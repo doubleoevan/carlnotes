@@ -1,8 +1,9 @@
 // the fetch an MCP view runs with. the MCP view's security policy names no connections, so the api requests the site's
 // components make are returned here. a podcast episode the player loads comes from the tool result, a finding's
-// feedback, a comment thread's read, a Comment's post, a reaction's save, and a Topic Post's read go to their tools,
-// and every other request fails
-import type { McpViewData } from "@carlnotes/contracts/mcpViews"
+// feedback, a comment thread's read, a Comment's post, a reaction's save, a Topic Post's read, and a Dashboard's chart
+// selection go to their tools, and every other request fails
+import { dashboardParam, dashboardQuery } from "@carlnotes/contracts/dashboards"
+import { DASHBOARD_TOOL_KINDS, type McpViewData } from "@carlnotes/contracts/mcpViews"
 import { findingFeedbackPayload } from "@carlnotes/contracts/payloads"
 import { commentThreadQuery, postCommentPayload, saveReactionPayload } from "@carlnotes/contracts/social"
 import {
@@ -23,6 +24,9 @@ const FINDING_FEEDBACK_PATH_PATTERN = /^\/api\/topic-findings\/([^/]+)\/feedback
 // a Topic Post's own read, which its info popup sends
 const TOPIC_POST_PATH_PATTERN = /^\/api\/topic-posts\/([^/]+)$/
 
+// a Dashboard's read of one chart selection, which a chart's choice sends
+const DASHBOARD_PATH_PATTERN = /^\/api\/dashboards\/([^/]+)\/([^/]+)$/
+
 // a comment thread's read and a Comment's post, and a reaction's save
 const COMMENTS_PATH = "/api/comments"
 const REACTIONS_PATH = "/api/reactions"
@@ -35,7 +39,8 @@ export function installMcpViewFetch(): void {
 }
 
 // return a podcast episode read from the tool result, send a finding's feedback, a comment thread's requests, a
-// reaction's save, and a Topic Post's read through their tools, and fail every other request
+// reaction's save, a Topic Post's read, and a Dashboard's chart selection through their tools, and fail every other
+// request
 async function mcpViewFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
 	// the request's path, relative or absolute
 	const requestUrl = new URL(
@@ -70,12 +75,19 @@ async function mcpViewFetch(input: RequestInfo | URL, init?: RequestInit): Promi
 		return saveReaction(init?.body)
 	}
 
-	// a Topic Post reads through its tool, and any other request fails
+	// a Topic Post's and a Dashboard's reads go through their tools, and any other request fails
+	const toolReadResponse = method === "GET" ? readThroughTool(requestUrl) : null
+	return toolReadResponse ?? Response.json({ error: "a view reads only what its tool returned" }, { status: 503 })
+}
+
+// a Topic Post's read or a Dashboard's chart selection through its tool, or null for any other read
+function readThroughTool(requestUrl: URL): Promise<Response> | null {
 	const topicPostId = TOPIC_POST_PATH_PATTERN.exec(requestUrl.pathname)?.[1]
-	if (topicPostId && method === "GET") {
+	if (topicPostId) {
 		return readTopicPost(decodeURIComponent(topicPostId))
 	}
-	return Response.json({ error: "a view reads only what its tool returned" }, { status: 503 })
+	const dashboardMatch = DASHBOARD_PATH_PATTERN.exec(requestUrl.pathname)
+	return dashboardMatch ? readDashboard(dashboardMatch, requestUrl.searchParams) : null
 }
 
 // send a finding's feedback through its tool, returning the response the rating block's request expects
@@ -138,4 +150,23 @@ async function readTopicPost(topicPostId: string): Promise<Response> {
 		addMcpViewPodcastEpisodes(podcastEpisodes)
 		return topicPost
 	})
+}
+
+// read one Dashboard's chart selection through its tool, returning the read as the dashboard request expects it
+async function readDashboard(
+	[, dashboardKindParam = "", subjectIdParam = ""]: RegExpExecArray,
+	searchParams: URLSearchParams,
+): Promise<Response> {
+	// the Dashboard's kind, its person or team, and the item kind or format the chart counts
+	const { dashboardKind, subjectId } = dashboardParam.parse({
+		dashboardKind: dashboardKindParam,
+		subjectId: decodeURIComponent(subjectIdParam),
+	})
+	const { itemKind, format } = dashboardQuery.parse(Object.fromEntries(searchParams))
+	const toolResult = await callMcpViewTool("read_dashboard", {
+		dashboardKind: DASHBOARD_TOOL_KINDS[dashboardKind],
+		...(dashboardKind === "teamDashboard" ? { teamId: subjectId } : { userId: subjectId }),
+		selection: format ?? itemKind,
+	})
+	return toToolResponse(toolResult, ({ dashboard }) => dashboard?.dashboard)
 }

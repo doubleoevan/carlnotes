@@ -2,6 +2,7 @@
 
 import { sendTeamAvatar } from "@carlnotes/client/teamClient"
 import { isLeaderRole } from "@carlnotes/contracts/enums"
+import { toTeamPath } from "@carlnotes/contracts/seo"
 import { type TeamPageResponse, toTeamPageTitle } from "@carlnotes/contracts/teams"
 import { ADD_TEAM_MEMBER_LABEL, toTeamDetails } from "@carlnotes/core/lib/teamFields"
 import { cn } from "@carlnotes/nightshift/classNames"
@@ -15,15 +16,13 @@ import { DetailsLine } from "@/components/common/DetailsLine"
 import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import {
 	PAGE_AVATAR_CLASS,
-	PAGE_BUTTON_ROW_CLASS,
-	PAGE_HEADER_AVATAR_CELL_CLASS,
-	PAGE_HEADER_DESCRIPTION_CELL_CLASS,
-	PAGE_HEADER_DETAILS_CELL_CLASS,
-	PAGE_HEADER_GRID_CLASS,
-	PAGE_HEADER_TITLE_CELL_CLASS,
-	PLAIN_PAGE_BUTTON_CLASS,
-	PLAIN_PAGE_BUTTON_ICON_CLASS,
-} from "@/lib/styleClasses"
+	PAGE_HEADER_AVATAR_FLOAT_CLASS,
+	PAGE_HEADER_DESCRIPTION_CLASS,
+	PAGE_HEADER_DETAILS_CLASS,
+	PAGE_HEADER_FLOW_CLASS,
+	PAGE_HEADER_TITLE_CLASS,
+} from "@/lib/pageHeaderClasses"
+import { PAGE_BUTTON_ROW_CLASS, PLAIN_PAGE_BUTTON_CLASS, PLAIN_PAGE_BUTTON_ICON_CLASS } from "@/lib/styleClasses"
 import { JoinTeamButton } from "./JoinTeamButton"
 
 // the leader's avatar picker in the header, uploading a chosen or dropped image at once
@@ -107,8 +106,8 @@ export function TeamHeader({
 				)}
 				{topicButton}
 			</div>
-			<div className={PAGE_HEADER_GRID_CLASS}>
-				<div className={PAGE_HEADER_AVATAR_CELL_CLASS}>
+			<div className={PAGE_HEADER_FLOW_CLASS}>
+				<div className={PAGE_HEADER_AVATAR_FLOAT_CLASS}>
 					{isTeamLeader ? (
 						<TeamHeaderAvatar team={teamPage} onChanged={onChanged} />
 					) : (
@@ -116,12 +115,12 @@ export function TeamHeader({
 					)}
 				</div>
 				{/* the page's title, with the team chat room's unseen mentions. the badge's click opens the chat room */}
-				<span className={cn(PAGE_HEADER_TITLE_CELL_CLASS, "relative")}>
+				<span className={cn(PAGE_HEADER_TITLE_CLASS, "relative")}>
 					<h1 className="font-display text-2xl">{toTeamPageTitle(teamPage.name)}</h1>
 					<PageUpdateCountBadge
 						topicId={null}
 						teamId={teamPage.teamId}
-						href={`/teams/${teamPage.teamId}`}
+						href={toTeamPath(teamPage.teamId)}
 						onClick={(event) => {
 							// the click opens the chat room in place instead of re-navigating to the page
 							event.preventDefault()
@@ -129,10 +128,8 @@ export function TeamHeader({
 						}}
 					/>
 				</span>
-				<DetailsLine className={PAGE_HEADER_DETAILS_CELL_CLASS} details={toTeamDetails({ teamPage, noteCount })} />
-				{teamPage.description && (
-					<p className={cn(PAGE_HEADER_DESCRIPTION_CELL_CLASS, "text-sm")}>{teamPage.description}</p>
-				)}
+				<DetailsLine className={PAGE_HEADER_DETAILS_CLASS} details={toTeamDetails({ teamPage, noteCount })} />
+				{teamPage.description && <p className={cn(PAGE_HEADER_DESCRIPTION_CLASS, "text-sm")}>{teamPage.description}</p>}
 			</div>
 		</header>
 	)

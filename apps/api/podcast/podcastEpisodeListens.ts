@@ -1,5 +1,6 @@
 // a listener's progress through a podcast episode, and the next podcast episode the listener has not played
 
+import type { Place } from "@carlnotes/contracts/dashboards"
 import type { PodcastEpisodeListenPayload } from "@carlnotes/contracts/payloads"
 import { db } from "@carlnotes/db"
 import { loadUserAccess } from "@carlnotes/db/quotas"
@@ -16,13 +17,14 @@ import {
 	toPodcastEpisodeViewFilter,
 } from "./podcastEpisodeRows"
 
-// what a listener's player reported, with the listener, the podcast episode and its topic, and the request's
-// analytics properties
+// what a listener's player reported, with the listener, the podcast episode and its topic, the request's analytics
+// properties, and the place Cloudflare reported for the request
 type SavePodcastEpisodeListenOptions = PodcastEpisodeListenPayload & {
 	userId: string
 	podcastEpisodeId: string
 	topic: Pick<typeof topics.$inferSelect, "id" | "visibility">
 	analyticsProperties: AnalyticsProperties
+	place: Place | null
 }
 
 // the user, and the topic that the user is on
@@ -41,6 +43,7 @@ export async function savePodcastEpisodeListen({
 	isPlaybackStart,
 	isCompleted,
 	format = "audio",
+	place,
 }: SavePodcastEpisodeListenOptions): Promise<void> {
 	// count one play if playback started, a film's play among the film plays too, and set the completion time only if
 	// the listener finished
@@ -69,9 +72,13 @@ export async function savePodcastEpisodeListen({
 			},
 		})
 
-	// count the user among the podcast episode's listeners if playback started
+	// count the user among the podcast episode's listeners and the day's plays if playback started
 	if (isPlaybackStart) {
-		void countPodcastEpisodeListen({ userId, clientAddress: null, userAgent: null }, podcastEpisodeId)
+		void countPodcastEpisodeListen({
+			requestSender: { userId, clientAddress: null, userAgent: null, place },
+			podcastEpisodeId,
+			format,
+		})
 	}
 
 	// report a playback start and a completion

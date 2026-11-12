@@ -31,7 +31,7 @@ function ChangingCount({ label, isMotionReduced }: { label: string; isMotionRedu
 const meta = {
 	title: "Common/FlashingCount",
 	component: FlashingCount,
-	args: { label: "Viewers", count: 12 },
+	args: { label: "Visitors", count: 12 },
 	argTypes: {
 		label: { control: "text" },
 		count: { control: { type: "number", min: 0 } },

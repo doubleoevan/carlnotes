@@ -1,9 +1,11 @@
-// the scheduled copy of the viewers of each topic, profile, and team and of each podcast episode's listeners from
-// Redis into Postgres, and the rebuild of Redis from Postgres on the first sync and after a Redis restart
+// the scheduled copy of the viewers of each topic, profile, team, and Topic Post and of each podcast episode's
+// listeners from Redis into Postgres, the rebuild of Redis from Postgres on the first sync and after a Redis restart,
+// and the daily count flush that follows each copy
 import { type DbTransaction, db } from "@carlnotes/db"
 import { runWithJobLease } from "@carlnotes/db/jobLease"
 import { podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { teams } from "@carlnotes/db/schema/teams"
+import { topicPosts } from "@carlnotes/db/schema/topicPosts"
 import { topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
 import { viewerCounters } from "@carlnotes/db/schema/viewerCounts"
@@ -20,6 +22,7 @@ import {
 } from "@carlnotes/db/viewerCounts"
 import { reportError } from "@carlnotes/server/monitoring"
 import { eq, sql } from "drizzle-orm"
+import { saveDailyCounts } from "./saveDailyCounts"
 import { loadViewerCountSeeds } from "./viewerCountSeeds"
 
 // how many refs one save transaction writes
@@ -33,10 +36,16 @@ type ViewerEstimateAndCounter = { viewerCountRef: ViewerCountRef; estimate: numb
 
 /**
  * Copies every changed count into Postgres under the sync's lease, restoring the saved counters first after a Redis
- * restart.
+ * restart, then adds the day buffer's views and plays to the daily counts under the same lease.
  */
 export async function syncViewerCounts(): Promise<void> {
-	await runWithJobLease({ jobName: VIEWER_COUNT_SYNC_JOB, runTask: copyViewerCounts })
+	await runWithJobLease({
+		jobName: VIEWER_COUNT_SYNC_JOB,
+		runTask: async () => {
+			await copyViewerCounts()
+			await saveDailyCounts()
+		},
+	})
 }
 
 /**
@@ -103,6 +112,7 @@ async function loadSavedCounters(): Promise<SavedViewerCounter[]> {
 			podcastEpisodeId: viewerCounters.podcastEpisodeId,
 			profileUserId: viewerCounters.profileUserId,
 			teamId: viewerCounters.teamId,
+			topicPostId: viewerCounters.topicPostId,
 			counter: viewerCounters.counter,
 		})
 		.from(viewerCounters)
@@ -118,21 +128,16 @@ type SavedCounterRefColumns = {
 	podcastEpisodeId: string | null
 	profileUserId: string | null
 	teamId: string | null
+	topicPostId: string | null
 }
 
 // the ref a saved counter's row names. the check constraint sets exactly one column, so the first one set is the ref
 function toSavedViewerCountRef(counterRow: SavedCounterRefColumns): ViewerCountRef {
-	if (counterRow.topicId) {
-		return { kind: "topic", id: counterRow.topicId }
-	}
-	if (counterRow.podcastEpisodeId) {
-		return { kind: "podcastEpisode", id: counterRow.podcastEpisodeId }
-	}
-
-	// a row with neither names a profile's user or a team
-	return counterRow.profileUserId
-		? { kind: "profile", id: counterRow.profileUserId }
-		: { kind: "team", id: counterRow.teamId ?? "" }
+	const kind =
+		(Object.keys(COUNTER_REF_COLUMN_KEYS) as ViewerCountKind[]).find(
+			(viewerCountKind) => counterRow[COUNTER_REF_COLUMN_KEYS[viewerCountKind]],
+		) ?? "team"
+	return { kind, id: counterRow[COUNTER_REF_COLUMN_KEYS[kind]] ?? "" }
 }
 
 // one ref's estimate and counter, or null if Redis fails to read the estimate or the counter
@@ -186,6 +191,7 @@ const COUNTER_REF_COLUMN_KEYS = {
 	podcastEpisode: "podcastEpisodeId",
 	profile: "profileUserId",
 	team: "teamId",
+	topicPost: "topicPostId",
 } as const satisfies Record<ViewerCountKind, string>
 
 // raise the ref's own count column to the estimate, and return the row it raised, if the ref still exists
@@ -223,5 +229,12 @@ function raiseViewerCount(
 				.set({ viewerCount: sql`greatest(${teams.viewerCount}, ${estimate})` })
 				.where(eq(teams.id, id))
 				.returning({ id: teams.id })
+		// a Topic Post's viewers
+		case "topicPost":
+			return transaction
+				.update(topicPosts)
+				.set({ viewerCount: sql`greatest(${topicPosts.viewerCount}, ${estimate})` })
+				.where(eq(topicPosts.id, id))
+				.returning({ id: topicPosts.id })
 	}
 }

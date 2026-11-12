@@ -1,5 +1,8 @@
 // a listener's saved progress: a play in either format counts once, and a film's play counts among the film plays too
+
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
+import { ZURICH_PLACE } from "@carlnotes/contracts/placeTestFixtures"
+import type { PodcastEpisodeFormat } from "@carlnotes/contracts/podcast"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as analytics from "@carlnotes/server/analytics"
 import * as viewerCounts from "../counts/viewerCounts"
@@ -12,7 +15,7 @@ afterEach(() => {
 })
 
 // save a playback start on a private topic in the format given, and return the play counts the upsert sent
-async function saveStartedListen(format?: "audio" | "video"): Promise<unknown[]> {
+async function saveStartedListen(format?: PodcastEpisodeFormat): Promise<unknown[]> {
 	// stub the pool, the listener count, and the event
 	const sentQueries = stubConnectionPool()
 	spyOn(viewerCounts, "countPodcastEpisodeListen").mockResolvedValue(undefined)
@@ -32,6 +35,7 @@ async function saveStartedListen(format?: "audio" | "video"): Promise<unknown[]>
 		isPlaybackStart: true,
 		isCompleted: false,
 		format,
+		place: ZURICH_PLACE,
 	})
 
 	// the upsert adds to both counts on a conflict
@@ -46,6 +50,11 @@ async function saveStartedListen(format?: "audio" | "video"): Promise<unknown[]>
 test("a film's playback start counts one play and one film play, and reports its format", async () => {
 	// the insert counts one play and one film play, and the update adds the same
 	expect(await saveStartedListen("video")).toEqual([1, 1, 1, 1])
+	expect(viewerCounts.countPodcastEpisodeListen).toHaveBeenCalledWith({
+		requestSender: expect.objectContaining({ userId: "listener", place: ZURICH_PLACE }),
+		podcastEpisodeId: "episode-1",
+		format: "video",
+	})
 	expect(analytics.trackEvent).toHaveBeenCalledWith(
 		"episode_played",
 		"listener",

@@ -19,7 +19,10 @@ and the package boundary check fails anything else, a type-only import of `@carl
   `(tabs)/topics.tsx`, the Topics directory, `(tabs)/search.tsx`, the retained site search, `(tabs)/settings.tsx`, a
   retained alias for Account, and `topics/[topicId].tsx`. Visitors may read Home, with the web hero, Search, public
   Topics, Podcast Episodes, Profiles, Teams, Plans, permitted Topic/Team notes, and `invite/[token].tsx`, the invitation
-  screen, through the same platform routes. Account, Activity, personal Teams, Settings, and chat require sign-in, and
+  screen, through the same platform routes, and the Dashboard screens, `profiles/[userId]/specials/topics.tsx`,
+  `profiles/[userId]/specials/podcasts.tsx`, and `teams/[teamId]/specials.tsx`. `teams/specials.tsx` opens the user's
+  first team's Team Dashboard in alphabetical order, or Teams for a user with no team. Account, with the three
+  Dashboard rows, Activity, personal Teams, Settings, chat, and `teams/specials.tsx` require sign-in, and
   `+native-intent.ts` opens sign-in for a visitor's link to one of them, then the linked screen. Retired sessions cannot
   open public reading until their session is cleared. A visitor also sees `sign-in.tsx`, Google, GitHub, and Apple
   and the email form, and `sign-up.tsx`, the email form behind the app signup gate, with the web's prompt for the
@@ -34,7 +37,8 @@ and the package boundary check fails anything else, a type-only import of `@carl
   `apiBaseUrl.ts` chooses the api url, and `typeRoleStyles.ts` maps the Nightshift type roles to native text styles.
   `activeIconProps.ts` is the class and fill of an active icon, the counterpart of the web's `ACTIVE_ICON_CLASS`.
   `clipboard.ts` copies text with accessible success feedback and shared failure handling for chat and Markdown.
-  `theme.ts` restores and saves the appearance choice and keeps native controls and Uniwind on the same palette.
+  `theme.ts` restores and saves the appearance choice and keeps native controls and Uniwind on the same palette, and
+  `useColorMode` reads the mode the app draws in.
   `themePreference.ts` names its three values: system, light, and dark. `sessionReturnPath.ts` keeps the screen a
   visitor left and `openSessionScreen` sends them to sign-in or sign-up with the web's prompt for the action,
   `nativeIntent.ts` decides what a link into the app opens: a web url maps through `platformPath.ts` the way the in-app
@@ -102,7 +106,9 @@ and the package boundary check fails anything else, a type-only import of `@carl
   its own, so add no watchFolders and no resolver aliases.
 - `.rnstorybook/` — Storybook for React Native: `main.ts` finds the stories under `src/components/`, with the
   on-device controls and actions and the backgrounds feature, and `preview.tsx` loads the stylesheet, switches the
-  Uniwind theme with the light and dark toggle, and puts a `surface: "card"` story on the card fill. `manager.tsx`
+  Uniwind theme with the light and dark toggle, puts a `surface: "card"` story on the card fill, and exports
+  `toStoryTheme`, the theme the toggle picked. `seriesColorsDecorator.tsx` is the chart stories' decorator, which draws
+  a story at the frame's full width with the series colors of the toggle's theme. `manager.tsx`
   brands the frame as the web's is: `NIGHTSHIFT_STORYBOOK_THEME` maps the web frame's Dark roast fields onto
   Storybook's native theme in both modes, and `NightshiftStorybookUI` draws Storybook's own `FullUI` with the app
   icon and the name in the logo type role as the brand. The brand is set after Storybook's deep merge of the theme, which
@@ -304,7 +310,16 @@ sections in `HOME_SECTIONS`' order, as the web does, with New podcasts this week
 posts this week right below Featured posts, each absent with no card. The profile's Featured Posts lists every post
 of its person and is its only Topic Post section. The team screen has the profile's four card sections, Featured
 Films right before Featured Podcasts, and its Featured Posts lists every post of its topics. `components/common/ViewerCountLine.tsx` adapts core's
-Visitors line at the end of the profile and team screens. `components/common/DetailsLine.tsx` adapts core's details
+Visitors line at the end of the profile, team, and Topic Post screens, with the links to the person's Topic Dashboard
+and Podcast Dashboard and the team's Team Dashboard. `components/dashboard/DashboardScreen.tsx` is a Dashboard screen
+over core's `Dashboard`, with `dashboardElements.tsx` for its sections, cards, controls, and the sheet a tapped point
+opens, and `components/common/avatarHeaderElements.tsx` for core's `AvatarHeader`, `AvatarHeaderSkeleton`, and
+`DashboardSubjectHeader` under the screen's title, which the Teams, Activity, and Account screens share. `dashboardPageIcons.ts` holds each page's icon, which the screen's title, the loading state of
+`teams/specials.tsx`, and the user menu share. `DashboardBarChart.tsx` draws the top ten as native rows,
+`DashboardPieChart.tsx` the pie and `DashboardTrendChart.tsx` the trend with Victory Native on Skia,
+`DashboardWordCloud.tsx` the word cloud with react-native-svg, and `PlaceMap.tsx` the map with react-native-maps, on
+Google Maps on Android and on iOS if the build has `GOOGLE_MAPS_IOS_API_KEY`, else Apple Maps. Each has a story beside
+it. `components/common/DetailsLine.tsx` adapts core's details
 line, a wrapping row of small muted text: the counts under a topic's byline and reactions, a Topic Post's date,
 reading time, and comment count under its byline's row, the profile's and the team screen's summary line, and the
 Topic's viewers and followers in the Topic Post sheet. `components/common/RankDialog.tsx` adapts core's
@@ -360,9 +375,13 @@ highlight color, and `HIGHLIGHTED_PAGE_BUTTON_CLASS` the one highlighted button 
 header row. Both go on the default `Button`, so the two draw at one size, 36 points tall with the hit slop to the touch
 target. `PAGE_BUTTON_ROW_CLASS` is the row, and each screen adds the margins that keep 16 points above it, from the
 search bar, and 16 points below it. `AVATAR_HEADER_BUTTON_ROW_CLASS` is that row with `PageScreen`'s margins, which
-the screen and its loading state share. `src/sectionClasses.ts` holds the classes a section and its loading state
-share: `SKELETON_SHAPE_CLASS`, a placeholder's fill, the collapsible section's box and title row, and the news card's
-heading row. A screen's loading state is laid out in the loaded screen's own classes and components, so a section's
+the screen and its loading state share. `src/components/common/PageHeaderRow.tsx` holds the avatar header's row and
+`PageHeaderIdentity.tsx` the column beside the avatar that a profile, a team, and a Dashboard screen share, with the
+title and the counts beside the avatar as the web's header draws them at phone width, and below it at a text size too
+large for them to fit beside it. `src/sectionClasses.ts` holds the classes a section and its loading state share:
+`SKELETON_SHAPE_CLASS`, a placeholder's fill, the collapsible section's box and title row, the news card's heading row,
+and `COUNTS_LINE_CLASS`, the visitors and counts line that `ViewerCountLine` and `TopicCountsLine` share. A screen's
+loading state is laid out in the loaded screen's own classes and components, so a section's
 loading state is `AccordionSection` with `isLoading` or `components/topic/CollapsibleSectionSkeleton.tsx`, and the
 news list's is its own loading rows. `components/topic/TopicSkeleton.tsx` is the topic screen's loading state, and
 exports the film card's, the player card's, and the empty section card's loading states that the podcast episode
@@ -406,7 +425,9 @@ Topic Posts: `src/components/topicPost/` holds the app's adapters of the shared 
 Share and the screen's Share open `src/components/share/ShareTopic.tsx` with the post as its `topicPost`, which shares
 the post in the topic's place, and whose invite link opens the post), `TopicPostsSection`, and
 `TopicPostEditor`, and `TopicPostScreen.tsx`, the
-screen at `app/topics/[topicId]/posts/[topicPostId].tsx`. The screen renders the shared `TopicPostPage`: a
+screen at `app/topics/[topicId]/posts/[topicPostId].tsx`. `ShareTopic.tsx`, `ShareTeam.tsx`, and a Dashboard screen's
+Share open the operating system's share sheet through `share/shareSheet.ts`, which shows an error if the sheet does
+not open. `TopicPostScreen.tsx` renders the shared `TopicPostPage`: a
 published post in `PageScreen` with its actions menu, whose Featured posts opens the author's `ProfileRankDialog` on
 a published post of a public topic, image sheet, and comment thread, and a draft or an edit in
 the note screen's keyboard-safe frame. `src/platformPath.ts` maps a post's web path to its route.

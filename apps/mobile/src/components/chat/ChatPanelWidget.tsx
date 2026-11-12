@@ -4,24 +4,24 @@ import { useIsPodcastPlayerShown } from "@carlnotes/core/stores/podcastEpisodePl
 import { Coffee, X } from "lucide-react-native"
 import type { ReactNode } from "react"
 import { KeyboardAvoidingView, StatusBar, View } from "react-native"
-import { useUniwind } from "uniwind"
 import { CoffeeCup } from "@/components/branding/CoffeeCup"
 import { ClassNameSafeAreaView } from "@/components/common/ClassNameSafeAreaView"
 import { UpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
+import { useColorMode } from "@/theme"
 
 /**
  * Frames a native conversation above the keyboard and device safe areas.
  */
 export function ChatPanelWidget({ children, onClose }: { children: ReactNode; onClose: () => void }) {
 	// let the root reserve keyboard space for the conversation and its loaded podcast together
-	const { theme } = useUniwind()
+	const colorMode = useColorMode()
 	const isPodcastPlayerShown = useIsPodcastPlayerShown()
 	return (
 		<ClassNameSafeAreaView className="w-full flex-1 bg-card">
-			<StatusBar barStyle={theme === "dark" ? "light-content" : "dark-content"} />
+			<StatusBar barStyle={colorMode === "dark" ? "light-content" : "dark-content"} />
 			<KeyboardAvoidingView className="flex-1" enabled={!isPodcastPlayerShown} behavior="padding">
 				{/* conversation heading */}
 				<View className="flex-row items-center justify-between gap-2 px-3 pt-2">

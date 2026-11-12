@@ -1,5 +1,6 @@
 import { toAvatarVersion } from "@carlnotes/contracts/avatars"
 import { isAdminRole } from "@carlnotes/contracts/enums"
+import { toTeamPath } from "@carlnotes/contracts/seo"
 import { reloadChatRooms } from "@carlnotes/core/hooks/useUpdateBadges"
 import { toChatKey, toPrivateChatPage } from "@carlnotes/core/lib/chatConversations"
 import { setChatId } from "@carlnotes/core/stores/chatConversationStore"
@@ -32,7 +33,7 @@ export function ChatScreen(chatScreenProps: ChatScreenProps) {
 			router.replace(`/topics/${topicId}`)
 			return
 		}
-		router.replace(teamId ? `/teams/${teamId}` : "/")
+		router.replace(teamId ? toTeamPath(teamId) : "/")
 	}
 	return (
 		<ChatPanelWidget onClose={handleClose}>

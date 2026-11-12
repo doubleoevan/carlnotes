@@ -6,7 +6,7 @@
 	"scripts": {
 		"dev": "vite",
 		"build": "vite build && bun run build:mcp-views",
-		"build:mcp-views": "vite build --config vite.mcpViews.config.ts",
+		"build:mcp-views": "vite build --config vite.mcpViews.config.ts && vite build --config vite.mcpViews.config.ts --mode dashboard",
 		"dev:storybook": "storybook dev -p 6006 --no-open --host 0.0.0.0",
 		"build:storybook": "storybook build --output-dir dist/nightshift"
 	},
@@ -29,10 +29,12 @@
 		"@tanstack/react-query": "^5.105.3",
 		"@tanstack/react-router": "1.170.46",
 		"@tanstack/react-start": "1.169.4",
+		"@vis.gl/react-google-maps": "^1.10.2",
 		"@zip.js/zip.js": "2.24.0",
 		"better-auth": "~1.7.16",
 		"class-variance-authority": "^0.7.1",
 		"clsx": "^2.1.1",
+		"echarts": "^6.1.0",
 		"heic-to": "^1.6.7",
 		"hono": "^4.13.16",
 		"lucide-react": "^1.68.0",
@@ -47,6 +49,8 @@
 		"sonner": "^2.0.8",
 		"streamdown": "^2.7.1",
 		"tailwind-merge": "^3.7.0",
+		"topojson-client": "^3.1.0",
+		"world-atlas": "^2.0.2",
 		"zod": "^4.6.7"
 	},
 	"devDependencies": {
@@ -58,6 +62,7 @@
 		"@tailwindcss/vite": "^4.3.4",
 		"@types/react": "^19.3.0",
 		"@types/react-dom": "^19.3.0",
+		"@types/topojson-client": "^3.1.5",
 		"@vitejs/plugin-react": "^6.2.1",
 		"happy-dom": "^21.0.4",
 		"playwright-core": "^1.64.1",

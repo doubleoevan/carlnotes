@@ -12,7 +12,7 @@ import { cn } from "@carlnotes/nightshift/classNames"
 import { paginationClasses } from "@carlnotes/nightshift/pagination"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { type RenderedRow, toRenderedRows } from "@/lib/renderedRows"
-import { ONE_PAGE_TABLE_CARD_CLASS, SCRIPTED_PAGINATION_TABLE_CARD_CLASS } from "@/lib/styleClasses"
+import { ONE_PAGE_TABLE_CARD_CLASS, SCRIPTED_PAGINATION_TABLE_CARD_CLASS } from "@/lib/tableClasses"
 
 // the smallest page a table can be cut into. below this, the pagination controls are hidden
 export const SMALLEST_PAGE_SIZE = PAGE_SIZES[0]

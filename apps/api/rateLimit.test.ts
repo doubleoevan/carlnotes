@@ -14,6 +14,8 @@ import {
 	apiRateLimiter,
 	appSignupChallengeRateLimiter,
 	CALLER_RATE_LIMIT,
+	DASHBOARD_READ_RATE_LIMIT,
+	dashboardReadRateLimiter,
 	LINK_PREVIEW_RATE_LIMIT,
 	linkPreviewRateLimiter,
 	PAGE_RENDER_RATE_LIMIT,
@@ -265,7 +267,8 @@ test("a limiter over the reads a page render calls skips a request with no user 
 	expect(visitorStatuses.at(-1)).toBe(429)
 })
 
-// the general limit, the topic feed limit, and the link preview limit, each under its own Redis key
+// the general limit, the topic feed limit, the link preview limit, and the Dashboard read limit, each under its own
+// Redis key
 const QUIET_LIMITERS = [
 	{ limiterName: "general", limiter: apiRateLimiter, limit: API_RATE_LIMIT, keyPrefix: "rate-limit:api" },
 	{
@@ -279,6 +282,12 @@ const QUIET_LIMITERS = [
 		limiter: linkPreviewRateLimiter,
 		limit: LINK_PREVIEW_RATE_LIMIT,
 		keyPrefix: "rate-limit:link-preview",
+	},
+	{
+		limiterName: "Dashboard read",
+		limiter: dashboardReadRateLimiter,
+		limit: DASHBOARD_READ_RATE_LIMIT,
+		keyPrefix: "rate-limit:dashboard-read",
 	},
 ]
 

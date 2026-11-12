@@ -1,9 +1,8 @@
 // accepted sends and email share one UTC ceiling across every account's Sources
 import { PERSONAL_SOURCES_DAILY_SEND_LIMIT } from "@carlnotes/contracts/personalSources"
-import { DAY_MS } from "@carlnotes/contracts/time"
+import { DAY_MS, toUtcDay } from "@carlnotes/contracts/time"
 import { and, eq, sql } from "drizzle-orm"
 import { type DbHandle, db } from "./index"
-import { toUtcDay } from "./quotas"
 import { personalSourcesDailyCounts } from "./schema/personalSources"
 import { users } from "./schema/users"
 

@@ -3,7 +3,8 @@ import { expect, test } from "bun:test"
 import { renderToStaticMarkup } from "react-dom/server"
 import { PageSkeleton } from "@/components/layout/PageSkeleton"
 import { toElementClassNames } from "@/components/markupTestFixtures"
-import { FILM_CARD_CLASS, PLAIN_TOPIC_HEADER_GRID_CLASS, TOPIC_HEADER_AREA_CLASSES } from "@/lib/styleClasses"
+import { PLAIN_TOPIC_HEADER_GRID_CLASS, TOPIC_HEADER_AREA_CLASSES } from "@/lib/pageHeaderClasses"
+import { FILM_CARD_CLASS } from "@/lib/styleClasses"
 import { PodcastEpisodePlayerCardSkeleton, TopicSkeleton } from "./TopicSkeleton"
 
 // the class of the podcast feed button's placeholder under the chapter rows on a phone

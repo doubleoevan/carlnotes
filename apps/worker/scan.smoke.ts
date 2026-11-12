@@ -14,6 +14,7 @@ import { toUntrustedFences } from "@carlnotes/models/prompts/untrustedFenceTestF
 import { shutdownTelemetry, startTelemetry } from "@carlnotes/models/telemetry"
 import { buildContextPrompt } from "@carlnotes/pipeline/attach"
 import { buildAgreementPrompt } from "@carlnotes/pipeline/chat/agreement"
+import { buildDashboardParagraphPrompt } from "@carlnotes/pipeline/dashboardParagraph"
 // the extracted prompt builders, loaded here to prove that each writes its prompt from its Markdown template
 import { buildSearchPrompt } from "@carlnotes/pipeline/ingest/search"
 import { saveTopicVectors } from "@carlnotes/pipeline/meanVectors"
@@ -258,6 +259,10 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 		topicNames: ["Coffee"],
 		findingTitles: ["Sample"],
 	})
+	const dashboardParagraphResult = await buildDashboardParagraphPrompt({
+		summary: { dashboardKind: "topicDashboard", topicCount: 1, findingCount: 2, topicPostCount: 0, viewerCount: 3 },
+		series: null,
+	})
 	const topicPostSummaryResult = await buildTopicPostSummaryPrompt({
 		title: "Sample post",
 		html: "<p>Sample post text.</p>",
@@ -338,6 +343,7 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 		contextResult,
 		agreementResult,
 		updatesOpenerResult,
+		dashboardParagraphResult,
 		topicPostSummaryResult,
 		topicPostDiscussionResult,
 		reportResult,
@@ -354,6 +360,7 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 		["Personal sources context prompt", personalSourcesContextResult.prompt],
 		["agreement check prompt", agreementResult.prompt],
 		["updates opener prompt", updatesOpenerResult.prompt],
+		["dashboard paragraph prompt", dashboardParagraphResult.prompt],
 		["topic post summary prompt", topicPostSummaryResult.prompt],
 		["topic post discussion prompt", topicPostDiscussionResult.prompt],
 		["scan report prompt", reportResult.prompt],

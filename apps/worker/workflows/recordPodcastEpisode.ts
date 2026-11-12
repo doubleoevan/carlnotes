@@ -9,7 +9,7 @@ import {
 	toTopicPodcastEpisodeVideoWorkflowId,
 } from "@carlnotes/contracts/topicPodcastEpisodeVideoWork"
 import type { SpeechTier } from "@carlnotes/models/budget"
-import type { ScanTrigger } from "@carlnotes/pipeline/temporalClient"
+import type { ScanTrigger } from "@carlnotes/pipeline/scanWorkflowClient"
 import {
 	getExternalWorkflowHandle,
 	ParentClosePolicy,

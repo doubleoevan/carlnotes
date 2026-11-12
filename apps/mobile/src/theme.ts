@@ -1,7 +1,8 @@
 import { toStoreListeners } from "@carlnotes/core/stores/storeListeners"
+import type { ColorMode } from "@carlnotes/nightshift/colors"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 import { Appearance } from "react-native"
-import { Uniwind } from "uniwind"
+import { Uniwind, useUniwind } from "uniwind"
 import { type ThemePreference, toThemePreference } from "./themePreference"
 
 // the device's appearance is the default until the user chooses a palette, and the choice that returns to it
@@ -48,6 +49,15 @@ export async function setThemePreference(theme: ThemePreference): Promise<void> 
 export function useThemePreference(): ThemePreference {
 	useStoreVersion()
 	return themePreference
+}
+
+/**
+ * Reads the color mode the app draws in: dark for the dark palette, and light otherwise.
+ */
+export function useColorMode(): ColorMode {
+	// read the palette Uniwind draws in
+	const { theme } = useUniwind()
+	return theme === "dark" ? "dark" : "light"
 }
 
 // keep native sheets and the Nightshift palette on the same appearance, and publish the choice

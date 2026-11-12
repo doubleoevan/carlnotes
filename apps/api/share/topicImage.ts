@@ -1,5 +1,6 @@
 // the link-preview card a pasted Topic url renders as
 import type { Visibility } from "@carlnotes/contracts/enums"
+import { toCountLabel } from "@carlnotes/contracts/text"
 import type { CardElement } from "@carlnotes/pipeline/cardElementPng"
 import { toTopicImageOriginalKey } from "@carlnotes/pipeline/topicImages/topicImageFiles"
 import type { PublishedAvatar } from "../avatars"
@@ -10,7 +11,6 @@ import {
 	toAvatarIdentity,
 	toBrandIcon,
 	toCardPng,
-	toCountLabel,
 	toImageOverTextCardPng,
 	toOwnerAvatar,
 	toOwnerImageDataUri,

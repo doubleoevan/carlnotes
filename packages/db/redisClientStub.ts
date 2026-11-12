@@ -2,6 +2,7 @@
 import { RedisClient } from "bun"
 import { setRedisClientBuilder } from "./redis"
 import { REDIS_CLIENT_OPTIONS, type RedisConnectionClient } from "./redisConnection"
+import { runFakeDailyCountCommand } from "./redisFakeDailyCounts"
 import { runFakeSpendReservationCommand } from "./redisFakeSpendReservations"
 import { readFakeBuffer, runFakeViewerCountCommand, toFakeStoredValue } from "./redisFakeViewerCounts"
 
@@ -76,8 +77,15 @@ function toFakeRedisClient(storedValueByKey: Map<string, string>): RedisConnecti
 		async del(...keys: string[]): Promise<number> {
 			return keys.filter((key) => storedValueByKey.delete(key)).length
 		},
-		// tell the scripts apart by their text, after the viewer count commands
+		// tell the scripts apart by their text, after the daily count and viewer count commands
 		async send(command: string, commandArguments: string[]): Promise<unknown> {
+			// a daily count script runs on the map
+			const dailyCountReply = runFakeDailyCountCommand(storedValueByKey, command, commandArguments)
+			if (dailyCountReply !== undefined) {
+				return dailyCountReply
+			}
+
+			// a viewer count command runs on the map
 			const viewerCountReply = runFakeViewerCountCommand(storedValueByKey, command, commandArguments)
 			if (viewerCountReply !== undefined) {
 				return viewerCountReply

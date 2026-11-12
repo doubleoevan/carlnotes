@@ -1,5 +1,6 @@
 import { cn } from "@carlnotes/nightshift/classNames"
 import type { ReactNode } from "react"
+import { TOPIC_HEADER_AREA_CLASSES, toTopicHeaderGridClass } from "@/lib/pageHeaderClasses"
 import {
 	DASHED_ROW_CLASS,
 	IMAGE_SKELETON_CLASS,
@@ -9,8 +10,6 @@ import {
 	RANK_SLOT_CLASS,
 	RESOURCE_LIST_CARD_CLASS,
 	ROW_AVATAR_SKELETON_CLASS,
-	TOPIC_HEADER_AREA_CLASSES,
-	toTopicHeaderGridClass,
 } from "@/lib/styleClasses"
 
 // the open section's topics, and the sections that start closed

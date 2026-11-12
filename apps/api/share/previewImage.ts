@@ -295,10 +295,3 @@ function toMug(): CardElement {
 		},
 	}
 }
-
-/**
- * A count and its word pluralized if necessary.
- */
-export function toCountLabel(count: number, word: string): string {
-	return `${count} ${word}${count === 1 ? "" : "s"}`
-}

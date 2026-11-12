@@ -2,10 +2,11 @@
 
 import { db, isFindingShown } from "@carlnotes/db"
 import { findings } from "@carlnotes/db/schema/scans"
-import { teamMembers, teams } from "@carlnotes/db/schema/teams"
+import { teams } from "@carlnotes/db/schema/teams"
 import { sources, topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
 import { attachmentExists, getAttachmentBytes, uploadAttachment } from "@carlnotes/db/store"
+import { countActiveTeamMembers } from "@carlnotes/db/teamMembers"
 import { and, count, eq } from "drizzle-orm"
 import type { Context } from "hono"
 import { publishedAvatarColumns, toPublishedAvatar, toPublishedAvatarFromUser } from "../avatars"
@@ -273,10 +274,7 @@ async function toTeamPreviewWithCounts(team: {
 	avatarKey: string | null
 }): Promise<TeamPreview> {
 	// the team's active member count and public topic count, which the team page shows a non-member
-	const [teamMembersRow] = await db
-		.select({ members: count() })
-		.from(teamMembers)
-		.where(and(eq(teamMembers.teamId, team.teamId), eq(teamMembers.isActive, true)))
+	const memberCount = await countActiveTeamMembers(team.teamId)
 	const [topicRow] = await db.select({ topics: count() }).from(topics).where(toTeamPublicTopicsFilter(team.teamId))
 
 	// the avatar is named instead of loaded, so the card's key changes when the image does
@@ -284,7 +282,7 @@ async function toTeamPreviewWithCounts(team: {
 		teamId: team.teamId,
 		name: team.name,
 		avatar: team.avatarKey ? { avatarKey: team.avatarKey } : null,
-		memberCount: teamMembersRow?.members ?? 0,
+		memberCount,
 		topicCount: topicRow?.topics ?? 0,
 	}
 }

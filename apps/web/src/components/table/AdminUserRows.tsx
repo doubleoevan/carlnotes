@@ -12,6 +12,7 @@ import type { OwnerTopic } from "@carlnotes/contracts/activity"
 import type { AdminUserRow } from "@carlnotes/contracts/admin"
 import { isAdminRole } from "@carlnotes/contracts/enums"
 import { toCentsFromDollars } from "@carlnotes/contracts/plans"
+import { toTeamPath } from "@carlnotes/contracts/seo"
 import type { TeamSummary } from "@carlnotes/contracts/teams"
 import { toBytesLabel, toCentsLabel, toDateLabel } from "@carlnotes/core/lib/labels"
 import { cn } from "@carlnotes/nightshift/classNames"
@@ -23,14 +24,8 @@ import { TeamAvatar } from "@/components/branding/TeamAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import {
-	ADMIN_NUMBER_INPUT_CLASS,
-	STANDALONE_LINK_CLASS,
-	SUBTABLE_CARD_CLASS,
-	TABLE_CLASS,
-	TABLE_HEAD_CLASS,
-	TABLE_SCROLL_CLASS,
-} from "@/lib/styleClasses"
+import { ADMIN_NUMBER_INPUT_CLASS, STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
+import { SUBTABLE_CARD_CLASS, TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/tableClasses"
 import { TopicsSubtableRow } from "./OwnerTopicsTable"
 import { SubtableCountButton } from "./SubtableCountButton"
 import { TableCard } from "./TableCard"
@@ -313,7 +308,7 @@ function UserTeamsSubtable({ teams }: { teams: TeamSummary[] }) {
 							<tr key={team.teamId} className="border-b last:border-b-0">
 								<td className="py-2 pr-4">
 									<AnchorLink
-										href={`/teams/${team.teamId}`}
+										href={toTeamPath(team.teamId)}
 										className={cn(STANDALONE_LINK_CLASS, "flex items-center gap-2")}
 									>
 										<TeamAvatar team={team} className="size-6" />

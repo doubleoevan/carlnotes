@@ -47,8 +47,17 @@ type Story = StoryObj<typeof meta>
 // the avatar at rest, its initials on a tinted circle
 export const Closed: Story = {}
 
-// the user's dropdown: their pages, plans, the video, the docs, and sign out
-export const Open: Story = { parameters: { docs: DROPDOWN_DOCS }, play: openUserMenu }
+// the user's dropdown: their pages, the three Dashboard pages, plans, the video, the docs, and sign out
+export const Open: Story = {
+	parameters: { docs: DROPDOWN_DOCS },
+	play: async (context) => {
+		// the dropdown fades in, so each Dashboard row is visible once the fade ends
+		await openUserMenu(context)
+		for (const dashboardPageName of ["Topic Specials", "Podcast Specials", "Team Specials"]) {
+			await findVisibleByRole("link", { name: dashboardPageName })
+		}
+	},
+}
 
 // an admin's dropdown, which adds the admin console above sign out
 export const AdminOpen: Story = {

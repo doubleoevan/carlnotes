@@ -1,6 +1,6 @@
 // the typed Hono client for the api and the plain fetch beside it, both configured once by the app that runs them, with
-// readApiResponse and readApiErrorMessage for reading a response, and the native file part a multipart body takes. the
-// AppType import is types only
+// readApiResponse and readApiErrorMessage for reading a response, the request options a read sends, and the native file
+// part a multipart body takes. the AppType import is types only
 import type { AppType } from "@carlnotes/api"
 import {
 	APP_VERSION_OUTDATED_LINE,
@@ -90,6 +90,17 @@ export function apiClient(): ApiClient {
  */
 export function toApiUrl(path: string): string {
 	return `${apiClientSettings.apiBaseUrl}${path}`
+}
+
+// whether a read is public, and the read's abort signal
+type ToReadRequestInitOptions = { isPublic: boolean; signal?: AbortSignal }
+
+/**
+ * Returns a read's request options: a public read leaves the session cookie behind, and any other read sends it for the
+ * access check. A read the caller abandons is aborted through its signal.
+ */
+export function toReadRequestInit({ isPublic, signal }: ToReadRequestInitOptions): RequestInit {
+	return { credentials: isPublic ? "omit" : "same-origin", signal }
 }
 
 /**

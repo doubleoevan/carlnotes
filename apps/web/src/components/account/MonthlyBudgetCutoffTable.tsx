@@ -3,7 +3,7 @@ import { cn } from "@carlnotes/nightshift/classNames"
 import type { ReactNode } from "react"
 import { DATA_TABLE_ELEMENTS } from "@/components/table/DataTable"
 import { TableCard } from "@/components/table/TableCard"
-import { ONE_PAGE_TABLE_CARD_CLASS } from "@/lib/styleClasses"
+import { ONE_PAGE_TABLE_CARD_CLASS } from "@/lib/tableClasses"
 
 export { toMonthlyBudgetCutoffRows } from "@carlnotes/core/lib/monthlyBudgetCutoffs"
 

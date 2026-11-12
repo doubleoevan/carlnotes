@@ -2,6 +2,7 @@ import { fetchActivity } from "@carlnotes/client/activityClient"
 import { authClient } from "@carlnotes/client/authClient"
 import type { ActivityResponse } from "@carlnotes/contracts/activity"
 import { toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
+import { AvatarHeader, AvatarHeaderSkeleton } from "@carlnotes/core/components/AvatarHeader"
 import { toSectionCountLabel } from "@carlnotes/core/lib/labels"
 import { useTopicInviteBadges } from "@carlnotes/core/stores/topicInviteStore"
 import { Activity } from "lucide-react"
@@ -9,9 +10,11 @@ import type * as React from "react"
 import { useEffect, useState } from "react"
 import { AccordionSection } from "@/components/common/AccordionSection"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import {
+	WEB_AVATAR_HEADER_ELEMENTS,
+	WEB_AVATAR_HEADER_SKELETON_ELEMENTS,
+} from "@/components/common/avatarHeaderElements"
 import { UpdateCountBadge } from "@/components/common/UpdateCountBadge"
-import { UserProfileLink } from "@/components/common/UserProfileLink"
-import { UserProfileLinkSkeleton } from "@/components/common/UserProfileLinkSkeleton"
 import { PageSkeleton } from "@/components/layout/PageSkeleton"
 import { Accordion } from "@/components/primitives/accordion"
 import { EmptyListCard } from "@/components/table/TableCard"
@@ -20,11 +23,11 @@ import { TopicSubscriptionsTable } from "@/components/table/TopicSubscriptionsTa
 import { NewTopicButton, useNewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { useSearchParams } from "@/hooks/useSearchParams"
-import { PAGE_CLASS, PAGE_HEADER_CLASS, PAGE_TITLE_CLASS } from "@/lib/styleClasses"
+import { PAGE_CLASS, PAGE_HEADER_CLASS, PAGE_TITLE_CLASS, SECTIONS_UNDER_AVATAR_HEADER_CLASS } from "@/lib/styleClasses"
 import { useRegisterPageActions } from "@/stores/pageActionsStore"
 
 // the margin over the page's sections, loaded or loading
-const ACTIVITY_SECTIONS_CLASS = "mt-2"
+const ACTIVITY_SECTIONS_CLASS = SECTIONS_UNDER_AVATAR_HEADER_CLASS
 
 /**
  * The Activity page: the signed-in user's topic subscriptions and the invitations they sent.
@@ -91,12 +94,12 @@ export function ActivityPage() {
 				</h1>
 				{isOwnView && <NewTopicButton onNewTopic={openNewTopicDialog} />}
 			</div>
-			{/* the viewed user's profile link, from the session on the user's own page and from the payload on an admin's
-			    link, with a placeholder on the link's own line while that payload loads */}
+			{/* the viewed user's avatar header, from the session on the user's own page and from the payload on an admin's
+			    link, with its placeholder while that payload loads */}
 			{user ? (
-				<UserProfileLink user={user} className="mt-2 text-sm" />
+				<AvatarHeader subject={{ subjectKind: "user", user }} elements={WEB_AVATAR_HEADER_ELEMENTS} />
 			) : (
-				!isLoadFailed && <UserProfileLinkSkeleton className="mt-2 text-sm" />
+				!isLoadFailed && <AvatarHeaderSkeleton elements={WEB_AVATAR_HEADER_SKELETON_ELEMENTS} />
 			)}
 			{activity ? (
 				<ActivitySections activity={activity} isOwnView={isOwnView} onReload={reloadActivity} />

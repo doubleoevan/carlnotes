@@ -1,6 +1,8 @@
 import { authClient } from "@carlnotes/client/authClient"
+import { toDashboardPageLinks } from "@carlnotes/contracts/dashboards"
 import { isAdminRole } from "@carlnotes/contracts/enums"
 import { toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
+import { AvatarHeader, AvatarHeaderSkeleton } from "@carlnotes/core/components/AvatarHeader"
 import { useAccount } from "@carlnotes/core/hooks/useAccount"
 import { CircleDollarSign, Settings, User } from "lucide-react-native"
 import { useState } from "react"
@@ -9,10 +11,15 @@ import { AccountBudget } from "@/components/account/AccountBudget"
 import { AccountSettings } from "@/components/account/AccountSettings"
 import { AppVersionLine } from "@/components/account/AppVersionLine"
 import { AccordionSection } from "@/components/common/AccordionSection"
+import {
+	MOBILE_AVATAR_HEADER_ELEMENTS,
+	MOBILE_AVATAR_HEADER_SKELETON_ELEMENTS,
+} from "@/components/common/avatarHeaderElements"
 import { LoadFailedNotice } from "@/components/common/LoadFailedNotice"
-import { UserProfileLink } from "@/components/common/UserProfileLink"
+import { MenuLink } from "@/components/layout/MenuLink"
 import { PageScreen } from "@/components/layout/PageScreen"
 import { PageSkeleton } from "@/components/layout/PageSkeleton"
+import { TableCard } from "@/components/table/TableCard"
 
 /**
  * Loads the signed-in account's billing and activity with the same settings as the web account.
@@ -25,11 +32,23 @@ export default function AccountScreen() {
 	// the budget and settings sections, both open at first like the web's
 	const [isBudgetExpanded, setIsBudgetExpanded] = useState(true)
 	const [isSettingsExpanded, setIsSettingsExpanded] = useState(true)
+
+	// the signed-in user's three Dashboard pages
+	const dashboardPageLinks = session ? toDashboardPageLinks(session.user.id) : null
 	return (
 		<PageScreen
 			title="Account"
 			icon={User}
-			byline={session && <UserProfileLink user={toSessionProfileIdentity(session.user)} />}
+			byline={
+				session ? (
+					<AvatarHeader
+						subject={{ subjectKind: "user", user: toSessionProfileIdentity(session.user) }}
+						elements={MOBILE_AVATAR_HEADER_ELEMENTS}
+					/>
+				) : (
+					<AvatarHeaderSkeleton elements={MOBILE_AVATAR_HEADER_SKELETON_ELEMENTS} />
+				)
+			}
 			onRefresh={() => void query.refetch()}
 			isRefreshing={query.isRefetching}
 		>
@@ -56,6 +75,14 @@ export default function AccountScreen() {
 						)}
 					</View>
 				</AccordionSection>
+				{/* the three Dashboard rows, as the user menu draws them */}
+				{dashboardPageLinks && (
+					<TableCard className="mx-4 mb-6 p-2">
+						{dashboardPageLinks.map(({ dashboardKind, label, path }) => (
+							<MenuLink key={dashboardKind} label={label} href={path} isSelected={false} />
+						))}
+					</TableCard>
+				)}
 				<AccordionSection
 					title="Settings"
 					icon={Settings}

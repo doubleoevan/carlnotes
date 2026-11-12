@@ -2,7 +2,7 @@ import { colors } from "@carlnotes/nightshift/colors"
 import { NOTE_BODY_LEADING, toNoteHtmlStyle } from "@carlnotes/nightshift/noteHtmlStyle"
 import { fontFamilies, typeRoles } from "@carlnotes/nightshift/typography"
 import { toPixels } from "@carlnotes/nightshift/units"
-import { useUniwind } from "uniwind"
+import { useColorMode } from "@/theme"
 
 /**
  * Resolves the same note typography and palette as web into native editor styles.
@@ -12,15 +12,14 @@ export function useNoteStyle(): {
 	placeholderColor: string
 	bodyStyle: { fontFamily: string; fontSize: number; lineHeight: number; color: string }
 } {
-	const { theme } = useUniwind()
-	const mode = theme === "dark" ? "dark" : "light"
+	const colorMode = useColorMode()
 	const palette = {
-		foreground: colors.foreground[mode],
-		mutedForeground: colors.mutedForeground[mode],
-		muted: colors.muted[mode],
-		border: colors.border[mode],
-		link: colors.link[mode],
-		primary: colors.primary[mode],
+		foreground: colors.foreground[colorMode],
+		mutedForeground: colors.mutedForeground[colorMode],
+		muted: colors.muted[colorMode],
+		border: colors.border[colorMode],
+		link: colors.link[colorMode],
+		primary: colors.primary[colorMode],
 	}
 	return {
 		htmlStyle: toNoteHtmlStyle(palette),

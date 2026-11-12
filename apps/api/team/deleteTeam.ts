@@ -1,12 +1,13 @@
-// deleting a team: the delete if nobody else is on it, the handover to a new leader if someone is, and the one
-// team row delete behind both and an account close
+// deleting a team: the delete if nobody else is on it, the handover to a new leader if someone is, the team row
+// delete, and the edge purge
 
 import { type DbTransaction, db } from "@carlnotes/db"
+import { deleteDashboardSnapshotRows } from "@carlnotes/db/dashboardSnapshotRows"
 import { chatRoomAttachments } from "@carlnotes/db/schema/chat"
 import { teamMembers, teams } from "@carlnotes/db/schema/teams"
 import { deleteStoredObjects, recordPendingObjectDeletions } from "@carlnotes/db/store"
 import { clearUnseenCommentMentions } from "@carlnotes/db/unseenCommentMentions"
-import { purgeEdgeCacheTagAfterDeletion } from "@carlnotes/server/edgePurge"
+import { purgeEdgeCacheTagAfterDeletion, toDashboardCacheTag } from "@carlnotes/server/edgePurge"
 import { and, eq } from "drizzle-orm"
 import { isLeaderRole } from "../authorization"
 import { deleteChatRoomAttachmentRows } from "../chat/roomAttachments"
@@ -59,9 +60,9 @@ export async function deleteTeam(userId: string, teamId: string): Promise<Delete
 		return updateTeamLeader(userId, teamId)
 	}
 
-	// delete the team's avatar image and chat room attachments once the row is gone, and purge the avatar from the edge
+	// delete the team's stored objects once the row is gone, and purge its avatar and Team Dashboard from the edge
 	await deleteStoredObjects(deletedTeamObjectKeys)
-	await purgeEdgeCacheTagAfterDeletion(toTeamAvatarCacheTag(teamId))
+	await purgeDeletedTeamAtEdge(teamId)
 	return { status: "deleted" }
 }
 
@@ -110,12 +111,15 @@ async function updateTeamLeader(userId: string, teamId: string): Promise<DeleteT
 }
 
 /**
- * Deletes a team row with its chat room attachment rows, records their object keys as pending on the transaction,
- * and returns the keys.
+ * Deletes a team row with its chat room attachment rows and its Team Dashboard's snapshots, records their object keys
+ * as pending on the transaction, and returns the keys.
  */
 export async function deleteTeamRow(transaction: DbTransaction, teamId: string): Promise<string[]> {
-	// delete the chat room attachment rows, then the team row
+	// delete the chat room attachment rows and the Team Dashboard's snapshots, then the team row
 	const chatRoomAttachmentKeys = await deleteChatRoomAttachmentRows(transaction, eq(chatRoomAttachments.teamId, teamId))
+	const dashboardImageKeys = await deleteDashboardSnapshotRows(transaction, [
+		{ dashboardKind: "teamDashboard", subjectId: teamId },
+	])
 	const [deletedTeamRow] = await transaction
 		.delete(teams)
 		.where(eq(teams.id, teamId))
@@ -123,8 +127,18 @@ export async function deleteTeamRow(transaction: DbTransaction, teamId: string):
 
 	// record the avatar key, if the team had one
 	if (!deletedTeamRow?.avatarKey) {
-		return chatRoomAttachmentKeys
+		return [...chatRoomAttachmentKeys, ...dashboardImageKeys]
 	}
 	await recordPendingObjectDeletions({ handle: transaction, objectKeys: [deletedTeamRow.avatarKey] })
-	return [...chatRoomAttachmentKeys, deletedTeamRow.avatarKey]
+	return [...chatRoomAttachmentKeys, ...dashboardImageKeys, deletedTeamRow.avatarKey]
+}
+
+/**
+ * Purges a deleted team's avatar and its Team Dashboard from the edge.
+ */
+export async function purgeDeletedTeamAtEdge(teamId: string): Promise<void> {
+	await Promise.all([
+		purgeEdgeCacheTagAfterDeletion(toTeamAvatarCacheTag(teamId)),
+		purgeEdgeCacheTagAfterDeletion(toDashboardCacheTag({ dashboardKind: "teamDashboard", subjectId: teamId })),
+	])
 }

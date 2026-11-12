@@ -3,13 +3,13 @@ import { toAvatarImagePath } from "@carlnotes/contracts/avatars"
 import { PODCAST_NAME } from "@carlnotes/contracts/podcastEpisodes"
 import { toProfilePath, toTopicPath } from "@carlnotes/contracts/seo"
 import { SITE_URL } from "@carlnotes/contracts/site"
+import { toCountLabel } from "@carlnotes/contracts/text"
 import type { TopicDetails, TopicResponse } from "@carlnotes/contracts/topics"
 import { MAX_TOPIC_SOURCES } from "@carlnotes/contracts/topics"
 import {
 	TopicPodcastEpisodeVideoInfoSection,
 	type TopicPodcastEpisodeVideoInfoSectionElements,
 } from "@carlnotes/core/components/TopicPodcastEpisodeVideoInfoSection"
-import { toCountLabel } from "@carlnotes/core/lib/labels"
 import { toNotesMarkdown } from "@carlnotes/core/lib/topicScanRecap"
 import { usePurchaseOffers } from "@carlnotes/core/stores/purchaseOffersStore"
 import { useRecyclingState } from "@shopify/flash-list"

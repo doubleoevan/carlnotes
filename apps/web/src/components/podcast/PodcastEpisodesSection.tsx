@@ -7,7 +7,7 @@ import { cn } from "@carlnotes/nightshift/classNames"
 import { PagedTableSection } from "@/components/table/PagedTableSection"
 import { PodcastEpisodeTitleLink } from "@/components/table/PodcastEpisodeTitleLink"
 import { SortableHeader } from "@/components/table/SortableHeader"
-import { TABLE_WIDE_FIRST_COLUMN_CLASS } from "@/lib/styleClasses"
+import { TABLE_WIDE_FIRST_COLUMN_CLASS } from "@/lib/tableClasses"
 
 // the section's key and title, whether a divider shows under it while closed, the title column's heading, and its
 // podcast episodes with their descriptions

@@ -1,5 +1,6 @@
 // the edge purge by cache tag, which the api and the worker both send after a public write
 
+import type { DashboardSubject } from "@carlnotes/contracts/dashboards"
 import { reportError } from "./monitoring"
 
 // the tags to purge, with the zone id and api token the purge request uses
@@ -23,6 +24,13 @@ export function toTopicImageCacheTag(topicId: string): string {
  */
 export function toTopicPostCacheTag(topicPostId: string): string {
 	return `topic-post:${topicPostId}`
+}
+
+/**
+ * Returns the tag a Dashboard's public snapshots are cached under at the edge.
+ */
+export function toDashboardCacheTag({ dashboardKind, subjectId }: DashboardSubject): string {
+	return `dashboard:${dashboardKind}:${subjectId}`
 }
 
 /**

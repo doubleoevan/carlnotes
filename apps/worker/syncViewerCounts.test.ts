@@ -25,7 +25,7 @@ test("after a restart the saved counter merges back, and the copy writes the uni
 	// Postgres holds the saved counter, and the topic's row is there to raise
 	const sentQueries = stubConnectionPool((sentQuery) => {
 		if (sentQuery.text.includes('from "viewer_counters"')) {
-			return [["topic-1", null, null, null, SAVED_COUNTER]]
+			return [["topic-1", null, null, null, null, SAVED_COUNTER]]
 		}
 		return sentQuery.text.startsWith('update "topics"') ? [["topic-1"]] : []
 	})
@@ -128,7 +128,7 @@ test("after a restart a profile's saved counter merges back before the copy", as
 	// Postgres holds the profile's saved counter, and the user's row is there to raise
 	stubConnectionPool((sentQuery) => {
 		if (sentQuery.text.includes('from "viewer_counters"')) {
-			return [[null, null, "user-1", null, SAVED_COUNTER]]
+			return [[null, null, "user-1", null, null, SAVED_COUNTER]]
 		}
 		return sentQuery.text.startsWith('update "users"') ? [["user-1"]] : []
 	})
@@ -136,4 +136,21 @@ test("after a restart a profile's saved counter merges back before the copy", as
 
 	// the live count holds the saved viewer and the new one
 	expect(await readViewerEstimate(profileRef)).toBe(2)
+})
+
+test("a Topic Post's counter raises its own column and saves in the row that names it", async () => {
+	stubRedisClient()
+	await addViewer({ kind: "topicPost", id: "post-1" }, "v:visitor")
+
+	// the Topic Post's row is there to raise
+	const sentQueries = stubConnectionPool((sentQuery) =>
+		sentQuery.text.startsWith('update "topic_posts"') ? [["post-1"]] : [],
+	)
+	await copyViewerCounts()
+
+	// the Topic Post's column is raised with greatest, and its counter is saved in the row that names the Topic Post
+	const countUpdate = sentQueries.find((sentQuery) => sentQuery.text.startsWith('update "topic_posts"'))
+	expect(countUpdate?.text).toContain("greatest(")
+	const counterInsert = sentQueries.find((sentQuery) => sentQuery.text.startsWith('insert into "viewer_counters"'))
+	expect(counterInsert?.text).toContain('"topic_post_id"')
 })

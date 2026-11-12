@@ -7,6 +7,7 @@ import {
 	TopicPostPage as SharedTopicPostPage,
 	type TopicPostPageElements,
 } from "@carlnotes/core/components/TopicPostPage"
+import { useTopicPostView } from "@carlnotes/core/hooks/useTopicPostView"
 import {
 	HOME_RANK_OPTION_LABELS,
 	PROFILE_RANK_OPTION_LABELS,
@@ -35,6 +36,7 @@ import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { DetailsLine } from "@/components/common/DetailsLine"
 import { ProfileRankDialog } from "@/components/common/RankDialog"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
+import { ViewerCountLine } from "@/components/common/ViewerCountLine"
 import { PageSkeleton } from "@/components/layout/PageSkeleton"
 import { NOTE_BODY_CLASS, NOTE_BODY_STYLE } from "@/components/note/noteStyle"
 import { ShareTopic } from "@/components/share/ShareTopic"
@@ -48,7 +50,8 @@ import { TOPIC_POST_DISCUSSION_CARD_ELEMENTS } from "@/components/topicPost/Topi
 import { TopicPostInfo } from "@/components/topicPost/TopicPostInfo"
 import { useIsMounted, useLoadInBrowser } from "@/hooks/useBrowserValue"
 import { usePageTitle } from "@/hooks/usePageTitle"
-import { PAGE_CLASS, PLAIN_TOPIC_HEADER_GRID_CLASS, TOPIC_HEADER_AREA_CLASSES } from "@/lib/styleClasses"
+import { PLAIN_TOPIC_HEADER_GRID_CLASS, TOPIC_HEADER_AREA_CLASSES } from "@/lib/pageHeaderClasses"
+import { PAGE_CLASS } from "@/lib/styleClasses"
 import { type PageActionOption, useRegisterPageActions } from "@/stores/pageActionsStore"
 
 // the editor and the reader load with the editor package, in the browser alone
@@ -158,6 +161,9 @@ export function TopicPostPage() {
 		}
 	}, [topicPost, topicPostId, pathname, navigate])
 
+	// send the Topic Post page's view once per tab, once a published Topic Post has loaded
+	useTopicPostView(topicPost?.publishedAt ? topicPost.id : null)
+
 	// read the session, and register the actions menu
 	const { data: session } = authClient().useSession()
 	useRegisterTopicPostPageActions({
@@ -218,6 +224,12 @@ export function TopicPostPage() {
 					isTopicOwner={topicPost.isTopicOwner}
 					onCommentCountChange={setCommentCount}
 				/>
+				{/* a published Topic Post's viewer count line, the page's last line */}
+				{topicPost.publishedAt && (
+					<ViewerCountLine
+						viewerCountPage={{ kind: "topicPost", id: topicPost.id, isPublic: topicPost.isTopicPublic }}
+					/>
+				)}
 			</SharedTopicPostPage>
 
 			{/* the actions menu's share dialog, the topic's own with this post shared in the topic's place */}

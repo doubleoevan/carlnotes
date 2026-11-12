@@ -6,6 +6,7 @@ import { EMPTY_REACTION_SUMMARY } from "@carlnotes/contracts/social"
 import type { TopicPostResponse } from "@carlnotes/contracts/topicPosts"
 import { RouterProvider } from "@tanstack/react-router"
 import { renderToString } from "react-dom/server"
+import { VIEWER_COUNT_LINE_CLASS } from "@/lib/styleClasses"
 import { loadRouter } from "@/routes/-loadRouter"
 
 // the fixture post's ids and current slugs, and a draft's id, which has no head
@@ -171,4 +172,12 @@ test("an id-only path and a stale slug redirect permanently to the post's curren
 test("a draft responds 404 to a visitor", async () => {
 	const { serverLoadResult } = await loadRouter(`/topics/${TOPIC_ID}/agents/posts/${DRAFT_ID}`)
 	expect(serverLoadResult).toMatchObject({ type: "render", status: 404 })
+})
+
+// the server render ends a published Topic Post with the empty Visitors line, which fills only after the page mounts
+test("a published Topic Post's server render ends with the empty counts line and no viewer count", async () => {
+	const { router } = await loadRouter(TOPIC_POST_PATH)
+	const html = renderToString(<RouterProvider router={router} />)
+	expect(html).toContain(`<p class="${VIEWER_COUNT_LINE_CLASS}"></p>`)
+	expect(html).not.toMatch(/\bVisitors\b/)
 })

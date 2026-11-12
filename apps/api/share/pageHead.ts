@@ -13,6 +13,7 @@ import {
 	toTopicFeedPath,
 	toTopicPath,
 } from "@carlnotes/contracts/seo"
+import { toCountLabel } from "@carlnotes/contracts/text"
 import { toTopicImageUrls } from "@carlnotes/contracts/topicImages"
 import { db } from "@carlnotes/db"
 import { topics } from "@carlnotes/db/schema/topics"
@@ -32,7 +33,7 @@ import { loadTopicFeedUpdatedAt } from "../seo"
 import { toTopicPostPageHead } from "../topicPost/topicPostPageHead"
 import { toPodcastEpisodePreview, toPodcastEpisodePreviewKey } from "./podcastEpisodeImage"
 import { loadTopicPostPreview, toInvitedTeamPreview, toProfilePreview, toTeamPreview, toTopicPreview } from "./preview"
-import { toCountLabel, toPreviewVersion } from "./previewImage"
+import { toPreviewVersion } from "./previewImage"
 import { type ProfilePreview, toProfilePreviewKey } from "./profileImage"
 import { type TeamPreview, toTeamPreviewKey } from "./teamImage"
 import { type TopicPreview, toTopicPreviewKey } from "./topicImage"

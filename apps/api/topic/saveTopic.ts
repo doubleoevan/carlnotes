@@ -11,6 +11,7 @@ import { users } from "@carlnotes/db/schema/users"
 import { clearUnseenCommentMentions, loadTopicMentionedUserIds } from "@carlnotes/db/unseenCommentMentions"
 import { addViewer } from "@carlnotes/db/viewerCounts"
 import { topicImageModel } from "@carlnotes/models/topicImageModel"
+import { rebuildTopicDashboards } from "@carlnotes/pipeline/dashboardRebuild"
 import { startTopicImageRender } from "@carlnotes/pipeline/topicImages/topicImageRenders"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { purgeEdgeCacheTagAfterDeletion, toTopicImageCacheTag } from "@carlnotes/server/edgePurge"
@@ -377,9 +378,11 @@ export async function updateTopic(
 		await purgeEdgeCacheTagAfterDeletion(toTopicImageCacheTag(topicId))
 	}
 
-	// a changed visibility changes who may read the topic's comments, so clear the cached mentions of its mentioned users
+	// a changed visibility changes who may read the topic's comments and see it on a Dashboard, so clear the cached
+	// mentions of its mentioned users and rebuild its Dashboards
 	if (visibility !== topic.visibility) {
 		await clearUnseenCommentMentions(await loadTopicMentionedUserIds(topicId))
+		await rebuildTopicDashboards(topic)
 	}
 
 	// check whatever url Sources this edit added, now that the rows are committed

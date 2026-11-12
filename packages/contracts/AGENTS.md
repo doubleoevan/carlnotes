@@ -136,12 +136,14 @@ the query and param schemas the api validates with, `okResponse`, the chat reply
 recording's multipart post.
 `apiRouteContracts.ts` is the route contracts the contract freeze serializes: every capability the app reaches, keyed as
 the client parity check names it, with its method, path, and schemas, and `API_ROUTE_HELPERS` for a client export that
-calls no route or only wraps another export. It holds the `ApiRouteContract` type and spreads five part files, one per
+calls no route or only wraps another export. It holds the `ApiRouteContract` type and spreads eight part files, one per
 area, that import the type back: `topicRouteContracts.ts` (topics, topic findings, viewer counts, notes, and the site
 search), `chatRouteContracts.ts` (the private chat, the chat rooms, and the four voice routes), `teamRouteContracts.ts`
 (teams, blocks, and reports), `accountRouteContracts.ts` (activity, the app sign-up gate, billing, profiles and the
-account, and the Terms), and `podcastRouteContracts.ts` (podcast episodes). The part files load every other contract,
-and nothing loads them back.
+account, and the Terms), `podcastRouteContracts.ts` (podcast episodes), `socialRouteContracts.ts` (reactions, comment
+threads, the news, and Topic Posts), `personalSourcesRouteContracts.ts` (Personal sources), and
+`dashboardRouteContracts.ts` (a Dashboard's snapshot). The part files load every other contract, and nothing loads
+them back.
 
 The read-only Personal sources email response returns the environment-configured mailbox for the empty-state hint. Finding views show public notes alone. Send and email routing use editable Topics.
 
@@ -177,3 +179,14 @@ and each window's empty line. `commentMentions.ts` holds a signed-in user's unse
 marks them seen, and the places a mention badge sits. `topicPodcastEpisodeVideoWork.ts` holds the task queues, the
 workflow names, and the workflow ids of a film's render, its rebuild, and the film backfill, with the backfill's
 summary, for the worker, its workflows, and the Temporal client.
+
+`dashboards.ts` holds a Dashboard, which the page copy calls "Specials": the three kinds and their page names and paths,
+with `toDashboardPageLinks` for a person's three pages and `toDashboardLinks` for a viewer count line's links, the items
+a view counts and the play formats, the trend ranges, the retention days, the city minimum that keeps a place private,
+the summary and its counts, the snapshot each chart reads, and the path params, the query, and the response of a read.
+`countryCenters.ts` holds each country's center, where a country's pin sits, and `countryNames.ts` a country code's
+English name. `dashboardWork.ts` holds the signal that asks a running Dashboard rebuild to build again, which the
+Temporal client and the workflow share. `placeTestFixtures.ts` holds the places the tests share, and only tests import
+it. `arrays.ts` holds `toChunks`, which splits a list into batches of one size. `teams.ts` holds `toAlphabeticalTeams`,
+teams in alphabetical order by name, and `mcpViews.ts` holds the dashboard MCP view's data and `DASHBOARD_TOOL_KINDS`,
+the `read_dashboard` tool's `dashboardKind` value for each Dashboard kind.

@@ -38,6 +38,7 @@
 				"evals/personal-sources-context/personalSourcesContextEval.ts",
 				"evals/personal-sources-context/personalSourcesScoringEval.ts",
 				"evals/updates-opener/updatesOpenerEval.ts",
+				"evals/dashboard-paragraph/dashboardParagraphEval.ts",
 				"evals/topic-post-summary/topicPostSummaryEval.ts",
 				"evals/topic-post-discussion/topicPostDiscussionEval.ts",
 				"evals/topic-post-chat/topicPostChatEval.ts",
@@ -98,6 +99,8 @@
 				"src/mcpViews/mcpViewTopicPostEditor.ts",
 				// vite.mcpViews.config.ts swaps the opening of a url in a new tab for this one by path
 				"src/mcpViews/mcpViewExternalLinks.ts",
+				// vite.mcpViews.config.ts swaps the dashboard MCP view for this one by path outside the dashboard mode
+				"src/mcpViews/emptyDashboardMcpView.ts",
 				// the smoke:mcp-views script, and the page mcpViewTestHost.ts bundles for the browser
 				"src/mcpViews/testHost/mcpViews.smoke.ts",
 				"src/mcpViews/testHost/hostPage.ts"

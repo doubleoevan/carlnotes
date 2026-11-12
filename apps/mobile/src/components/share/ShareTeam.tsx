@@ -1,10 +1,10 @@
 import { sendCreateTeamInvite } from "@carlnotes/client/teamClient"
-import { toInvitePath } from "@carlnotes/contracts/seo"
+import { toInvitePath, toTeamPath } from "@carlnotes/contracts/seo"
 import { SITE_URL } from "@carlnotes/contracts/site"
 import { useCopyFeedback } from "@carlnotes/core/hooks/useCopyFeedback"
 import { setStringAsync } from "expo-clipboard"
 import { Link, Share as ShareIcon } from "lucide-react-native"
-import { Share, View } from "react-native"
+import { View } from "react-native"
 import { Sheet } from "@/components/common/Sheet"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
@@ -12,6 +12,7 @@ import { Text } from "@/components/primitives/text"
 import { usePageMutation } from "@/hooks/usePageMutation"
 import { captureVisitEvent } from "@/visitAnalytics"
 import { ShareTargets } from "./ShareTargets"
+import { openShareSheet } from "./shareSheet"
 
 /**
  * Shares public team pages or membership invitation links with the web's visibility gates.
@@ -29,7 +30,7 @@ export function ShareTeam({
 	canInvite: boolean
 	onClose: () => void
 }) {
-	const url = `${SITE_URL}/teams/${teamId}`
+	const url = `${SITE_URL}${toTeamPath(teamId)}`
 	const handleShare = (channel: string): void => captureVisitEvent("visit_share_clicked", { kind: "team", channel })
 	const mutation = usePageMutation()
 	const { copiedLabel, markCopied } = useCopyFeedback()
@@ -51,7 +52,7 @@ export function ShareTeam({
 							if (invite === "limited") {
 								throw new Error("Daily invite limit reached. It resets tomorrow.")
 							}
-							await Share.share({ message: `${SITE_URL}${toInvitePath(invite.token)}` })
+							await openShareSheet({ title: teamName, url: `${SITE_URL}${toInvitePath(invite.token)}` })
 						})
 					}
 				>
@@ -66,7 +67,7 @@ export function ShareTeam({
 				disabled={!isPublic}
 				onPress={() => {
 					handleShare("share-sheet")
-					void mutation.run(() => Share.share({ message: url }))
+					void openShareSheet({ title: teamName, url })
 				}}
 			>
 				<Icon as={ShareIcon} />

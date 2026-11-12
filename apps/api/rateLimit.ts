@@ -236,6 +236,14 @@ export const socialReadRateLimiter = toRateLimiter({
 	isReadByPageRenders: true,
 })
 
+// the quiet limiter over the Dashboard pages' snapshot reads, keyed by the user else the address. a page sends one read
+// per chart selection
+export const DASHBOARD_READ_RATE_LIMIT = 120
+export const dashboardReadRateLimiter = toQuietRateLimiter({
+	limit: DASHBOARD_READ_RATE_LIMIT,
+	store: toRateLimitStore("rate-limit:dashboard-read"),
+})
+
 /**
  * Counts one search against the search limit under the caller's key, and returns whether it is within the limit.
  */

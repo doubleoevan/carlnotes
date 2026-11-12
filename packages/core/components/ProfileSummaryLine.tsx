@@ -1,7 +1,7 @@
 import type { ProfileResponse } from "@carlnotes/contracts/profilePage"
+import { toCountLabel } from "@carlnotes/contracts/text"
 import type { ComponentType } from "react"
 import { toCountDetails } from "../lib/detailsLine"
-import { toCountLabel } from "../lib/labels"
 import { USER_BLOCKED_LABEL } from "../lib/userBlocks"
 import type { DetailsLineProps } from "./DetailsLine"
 

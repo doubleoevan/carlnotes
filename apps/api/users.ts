@@ -2,13 +2,14 @@
 
 import { inviteAccessPayload, notificationsEmailPayload } from "@carlnotes/contracts/payloads"
 import { db } from "@carlnotes/db"
+import { deleteDashboardSnapshotRows, toPersonalDashboardSubjects } from "@carlnotes/db/dashboardSnapshotRows"
 import { teamMembers } from "@carlnotes/db/schema/teams"
 import { topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
 import { deleteStoredObjects, recordPendingObjectDeletions } from "@carlnotes/db/store"
 import { deleteLiteLLMKey } from "@carlnotes/models/litellmProxy"
 import { trackEvent } from "@carlnotes/server/analytics"
-import { purgeEdgeCacheTagAfterDeletion } from "@carlnotes/server/edgePurge"
+import { purgeEdgeCacheTagAfterDeletion, toDashboardCacheTag } from "@carlnotes/server/edgePurge"
 import { reportError } from "@carlnotes/server/monitoring"
 import { zValidator } from "@hono/zod-validator"
 import { and, asc, count, eq, inArray, ne } from "drizzle-orm"
@@ -19,10 +20,10 @@ import { isAllowed } from "./authorization"
 import { cancelUserSubscription } from "./billing"
 import { loadChatAttachmentObjectKeys } from "./chat/chatAttachmentReads"
 import { type AnalyticsProperties, type AppEnv, currentUser, toAnalyticsProperties } from "./currentUser"
-import { toTeamAvatarCacheTag, toUserAvatarCacheTag } from "./edgeCache"
+import { toUserAvatarCacheTag } from "./edgeCache"
 import { refreshSessionUser, revokeUserSessions } from "./sessions"
 import { deleteRevenueCatCustomer } from "./storeBilling"
-import { deleteTeamRow } from "./team/deleteTeam"
+import { deleteTeamRow, purgeDeletedTeamAtEdge } from "./team/deleteTeam"
 import { deleteTopic } from "./topic/deleteTopic"
 import { loadTopicPostObjectKeys } from "./topicPost/topicPostObjectKeys"
 
@@ -74,9 +75,9 @@ async function setNewTeamLeaders(userId: string): Promise<void> {
 		// recorded in the same transaction. its topics return to their topic owners
 		const deletedTeamObjectKeys = await db.transaction((transaction) => deleteTeamRow(transaction, teamId))
 
-		// delete the team's objects too, and purge its avatar from the edge
+		// delete the team's objects too, and purge its avatar and Team Dashboard from the edge
 		await deleteStoredObjects(deletedTeamObjectKeys)
-		await purgeEdgeCacheTagAfterDeletion(toTeamAvatarCacheTag(teamId))
+		await purgeDeletedTeamAtEdge(teamId)
 	}
 }
 
@@ -137,11 +138,13 @@ export async function deleteUser(
 		reportError(error, "api-route", { userId: targetUserId })
 	})
 
-	// record the keys of everything kept in chat, on any topic, of the topic posts written on other users' topics, and
-	// of the avatar, then delete the user row in one transaction, so the keys survive the cascade
+	// record the keys of everything kept in chat, on any topic, of the topic posts written on other users' topics, of
+	// the Dashboards' share images, and of the avatar, then delete the user row in one transaction, so the keys survive
+	// the cascade
 	const { deletedUserRow, objectKeys } = await db.transaction(async (transaction) => {
 		const chatAttachmentObjectKeys = await loadChatAttachmentObjectKeys({ userId: targetUserId }, transaction)
 		const topicPostObjectKeys = await loadTopicPostObjectKeys({ authorUserId: targetUserId }, transaction)
+		const dashboardImageKeys = await deleteDashboardSnapshotRows(transaction, toPersonalDashboardSubjects(targetUserId))
 		const [deletedUserRow] = await transaction
 			.delete(users)
 			.where(eq(users.id, targetUserId))
@@ -151,6 +154,7 @@ export async function deleteUser(
 		const objectKeys = [
 			...chatAttachmentObjectKeys,
 			...topicPostObjectKeys,
+			...dashboardImageKeys,
 			...(deletedUserRow?.avatarKey ? [deletedUserRow.avatarKey] : []),
 		]
 		await recordPendingObjectDeletions({ handle: transaction, objectKeys })
@@ -169,8 +173,12 @@ export async function deleteUser(
 		})
 	}
 
-	// purge the account's avatar from the edge now that the row is gone
-	await purgeEdgeCacheTagAfterDeletion(toUserAvatarCacheTag(targetUserId))
+	// purge the account's avatar and its Topic and Podcast Dashboards from the edge now that the row is gone
+	const accountCacheTags = [
+		toUserAvatarCacheTag(targetUserId),
+		...toPersonalDashboardSubjects(targetUserId).map(toDashboardCacheTag),
+	]
+	await Promise.all(accountCacheTags.map(purgeEdgeCacheTagAfterDeletion))
 
 	// the row is gone, so this analytics event is the only record of who closed it
 	trackEvent("account_deleted", actingUserId, {

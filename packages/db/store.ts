@@ -1,6 +1,9 @@
 // object storage through Bun's built-in S3 client the S3_* env values alone select: the uploads, the reads,
 // the object keys, deleteStoredObject, and the pending object deletions
 
+import { toChunks } from "@carlnotes/contracts/arrays"
+import type { DashboardSubject } from "@carlnotes/contracts/dashboards"
+import type { McpViewScriptFile } from "@carlnotes/contracts/mcpViewHtml"
 import { runWithConcurrency } from "@carlnotes/server/concurrency"
 import { eq, sql } from "drizzle-orm"
 import { type DbHandle, db } from "./index"
@@ -30,11 +33,9 @@ export async function recordPendingObjectDeletions({
 	objectKeys,
 	nextTryAt,
 }: RecordPendingObjectDeletionsOptions): Promise<void> {
-	for (let i = 0; i < objectKeys.length; i += PENDING_OBJECT_DELETION_BATCH_SIZE) {
+	for (const objectKeyBatch of toChunks(objectKeys, PENDING_OBJECT_DELETION_BATCH_SIZE)) {
 		// insert one batch, keeping any key already pending
-		const pendingObjectDeletionRows = objectKeys
-			.slice(i, i + PENDING_OBJECT_DELETION_BATCH_SIZE)
-			.map((objectKey) => ({ objectKey, nextTryAt }))
+		const pendingObjectDeletionRows = objectKeyBatch.map((objectKey) => ({ objectKey, nextTryAt }))
 		await handle.insert(pendingObjectDeletions).values(pendingObjectDeletionRows).onConflictDoNothing()
 	}
 }
@@ -193,6 +194,11 @@ export function toChatRoomAttachmentKey(topicId: string, roomAttachmentId: strin
 	return `topics/${topicId}/room-attachments/${roomAttachmentId}/${toSafeFilename(filename)}`
 }
 
+// the object key for a public Dashboard's share image, named by its public summary's hash
+export function toDashboardShareImageKey({ dashboardKind, subjectId }: DashboardSubject, contentHash: string): string {
+	return `dashboards/${dashboardKind}/${subjectId}/${contentHash}.png`
+}
+
 // the object key for a link preview's proxied image, namespaced by link preview id
 export function toLinkPreviewImageKey(linkPreviewId: string): string {
 	return `link-previews/${linkPreviewId}/image`
@@ -232,8 +238,8 @@ export async function getResourceContent(contentKey: string): Promise<string> {
 	return bucket().file(contentKey).text()
 }
 
-// the object key of one of a stored MCP view version's two files
-export function toMcpViewBundleKey(version: number, bundleFile: "mcpViews.js" | "mcpViews.css"): string {
+// the object key of one of a stored MCP view version's files
+export function toMcpViewBundleKey(version: number, bundleFile: McpViewScriptFile | "mcpViews.css"): string {
 	return `mcp-view-bundles/v${version}/${bundleFile}`
 }
 

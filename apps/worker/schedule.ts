@@ -1,6 +1,7 @@
 // scans every Topic scheduled by its frequency and emails its new Findings to subscribers
 
 import { SCHEDULED_SCAN_SPENT_BUDGET_REASON } from "@carlnotes/contracts/scanFailure"
+import { toLastCompletedUtcDay } from "@carlnotes/contracts/time"
 import { db, sizeConnectionPool } from "@carlnotes/db"
 import { loadDailySpendCutoffState } from "@carlnotes/db/dailySpendCutoffs"
 import { runWithJobLease } from "@carlnotes/db/jobLease"
@@ -12,6 +13,7 @@ import { recoverPersonalSourcesWork } from "@carlnotes/pipeline/personalSources/
 import { startTopicScan } from "@carlnotes/pipeline/scan"
 import { screenPendingSources } from "@carlnotes/pipeline/screen"
 import { failStaleScans } from "@carlnotes/pipeline/staleScans"
+import { startDashboardSnapshotsWorkflow } from "@carlnotes/pipeline/temporalClient"
 import { shutdownAnalytics } from "@carlnotes/server/analytics"
 import { toPositiveInteger } from "@carlnotes/server/envSettings"
 import { reportError, shutdownMonitoring, startMonitoring } from "@carlnotes/server/monitoring"
@@ -294,7 +296,7 @@ async function saveFailedScan(topic: Topic): Promise<void> {
 
 // run the leased sweep and the leased viewer count sync, then retry the pending object deletions, remind the support
 // personal sources of reports left open, send the day's notifications emails, and report the day's spend once the
-// leases are released
+// leases are released, after starting the day's Dashboard build
 async function runSweep(): Promise<void> {
 	await runScheduledTopicScans()
 	await syncViewerCounts()
@@ -304,6 +306,11 @@ async function runSweep(): Promise<void> {
 	// a failed email read still leaves the day's spend to report
 	await sendNotificationsEmails().catch((error: unknown) => {
 		reportError(error, "email", { emailKind: "notifications" })
+	})
+
+	// start the Dashboard build for the last completed UTC day, once a day, and still report the spend if it fails
+	await startDashboardSnapshotsWorkflow(toLastCompletedUtcDay()).catch((error: unknown) => {
+		reportError(error, "worker", { workflow: "dashboard-snapshots" })
 	})
 	await reportDailySpend()
 }

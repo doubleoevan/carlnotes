@@ -2,6 +2,7 @@ import { sendAcceptInvite, sendDeclineInvite } from "@carlnotes/client/activityC
 import { authClient } from "@carlnotes/client/authClient"
 import { isLeaderRole } from "@carlnotes/contracts/enums"
 import { type ProfileIdentity, toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
+import { toTeamPath } from "@carlnotes/contracts/seo"
 import type { TeamSummary, TeamsPageResponse } from "@carlnotes/contracts/teams"
 import { toDeleteReceivedInviteConfirmation } from "@carlnotes/core/lib/confirmationCopy"
 import { toCentsLabel } from "@carlnotes/core/lib/labels"
@@ -47,11 +48,11 @@ export function TeamMembershipRow({
 				<td className="py-2 pr-4">
 					{/* the team's avatar and name link to its page, with the team chat room's mention badge on top */}
 					<span className="relative inline-block">
-						<AnchorLink href={`/teams/${team.teamId}`} className={cn(STANDALONE_LINK_CLASS, "flex items-center gap-2")}>
+						<AnchorLink href={toTeamPath(team.teamId)} className={cn(STANDALONE_LINK_CLASS, "flex items-center gap-2")}>
 							<TeamAvatar team={team} className="size-6" />
 							{team.name}
 						</AnchorLink>
-						<PageUpdateCountBadge topicId={null} teamId={team.teamId} href={`/teams/${team.teamId}`} />
+						<PageUpdateCountBadge topicId={null} teamId={team.teamId} href={toTeamPath(team.teamId)} />
 					</span>
 				</td>
 				<td className="text-muted-foreground max-w-40 py-2 pr-4 sm:max-w-64">
@@ -205,7 +206,7 @@ export function TeamInviteRow({ invite, onAnswered }: { invite: ReceivedInvite; 
 				<td className="py-2 pr-4">
 					{invite.isPublic ? (
 						<AnchorLink
-							href={`/teams/${invite.teamId}`}
+							href={toTeamPath(invite.teamId)}
 							className={cn(STANDALONE_LINK_CLASS, "flex items-center gap-2")}
 						>
 							{teamLabel}

@@ -3,62 +3,79 @@ import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 
+// the mode of the second build, which writes the dashboard MCP view's own script beside the first build's
+const DASHBOARD_MCP_VIEW_MODE = "dashboard"
+
 /**
- * The Vite config for the MCP views: one script and one stylesheet, with every asset inlined, which the api writes into
- * each MCP view's html. The auth client is the MCP view's own, whose session is the caller the tool result names, the visit
- * analytics report nothing, the voice detector never starts, the Topic Post editor draws nothing, and a url outside the
- * app opens through the host.
+ * The Vite config for the MCP views: one script for every MCP view but the dashboard, the dashboard MCP view's own
+ * script in the dashboard mode, and one stylesheet, with every asset inlined, which the api writes into each MCP view's
+ * html. The auth client is the MCP view's own, whose session is the caller the tool result names, the visit analytics
+ * report nothing, the voice detector never starts, the Topic Post editor draws nothing, a url outside the app opens
+ * through the host, and outside the dashboard mode the dashboard MCP view draws nothing.
  */
-export default defineConfig({
-	plugins: [react(), tailwindcss()],
-	resolve: {
-		// the MCP view's auth client, its visit analytics, voice detector, and Topic Post editor, which do nothing, its way
-		// out to a url, then the alias for the app's src
-		alias: [
-			{
-				find: "@carlnotes/client/authClient",
-				replacement: path.resolve(__dirname, "./src/mcpViews/mcpViewAuthClient.ts"),
-			},
-			{
-				find: "@/lib/visitAnalytics",
-				replacement: path.resolve(__dirname, "./src/mcpViews/mcpViewVisitAnalytics.ts"),
-			},
-			{
-				find: "@/lib/voiceActivity",
-				replacement: path.resolve(__dirname, "./src/mcpViews/mcpViewVoiceActivity.ts"),
-			},
-			{
-				find: "@/components/topicPost/TopicPostEditor",
-				replacement: path.resolve(__dirname, "./src/mcpViews/mcpViewTopicPostEditor.ts"),
-			},
-			{
-				find: "@/lib/externalLinks",
-				replacement: path.resolve(__dirname, "./src/mcpViews/mcpViewExternalLinks.ts"),
-			},
-			{ find: "@", replacement: path.resolve(__dirname, "./src") },
-		],
-		// force a single React copy so hooks work. duplicate copies cause "invalid hook call"
-		dedupe: ["react", "react-dom"],
-	},
-	// an MCP view holds no files of its own, so the site's public folder is left out
-	publicDir: false,
-	build: {
-		outDir: "dist/mcp-views",
-		emptyOutDir: true,
-		// one stylesheet, and every font and image inlined, since an MCP view loads nothing it does not hold
-		cssCodeSplit: false,
-		assetsInlineLimit: () => true,
-		// ponytail: the one script holds every component an MCP view renders, about 1.5 MB. split it into served files if a
-		// host rejects a resource that large
-		chunkSizeWarningLimit: 2000,
-		rolldownOptions: {
-			input: path.resolve(__dirname, "./src/mcpViews/main.tsx"),
-			output: {
-				format: "es",
-				codeSplitting: false,
-				entryFileNames: "mcpViews.js",
-				assetFileNames: "mcpViews[extname]",
+export default defineConfig(({ mode }) => {
+	const isDashboardMcpView = mode === DASHBOARD_MCP_VIEW_MODE
+	return {
+		plugins: [react(), tailwindcss()],
+		resolve: {
+			// the MCP view's auth client, its visit analytics, voice detector, and Topic Post editor, which do nothing, its
+			// way out to a url, the empty dashboard MCP view outside the dashboard mode, then the alias for the app's src
+			alias: [
+				{
+					find: "@carlnotes/client/authClient",
+					replacement: path.resolve(__dirname, "./src/mcpViews/mcpViewAuthClient.ts"),
+				},
+				{
+					find: "@/lib/visitAnalytics",
+					replacement: path.resolve(__dirname, "./src/mcpViews/mcpViewVisitAnalytics.ts"),
+				},
+				{
+					find: "@/lib/voiceActivity",
+					replacement: path.resolve(__dirname, "./src/mcpViews/mcpViewVoiceActivity.ts"),
+				},
+				{
+					find: "@/components/topicPost/TopicPostEditor",
+					replacement: path.resolve(__dirname, "./src/mcpViews/mcpViewTopicPostEditor.ts"),
+				},
+				{
+					find: "@/lib/externalLinks",
+					replacement: path.resolve(__dirname, "./src/mcpViews/mcpViewExternalLinks.ts"),
+				},
+				...(isDashboardMcpView
+					? []
+					: [
+							{
+								find: /^\.\/DashboardMcpView$/,
+								replacement: path.resolve(__dirname, "./src/mcpViews/emptyDashboardMcpView.ts"),
+							},
+						]),
+				{ find: "@", replacement: path.resolve(__dirname, "./src") },
+			],
+			// force a single React copy so hooks work. duplicate copies cause "invalid hook call"
+			dedupe: ["react", "react-dom"],
+		},
+		// an MCP view holds no files of its own, so the site's public folder is left out
+		publicDir: false,
+		build: {
+			outDir: "dist/mcp-views",
+			// the first build empties the folder, and the dashboard mode's build adds its script to it. its stylesheet
+			// replaces the first build's, which Tailwind writes from the same sources
+			emptyOutDir: !isDashboardMcpView,
+			// one stylesheet, and every font and image inlined, since an MCP view loads nothing it does not hold
+			cssCodeSplit: false,
+			assetsInlineLimit: () => true,
+			// ponytail: the dashboard MCP view's script holds every component an MCP view renders, about 2.3 MB. split it
+			// into served files if a host rejects a resource that large
+			chunkSizeWarningLimit: 2400,
+			rolldownOptions: {
+				input: path.resolve(__dirname, "./src/mcpViews/main.tsx"),
+				output: {
+					format: "es",
+					codeSplitting: false,
+					entryFileNames: isDashboardMcpView ? "dashboardMcpView.js" : "mcpViews.js",
+					assetFileNames: "mcpViews[extname]",
+				},
 			},
 		},
-	},
+	}
 })

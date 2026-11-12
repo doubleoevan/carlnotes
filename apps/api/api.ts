@@ -29,6 +29,7 @@ import { countUnseenChatMentions, loadChatRooms } from "./chat/rooms"
 import { VOICE_TRANSCRIPTION_PATH, voiceRoute } from "./chat/voiceRoute"
 import { countsRoute } from "./counts/countsRoute"
 import { type AppEnv, currentUser } from "./currentUser"
+import { dashboardsRoute } from "./dashboard/dashboardsRoute"
 import { renderedCacheHeaders } from "./edgeCache"
 import { homeRoute } from "./home/homeRoute"
 import { invitesRoute, toInviteTarget } from "./invite/invites"
@@ -281,6 +282,8 @@ export const apiRoute = new Hono<AppEnv>()
 	.route("/", profileOrderRoute)
 	// a topic page's view, and the counts the topic and podcast episode pages read
 	.route("/", countsRoute)
+	// the Dashboard pages' snapshots and share images
+	.route("/", dashboardsRoute)
 	// the flag content route
 	.route("/", flagContentRoute)
 	// the topic finding routes

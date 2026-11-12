@@ -8,7 +8,7 @@ import {
 } from "@carlnotes/core/lib/teamsMembershipTableColumns"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { TABLE_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
+import { TABLE_CLASS, TABLE_SCROLL_CLASS } from "@/lib/tableClasses"
 import { DATA_TABLE_ELEMENTS } from "./DataTable"
 import type { RowSort } from "./SortableHeader"
 import { TableCard } from "./TableCard"

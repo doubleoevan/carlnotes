@@ -5,6 +5,8 @@ import { teamMembers, teams } from "@carlnotes/db/schema/teams"
 import { teamTopics } from "@carlnotes/db/schema/teamTopics"
 import { subscriptions, topics } from "@carlnotes/db/schema/topics"
 import { clearUnseenCommentMentions, loadTopicMentionedUserIds } from "@carlnotes/db/unseenCommentMentions"
+import { rebuildTopicDashboards, rebuildTopicDashboardsById } from "@carlnotes/pipeline/dashboardRebuild"
+import { purgeEdgeCacheTagAfterDeletion, toDashboardCacheTag } from "@carlnotes/server/edgePurge"
 import { and, eq, inArray, isNull, notInArray, sql } from "drizzle-orm"
 import { isLeaderRole } from "../authorization"
 import { deletePodcastFeedToken } from "../podcast/podcastFeedTokens"
@@ -51,8 +53,10 @@ export async function createTeam(
 		throw error
 	}
 
-	// drop the visitors' copies of each attached topic's page, which names its teams
+	// drop the visitors' copies of each attached topic's page, which names its teams, and rebuild the Dashboards of the
+	// topics the team now owns
 	await clearVisitorTopicPages(...payload.topicIds)
+	await rebuildTopicDashboardsById(...payload.topicIds)
 	return { status: "created", teamId }
 }
 
@@ -130,6 +134,7 @@ export async function addTopicToTeam(
 	)
 	if (addTopicResult === "added") {
 		await clearVisitorTopicPages(topicId)
+		await rebuildTopicDashboardsById(topicId)
 	}
 	return addTopicResult
 }
@@ -140,12 +145,15 @@ async function canAttachTopic(
 	userId: string,
 	topic: typeof topics.$inferSelect,
 ): Promise<boolean> {
+	// the owner's topic and a public topic attach, and another person's private topic never does
 	if (topic.ownerId === userId || topic.visibility === "public") {
 		return true
 	}
 	if (topic.visibility === "private") {
 		return false
 	}
+
+	// an invite topic attaches if the user can read it
 	const [visible] = await transaction
 		.select({ id: topics.id })
 		.from(topics)
@@ -337,6 +345,8 @@ export async function removeTopicFromTeam(userId: string, teamId: string, topicI
 		),
 		clearVisitorTopicPages(topicId),
 		loadTopicMentionedUserIds(topicId).then(clearUnseenCommentMentions),
+		rebuildTopicDashboards({ ownerId: topic?.ownerId ?? userId, teamId }),
+		rebuildTopicDashboardsById(topicId),
 	])
 	return true
 }
@@ -354,7 +364,12 @@ export async function updateTeam(
 		return "forbidden"
 	}
 
-	// the case-insensitive unique index catches a rename onto a taken name
+	// the name and visibility before the update, then the update. the case-insensitive unique index catches a rename
+	// onto a taken name
+	const [storedTeam] = await db
+		.select({ name: teams.name, isPublic: teams.isPublic })
+		.from(teams)
+		.where(eq(teams.id, teamId))
 	try {
 		await db.update(teams).set(payload).where(eq(teams.id, teamId))
 	} catch (error) {
@@ -363,6 +378,14 @@ export async function updateTeam(
 			return "name-taken"
 		}
 		throw error
+	}
+
+	// a rename or a visibility change leaves the edge copy of the team's Team Dashboard stale, and a description edit
+	// does not show there
+	const isRenamed = payload.name !== undefined && payload.name !== storedTeam?.name
+	const isVisibilityChanged = payload.isPublic !== undefined && payload.isPublic !== storedTeam?.isPublic
+	if (isRenamed || isVisibilityChanged) {
+		await purgeEdgeCacheTagAfterDeletion(toDashboardCacheTag({ dashboardKind: "teamDashboard", subjectId: teamId }))
 	}
 	return "saved"
 }

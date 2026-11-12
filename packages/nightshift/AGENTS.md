@@ -13,7 +13,8 @@ read, and the component contracts both apps' implementations build on. `tokens.c
   the section's count at the far right. `theme.ts` — the names the web theme maps,
   `toColorCssVariable`, a color token as its runtime `var(--<kebab>)`, so a style that reads it follows the theme toggle,
   `THEME_STORAGE_KEY`, and `DARK_CLASS_SCRIPT`, the script that the web app and the api's content pages run before
-  first paint to set the dark class from the saved theme or the OS setting.
+  first paint to set the dark class from the saved theme or the OS setting. It also exports the `ColorMode` type
+  that the web app's `useColorMode` returns.
   Tailwind's inline `--color-` aliases are build inputs; library styles must read the runtime palette variables.
   `units.ts` converts rem to pixels at the browser's default 16-pixel rem: `toPixels` and `toRemAndPixels`, a label
   such as "0.625rem, 10px". `breakpoints.ts` — `MD_BREAKPOINT_REM`, Tailwind's `md` breakpoint, for code that reads
@@ -22,6 +23,10 @@ read, and the component contracts both apps' implementations build on. `tokens.c
   `shadow-raised` utility both stylesheets hold. `classNames.ts` — `cn`, the class merge both apps build classes with:
   clsx inside a tailwind-merge taught that `shadow-raised` is a shadow. The package exports it by name as well as
   through the wildcard. The shadcn CLI resolves a `components.json` alias only through an exact export.
+- `chartTheme.ts` — the Nightshift chart theme: `toChartTheme`, the ECharts theme the Dashboard charts draw with,
+  `CHART_AXIS_LABEL_SIZE`, the axis label size both apps' charts share, and `toChartSeriesColors`, the series colors.
+  The theme is a plain object built from the color tokens and the body font in each mode, and the series colors come
+  from the color tokens.
 - `iconAction.ts` — `ICON_ACTION_CLASS`, the padding of an icon-only action in a row of them, which sets neighbors
   8px apart with no gap.
 - `field.ts` — `FIELD_CLASS`, the border and the fill of a field, a select, and an outline Button in both modes: the

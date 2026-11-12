@@ -1,6 +1,7 @@
 // values turned into the text a user sees: dates, durations, money, sizes, and counts
 
 import { UNKNOWN_CASE } from "@carlnotes/contracts/enums"
+import { toCountLabel, toCountNoun } from "@carlnotes/contracts/text"
 import { DAY_MS } from "@carlnotes/contracts/time"
 import type { TopicDetails, TopicScan } from "@carlnotes/contracts/topics"
 import type { UpdatesFinding } from "@carlnotes/contracts/updates"
@@ -23,10 +24,10 @@ export function toDateLabel(dateString: string | null): string {
 }
 
 /**
- * An ISO date as its month and day in the local time zone: Oct 22.
+ * An ISO date as its month and day, Oct 22, in the local time zone, or in UTC so the day never shifts with the zone.
  */
-export function toMonthDayLabel(dateString: string): string {
-	return new Date(dateString).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+export function toMonthDayLabel(dateString: string, { timeZone }: { timeZone?: "UTC" } = {}): string {
+	return new Date(dateString).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone })
 }
 
 /**
@@ -202,18 +203,6 @@ export function capitalize(word: string): string {
  */
 export function toBrewsWord(count: number): string {
 	return toCountNoun(count, "Brew")
-}
-
-/**
- * Returns a regular noun for a count, singular where there is one of the thing and plural otherwise, without the count.
- */
-export function toCountNoun(count: number, noun: string): string {
-	return count === 1 ? noun : `${noun}s`
-}
-
-// a count with its noun, singular where there is one of the thing
-export function toCountLabel(count: number, noun: string): string {
-	return `${count.toLocaleString()} ${toCountNoun(count, noun)}`
 }
 
 /**

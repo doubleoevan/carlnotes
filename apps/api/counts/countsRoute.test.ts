@@ -1,11 +1,19 @@
 // counts route tests: a topic view returns 204 and counts only a person who may view the topic, from the app's own
-// origin and within the rate limit, and the counts read is shared at the edge for a public topic and private for any
-// other
-import { afterEach, beforeEach, expect, test } from "bun:test"
+// origin and within the rate limit, the counts read is shared at the edge for a public topic and private for any
+// other, a Topic Post's view and counts read follow the same rules, and a view or a play counts once into the day's
+// daily count buffer
+
+import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
+import { ZURICH_PLACE } from "@carlnotes/contracts/placeTestFixtures"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
+import { takeDailyCountEntries } from "@carlnotes/db/dailyCountBuffer"
 import { restoreRedisClient, stubRedisClient, stubUnreachableRedisClient } from "@carlnotes/db/redisClientStub"
 import { readViewerEstimate } from "@carlnotes/db/viewerCounts"
+import * as requestPlace from "../requestPlace"
+import type { TopicPostRow } from "../topicPost/topicPosts"
+import * as topicPosts from "../topicPost/topicPosts"
 import { countsRoute } from "./countsRoute"
+import { countPodcastEpisodeListen } from "./viewerCounts"
 
 // the topic the tests view, and a browser's and a crawler's same-origin requests, each with its address
 const TOPIC = { kind: "topic", id: "topic-1" } as const
@@ -32,6 +40,7 @@ afterEach(() => {
 	Bun.env.BETTER_AUTH_SECRET = savedAuthSecret
 	restoreConnectionPool()
 	restoreRedisClient()
+	mock.restore()
 })
 
 // a topic row with the given visibility, its saved viewer count, and its followers
@@ -223,4 +232,91 @@ test("a public team's count is shared, and a private team's is hidden from a vis
 	const privateResponse = await countsRoute.request("/counts/teams/team-1")
 	expect(privateResponse.status).toBe(404)
 	expect(privateResponse.headers.get("Cache-Control")).toBe("private, no-cache")
+})
+
+// the Topic Post the tests view, published on a public Topic with five saved viewers
+const TOPIC_POST = { kind: "topicPost", id: "post-1" } as const
+const TOPIC_POST_ROW = {
+	topicPost: { id: "post-1", topicId: "topic-1", authorUserId: "author-1", publishedAt: new Date(), viewerCount: 5 },
+	topic: { id: "topic-1", ownerId: "owner-1", visibility: "public", teamId: null },
+	author: { userId: "author-1", username: "author-1", avatarSource: "generated", avatarKey: null },
+} as TopicPostRow
+
+// the Topic Post's read, on a Topic of the given visibility, and no row for any other read
+function stubTopicPost(visibility: "public" | "private"): void {
+	stubConnectionPool()
+	spyOn(topicPosts, "loadTopicPostRow").mockResolvedValue({
+		...TOPIC_POST_ROW,
+		topic: { ...TOPIC_POST_ROW.topic, visibility },
+	})
+}
+
+test("a visitor's reloads of a public Topic Post count once", async () => {
+	stubRedisClient()
+	stubTopicPost("public")
+	for (let reload = 0; reload < 10; reload++) {
+		const response = await countsRoute.request("/topicPosts/post-1/view", { method: "POST", headers: BROWSER_HEADERS })
+		expect(response.status).toBe(204)
+	}
+
+	// the ten reloads count one viewer
+	expect(await readViewerEstimate(TOPIC_POST)).toBe(1)
+})
+
+test("a view of a Topic Post the sender may not read returns 204 and counts nothing", async () => {
+	stubRedisClient()
+	stubTopicPost("private")
+	const response = await countsRoute.request("/topicPosts/post-1/view", { method: "POST", headers: BROWSER_HEADERS })
+	expect(response.status).toBe(204)
+	expect(await readViewerEstimate(TOPIC_POST)).toBe(0)
+})
+
+test("a public Topic Post's count is shared, and a private Topic Post's reads as missing", async () => {
+	stubRedisClient()
+	stubTopicPost("public")
+	const publicResponse = await countsRoute.request("/counts/topicPosts/post-1")
+	expect(await publicResponse.json()).toEqual({ viewerCount: 5 })
+	expect(publicResponse.headers.get("CDN-Cache-Control")).toBe("max-age=30")
+
+	// a Topic Post on a private Topic reads as missing, and the response is never shared
+	stubTopicPost("private")
+	const privateResponse = await countsRoute.request("/counts/topicPosts/post-1")
+	expect(privateResponse.status).toBe(404)
+	expect(privateResponse.headers.get("Cache-Control")).toBe("private, no-cache")
+})
+
+test("a topic view and a Topic Post view each count once into the day's buffer with the request's place", async () => {
+	stubRedisClient()
+	stubTopicRow("public")
+	spyOn(requestPlace, "readRequestPlace").mockReturnValue(ZURICH_PLACE)
+	await countsRoute.request("/topics/topic-1/view", { method: "POST", headers: BROWSER_HEADERS })
+	await countsRoute.request("/topics/topic-1/view", { method: "POST", headers: BROWSER_HEADERS })
+
+	// the Topic Post's view, on the same day and from the same place
+	stubTopicPost("public")
+	await countsRoute.request("/topicPosts/post-1/view", { method: "POST", headers: BROWSER_HEADERS })
+	const dailyCountEntries = (await takeDailyCountEntries()) ?? []
+	expect(dailyCountEntries.map(({ dailyCountRow, count }) => [dailyCountRow, count])).toEqual([
+		[{ dailyCountKind: "view", itemKind: "topic", itemId: "topic-1", day: expect.any(String), place: ZURICH_PLACE }, 1],
+		[
+			{ dailyCountKind: "view", itemKind: "topicPost", itemId: "post-1", day: expect.any(String), place: ZURICH_PLACE },
+			1,
+		],
+	])
+})
+
+test("a play counts into the day's buffer in its format, once for a retried download", async () => {
+	stubRedisClient()
+	const requestSender = { userId: "listener-1", clientAddress: null, userAgent: "Overcast/3.0", place: ZURICH_PLACE }
+	await countPodcastEpisodeListen({ requestSender, podcastEpisodeId: "episode-1", format: "video" })
+	await countPodcastEpisodeListen({ requestSender, podcastEpisodeId: "episode-1", format: "video" })
+
+	// one play in the buffer, in its format
+	const [dailyCountEntry] = (await takeDailyCountEntries()) ?? []
+	expect(dailyCountEntry?.count).toBe(1)
+	expect(dailyCountEntry?.dailyCountRow).toMatchObject({
+		dailyCountKind: "play",
+		podcastEpisodeId: "episode-1",
+		format: "video",
+	})
 })

@@ -3,6 +3,7 @@
 // views that bundle holds, if they are not the current ones
 
 import { parseArgs } from "node:util"
+import { toMcpViewScriptFile } from "@carlnotes/contracts/mcpViewHtml"
 import { MCP_VIEW_VERSION } from "@carlnotes/contracts/mcpViews"
 import { STORED_MCP_VIEW_VERSIONS } from "@carlnotes/contracts/mcpViewVersions"
 import { toMcpViewBundleKey, uploadAttachment } from "@carlnotes/db/store"
@@ -35,11 +36,13 @@ if (!freezeOptions.bundle) {
 	}
 }
 
-// upload the bundle's two files
+// upload the script each stored MCP view reads, and the stylesheet
 const bundleRoot = freezeOptions.bundle ?? MCP_VIEWS_BUNDLE_ROOT
-const mcpViewScript = await Bun.file(`${bundleRoot}/mcpViews.js`).bytes()
+for (const mcpViewScriptFile of new Set(frozenVersion.mcpViews.map(toMcpViewScriptFile))) {
+	const mcpViewScript = await Bun.file(`${bundleRoot}/${mcpViewScriptFile}`).bytes()
+	await uploadAttachment(toMcpViewBundleKey(MCP_VIEW_VERSION, mcpViewScriptFile), mcpViewScript, "text/javascript")
+}
 const mcpViewStylesheet = await Bun.file(`${bundleRoot}/mcpViews.css`).bytes()
-await uploadAttachment(toMcpViewBundleKey(MCP_VIEW_VERSION, "mcpViews.js"), mcpViewScript, "text/javascript")
 await uploadAttachment(toMcpViewBundleKey(MCP_VIEW_VERSION, "mcpViews.css"), mcpViewStylesheet, "text/css")
 
 // name the stored version in the manifest, and move the current version past it

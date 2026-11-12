@@ -12,15 +12,14 @@ import { readPoolGauges, sizeConnectionPool } from "@carlnotes/db"
 import { readRedisExtraGauges } from "@carlnotes/db/redisGauges"
 import { shutdownTelemetry, startTelemetry } from "@carlnotes/models/telemetry"
 import { PUSH_TASK_QUEUE } from "@carlnotes/pipeline/pushWorkflows"
+import { describeScanQueue, SCAN_TASK_QUEUE, toScanBacklogCrossing } from "@carlnotes/pipeline/scanWorkflowClient"
 import {
 	ATTACHMENT_TASK_QUEUE,
-	describeScanQueue,
-	SCAN_TASK_QUEUE,
+	DASHBOARD_TASK_QUEUE,
 	SOURCE_TASK_QUEUE,
 	startTopicPodcastEpisodeVideoBackfillWorkflow,
 	TOPIC_IMAGE_TASK_QUEUE,
 	TOPIC_POST_TASK_QUEUE,
-	toScanBacklogCrossing,
 } from "@carlnotes/pipeline/temporalClient"
 import { shutdownAnalytics } from "@carlnotes/server/analytics"
 import { toPositiveInteger } from "@carlnotes/server/envSettings"
@@ -34,6 +33,7 @@ import { runWithRetries } from "@carlnotes/server/retry"
 import { type ExtraGaugesReading, startRuntimeGauges } from "@carlnotes/server/runtimeGauges"
 import { NativeConnection, Worker } from "@temporalio/worker"
 import * as topicPodcastEpisodeVideoBackfillActivities from "./workflows/backfillTopicPodcastEpisodeVideosActivities"
+import * as dashboardActivities from "./workflows/buildDashboardSnapshotsActivities"
 import * as attachmentActivities from "./workflows/processAttachmentActivities"
 import * as topicPostActivities from "./workflows/publishTopicPostActivities"
 import * as personalSourcesEmailActivities from "./workflows/receivePersonalSourcesEmailActivities"
@@ -79,6 +79,9 @@ const PODCAST_RECORDING_CONCURRENCY = toPositiveInteger(
 	Bun.env.PODCAST_RECORDING_CONCURRENCY,
 	DEFAULT_PODCAST_RECORDING_CONCURRENCY,
 )
+
+// how many Dashboard build batches run at once on this replica. each reads a year of daily counts per Dashboard
+const DASHBOARD_CONCURRENCY = 2
 
 // how many films render at once on this replica, and how many the backfill renders. zero films turns films off
 const TOPIC_PODCAST_EPISODE_VIDEO_CONCURRENCY = topicPodcastEpisodeVideoConcurrency()
@@ -212,6 +215,15 @@ async function run(): Promise<void> {
 			taskQueue: SOURCE_TASK_QUEUE,
 			shutdownGraceTime: SHUTDOWN_GRACE_MS,
 			maxConcurrentActivityTaskExecutions: SCREEN_CONCURRENCY,
+		}),
+		// builds the Dashboards' snapshots, nightly and after a change to who may see a Dashboard's items
+		Worker.create({
+			connection,
+			workflowsPath: new URL("./workflows/buildDashboardSnapshots.ts", import.meta.url).pathname,
+			activities: dashboardActivities,
+			taskQueue: DASHBOARD_TASK_QUEUE,
+			shutdownGraceTime: SHUTDOWN_GRACE_MS,
+			maxConcurrentActivityTaskExecutions: DASHBOARD_CONCURRENCY,
 		}),
 		...(TOPIC_PODCAST_EPISODE_VIDEO_CONCURRENCY > 0 ? createTopicPodcastEpisodeVideoWorkers(connection) : []),
 	])

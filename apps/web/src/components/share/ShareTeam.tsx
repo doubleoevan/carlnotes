@@ -1,26 +1,14 @@
 import { sendCreateTeamInvite } from "@carlnotes/client/teamClient"
-import { useCopyFeedback } from "@carlnotes/core/hooks/useCopyFeedback"
-import { Check, Link, Share } from "lucide-react"
+import { toTeamPath } from "@carlnotes/contracts/seo"
+import { Check, Share } from "lucide-react"
 import { toast } from "sonner"
-import { Dialog, DialogContent, DialogTitle } from "@/components/primitives/dialog"
-import { useIsMounted, useOrigin } from "@/hooks/useBrowserValue"
+import { useOrigin } from "@/hooks/useBrowserValue"
 import { toInviteUrl } from "@/lib/inviteUrl"
-import { canOpenShareSheet, openShareSheet } from "@/lib/shareSheet"
-import { MENU_DIVIDER_CLASS } from "@/lib/styleClasses"
-import { copyToClipboard } from "@/lib/utils"
+import { openShareSheet } from "@/lib/shareSheet"
 import { captureVisitEvent } from "@/lib/visitAnalytics"
-import {
-	COPY_PAGE_LABEL,
-	CopyLinkOption,
-	DisabledShareOption,
-	INVITE_LABEL,
-	INVITE_SHARE_LABEL,
-	POST_PLATFORM_TARGETS,
-	SEND_TARGETS,
-	SHARE_OPTION_CLASS,
-	SHARE_OPTION_ICON_CLASS,
-	ShareTargetOptions,
-} from "./ShareOptions"
+import { PageShareDialog } from "./PageShareDialog"
+import { INVITE_LABEL, INVITE_SHARE_LABEL, SHARE_OPTION_CLASS, SHARE_OPTION_ICON_CLASS } from "./ShareOptions"
+import { usePageShare } from "./usePageShare"
 
 /**
  * The Share dialog for a Team, opened from the actions menu. It shares the team's page,
@@ -41,34 +29,16 @@ export function ShareTeam({
 	canInvite: boolean
 	onClose: () => void
 }) {
-	const { copiedLabel, markCopied } = useCopyFeedback()
-	// whether this browser can open a share sheet, false until the component mounts in the browser
-	const isShareSheetAvailable = useIsMounted() && canOpenShareSheet()
-
-	// the absolute url a platform needs, encoded once for use inside a query string
-	const teamUrl = `${useOrigin()}/teams/${teamId}`
-	const [encodedUrl, encodedTitle] = [encodeURIComponent(teamUrl), encodeURIComponent(teamName)]
+	// the team page's absolute url, which a platform needs
+	const teamUrl = `${useOrigin()}${toTeamPath(teamId)}`
 
 	// report a share by its channel. a team is never named
 	const handleShareOptionClick = (channel: string): void =>
 		captureVisitEvent("visit_share_clicked", { kind: "team", channel })
 
-	// copy a link to the team to the clipboard and show a confirmation label
-	async function handleCopyLink(label: string, text: string): Promise<void> {
-		handleShareOptionClick("copy-link")
-		if (await copyToClipboard(text)) {
-			markCopied(label)
-		}
-	}
-
-	// pass the team's url to the device's sheet. a rejected gesture falls back to the clipboard copy
-	async function handleShareSheet(): Promise<void> {
-		handleShareOptionClick("share-sheet")
-		const shared = await openShareSheet({ title: teamName, text: `${teamName} on CarlNotes`, url: teamUrl })
-		if (shared === "unavailable") {
-			await handleCopyLink(COPY_PAGE_LABEL, teamUrl)
-		}
-	}
+	// the copy and the share sheet for the team's page
+	const pageShare = usePageShare({ title: teamName, url: teamUrl, onShareOptionClick: handleShareOptionClick })
+	const { copiedLabel, isShareSheetAvailable, copyLink: handleCopyLink } = pageShare
 
 	// create the invite token inside the click handler and pass its invite url to the share sheet
 	async function handleShareInvite(): Promise<void> {
@@ -96,63 +66,26 @@ export function ShareTeam({
 		}
 	}
 
-	const reason = "Make this team public to post it to a platform"
-	const targetOptionProps = {
-		isEnabled: isPublic,
-		encodedUrl,
-		encodedTitle,
-		reason,
-		onPlatformOptionClick: handleShareOptionClick,
-	}
 	// the invite option opens a sheet where there is one, and copies everywhere else
 	const inviteLabel = isShareSheetAvailable ? INVITE_SHARE_LABEL : INVITE_LABEL
 	return (
-		<Dialog open onOpenChange={onClose}>
-			{/* the tighter padding and gap keep the dialog to the topic share popover's own density */}
-			<DialogContent className="gap-2 p-4 sm:max-w-xs">
-				<DialogTitle>Share team</DialogTitle>
-				{/* one list, so the dialog's grid gap never falls between the options */}
-				<div className="grid">
-					<ShareTargetOptions shareTargets={POST_PLATFORM_TARGETS} {...targetOptionProps} />
-					{/* a divider above the options that share the team to one person instead of posting it */}
-					<div className={MENU_DIVIDER_CLASS} />
-					{/* the only option that grants access. every other option shares the team's page */}
-					{canInvite && (
-						<button type="button" onClick={() => void handleShareInvite()} className={SHARE_OPTION_CLASS}>
-							{copiedLabel === INVITE_LABEL ? (
-								<Check className={SHARE_OPTION_ICON_CLASS} />
-							) : (
-								<Share className={SHARE_OPTION_ICON_CLASS} />
-							)}
-							{copiedLabel === INVITE_LABEL ? "Link copied" : inviteLabel}
-						</button>
+		<PageShareDialog
+			heading="Share team"
+			disabledReason={isPublic ? null : "Make this team public to post it to a platform"}
+			pageShare={pageShare}
+			onClose={onClose}
+		>
+			{/* the only option that grants access. every other option shares the team's page */}
+			{canInvite && (
+				<button type="button" onClick={() => void handleShareInvite()} className={SHARE_OPTION_CLASS}>
+					{copiedLabel === INVITE_LABEL ? (
+						<Check className={SHARE_OPTION_ICON_CLASS} />
+					) : (
+						<Share className={SHARE_OPTION_ICON_CLASS} />
 					)}
-					{/* the device's share sheet is above the send options if one can open */}
-					{isShareSheetAvailable &&
-						(isPublic ? (
-							<button type="button" onClick={() => void handleShareSheet()} className={SHARE_OPTION_CLASS}>
-								<Share className={SHARE_OPTION_ICON_CLASS} />
-								Share…
-							</button>
-						) : (
-							<DisabledShareOption
-								label="Share…"
-								icon={<Share className={SHARE_OPTION_ICON_CLASS} />}
-								disabledReason={reason}
-							/>
-						))}
-					<ShareTargetOptions shareTargets={SEND_TARGETS} {...targetOptionProps} />
-					{/* the copy link option sits under a divider */}
-					<div className={MENU_DIVIDER_CLASS} />
-					<CopyLinkOption
-						label={COPY_PAGE_LABEL}
-						icon={<Link className="size-4" />}
-						className={SHARE_OPTION_CLASS}
-						isCopied={copiedLabel === COPY_PAGE_LABEL}
-						onCopy={() => handleCopyLink(COPY_PAGE_LABEL, teamUrl)}
-					/>
-				</div>
-			</DialogContent>
-		</Dialog>
+					{copiedLabel === INVITE_LABEL ? "Link copied" : inviteLabel}
+				</button>
+			)}
+		</PageShareDialog>
 	)
 }

@@ -28,6 +28,9 @@ test("toExactDollarLabel keeps a sub-cent cost readable", () => {
 // a date reads as its short month and day
 test("toMonthDayLabel reads a date as its month and day", () => {
 	expect(toMonthDayLabel("2026-10-22T12:00:00Z")).toBe("Oct 22")
+
+	// in UTC a late evening west of Greenwich reads as the next day in every time zone
+	expect(toMonthDayLabel("2026-11-09T23:30:00-05:00", { timeZone: "UTC" })).toBe("Nov 10")
 })
 
 // completed brews use their finish time, and running brews use their start, in the device's local time zone

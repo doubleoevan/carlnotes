@@ -44,14 +44,14 @@ function toRegisteredMcpUiResources(storedMcpViewVersions?: StoredMcpViewVersion
 	return registeredMcpUiResources
 }
 
-test("nine versioned MCP view resources retain unversioned aliases with the same security policy", () => {
+test("ten versioned MCP view resources retain unversioned aliases with the same security policy", () => {
 	const registeredMcpUiResources = toRegisteredMcpUiResources()
-	const aliasedVersionSuffixes = ["", "?v=2", "?v=3", "?v=4", "?v=5", "?v=6", "?v=7", "?v=8", "?v=9"]
+	const aliasedVersionSuffixes = ["", "?v=2", "?v=3", "?v=4", "?v=5", "?v=6", "?v=7", "?v=8", "?v=9", "?v=10"]
 	const versionSuffixes = [`?v=${MCP_VIEW_VERSION}`, ...aliasedVersionSuffixes]
 	const storedUris = STORED_MCP_VIEW_VERSIONS.flatMap(({ version, mcpViews }) =>
 		mcpViews.map((mcpView) => toMcpUiResourceUri(mcpView, version)),
 	)
-	expect(MCP_VIEWS).toHaveLength(9)
+	expect(MCP_VIEWS).toHaveLength(10)
 	expect(registeredMcpUiResources.map((uiResource) => uiResource.uri).sort()).toEqual(
 		[
 			...MCP_VIEWS.flatMap((mcpView) =>
@@ -166,6 +166,27 @@ test("an MCP view's html holds the built bundle, names its MCP view, and escapes
 })
 
 test("a missing build fails the read with the build that makes it", async () => {
-	expect(readMcpViewBundle("./apps/web/dist/no-such-bundle")).rejects.toThrow(MISSING_MCP_VIEW_BUNDLE_MESSAGE)
+	expect(readMcpViewBundle("./apps/web/dist/no-such-bundle", "findings")).rejects.toThrow(
+		MISSING_MCP_VIEW_BUNDLE_MESSAGE,
+	)
 	expect(MISSING_MCP_VIEW_BUNDLE_MESSAGE).toContain("bun run build:ui")
+})
+
+test("the dashboard MCP view reads its own script, and every other MCP view the shared one", async () => {
+	const readPaths: string[] = []
+	const toBundleFile = (path: string): unknown => {
+		readPaths.push(path)
+		return { exists: async () => true, text: async () => "" }
+	}
+	spyOn(Bun, "file").mockImplementation(toBundleFile as unknown as typeof Bun.file)
+
+	// each read names its script, then the one stylesheet
+	await readMcpViewBundle("bundle", "dashboard")
+	await readMcpViewBundle("bundle", "topic")
+	expect(readPaths).toEqual([
+		"bundle/dashboardMcpView.js",
+		"bundle/mcpViews.css",
+		"bundle/mcpViews.js",
+		"bundle/mcpViews.css",
+	])
 })

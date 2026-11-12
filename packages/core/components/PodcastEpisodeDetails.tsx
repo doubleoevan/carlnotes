@@ -1,9 +1,9 @@
 import type { PodcastEpisode, PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
 import { AI_VOICES_NOTE } from "@carlnotes/contracts/podcastEpisodes"
-import { toDotSeparatedText } from "@carlnotes/contracts/text"
+import { toCountLabel, toDotSeparatedText } from "@carlnotes/contracts/text"
 import { cn } from "@carlnotes/nightshift/classNames"
 import type { ComponentType, ReactNode } from "react"
-import { toCountLabel, toPodcastEpisodeDayAndDurationLabels } from "../lib/labels"
+import { toPodcastEpisodeDayAndDurationLabels } from "../lib/labels"
 
 type Container = ComponentType<{ children: ReactNode; className?: string }>
 export type PodcastEpisodeDetailsProps = {

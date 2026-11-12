@@ -8,7 +8,7 @@ import {
 	toCentsFromDollars,
 	type UserAccess,
 } from "@carlnotes/contracts/plans"
-import { DAY_MS } from "@carlnotes/contracts/time"
+import { DAY_MS, toUtcDay } from "@carlnotes/contracts/time"
 import { and, count, eq, gte, inArray, isNull, ne, type SQL, sql } from "drizzle-orm"
 import type { AnyPgColumn } from "drizzle-orm/pg-core"
 import { type DbHandle, db } from "./index"
@@ -369,13 +369,6 @@ export async function hasFullPodcastEpisodes(ownerId: string): Promise<boolean> 
 // utc midnight starting from the given moment's day. quota days roll over at utc midnight
 export function startOfUtcDay(moment: Date): Date {
 	return new Date(Date.UTC(moment.getUTCFullYear(), moment.getUTCMonth(), moment.getUTCDate()))
-}
-
-/**
- * Returns a time's UTC day as its ISO date.
- */
-export function toUtcDay(moment: Date): string {
-	return moment.toISOString().slice(0, 10)
 }
 
 // utc midnight starting the given moment's month, when monthly spend and the key budget roll over

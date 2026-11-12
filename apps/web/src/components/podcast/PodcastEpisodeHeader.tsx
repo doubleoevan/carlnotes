@@ -10,7 +10,7 @@ import { CommentMentionBadge } from "@/components/social/CommentMentionBadge"
 import { ReactionRow } from "@/components/social/ReactionRow"
 import { TopicByline } from "@/components/topic/TopicByline"
 import { TopicHeaderImage } from "@/components/topic/TopicImageButton"
-import { PLAIN_TOPIC_HEADER_GRID_CLASS, TOPIC_HEADER_AREA_CLASSES } from "@/lib/styleClasses"
+import { PLAIN_TOPIC_HEADER_GRID_CLASS, TOPIC_HEADER_AREA_CLASSES } from "@/lib/pageHeaderClasses"
 
 // the podcast episode page, whether the reader is signed in, for the reactions, and the click on an editor's image
 type PodcastEpisodeHeaderProps = {

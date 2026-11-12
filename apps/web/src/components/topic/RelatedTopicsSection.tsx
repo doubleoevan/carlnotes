@@ -3,7 +3,7 @@ import { cn } from "@carlnotes/nightshift/classNames"
 import { PagedTableSection } from "@/components/table/PagedTableSection"
 import { SortableHeader, type SortValue } from "@/components/table/SortableHeader"
 import { TopicNameLink } from "@/components/table/TopicNameLink"
-import { TABLE_ONLY_COLUMN_CLASS } from "@/lib/styleClasses"
+import { TABLE_ONLY_COLUMN_CLASS } from "@/lib/tableClasses"
 
 // a related topic, with its latest podcast episode
 export type RelatedTopic = TopicResponse["relatedTopics"][number]

@@ -11,6 +11,7 @@ import { toTypeRoleStyle } from "@/typeRoleStyles"
  */
 export function CollapsibleSection({
 	title,
+	titleEmoji,
 	children,
 	titleAside,
 	countLabel,
@@ -21,6 +22,8 @@ export function CollapsibleSection({
 	onOpenChange,
 }: {
 	title: string
+	// an emoji after the title, which the section's accessibility label leaves out
+	titleEmoji?: string
 	children: ReactNode
 	titleAside?: ReactNode
 	// the section's count at the far right of its title, such as "6 episodes"
@@ -61,7 +64,7 @@ export function CollapsibleSection({
 						style={toTypeRoleStyle("sectionTitle")}
 						className={cn("text-foreground", titleNote ? "shrink" : "flex-1")}
 					>
-						{title}
+						{titleEmoji ? `${title} ${titleEmoji}` : title}
 					</Text>
 					{!titleNote && <SectionCountLabel countLabel={countLabel} />}
 				</Pressable>

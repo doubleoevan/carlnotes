@@ -24,6 +24,7 @@ export function CollapsibleSection({
 	hasStackedClosedDivider,
 	isOpen,
 	onOpenChange,
+	id,
 	className,
 	children,
 }: {
@@ -48,6 +49,8 @@ export function CollapsibleSection({
 	// the section's open state and its change, for a section whose state is saved. open by default if left out
 	isOpen?: boolean
 	onOpenChange?: (isOpen: boolean) => void
+	// the section's anchor, which a link scrolls to below the sticky search bar
+	id?: string
 	className?: string
 	children: React.ReactNode
 }) {
@@ -57,7 +60,8 @@ export function CollapsibleSection({
 			defaultValue={[value]}
 			value={isOpen === undefined ? undefined : isOpen ? [value] : []}
 			onValueChange={(openValues) => onOpenChange?.(openValues.includes(value))}
-			className={className}
+			id={id}
+			className={cn(id && "scroll-mt-20", className)}
 		>
 			<AccordionItem
 				value={value}

@@ -1,3 +1,4 @@
+import { FILM_ANCHOR_ID } from "@carlnotes/contracts/podcastEpisodes"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import {
 	TopicPodcastEpisodeVideoSection as SharedTopicPodcastEpisodeVideoSection,
@@ -58,7 +59,7 @@ function TopicCinemaSection({
 		}
 	}, [scrollRequestCount])
 	return (
-		<div ref={sectionRef} className="scroll-mt-20">
+		<div ref={sectionRef} id={FILM_ANCHOR_ID} className="scroll-mt-20">
 			<CollapsibleSection
 				value="topic-cinema"
 				title={title}

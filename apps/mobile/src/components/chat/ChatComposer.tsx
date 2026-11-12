@@ -6,9 +6,9 @@ import { colors } from "@carlnotes/nightshift/colors"
 import { ArrowUp, Square } from "lucide-react-native"
 import { type ComponentRef, type ReactNode, type Ref, useState } from "react"
 import { ScrollView, TextInput, type TextInputProps, View } from "react-native"
-import { useUniwind } from "uniwind"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
+import { useColorMode } from "@/theme"
 import { ChatAttachmentChips } from "./ChatAttachmentChips"
 
 // the draft, its send and stop, and how the box reads and grows
@@ -95,7 +95,7 @@ function ComposerBox({
 }: ComposerBoxProps) {
 	// the native input grows with its draft, or with its placeholder while empty, and stretches to fill the box if
 	// the keyboard leaves the box less room
-	const { theme } = useUniwind()
+	const colorMode = useColorMode()
 	return (
 		<View className="min-h-16 shrink flex-row items-end gap-2 rounded-xl border border-border bg-bubble p-2">
 			{attachmentActions && <View className="flex-row items-center">{attachmentActions}</View>}
@@ -110,7 +110,7 @@ function ComposerBox({
 				maxLength={maxLength}
 				editable={!isDisabled && !isStreaming}
 				placeholder={placeholder}
-				placeholderTextColor={colors.mutedForeground[theme === "dark" ? "dark" : "light"]}
+				placeholderTextColor={colors.mutedForeground[colorMode]}
 				className="flex-1 font-sans text-sm text-foreground"
 				style={{
 					alignSelf: "stretch",

@@ -63,6 +63,7 @@ Check for:
      `redactEvent` and `redactTransaction` replacing `scrubContent` and `scrubTransaction`.
    - `apps/mobile/src/components/layout/HeaderMenu.tsx` and its story (now `UserMenu.tsx` and its story, matching
      the signed-in web menu). Web's separate `HeaderMenu.tsx` keeps its visitor-header role.
+   - `PAGE_HEADER_GRID_CLASS` (now `PAGE_HEADER_FLOW_CLASS` in `apps/web/src/lib/pageHeaderClasses.ts`)
    - `--prompt-only` (now `coderabbit review --agent`)
    - `git diff --cached --name-status main` in the ship ritual's docs check (now
      `git diff --name-status <origin/main sha>` plus `git ls-files --others --exclude-standard`)

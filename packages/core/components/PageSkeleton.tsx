@@ -129,8 +129,8 @@ function ActionsSkeleton({ elements: { ButtonRow, Shape } }: { elements: PageSke
 	)
 }
 
-// reserve the avatar at the height of a topic's image, with the name's line over the summary line beside it. a
-// profile's summary line wraps onto a second line on a phone
+// reserve the avatar at the height of a topic's image, with the name's line over the summary line beside it, at the
+// loaded header's top padding. a profile's summary line wraps onto a second line on a phone
 function IdentitySkeleton({
 	elements: { Stack, Row, Shape },
 	hasWrappedSummary,
@@ -139,13 +139,13 @@ function IdentitySkeleton({
 	hasWrappedSummary: boolean
 }) {
 	return (
-		<Row className="gap-4">
+		<Row className="items-start gap-4">
 			<Shape className="size-20 shrink-0 rounded-full sm:size-24" />
-			<Stack className="min-w-0 flex-1">
+			<Stack className="min-w-0 flex-1 pt-2 sm:pt-5">
 				<Row className="h-8">
 					<Shape className="h-6 w-48 max-w-full" />
 				</Row>
-				<Row className="mt-2 h-5">
+				<Row className="mt-1 h-5">
 					<Shape className="h-3.5 w-64 max-w-full" />
 				</Row>
 				{hasWrappedSummary && (

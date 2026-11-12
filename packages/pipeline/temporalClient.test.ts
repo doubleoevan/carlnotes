@@ -2,8 +2,8 @@
 // film rebuild each start once, and a Topic Post's edits share one summary rewrite
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { Connection, WorkflowClient, WorkflowExecutionAlreadyStartedError } from "@temporalio/client"
+import { describeScanQueue } from "./scanWorkflowClient"
 import {
-	describeScanQueue,
 	startChatMentionPushWorkflow,
 	startTopicPodcastEpisodeVideoRebuild,
 	startTopicPostSummaryWorkflow,

@@ -10,13 +10,8 @@ import { CHAT_QUESTION_PLACEHOLDER } from "@/components/chat/ChatComposer"
 import { ChatTurnBlock } from "@/components/chat/ChatTurnBlock"
 import { FileDropZone } from "@/components/common/FileDropZone"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import {
-	COMPOSER_BAR_CLASS,
-	COMPOSER_BOX_CLASS,
-	COMPOSER_FRAME_CLASS,
-	ICON_BUTTON_CLASS,
-	SEND_BUTTON_CLASS,
-} from "@/lib/styleClasses"
+import { COMPOSER_BAR_CLASS, COMPOSER_BOX_CLASS, COMPOSER_FRAME_CLASS, SEND_BUTTON_CLASS } from "@/lib/chatClasses"
+import { ICON_BUTTON_CLASS } from "@/lib/styleClasses"
 import { CHAT_FILE_PICKER_ACCEPT } from "@/lib/utils"
 import { FIXTURE_DATE, STORY_PEOPLE } from "../../../.storybook/fixtures"
 

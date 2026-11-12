@@ -12,7 +12,7 @@ import { ICON_ACTION_CLASS } from "@carlnotes/nightshift/iconAction"
 import { useRecyclingState } from "@shopify/flash-list"
 import { Check, Flag, Link, Rss, Share as ShareIcon } from "lucide-react-native"
 import { type ComponentRef, useRef, useState } from "react"
-import { Platform, Pressable, Share, View } from "react-native"
+import { Pressable, View } from "react-native"
 import { toActiveIconProps } from "@/activeIconProps"
 import { ReportIssueForm } from "@/components/common/ReportIssueDialog"
 import { Sheet, type SheetProps } from "@/components/common/Sheet"
@@ -27,6 +27,7 @@ import {
 } from "@/pageButtonClasses"
 import { captureVisitEvent, toPublicTopicProperties } from "@/visitAnalytics"
 import { ShareTargets } from "./ShareTargets"
+import { openShareSheet } from "./shareSheet"
 
 // visibility governs each option without hiding the share menu itself
 type ShareTopicDetails = Pick<TopicDetails, "id" | "name" | "visibility"> & Partial<Pick<TopicDetails, "isTopicOwner">>
@@ -143,7 +144,7 @@ export function ShareTopicSheet({
 						isDisabled={!actions.canSend}
 						onPress={() => {
 							handleShare("share-sheet")
-							void shareTopicUrl({ title: actions.sharedName, url: actions.sharedUrl })
+							void openShareSheet({ title: actions.sharedName, url: actions.sharedUrl })
 						}}
 					/>
 					<ShareTargets
@@ -255,7 +256,7 @@ function useShareTopicActions({ topic, topicPost }: ShareTopicSubject): {
 				showClientError("Daily invite limit reached. It resets tomorrow.")
 				return
 			}
-			await shareTopicUrl({ title: sharedName, url: `${SITE_URL}${toInvitePath(invite.token)}` })
+			await openShareSheet({ title: sharedName, url: `${SITE_URL}${toInvitePath(invite.token)}` })
 		} catch {
 			showClientError("That invite didn't get made. Try again.")
 		} finally {
@@ -307,13 +308,4 @@ function ShareOption({
 			{isCopied ? <Icon as={Check} className="size-4 text-link" /> : null}
 		</Button>
 	)
-}
-
-// hand the selected url to the operating system without choosing a recipient
-async function shareTopicUrl({ title, url }: { title: string; url: string }): Promise<void> {
-	try {
-		await Share.share(Platform.OS === "ios" ? { title, url } : { title, message: url })
-	} catch {
-		showClientError("That link didn't open. Carl suggests trying again.")
-	}
 }

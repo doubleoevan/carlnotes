@@ -4,7 +4,7 @@ import { useNavigate } from "@tanstack/react-router"
 import { LoaderCircle, Mic } from "lucide-react"
 import { IconButton } from "@/components/common/IconButton"
 import { toSignupNavigation } from "@/components/session/signupPrompts"
-import { SEND_BUTTON_CLASS } from "@/lib/styleClasses"
+import { SEND_BUTTON_CLASS } from "@/lib/chatClasses"
 import type { VoiceRecording } from "./useVoiceRecording"
 
 export { isMicShown } from "@carlnotes/core/lib/voiceRecordingRules"

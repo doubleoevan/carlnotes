@@ -48,8 +48,9 @@ export function ProfileSections({
 	const opener = useUpdatesOpener(isOwnProfile ? (session?.user.id ?? null) : null)
 	// how many topics the table lists: the person's own once they load, or the ones the profile shows a visitor
 	const topicCount = toProfileTopicCount({ profile, isOwnProfile, ownTopics: topics })
+	// the news sits as far under the profile header's avatar as the avatar sits under the page's buttons
 	return (
-		<div className="mt-4">
+		<div className="mt-2">
 			{/* the person's news, which they read whole and anyone else reads as its public rows */}
 			<NewsList
 				profileUserId={profile.userId}

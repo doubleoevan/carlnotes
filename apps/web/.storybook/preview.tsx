@@ -1,5 +1,6 @@
 import { toChatAttachmentUrl } from "@carlnotes/client/chatClient"
 import { toChatRoomAttachmentUrl } from "@carlnotes/client/chatRoomClient"
+import { fetchDashboard, fetchDashboardMapSettings } from "@carlnotes/client/dashboardClient"
 import {
 	fetchCommentThread,
 	fetchMentionSuggestions,
@@ -41,6 +42,7 @@ sb.mock(import("@carlnotes/client/userBlockClient"))
 sb.mock(import("@carlnotes/client/chatClient"))
 sb.mock(import("@carlnotes/client/chatRoomClient"))
 sb.mock(import("@carlnotes/client/commentMentionClient"))
+sb.mock(import("@carlnotes/client/dashboardClient"))
 sb.mock(import("@carlnotes/client/flagContentClient"))
 sb.mock(import("@carlnotes/client/mcpClient"))
 sb.mock(import("@carlnotes/client/newsClient"))
@@ -122,6 +124,9 @@ const preview: Preview = {
 		mocked(fetchCommentThread).mockResolvedValue(EMPTY_COMMENT_THREAD)
 		mocked(fetchMentionSuggestions).mockResolvedValue([])
 		mocked(saveReaction).mockResolvedValue({ status: "saved", summary: EMPTY_REACTION_SUMMARY })
+		// a Dashboard map draws the outline map, with no Google Maps key, and a Dashboard read finds nothing
+		mocked(fetchDashboardMapSettings).mockResolvedValue({ apiKey: null, mapId: null })
+		mocked(fetchDashboard).mockResolvedValue(null)
 		const htmlClassList = document.documentElement.classList
 		htmlClassList.toggle("scripted", parameters.hasJavaScript !== false)
 		const originalFetch = globalThis.fetch

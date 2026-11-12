@@ -82,7 +82,7 @@ export const searchRequestPayload = z.object({
 		.enum(TOPIC_FINDING_SORTS)
 		.default("relevant")
 		.describe(
-			"relevant ranks by how well the name matches, newest by date, and trending by viewers, listeners, and views.",
+			"relevant ranks by how well the name matches, newest by date, and trending by visitors, listeners, and views.",
 		),
 	page: z.number().int().min(1).default(1).describe("The page to return, counted from 1."),
 	size: z

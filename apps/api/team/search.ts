@@ -1,6 +1,8 @@
 // the site search's team reader: the teams whose name contains the query
+
 import { toAvatarKeyVersion } from "@carlnotes/contracts/avatars"
 import type { TeamSearchRow } from "@carlnotes/contracts/search"
+import { toTeamPath } from "@carlnotes/contracts/seo"
 import { db } from "@carlnotes/db"
 import { teamMembers, teams } from "@carlnotes/db/schema/teams"
 import { and, eq, inArray, like, or, sql } from "drizzle-orm"
@@ -24,7 +26,7 @@ export async function searchTeams(searchTeamsOptions: SearchTeamsOptions): Promi
 		kind: "team",
 		id: teamRow.teamId,
 		name: teamRow.name,
-		path: `/teams/${teamRow.teamId}`,
+		path: toTeamPath(teamRow.teamId),
 		date: null,
 		count: null,
 		team: { teamId: teamRow.teamId, name: teamRow.name, avatarVersion: toAvatarKeyVersion(teamRow.avatarKey) },

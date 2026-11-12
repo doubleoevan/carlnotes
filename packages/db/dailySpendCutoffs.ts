@@ -1,13 +1,13 @@
 // the daily spend cutoffs: the spend control settings with their defaults, the day's free-plan spend, whether each
 // cutoff is passed, and which scans wait for the first scan dispatch limit
 import type { DailySpendCutoffKind, SpendControlSettings } from "@carlnotes/contracts/admin"
-import { DAY_MS, HOUR_MS } from "@carlnotes/contracts/time"
+import { DAY_MS, HOUR_MS, toUtcDay } from "@carlnotes/contracts/time"
 import { toPositiveCents, toPositiveInteger, toWholeNumber } from "@carlnotes/server/envSettings"
 import { reportError } from "@carlnotes/server/monitoring"
 import { and, eq, gte, isNotNull, isNull, or, type SQL, sql } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core"
 import { db } from "./index"
-import { loadSpendSince, loadUserAccess, startOfUtcDay, toPlanUserIdQuery, toSpendCents, toUtcDay } from "./quotas"
+import { loadSpendSince, loadUserAccess, startOfUtcDay, toPlanUserIdQuery, toSpendCents } from "./quotas"
 import { cacheJson } from "./redis"
 import { memoizeInRequest } from "./requestMemo"
 import { scans } from "./schema/scans"

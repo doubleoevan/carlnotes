@@ -12,39 +12,39 @@ export function runFakeViewerCountCommand(
 	// the add script adds the element to the counter, and lists the counter's ref as changed if the counter grew
 	const [script = "", , firstKey = "", secondKey = "", element = "", member = ""] = commandArguments
 	if (command === "EVAL" && script.includes("PFADD")) {
-		if (addMembers(storedValueByKey, firstKey, [element])) {
-			addMembers(storedValueByKey, secondKey, [member])
+		if (addFakeMembers(storedValueByKey, firstKey, [element])) {
+			addFakeMembers(storedValueByKey, secondKey, [member])
 		}
 		return 1
 	}
 
 	// the take script returns every changed ref and empties the set
 	if (command === "EVAL" && script.includes("SMEMBERS")) {
-		const members = readMembers(storedValueByKey, firstKey)
+		const members = readFakeMembers(storedValueByKey, firstKey)
 		storedValueByKey.delete(firstKey)
 		return members
 	}
 
-	// a count reads how many members the key holds
+	// a count reads how many distinct members the keys hold together
 	const [key = "", ...otherKeys] = commandArguments
 	if (command === "PFCOUNT") {
-		return readMembers(storedValueByKey, key).length
+		return new Set(commandArguments.flatMap((countedKey) => readFakeMembers(storedValueByKey, countedKey))).size
 	}
 
 	// a counter add and a set add each return 1 if the key grew
 	if (command === "PFADD") {
-		return addMembers(storedValueByKey, key, otherKeys) ? 1 : 0
+		return addFakeMembers(storedValueByKey, key, otherKeys) ? 1 : 0
 	}
 	if (command === "SADD") {
-		return addMembers(storedValueByKey, key, otherKeys) ? 1 : 0
+		return addFakeMembers(storedValueByKey, key, otherKeys) ? 1 : 0
 	}
 
 	// a merge adds every source counter's members to the first key
 	if (command === "PFMERGE") {
-		addMembers(
+		addFakeMembers(
 			storedValueByKey,
 			key,
-			otherKeys.flatMap((sourceKey) => readMembers(storedValueByKey, sourceKey)),
+			otherKeys.flatMap((sourceKey) => readFakeMembers(storedValueByKey, sourceKey)),
 		)
 		return "OK"
 	}
@@ -68,15 +68,19 @@ export function toFakeStoredValue(value: string | Uint8Array): string {
 	return typeof value === "string" ? value : new TextDecoder().decode(value)
 }
 
-// a counter's or a set's members, empty for a missing key
-function readMembers(storedValueByKey: Map<string, string>, key: string): string[] {
+/**
+ * Returns a fake counter's, set's, or sketch's members, empty for a missing key.
+ */
+export function readFakeMembers(storedValueByKey: Map<string, string>, key: string): string[] {
 	const storedValue = storedValueByKey.get(key)
 	return storedValue ? (JSON.parse(storedValue) as string[]) : []
 }
 
-// add members to a counter or a set, and return whether any was new
-function addMembers(storedValueByKey: Map<string, string>, key: string, newMembers: string[]): boolean {
-	const members = new Set(readMembers(storedValueByKey, key))
+/**
+ * Adds members to a fake counter, set, or sketch, and returns whether any was new.
+ */
+export function addFakeMembers(storedValueByKey: Map<string, string>, key: string, newMembers: string[]): boolean {
+	const members = new Set(readFakeMembers(storedValueByKey, key))
 	const sizeBefore = members.size
 	for (const newMember of newMembers) {
 		members.add(newMember)

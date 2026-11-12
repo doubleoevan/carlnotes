@@ -1,8 +1,9 @@
 // a live smoke test for the mcp server through the sdk client, in-process: a visitor's reads, the oauth flow with
-// its forced consent, an account's consumed, rating, and bookmark writes, its edits, the news and Topic Post reads
-// on both routes, and the per-tool-caller rate limit
+// its forced consent, an account's consumed, rating, and bookmark writes, its edits, the news, Topic Post, and
+// Dashboard reads on both routes, and the per-tool-caller rate limit
 // run it with bun run smoke:mcp against the development database, Redis, LiteLLM, and Temporal worker
 import { connectionPool } from "@carlnotes/db"
+import { checkUserDashboardTool, checkVisitorDashboardTool } from "./mcpDashboardSmokeSections"
 import { cleanUpDirectoryFixtures, seedDirectoryFixtures } from "./mcpDirectorySmokeFixtures"
 import { checkOrigins, checkPrivateAccess, checkSubscriptionAccess } from "./mcpDirectorySmokeSections"
 import { checkOAuth, checkOAuthRevocation, registeredClientId } from "./mcpOAuthSmokeSections"
@@ -25,18 +26,20 @@ try {
 	await checkVisitor()
 	await checkVisitorTopicTools()
 	await checkVisitorNewsAndTopicPostTools()
+	await checkVisitorDashboardTool()
 
 	// authenticate once and check access, results, and the account's writes
 	const accessToken = await checkOAuth()
 	await checkOrigins(accessToken)
 	await checkPrivateAccess(accessToken)
 	await checkSubscriptionAccess(accessToken)
-	// check the results, the Scan tools, the Personal sources routes, and the account's writes
+	// check the results, the Scan tools, the Personal sources routes, the Dashboard reads, and the account's writes
 	await checkResultBounds(accessToken)
 	await checkTopicToolResults(accessToken)
 	await checkScanTools(accessToken)
 	await checkPersonalSourcesRouting(accessToken)
 	await checkUserNewsAndTopicPostTools(accessToken)
+	await checkUserDashboardTool(accessToken)
 	await checkUser(accessToken)
 
 	// end the grant and prove the rate limit still applies

@@ -9,14 +9,13 @@ import { AccordionSection } from "@/components/common/AccordionSection"
 import { CardsRowSkeleton } from "@/components/common/CardsSection"
 import { Accordion } from "@/components/primitives/accordion"
 import { NEWS_LIST_ELEMENTS } from "@/components/social/NewsList"
+import { HEADER_TOPIC_IMAGE_CLASS, TOPIC_HEADER_AREA_CLASSES } from "@/lib/pageHeaderClasses"
 import {
 	CARD_CLASS,
 	FLUSH_FIRST_SECTION_CLASS,
-	HEADER_TOPIC_IMAGE_CLASS,
 	NEWS_HEADING_ROW_CLASS,
 	PAGE_BUTTON_ROW_CLASS,
 	SKELETON_SHAPE_CLASS,
-	TOPIC_HEADER_AREA_CLASSES,
 } from "@/lib/styleClasses"
 
 /**

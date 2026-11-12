@@ -21,3 +21,9 @@ export const COLLAPSIBLE_SECTION_TITLE_ROW_CLASS = "min-h-12 flex-row items-cent
  * The news card's heading row: its title at the left and its window picker at the right, which wraps under the title.
  */
 export const NEWS_HEADING_ROW_CLASS = "flex-row flex-wrap items-center justify-between gap-x-3 gap-y-2"
+
+/**
+ * A screen's counts line under its last section: the counts centered and spaced apart, wrapping onto a second line, at
+ * one line's height while it is empty.
+ */
+export const COUNTS_LINE_CLASS = "mx-4 mt-8 min-h-5 flex-row flex-wrap items-center justify-center gap-x-8 gap-y-2"

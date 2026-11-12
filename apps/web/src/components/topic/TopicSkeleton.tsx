@@ -6,17 +6,19 @@ import {
 import { cn } from "@carlnotes/nightshift/classNames"
 import type * as React from "react"
 import {
+	HEADER_TOPIC_IMAGE_CLASS,
+	PLAIN_TOPIC_HEADER_GRID_CLASS,
+	TOPIC_HEADER_AREA_CLASSES,
+} from "@/lib/pageHeaderClasses"
+import {
 	DASHED_ROW_CLASS,
 	FILM_CARD_CLASS,
-	HEADER_TOPIC_IMAGE_CLASS,
 	IMAGE_SKELETON_CLASS,
 	INFO_CARD_CLASS,
 	INFO_CARD_SECTIONS_CLASS,
-	PLAIN_TOPIC_HEADER_GRID_CLASS,
 	RANK_SLOT_CLASS,
 	RESOURCE_LIST_CARD_CLASS,
 	ROW_AVATAR_SKELETON_CLASS,
-	TOPIC_HEADER_AREA_CLASSES,
 } from "@/lib/styleClasses"
 import { MORE_UNDER_CARD_CLASS } from "./MoreButton"
 import { ChapterPillSkeleton, ExpanderSkeleton, ResourceSkeleton } from "./TopicFeedSkeleton"

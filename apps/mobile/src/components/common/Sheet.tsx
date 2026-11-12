@@ -19,11 +19,11 @@ import {
 	View,
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
-import { useUniwind } from "uniwind"
 import { SectionTargetContext } from "@/components/layout/SectionAnchor"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { useSectionTargetScroll } from "@/hooks/useSectionTargetScroll"
+import { useColorMode } from "@/theme"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
 import { ScrollIndicator } from "./ScrollIndicator"
 
@@ -48,7 +48,7 @@ export function Sheet({ title, children, onClose, triggerRef, hasHighlightedScro
 	// open the sheet's scroll at a linked comment, and tell the rows waiting to be seen when a scroll ends
 	const { sectionTargetRef, scrollHandlers } = useSectionTargetScroll(scrollRef)
 	const insets = useSafeAreaInsets()
-	const { theme } = useUniwind()
+	const colorMode = useColorMode()
 	const scrollOffset = useRef(new Animated.Value(0)).current
 	const [viewportHeight, setViewportHeight] = useState(0)
 	const [contentHeight, setContentHeight] = useState(0)
@@ -111,7 +111,7 @@ export function Sheet({ title, children, onClose, triggerRef, hasHighlightedScro
 				showsVerticalScrollIndicator={!hasHighlightedScrollIndicator}
 				showsHorizontalScrollIndicator={false}
 				persistentScrollbar
-				indicatorStyle={theme === "dark" ? "white" : "black"}
+				indicatorStyle={colorMode === "dark" ? "white" : "black"}
 				onLayout={(event) => setViewportHeight(event.nativeEvent.layout.height)}
 				onScroll={(event) => scrollOffset.setValue(event.nativeEvent.contentOffset.y)}
 				onScrollBeginDrag={scrollHandlers.onScrollBeginDrag}

@@ -27,6 +27,16 @@ export function isExternalAddress(clientAddress: string | null): boolean {
 	return clientAddress ? !isInternalAddress(clientAddress) : false
 }
 
+/**
+ * Returns an x-forwarded-for header's comma-separated hops in order, cleaned of padding and empties.
+ */
+export function toForwardedForHops(forwardedFor: string | null): string[] {
+	return (forwardedFor ?? "")
+		.split(",")
+		.map((hop) => hop.trim())
+		.filter(Boolean)
+}
+
 // whether this process has checked TRUSTED_PROXIES against a request. each process checks only one request
 let hasCheckedTrustedProxies = false
 
@@ -67,11 +77,7 @@ export function toTrustedProxiesWarning({
 	clientAddress,
 	trustedProxyCount,
 }: ToTrustedProxiesWarningOptions): string | null {
-	// the header's comma-separated hops, cleaned of padding and empties
-	const hops = (forwardedFor ?? "")
-		.split(",")
-		.map((hop) => hop.trim())
-		.filter(Boolean)
+	const hops = toForwardedForHops(forwardedFor)
 
 	// if TRUSTED_PROXIES is set, warn unless the header resolved to a public client.
 	// no address or an internal one means the platform added a hop that TRUSTED_PROXIES lacks.

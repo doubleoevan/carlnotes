@@ -1,10 +1,9 @@
 // the limits and weights behind reactions and comments: an account's daily writes, and how much each account's
 // reaction counts toward a Finding's reaction signal
-import { DAY_MS } from "@carlnotes/contracts/time"
+import { DAY_MS, toUtcDay } from "@carlnotes/contracts/time"
 import { inArray } from "drizzle-orm"
 import { db } from "./index"
 import { loadAcceptedInviteShares, toAccountSignalWeight } from "./inviteLimits"
-import { toUtcDay } from "./quotas"
 import { countRateLimitHit } from "./redisRateLimits"
 import { users } from "./schema/users"
 

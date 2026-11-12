@@ -6,7 +6,7 @@ import {
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Mic } from "lucide-react"
 import { IconButton } from "@/components/common/IconButton"
-import { QUESTION_BUBBLE_WIDTH_CLASS } from "@/lib/styleClasses"
+import { QUESTION_BUBBLE_WIDTH_CLASS } from "@/lib/chatClasses"
 
 /**
  * Adapts the shared chat chapter tag to browser controls and tooltips.

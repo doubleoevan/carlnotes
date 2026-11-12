@@ -3,7 +3,7 @@
 
 import { toActivityApplicationFailure } from "@carlnotes/contracts/scanFailure"
 import type { ResendFailure } from "@carlnotes/emails/email"
-import type { ScanTrigger } from "@carlnotes/pipeline/temporalClient"
+import type { ScanTrigger } from "@carlnotes/pipeline/scanWorkflowClient"
 import { ActivityFailure, condition, defineSignal, proxyActivities, setHandler } from "@temporalio/workflow"
 import { SEND_RETRY_POLICY, SEND_TIMEOUT_MS } from "./deliveryRetryPolicy"
 import type * as emailActivities from "./sendScanEmailActivities"

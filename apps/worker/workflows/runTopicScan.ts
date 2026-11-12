@@ -2,6 +2,7 @@
 
 import { toWorkflowFailureReason } from "@carlnotes/contracts/scanFailure"
 import { PUSH_TASK_QUEUE } from "@carlnotes/pipeline/pushWorkflows"
+import type { ScanTrigger } from "@carlnotes/pipeline/scanWorkflowClient"
 // the attempt counts the retry policies that the temporal activities read
 import {
 	FINISH_ATTEMPTS,
@@ -13,7 +14,6 @@ import {
 	REVIEW_ATTEMPTS,
 	REVIEW_TIMEOUT_MS,
 } from "@carlnotes/pipeline/stageTimeouts"
-import type { ScanTrigger } from "@carlnotes/pipeline/temporalClient"
 import {
 	CancellationScope,
 	getExternalWorkflowHandle,

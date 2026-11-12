@@ -4,7 +4,7 @@ import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { expect, fireEvent, fn } from "storybook/test"
 import { AvatarDropOverlay } from "@/components/avatar/AvatarUpload"
 import { UserAvatar } from "@/components/branding/UserAvatar"
-import { COMPOSER_FRAME_CLASS } from "@/lib/styleClasses"
+import { COMPOSER_FRAME_CLASS } from "@/lib/chatClasses"
 import { STORY_USER } from "../../../.storybook/fixtures"
 import { FileDropZone } from "./FileDropZone"
 

@@ -1,6 +1,7 @@
 import { toClockLabel } from "@carlnotes/core/lib/labels"
 import { ArrowUp, X } from "lucide-react"
-import { ICON_BUTTON_CLASS, SEND_BUTTON_CLASS } from "@/lib/styleClasses"
+import { SEND_BUTTON_CLASS } from "@/lib/chatClasses"
+import { ICON_BUTTON_CLASS } from "@/lib/styleClasses"
 import type { VoiceRecording } from "./useVoiceRecording"
 
 /**

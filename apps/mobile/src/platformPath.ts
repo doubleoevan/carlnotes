@@ -43,8 +43,8 @@ const NATIVE_ROUTE_PATTERNS = [
 	/^\/$/,
 	/^\/(search|settings|account|activity|chat|plans|sign-in|sign-up|teams)$/,
 	/^\/invite\/[^/]+$/,
-	/^\/profiles\/[^/]+$/,
-	/^\/teams\/[^/]+(\/chat|\/notes\/[^/]+)?$/,
+	/^\/profiles\/[^/]+(\/specials\/(topics|podcasts))?$/,
+	/^\/teams\/[^/]+(\/chat|\/specials|\/notes\/[^/]+)?$/,
 	/^\/topics\/[^/]+(\/chat|\/notes\/[^/]+|\/episodes\/\d+\/\d+|\/posts\/[^/]+)?$/,
 ]
 

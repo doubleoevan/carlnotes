@@ -6,7 +6,7 @@ import {
 import { cn } from "@carlnotes/nightshift/classNames"
 import { PenLine } from "lucide-react"
 import { AnchorLink } from "@/components/common/AnchorLink"
-import { QUESTION_BUBBLE_WIDTH_CLASS } from "@/lib/styleClasses"
+import { QUESTION_BUBBLE_WIDTH_CLASS } from "@/lib/chatClasses"
 
 /**
  * Adapts the shared chat post tag to a browser link.

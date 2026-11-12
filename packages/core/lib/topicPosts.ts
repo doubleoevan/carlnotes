@@ -1,7 +1,7 @@
 // a Topic Post's copy and the values both apps read from it: the editor's labels, the word count, the date line, and
 // what its share options share
 import type { Visibility } from "@carlnotes/contracts/enums"
-import { READING_WORDS_PER_MINUTE, toDotSeparatedText, toHtmlText } from "@carlnotes/contracts/text"
+import { READING_WORDS_PER_MINUTE, toCountLabel, toDotSeparatedText, toHtmlText } from "@carlnotes/contracts/text"
 import {
 	TOPIC_POST_MIN_WORDS,
 	type TopicPostCard,
@@ -11,7 +11,6 @@ import {
 } from "@carlnotes/contracts/topicPosts"
 import type { EditableImage } from "../components/TopicImageEditor"
 import { toCountDetails } from "./detailsLine"
-import { toCountLabel } from "./labels"
 
 // what the editor, the page, and the section say
 export const TOPIC_POST_LABELS = {

@@ -94,8 +94,10 @@ export const PODCAST_NAME = "Coffee Break podcast"
 export const TOPIC_PODCAST_EPISODE_VIDEO_NAME = "Coffee Break film"
 export const FILMS_NAME = "Coffee Break films"
 
-// the anchor of the film player on a podcast episode page
+// the anchor of the film player on a podcast episode page and a topic page, and of the podcast episode player on a
+// topic page
 export const FILM_ANCHOR_ID = "film"
+export const PODCAST_ANCHOR_ID = "podcast"
 
 // the podcast's name as a listener and a search engine read it
 export const PODCAST_SHOW_NAME = `${PODCAST_NAME} with ${PODCAST_HOSTS_NAME}`

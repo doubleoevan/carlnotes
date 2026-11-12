@@ -1,7 +1,8 @@
 import type { Topic } from "@carlnotes/contracts/profiles"
+import { toCountLabel } from "@carlnotes/contracts/text"
 import type { ReactNode } from "react"
 import type { TableColumn } from "../components/DataTable"
-import { toCountLabel, toMonthYearLabel } from "./labels"
+import { toMonthYearLabel } from "./labels"
 
 export const topicSortValues = {
 	topic: (topic: Topic) => topic.name,
@@ -31,6 +32,7 @@ export function toTopicsTableColumns({
 	topics: Topic[]
 	includesNonPublicTopics: boolean
 	topicTooltip?: string
+	// the cell renderers each app supplies with its own elements
 	renderText: (text: string) => ReactNode
 	renderName: (topic: Topic) => ReactNode
 	renderVisibility: (topic: Topic) => ReactNode

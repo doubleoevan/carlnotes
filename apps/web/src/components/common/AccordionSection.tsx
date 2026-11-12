@@ -29,7 +29,7 @@ export function AccordionSection({
 }: {
 	// the accordion's own key for this section
 	value: string
-	title: string
+	title: ReactNode
 	// the icon before the title
 	icon?: LucideIcon
 	// the section's count, such as "6 topics", or nothing until it is known

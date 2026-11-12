@@ -2,6 +2,7 @@
 // and the count adds a view only to a finding a visitor may see
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
+import { takeDailyCountEntries } from "@carlnotes/db/dailyCountBuffer"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
 import * as findingFeedback from "./findingFeedback"
 import { countVisitorFindingView } from "./findingFeedback"
@@ -37,15 +38,24 @@ function postVisitorView(headers: Record<string, string>): Promise<Response> {
 	return Promise.resolve(findingsRoute.request("/topic-findings/finding-1/view", { method: "POST", headers }))
 }
 
-test("a visitor's open from the app counts a view and returns 204", async () => {
-	const countVisitorFindingViewSpy = spyOn(findingFeedback, "countVisitorFindingView").mockResolvedValue()
+test("a visitor's open from the app counts a view and the day's view, and returns 204", async () => {
+	const countVisitorFindingViewSpy = spyOn(findingFeedback, "countVisitorFindingView").mockResolvedValue(true)
 	const response = await postVisitorView(BROWSER_HEADERS)
 	expect(response.status).toBe(204)
 	expect(countVisitorFindingViewSpy).toHaveBeenCalledWith("finding-1")
+
+	// the day's buffer holds one view of the finding, from no known place
+	const [dailyCountEntry] = (await takeDailyCountEntries()) ?? []
+	expect(dailyCountEntry?.dailyCountRow).toMatchObject({
+		dailyCountKind: "view",
+		itemKind: "finding",
+		itemId: "finding-1",
+		place: null,
+	})
 })
 
 test("a crawler's open and another website's open return 204 and count nothing", async () => {
-	const countVisitorFindingViewSpy = spyOn(findingFeedback, "countVisitorFindingView").mockResolvedValue()
+	const countVisitorFindingViewSpy = spyOn(findingFeedback, "countVisitorFindingView").mockResolvedValue(true)
 	const crawlerResponse = await postVisitorView(CRAWLER_HEADERS)
 	const crossSiteResponse = await postVisitorView({ ...BROWSER_HEADERS, "sec-fetch-site": "cross-site" })
 	expect([crawlerResponse.status, crossSiteResponse.status]).toEqual([204, 204])

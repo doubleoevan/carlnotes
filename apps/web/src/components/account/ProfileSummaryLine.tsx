@@ -10,7 +10,7 @@ import { DetailsLine } from "@/components/common/DetailsLine"
 
 // the web's elements: the details line under the heading, and the link that ends it
 const PROFILE_SUMMARY_LINE_ELEMENTS: ProfileSummaryLineElements = {
-	DetailsLine: (props) => <DetailsLine className="mt-2" {...props} />,
+	DetailsLine,
 	UserBlockedLink: ({ label }) => (
 		<AnchorLink
 			href={`/account#${USER_BLOCKS_SECTION}`}

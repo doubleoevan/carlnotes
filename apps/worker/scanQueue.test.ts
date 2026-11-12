@@ -8,7 +8,7 @@ import { toDailySpendCutoffState } from "@carlnotes/db/dailySpendCutoffTestFixtu
 import { scans } from "@carlnotes/db/schema/scans"
 import * as litellm from "@carlnotes/models/litellm"
 import * as scan from "@carlnotes/pipeline/scan"
-import { toScanBacklogCrossing } from "@carlnotes/pipeline/temporalClient"
+import { toScanBacklogCrossing } from "@carlnotes/pipeline/scanWorkflowClient"
 import * as monitoring from "@carlnotes/server/monitoring"
 import { reportScanQueue, startUndispatchedScans, toDispatchableScanCount } from "./scanQueue"
 

@@ -1,8 +1,9 @@
 import type { OwnerTopic } from "@carlnotes/contracts/activity"
 import { frequencies, isDailyFrequency } from "@carlnotes/contracts/enums"
+import { toCountLabel } from "@carlnotes/contracts/text"
 import type { ReactNode } from "react"
 import type { TableColumn } from "../components/DataTable"
-import { toCentsLabel, toCountLabel, toMonthYearLabel } from "./labels"
+import { toCentsLabel, toMonthYearLabel } from "./labels"
 
 // the owner table sorts identically on Profile and in the web admin console
 export const ownerTopicSortValues = {
@@ -31,6 +32,7 @@ export function toOwnerTopicsTableColumns({
 	renderCost,
 }: {
 	topics: OwnerTopic[]
+	// the cell renderers each app supplies with its own elements
 	renderText: (text: string) => ReactNode
 	renderName: (topic: OwnerTopic) => ReactNode
 	renderSubscribers: (topic: OwnerTopic) => ReactNode

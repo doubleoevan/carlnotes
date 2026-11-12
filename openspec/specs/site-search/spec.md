@@ -216,14 +216,15 @@ contract rejects SHALL fall back to its default.
 The page SHALL start with the home page's row of the Tags picker and the New Topic button, then a title naming how many
 results the search found, such as 25 search results for "test", then the results as numbered rows in the feed's list
 card, numbered across pages, with the numbered pages under them. Each row SHALL show its kind and link to its page on
-the site: a Topic with its viewers and followers, a Podcast Episode with its Topic, how long ago it was published, and
-its listeners, a team with its topics and members, and a profile. A Topic row with a published Podcast Episode, and a
-Podcast Episode row, SHALL have the play pill the feed uses. A Finding row SHALL be the feed's own row, with its Topic
-after its age, and a click on it SHALL open the Finding's note, with Carl's notes, the link to its page, and the rating,
-bookmark, and read controls the Finding's Topic allows the user, each change shown on the row at once. While a new
-search loads, the page SHALL show skeleton rows; while another page of the same search loads, the title's count and the
-page row SHALL stay, and the list SHALL show one skeleton row per result that page holds. A search with no rows SHALL
-say so and name the kinds turned off. At 375 pixels wide the list SHALL fit with no sideways scroll.
+the site: a Topic with its viewers and followers, the viewers labeled visitors, a Podcast Episode with its Topic, how
+long ago it was published, and its listeners, a team with its topics and members, and a profile. A Topic row with a
+published Podcast Episode, and a Podcast Episode row, SHALL have the play pill the feed uses. A Finding row SHALL be the
+feed's own row, with its Topic after its age, and a click on it SHALL open the Finding's note, with Carl's notes, the
+link to its page, and the rating, bookmark, and read controls the Finding's Topic allows the user, each change shown on
+the row at once. While a new search loads, the page SHALL show skeleton rows; while another page of the same search
+loads, the title's count and the page row SHALL stay, and the list SHALL show one skeleton row per result that page
+holds. A search with no rows SHALL say so and name the kinds turned off. At 375 pixels wide the list SHALL fit with no
+sideways scroll.
 
 #### Scenario: A row links to its page
 
@@ -254,6 +255,11 @@ say so and name the kinds turned off. At 375 pixels wide the list SHALL fit with
 
 - **WHEN** the search page renders at 375 pixels wide
 - **THEN** the page has no horizontal scroll, and each row shows its name and kind
+
+#### Scenario: A Topic row counts visitors
+
+- **WHEN** a search returns a public Topic with 9 viewers and 2 followers
+- **THEN** its row reads "9 visitors · 2 followers"
 
 ### Requirement: The logo opens the bar's search, and leaves the search page with an empty bar
 

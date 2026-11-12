@@ -6,7 +6,7 @@ import type { scans } from "@carlnotes/db/schema/scans"
 import { toScanSummary } from "./ingest/index"
 import type { NewResource } from "./ingest/ingester"
 import { failUnstartedScan, scanTopic, stopTopicScan } from "./scan"
-import * as temporalClient from "./temporalClient"
+import * as scanWorkflowClient from "./scanWorkflowClient"
 
 // the connection pool's own query, put back after each test along with the spies
 afterEach(() => {
@@ -21,7 +21,7 @@ const OPEN_SCAN = { id: "scan-1" } as typeof scans.$inferSelect
 // a row that the caller opened is deleted
 test("a rejected start keeps an existing Scan row and marks that row dispatched, and deletes a row that the caller opened", async () => {
 	// a workflow start that is rejected as already running
-	spyOn(temporalClient, "startTopicScanWorkflow").mockResolvedValue({ status: "running" })
+	spyOn(scanWorkflowClient, "startTopicScanWorkflow").mockResolvedValue({ status: "running" })
 
 	// an existing row gets a dispatchedAt and is never deleted
 	const existingRowSentQueries = stubConnectionPool()
@@ -40,7 +40,7 @@ test("a rejected start keeps an existing Scan row and marks that row dispatched,
 
 // if the start throws an error, scanTopic keeps an existing row, sends no query, and throws the same error
 test("a start that throws an error keeps an existing Scan row and sends no query", async () => {
-	spyOn(temporalClient, "startTopicScanWorkflow").mockRejectedValue(new Error("temporal unreachable"))
+	spyOn(scanWorkflowClient, "startTopicScanWorkflow").mockRejectedValue(new Error("temporal unreachable"))
 	const sentQueries = stubConnectionPool()
 	await expect(scanTopic(OPEN_SCAN, "topic-1", "owner-1", "creation", true)).rejects.toThrow("temporal unreachable")
 	expect(sentQueries).toEqual([])
@@ -50,7 +50,7 @@ test("a start that throws an error keeps an existing Scan row and sends no query
 test("a start that hits its deadline keeps the row the caller opened", async () => {
 	// a start rejected with the gRPC deadline error that the Temporal client throws, code 4 being DEADLINE_EXCEEDED
 	const deadlineError = Object.assign(new Error("deadline"), { code: 4, details: "", metadata: {} })
-	const startTopicScanWorkflowSpy = spyOn(temporalClient, "startTopicScanWorkflow").mockRejectedValue(deadlineError)
+	const startTopicScanWorkflowSpy = spyOn(scanWorkflowClient, "startTopicScanWorkflow").mockRejectedValue(deadlineError)
 
 	// the deadline keeps the row, sending no query
 	const deadlineSentQueries = stubConnectionPool()
@@ -85,7 +85,7 @@ test("failUnstartedScan marks failed only a running Scan that is not manual, not
 
 // a waiting Scan with no workflow is saved as stopped, and the stop reads as cancelled
 test("stopTopicScan saves a waiting Scan as stopped and returns cancelled when no workflow is running", async () => {
-	spyOn(temporalClient, "cancelTopicScanWorkflow").mockResolvedValue({ status: "idle" })
+	spyOn(scanWorkflowClient, "cancelTopicScanWorkflow").mockResolvedValue({ status: "idle" })
 	const sentQueries = stubConnectionPool(() => [["scan-1"]])
 	expect((await stopTopicScan("topic-1")).status).toBe("cancelled")
 
@@ -99,7 +99,7 @@ test("stopTopicScan saves a waiting Scan as stopped and returns cancelled when n
 
 // a Topic with no waiting Scan and no running workflow has nothing to stop
 test("stopTopicScan returns idle when no waiting Scan and no workflow is running", async () => {
-	spyOn(temporalClient, "cancelTopicScanWorkflow").mockResolvedValue({ status: "idle" })
+	spyOn(scanWorkflowClient, "cancelTopicScanWorkflow").mockResolvedValue({ status: "idle" })
 	stubConnectionPool()
 	expect(await stopTopicScan("topic-1")).toEqual({ status: "idle" })
 })

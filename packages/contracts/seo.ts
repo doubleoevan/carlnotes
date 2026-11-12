@@ -1,6 +1,7 @@
 // the page head helpers. the site and page titles, structured data, topic slugs and paths, and the meta description
 import { PLANS } from "./plans"
-import { isPublishedPodcastEpisode } from "./podcast"
+import { isPublishedPodcastEpisode, type PodcastEpisodeFormat } from "./podcast"
+import { FILM_ANCHOR_ID, PODCAST_ANCHOR_ID } from "./podcastEpisodes"
 import { SITE_HOST } from "./site"
 import { toPlainText } from "./spokenText"
 import { toOneLineText } from "./text"
@@ -179,6 +180,13 @@ export function toProfilePath(userId: string): string {
 }
 
 /**
+ * Returns a team's page path.
+ */
+export function toTeamPath(teamId: string): string {
+	return `/teams/${teamId}`
+}
+
+/**
  * Returns a topic's feed path, which names the topic by id alone so a renamed topic keeps its feed url.
  */
 export function toTopicFeedPath(topicId: string): string {
@@ -239,6 +247,13 @@ export function toTopicPostPath(topic: { id: string; name: string }, topicPost: 
  */
 export function toCommentPath(pagePath: string, commentId: string): string {
 	return `${pagePath}${pagePath.includes("?") ? "&" : "?"}comment=${encodeURIComponent(commentId)}`
+}
+
+/**
+ * Returns a topic page's path at its film or at its podcast episode player.
+ */
+export function toTopicPlayerPath(topic: { id: string; name: string }, format: PodcastEpisodeFormat): string {
+	return `${toTopicPath(topic)}#${format === "video" ? FILM_ANCHOR_ID : PODCAST_ANCHOR_ID}`
 }
 
 /**

@@ -29,7 +29,7 @@ pill](../../../assets/screenshots/search-results.png)
 
 Each row names its kind:
 
-- **Topic**: its viewers and followers, with its latest podcast episode's play pill.
+- **Topic**: its visitors and followers, with its latest podcast episode's play pill.
 - **Podcast**: the topic it belongs to, how long ago it was published, and its listeners.
 - **Post**: its image, how long ago it was published, and the topic it belongs to.
 - **Finding**: its source and age, the play pill of the chapter that narrates it, and its topic.

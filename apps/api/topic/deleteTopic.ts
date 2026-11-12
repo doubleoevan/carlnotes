@@ -9,6 +9,7 @@ import { topicImages } from "@carlnotes/db/schema/topicImages"
 import { attachments, topics } from "@carlnotes/db/schema/topics"
 import { deleteStoredObjects, recordPendingObjectDeletions, toStoredObjectKeys } from "@carlnotes/db/store"
 import { clearUnseenCommentMentions, loadTopicMentionedUserIds } from "@carlnotes/db/unseenCommentMentions"
+import { rebuildTopicDashboards } from "@carlnotes/pipeline/dashboardRebuild"
 import { notifyIndexNow } from "@carlnotes/pipeline/indexNow"
 import { loadTopicPodcastEpisodeObjectKeys } from "@carlnotes/pipeline/podcast/removePodcastEpisode"
 import {
@@ -58,7 +59,7 @@ export async function deleteTopic(
 	})
 
 	// clear the topic's cached visitor copies and the cached unseen Comment Mentions that its comments held once the
-	// rows are gone, then delete the objects
+	// rows are gone, then delete the objects and rebuild the topic's Dashboards
 	await clearVisitorTopicCaches({
 		topicId,
 		visibility: topic.visibility,
@@ -67,6 +68,7 @@ export async function deleteTopic(
 	})
 	await clearUnseenCommentMentions(mentionedUserIds)
 	await deleteStoredObjects(objectKeys)
+	await rebuildTopicDashboards(topic)
 
 	// a deleted public topic's url is gone, so notify IndexNow to drop it, and its image files leave the edge
 	if (topic.visibility === "public") {

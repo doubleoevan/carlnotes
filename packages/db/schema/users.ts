@@ -37,6 +37,8 @@ export const users = pgTable(
 		isChatMentionPushEnabled: boolean("is_chat_mention_push_enabled"),
 		// whether the daily notifications email is sent to the user
 		isNotificationsEmailEnabled: boolean("is_notifications_email_enabled").notNull().default(false),
+		// the UTC month, as YYYY-MM, of the last topic scan email that linked the user's Dashboards, null before the first
+		dashboardLinkMonth: text("dashboard_link_month"),
 		// when an admin blocked the user from reactions and comments everywhere, and which admin. null while not blocked
 		adminBlockedAt: timestamp("admin_blocked_at", { withTimezone: true }),
 		adminBlockedByUserId: text("admin_blocked_by_user_id"),

@@ -1,5 +1,6 @@
 // the MCP view routes, one for each MCP view, in a memory router. a user never sees these paths, /brew/$topicId is
-// the scan MCP view, /posts/$topicId a Topic's Topic Posts, and /post/$topicPostId one Topic Post
+// the scan MCP view, /posts/$topicId a Topic's Topic Posts, /post/$topicPostId one Topic Post, and /specials one
+// Dashboard
 
 import type { McpSearchPage, McpView, McpViewTopicResult } from "@carlnotes/contracts/mcpViews"
 import { personalSourcesSendResult } from "@carlnotes/contracts/personalSources"
@@ -7,6 +8,7 @@ import type { TopicSuggestionsResult } from "@carlnotes/contracts/topicSuggestio
 import { createRootRoute, createRoute, createRouter, useLocation } from "@tanstack/react-router"
 import type { ReactNode } from "react"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
+import { DashboardMcpView } from "./DashboardMcpView"
 import { FindingsMcpView } from "./FindingsMcpView"
 import { McpViewShell } from "./McpViewShell"
 import {
@@ -52,6 +54,7 @@ const routeTree = rootRoute.addChildren([
 		path: `${TOPIC_POST_ROUTE_PREFIX}$topicPostId`,
 		component: TopicPostRoute,
 	}),
+	createRoute({ getParentRoute: () => rootRoute, path: "/specials", component: DashboardRoute }),
 ])
 
 /**
@@ -75,6 +78,7 @@ export function toMcpViewOpeningPath(mcpView: McpView, { toolResult }: McpViewTo
 		news: NEWS_ROUTE_PATH,
 		"topic-posts": `${TOPIC_POSTS_ROUTE_PREFIX}${mcpViewData.topic?.id ?? NO_ROUTE_ID}`,
 		"topic-post": `${TOPIC_POST_ROUTE_PREFIX}${mcpViewData.topicPost?.id ?? NO_ROUTE_ID}`,
+		dashboard: "/specials",
 	}
 	return openingPaths[mcpView]
 }
@@ -110,6 +114,13 @@ function TopicPostsRoute(): ReactNode {
 function TopicPostRoute(): ReactNode {
 	const { topicPost } = toMcpViewData(useMcpViewToolCall()?.toolResult._meta)
 	return topicPost ? <TopicPostMcpView topicPost={topicPost} /> : null
+}
+
+// one Dashboard's read, which the tool read before the MCP view opened. only the dashboard MCP view's own bundle draws
+// it, and the bundle every other MCP view shares draws nothing here
+function DashboardRoute(): ReactNode {
+	const { dashboard } = toMcpViewData(useMcpViewToolCall()?.toolResult._meta)
+	return dashboard ? <DashboardMcpView mcpViewDashboard={dashboard} /> : null
 }
 
 // a Topic's running Scan or its latest recap

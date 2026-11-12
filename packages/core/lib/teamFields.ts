@@ -1,7 +1,7 @@
 import type { TeamIdentity } from "@carlnotes/contracts/teamIdentity"
 import type { TeamPageResponse } from "@carlnotes/contracts/teams"
+import { toCountLabel } from "@carlnotes/contracts/text"
 import { toCountDetails } from "./detailsLine"
-import { toCountLabel } from "./labels"
 
 // the label of the team page's button that opens the invite dialog for a member
 export const ADD_TEAM_MEMBER_LABEL = "Add Member"

@@ -226,6 +226,9 @@ function RootLayout() {
 										<Stack.Screen name="topics/[topicId]/episodes/[season]/[episodeNumber]" />
 										<Stack.Screen name="topics/[topicId]/notes/[noteId]" />
 										<Stack.Screen name="teams/[teamId]/notes/[noteId]" />
+										<Stack.Screen name="profiles/[userId]/specials/topics" />
+										<Stack.Screen name="profiles/[userId]/specials/podcasts" />
+										<Stack.Screen name="teams/[teamId]/specials" />
 										<Stack.Screen name="plans" />
 										<Stack.Screen name="invite/[token]" />
 									</Stack.Protected>
@@ -235,6 +238,7 @@ function RootLayout() {
 										<Stack.Screen name="activity" />
 										<Stack.Screen name="teams/index" />
 										<Stack.Screen name="teams/[teamId]/chat" />
+										<Stack.Screen name="teams/specials" />
 										<Stack.Screen name="topics/[topicId]/chat" />
 									</Stack.Protected>
 									<Stack.Protected guard={!isSignedIn}>

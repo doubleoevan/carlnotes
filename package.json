@@ -75,6 +75,7 @@
 		"eval:personal-sources-scoring": "doppler run --project carlnotes --config dev -- bun evals/personal-sources-context/personalSourcesScoringEval.ts",
 		"eval:attachment-summaries": "doppler run -- bun evals/attachment-summaries/attachmentSummariesEval.ts",
 		"eval:updates-opener": "doppler run -- bun evals/updates-opener/updatesOpenerEval.ts",
+		"eval:dashboard-paragraph": "doppler run -- bun evals/dashboard-paragraph/dashboardParagraphEval.ts",
 		"eval:topic-post-summary": "doppler run -- bun evals/topic-post-summary/topicPostSummaryEval.ts",
 		"eval:topic-post-discussion": "doppler run -- bun evals/topic-post-discussion/topicPostDiscussionEval.ts",
 		"eval:topic-post-chat": "doppler run -- bun evals/topic-post-chat/topicPostChatEval.ts",

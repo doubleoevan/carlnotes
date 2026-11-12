@@ -3,6 +3,7 @@ import { fetchTeams, sendDeleteTeam, sendRemoveTeamMember } from "@carlnotes/cli
 import { fetchAddableTopics } from "@carlnotes/client/topicClient"
 import { toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
 import type { TeamSummary, TeamsPageResponse } from "@carlnotes/contracts/teams"
+import { AvatarHeader, AvatarHeaderSkeleton } from "@carlnotes/core/components/AvatarHeader"
 import { useUserMenuUpdateBadges } from "@carlnotes/core/hooks/useUpdateCounts"
 import { toLeaveTeamConfirmation } from "@carlnotes/core/lib/confirmationCopy"
 import { toSectionCountLabel } from "@carlnotes/core/lib/labels"
@@ -10,9 +11,12 @@ import { Plus, Users } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
 import { AccordionSection } from "@/components/common/AccordionSection"
+import {
+	WEB_AVATAR_HEADER_ELEMENTS,
+	WEB_AVATAR_HEADER_SKELETON_ELEMENTS,
+} from "@/components/common/avatarHeaderElements"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { UpdateCountBadge } from "@/components/common/UpdateCountBadge"
-import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { PageSkeleton } from "@/components/layout/PageSkeleton"
 import { Accordion } from "@/components/primitives/accordion"
 import { Button } from "@/components/primitives/button"
@@ -21,7 +25,13 @@ import { SentTeamInvitesTable } from "@/components/table/TeamInvitesTable"
 import { TeamsMembershipTable } from "@/components/table/TeamsMembershipTable"
 import { EditTeamModal } from "@/components/team/EditTeamModal"
 import { usePageTitle } from "@/hooks/usePageTitle"
-import { HIGHLIGHTED_PAGE_BUTTON_CLASS, PAGE_CLASS, PAGE_HEADER_CLASS, PAGE_TITLE_CLASS } from "@/lib/styleClasses"
+import {
+	HIGHLIGHTED_PAGE_BUTTON_CLASS,
+	PAGE_CLASS,
+	PAGE_HEADER_CLASS,
+	PAGE_TITLE_CLASS,
+	SECTIONS_UNDER_AVATAR_HEADER_CLASS,
+} from "@/lib/styleClasses"
 import { useRegisterChatContext } from "@/stores/chatPanelStore"
 
 /**
@@ -107,10 +117,16 @@ export function TeamsPage() {
 					New team
 				</Button>
 			</div>
-			{/* whose teams these are, with a link to their profile */}
-			{session && <UserProfileLink user={toSessionProfileIdentity(session.user)} className="mt-2 text-sm" />}
-			{/* mt-2 plus the first accordion trigger's own padding matches the account page's mt-6 gap */}
-			<div className="mt-2">
+			{/* whose teams these are, in their avatar header */}
+			{session ? (
+				<AvatarHeader
+					subject={{ subjectKind: "user", user: toSessionProfileIdentity(session.user) }}
+					elements={WEB_AVATAR_HEADER_ELEMENTS}
+				/>
+			) : (
+				<AvatarHeaderSkeleton elements={WEB_AVATAR_HEADER_SKELETON_ELEMENTS} />
+			)}
+			<div className={SECTIONS_UNDER_AVATAR_HEADER_CLASS}>
 				{teamsPage && isLoadFailed && (
 					<Button variant="outline" onClick={reloadTeams}>
 						Retry loading teams

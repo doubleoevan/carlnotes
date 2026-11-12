@@ -1,5 +1,5 @@
-// the privacy page's copy: what a Café and an Open Mic post make public, how visitors are counted, and the policy
-// that was there before
+// the privacy page's copy: what a profile page and a Topic Post make public, how visitors are counted and charted by
+// place, and the policy that was there before
 import { expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
@@ -20,6 +20,12 @@ test("the policy says an Open Mic post is as visible as its topic", () => {
 test("the policy says Café and team visits are counted like topic views, with nothing set on the device", () => {
 	expect(privacyPageSource).toContain("A Café and a team page count their visitors the same way.")
 	expect(privacyPageSource).toContain("sets nothing on your device")
+})
+
+test("the policy says visitors are charted by place with no IP address stored and a ten-person city minimum", () => {
+	expect(privacyPageSource).toContain("Specials pages chart visits and plays by day and by place.")
+	expect(privacyPageSource).toContain("never your IP address")
+	expect(privacyPageSource).toContain("A city shows on a map only after ten different people have visited from it.")
 })
 
 test("the additions leave the existing policy whole", () => {

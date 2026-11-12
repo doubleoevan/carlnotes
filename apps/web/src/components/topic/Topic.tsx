@@ -17,6 +17,7 @@ import { TOPIC_IMAGE_FRAME_CLASS } from "@/components/primitives/topic-image"
 import { toSignupNavigation } from "@/components/session/signupPrompts"
 import { ShareTopic } from "@/components/share/ShareTopic"
 import { useRevealClassName } from "@/hooks/useRevealClassName"
+import { TOPIC_HEADER_AREA_CLASSES, toTopicHeaderGridClass } from "@/lib/pageHeaderClasses"
 import {
 	ACTIVE_ICON_CLASS,
 	LIST_TOPIC_IMAGE_CLASS,
@@ -25,8 +26,6 @@ import {
 	RAIL_TEXT_INSET,
 	STANDALONE_LINK_CLASS,
 	TITLE_ICON_BUTTON_CLASS,
-	TOPIC_HEADER_AREA_CLASSES,
-	toTopicHeaderGridClass,
 } from "@/lib/styleClasses"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
 import { TopicByline } from "./TopicByline"

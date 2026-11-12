@@ -1,6 +1,13 @@
-// trusted proxies tests: the warning logged if TRUSTED_PROXIES is unset or misses a proxy hop
+// trusted proxies tests: an x-forwarded-for header's hops, and the warning logged if TRUSTED_PROXIES is unset or misses
+// a proxy hop
 import { expect, test } from "bun:test"
-import { toTrustedProxiesWarning } from "./trustedProxies"
+import { toForwardedForHops, toTrustedProxiesWarning } from "./trustedProxies"
+
+// a header's hops keep their order without padding or empty entries, and a missing header has none
+test("a header's hops are read in order, cleaned of padding and empties", () => {
+	expect(toForwardedForHops(" 203.0.113.7 ,, 172.70.1.1 ,")).toEqual(["203.0.113.7", "172.70.1.1"])
+	expect(toForwardedForHops(null)).toEqual([])
+})
 
 // if TRUSTED_PROXIES is unset, the warning suggests the proxy hops from the first request's x-forwarded-for header
 test("an unset TRUSTED_PROXIES reports the hops behind the user", () => {

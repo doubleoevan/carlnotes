@@ -10,6 +10,8 @@ import { View } from "react-native"
 import { UserAvatarPicker } from "@/components/avatar/UserAvatarPicker"
 import { Avatar, PAGE_AVATAR_SIZE } from "@/components/branding/Avatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { PageHeaderIdentity } from "@/components/common/PageHeaderIdentity"
+import { PageHeaderRow } from "@/components/common/PageHeaderRow"
 import { UserMenuUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { Text } from "@/components/primitives/text"
 import { ProfileSummaryLine } from "./ProfileSummaryLine"
@@ -23,9 +25,10 @@ function ProfileHeading({ children }: { children: string }) {
 	)
 }
 
-// the app's elements, with the avatar at the height of a topic's image on the Topics screen
+// the app's elements, with the avatar at the height of a topic's image on the Topics screen and the name and the
+// summary line beside it
 const ELEMENTS: ProfileHeaderElements = {
-	Row: ({ children }) => <View className="flex-row flex-wrap items-center gap-3">{children}</View>,
+	Row: PageHeaderRow,
 	OwnAvatar: ({ userId, username }) => (
 		<View>
 			<UserAvatarPicker userId={userId} username={username} size={PAGE_AVATAR_SIZE} />
@@ -40,7 +43,7 @@ const ELEMENTS: ProfileHeaderElements = {
 			size={PAGE_AVATAR_SIZE}
 		/>
 	),
-	Identity: ({ children }) => <View className="w-full">{children}</View>,
+	Identity: PageHeaderIdentity,
 	Heading: ({ isAccountLink, username, children }) =>
 		isAccountLink ? (
 			<AnchorLink href="/account" accessibilityLabel={`${username}'s account`}>

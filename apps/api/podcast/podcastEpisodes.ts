@@ -23,6 +23,7 @@ import { isAllowed } from "../authorization"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { PRIVATE_NO_STORE_CACHE_CONTROL, purgeProfileAtEdge } from "../edgeCache"
 import { toObjectionableCategory, toObjectionableContentResponse } from "../moderation"
+import { readRequestPlace } from "../requestPlace"
 import { toPodcastEpisodePreview } from "../share/podcastEpisodeImage"
 import { toCachedPodcastEpisodePreviewPng, toPreviewPngResponse } from "../share/preview"
 import { updateTopicFields } from "../tool/topicTools"
@@ -199,6 +200,7 @@ export const podcastEpisodesRoute = new Hono<AppEnv>()
 			podcastEpisodeId: accessiblePodcastEpisode.podcastEpisodeRow.id,
 			topic: accessiblePodcastEpisode.topic,
 			analyticsProperties: toAnalyticsProperties(context),
+			place: readRequestPlace(context.req.raw),
 			...context.req.valid("json"),
 		})
 		return context.json({ ok: true })

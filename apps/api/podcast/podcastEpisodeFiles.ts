@@ -64,7 +64,7 @@ export function countPodcastEpisodePlayRequest(
 	void countWithinRateLimit({
 		requestSender,
 		rateLimitName: "podcast-listen",
-		count: () => countPodcastEpisodeListen(requestSender, podcastEpisodeId),
+		count: () => countPodcastEpisodeListen({ requestSender, podcastEpisodeId, format }),
 	})
 
 	// a play token's first request reports the play

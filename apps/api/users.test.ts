@@ -1,5 +1,5 @@
 // account tests: a close with a failed revocation before it begins and after it has begun, a LiteLLM key created
-// while the account was closing, and the daily notifications email's switch
+// while the account was closing, the edge purges a close sends, and the daily notifications email's switch
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as store from "@carlnotes/db/store"
@@ -8,6 +8,7 @@ import * as monitoring from "@carlnotes/server/monitoring"
 import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import { TEST_ANALYTICS_PROPERTIES } from "./analyticsTestFixtures"
+import { type EdgePurgeFetchSpy, stubEdgePurge, toPurgedTags } from "./edgePurgeTestFixtures"
 import * as sessions from "./sessions"
 import { toJsonRequest, toSignedInApp } from "./testSession"
 import { deleteUser, usersRoute } from "./users"
@@ -124,32 +125,37 @@ test("a LiteLLM key that the close already deleted is not deleted a second time"
 	expect(deleteLiteLLMKeySpy.mock.calls).toEqual([["sk-stored"]])
 })
 
-// turn the purge on, stub a close of a user with no avatar and no key, and return the fetch spy
-function stubCloseWithEdgePurge(): ReturnType<typeof spyOn<typeof globalThis, "fetch">> {
-	Bun.env.CLOUDFLARE_ZONE_ID = "zone-1"
-	Bun.env.CLOUDFLARE_API_TOKEN = "token-1"
+// turn the purge on with Cloudflare responding to each purge at the status given, stub a close of a user with no
+// avatar and no key, and return the fetch spy
+function stubCloseWithEdgePurge(purgeStatus = 200): EdgePurgeFetchSpy {
 	delete Bun.env.REDIS_URL
 	spyOn(sessions, "revokeUserSessions").mockResolvedValue(false)
 	stubConnectionPool(toClosingUserRows)
-	return spyOn(globalThis, "fetch")
+	return stubEdgePurge(purgeStatus)
 }
 
-// once the row is gone, one purge names the account's avatar tag
-test("a close purges the account's avatar tag from the edge once", async () => {
-	const fetchSpy = stubCloseWithEdgePurge().mockResolvedValue(new Response("{}", { status: 200 }))
+// once the row is gone, one purge each names the account's avatar tag and its Topic and Podcast Dashboards' tags
+test("a close purges the account's avatar and its Topic and Podcast Dashboards from the edge once each", async () => {
+	const fetchSpy = stubCloseWithEdgePurge()
 	expect(await deleteUser("user-1", "user-1", TEST_ANALYTICS_PROPERTIES)).toBe("deleted")
-	const purgeRequests = fetchSpy.mock.calls.filter(([url]) => String(url).endsWith("/purge_cache"))
-	expect(purgeRequests).toHaveLength(1)
-	expect(JSON.parse(String(purgeRequests[0]?.[1]?.body))).toEqual({ tags: ["user-avatar:user-1"] })
+	expect(toPurgedTags(fetchSpy)).toEqual([
+		"dashboard:podcastDashboard:user-1",
+		"dashboard:topicDashboard:user-1",
+		"user-avatar:user-1",
+	])
 })
 
-// a purge Cloudflare rejects is reported, and the close still finishes
+// each purge Cloudflare rejects is reported, and the close still finishes
 test("a failed purge is reported and the close goes on", async () => {
-	stubCloseWithEdgePurge().mockResolvedValue(new Response("bad token", { status: 403 }))
+	stubCloseWithEdgePurge(403)
 	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
 	expect(await deleteUser("user-1", "user-1", TEST_ANALYTICS_PROPERTIES)).toBe("deleted")
-	expect(reportErrorSpy).toHaveBeenCalledTimes(1)
-	expect(String(reportErrorSpy.mock.calls[0]?.[0])).toContain("the edge purge of user-avatar:user-1 failed: 403")
+	const reportedErrors = reportErrorSpy.mock.calls.map(([error]) => String(error)).sort()
+	expect(reportedErrors).toEqual([
+		expect.stringContaining("the edge purge of dashboard:podcastDashboard:user-1 failed: 403"),
+		expect.stringContaining("the edge purge of dashboard:topicDashboard:user-1 failed: 403"),
+		expect.stringContaining("the edge purge of user-avatar:user-1 failed: 403"),
+	])
 })
 
 // every key the account owned is recorded as pending in the same transaction as the user row's delete
@@ -185,11 +191,10 @@ test("a close records every key the account owned", async () => {
 })
 
 // a team the user led alone is deleted with the account, its chat room attachment and avatar keys recorded in the
-// deleting transaction and their objects deleted after it
+// deleting transaction, their objects deleted after it, and its avatar and Team Dashboard purged from the edge
 test("a close deletes a solo team with its chat room attachments and avatar", async () => {
-	// no configured Redis, a user leading one team alone, and the console quiet
-	delete Bun.env.REDIS_URL
-	spyOn(sessions, "revokeUserSessions").mockResolvedValue(false)
+	// the purge on, a user leading one team alone, and the console quiet
+	const fetchSpy = stubCloseWithEdgePurge()
 	spyOn(console, "error").mockImplementation(() => {})
 	const deleteStoredObjectsSpy = spyOn(store, "deleteStoredObjects").mockResolvedValue(undefined)
 	const sentQueries = stubConnectionPool(({ text }) => {
@@ -220,6 +225,11 @@ test("a close deletes a solo team with its chat room attachments and avatar", as
 		"topics/t1/room-attachments/r1/notes.pdf",
 		"avatars/teams/team-1/9c1b.webp",
 	])
+
+	// the team's avatar and Team Dashboard leave the edge with the account's own tags
+	expect(toPurgedTags(fetchSpy)).toEqual(
+		expect.arrayContaining(["dashboard:teamDashboard:team-1", "team-avatar:team-1", "user-avatar:user-1"]),
+	)
 })
 
 // the switch saves its one column to the row and rewrites the sessions, and a visitor's request writes nothing

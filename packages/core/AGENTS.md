@@ -13,11 +13,19 @@ and readiness copy. `personalSourcesStories.ts`, `expandableRowStories.ts`, `aiA
 `userBlocksStories.ts` supply fictional fixtures for both component browsers. `TopicPersonalSourcesSectionStory` shares
 the in-place section fixtures. Personal sources stay outside the fetched Source count in the shared Source editor.
 
-`@carlnotes/core`, the DOM-free components, stores, hooks, and lib that web and mobile import as `@carlnotes/core/<folder>/<name>`.
-It imports `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`, `react`, and `@tanstack/react-query`, and the non-UI `markdown-to-jsx/markdown` parser.
+`@carlnotes/core`, the DOM-free components, stores, hooks, and lib that web and mobile import as
+`@carlnotes/core/<folder>/<name>`. It imports `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`,
+`react`, and `@tanstack/react-query`, and the non-UI `markdown-to-jsx/markdown` parser.
 
 - `components/` — portable React composition exported as `@carlnotes/core/components/<name>`. `cardElements.tsx`
-  holds the `CardElements` type both card components extend. `TablePagination`,
+  holds the `CardElements` type both card components extend. `Dashboard` is the body of all three Dashboard pages on
+  the web, in the mobile app, and in the MCP view: Carl's paragraph and five chart sections in four rows, each chart
+  drawn by the platform renderer an app supplies, opening on the default selection on every page, and opening
+  `DashboardPointDetail` for a point, a pin, or a trend day. `RadioGroup` is a row of choices of which one is on, and
+  `TeamDropdown` is the team dropdown over a user's own teams in alphabetical order. `AvatarHeader` is a page's person
+  or team, laid out like the profile page, with an optional details line, and `AvatarHeaderSkeleton` holds its place.
+  Specials, Teams, Activity, and Account open with it. `DashboardSubjectHeader` is the Dashboard page's
+  `AvatarHeader` over `DashboardSummaryStrip`. `TablePagination`,
   `Pagination`, `SourceResultsChart`, `TopicScanRecap`, `NumberedTopicFindingList`, `SafeNoteLink`, `TopicScanFailure`,
   `MoreButton`, `CopyMarkdownButton`, `NotesTable`, `ResourceMetadata`, `RatingThumbs`, and `UpdatesList`, the
   updates MCP view's list, own repeated content, visibility, ordering, and interaction state. `CommentMentionBadge`
@@ -71,7 +79,11 @@ It imports `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`,
   sells on the user's storefront, which the app sets, and `usePurchaseOffers`, the signed-in user's purchase offers in
   the app, which read a paid plan's billing provider and stay read-only until it loads. A store that reaches an audio
   element, the media session, or a component library stays in its app.
-- `hooks/` — `useNews.ts`, one page of a window of the signed-in user's news or of a profile's, `useNewsList.ts`, a
+- `hooks/` — `useDashboardSnapshot.ts`, a Dashboard's snapshot for one chart selection, read once and shared by every
+  chart that shows it, `useDashboardPage.ts`, a Dashboard page's access, default snapshot, subject, title, and team
+  dropdown, which the web page and the mobile app's screen share, `useTeams.ts`, the signed-in user's teams and team
+  invites read once per account, `useTopicPostView.ts`, a Topic Post page's view sent once its published Topic Post
+  loads, `useNews.ts`, one page of a window of the signed-in user's news or of a profile's, `useNewsList.ts`, a
   news list's window, page, and open state, and `useUpdatesOpener.ts`, the day's opener above the user's own news;
   `useYourTopicsPages.ts`, the home's Your topics five to a page, the first from the home payload;
   `useUserBlocks.ts`, the user's user block list and the unblock that shortens the list once the server
@@ -88,43 +100,50 @@ It imports `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`,
   invitations while the app is focused and online, which reloads the chat rooms into the store when the count changes
   and drops a response from a replaced account; and `usePolledCounts.ts`, a page's viewer, follower, or listener counts
   read once the page shows and then every minute while the app is focused and online.
-- `lib/` — pure rules and formatting: `reportCopy.ts` (the report dialog's words on both apps), `confirmElement.ts` (the
-  props of a confirmation dialog), `confirmationCopy.ts` (the words of each one), `labels.ts` (values as the text a user
-  sees: dates, durations, money, sizes, and counts), `pageHead.ts` (a `PageHead`, or a fixed title and path, as the tags
-  a route's `head()` returns), `paginationSlots.ts` (the slots a row of page links shows), `worstCaseMonthlySpend.ts`
-  (the admin console's worst case free-plan spend for the UTC month at a daily signup rate, the rates its table
-  compares, and the daily signup average of the past days), `planCards.ts` (which plan card matches the user's plan and
-  billing interval, and which badge shows), `streamReconnect.ts` (how long a silent SSE stream runs before it counts as
-  dropped and the wait before reopening it, for the chat room stream), `topicFindingFilters.ts` and
-  `topicFindingSorts.ts` (which findings a feed view shows and in what order), `topicSorts.ts` (the Topics page's topic
-  order under Trending: viewers, then followers, then the newest finding, with Home topics kept in its own order),
-  `topicPromptUrls.ts` (the urls written inside a topic prompt), `emailProviders.ts` (the webmail compose urls an invite
-  is given), `chromeIntentUrl.ts` (the page as an Android intent url that opens it in Chrome, out of an embedded
-  webview), `pushCopy.ts` (the push permission sheet's and the Notifications section's words), `sessionCopy.ts` (the
-  lines the sign-in, sign-out, sign-up, and close-account controls say, shared by the web and the mobile app),
-  `signupPrompts.ts` (the prompt each account action shows a visitor on the sign-up page, and the lookup by cta tag),
-  `inviteRejections.ts` (what an invite page says while it checks a token, if the check fails, and for each way a token
-  is rejected), `updateCounts.ts` (one badge's count summing chat mentions, note changes, and topic invitations, its
-  accessible labels, and the groups a tooltip or a long-press sheet lists), `updateBadgePoll.ts` (the poll behind
-  `useUpdateBadges`, on `activePoll.ts`), `countsPoll.ts` (the poll behind `usePolledCounts`, on `activePoll.ts`),
-  `focusAndOnline.ts` (whether the app is focused and online through Query's adapters, and how a poll subscribes to a
-  change), `limitedPoll.ts` (a poll on `activePoll.ts` that reads on an interval while the app is focused and online and
-  stops at a time limit, behind the Topic Post discussion poll and the film rendering poll), `topicGateCopy.ts` (the
-  invite-only gate's words), `podcastEpisodeCopy.ts` (the words shown if a podcast episode fails to load or play, the
-  lines shown while it records and while its film renders, and the film section's title on the topic page and the
-  podcast episode page), `topicPodcastEpisodeVideoDisplay.ts` (what a film section shows for a podcast episode: the film
-  player for a ready film, the rendering card while its film renders, or nothing, and the section a topic's page shows
-  while its only film is rendering), and `voiceRecordingDecisions.ts` (what the voice recorder decides from each frame,
-  with the `SilenceThresholdSettings` type and the browser's default settings), `voiceRecordingRules.ts` (the mic's
-  visibility, the recording timer, the reopened recording's rejection, and the meter's callback), `voiceRecorder.ts`
-  (the recorder adapter each app supplies: the session a tap opens, the start, the recording's delete, the rejected
-  microphone's action, and the background listener), `spokenAnswerPlayer.ts` (the spoken answer player adapter each app
-  supplies), and `spokenQuestionsPaused.ts` (the mic's action past the spoken questions cutoff, and the plans page's
-  upgrade lines), and `storefrontPurchaseRules.ts` (whether a user may buy a plan and where a paid plan is managed, from
-  the platform, the store's offering, and the user's plan and billing provider, with each place's label).
-  `sessionCopy.ts` also holds the closing copy for a store subscriber, whose plan keeps billing through the store.
-- Imports: `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`, `react`, and `@tanstack/react-query`. Never a server package or an app. Universal: the
-  root rule. A module that needs a DOM type is a web module and lives in `apps/web/src`.
+- `lib/` — pure rules and formatting: `dashboardCharts.ts` (the Dashboard charts' contract: the five charts, their
+  controls, the renderer props, and a point's detail lines), `dashboardMapPins.ts` (the map's box, center, and zoom
+  padding, and its pins: nearby places grouped at a zoom, each pin's size, label, and point, and the box a click zooms
+  to), `groupBy.ts` (values grouped by a key in a loop. Hermes has no `Map.groupBy`), `dashboardCounts.ts` (a chart's
+  views or plays, split into podcast and film plays, and their sums), `wordCloud.ts` (the word cloud's words and spiral
+  layout, which both apps draw, and the title words the snapshots count), `dashboardStories.ts` (the Dashboard story
+  fixtures), `reportCopy.ts` (the report dialog's words on both apps), `confirmElement.ts` (the props of a confirmation
+  dialog), `confirmationCopy.ts` (the words of each one), `labels.ts` (values as the text a user sees: dates, durations,
+  money, sizes, and counts), `pageHead.ts` (a `PageHead`, or a fixed title and path, as the tags a route's `head()`
+  returns), `paginationSlots.ts` (the slots a row of page links shows), `worstCaseMonthlySpend.ts` (the admin console's
+  worst case free-plan spend for the UTC month at a daily signup rate, the rates its table compares, and the daily
+  signup average of the past days), `planCards.ts` (which plan card matches the user's plan and billing interval, and
+  which badge shows), `streamReconnect.ts` (how long a silent SSE stream runs before it counts as dropped and the wait
+  before reopening it, for the chat room stream), `topicFindingFilters.ts` and `topicFindingSorts.ts` (which findings a
+  feed view shows and in what order), `topicSorts.ts` (the Topics page's topic order under Trending: viewers, then
+  followers, then the newest finding, with Home topics kept in its own order), `topicPromptUrls.ts` (the urls written
+  inside a topic prompt), `emailProviders.ts` (the webmail compose urls an invite is given), `chromeIntentUrl.ts` (the
+  page as an Android intent url that opens it in Chrome, out of an embedded webview), `pushCopy.ts` (the push permission
+  sheet's and the Notifications section's words), `sessionCopy.ts` (the lines the sign-in, sign-out, sign-up, and
+  close-account controls say, shared by the web and the mobile app), `signupPrompts.ts` (the prompt each account action
+  shows a visitor on the sign-up page, and the lookup by cta tag), `inviteRejections.ts` (what an invite page says while
+  it checks a token, if the check fails, and for each way a token is rejected), `updateCounts.ts` (one badge's count
+  summing chat mentions, note changes, and topic invitations, its accessible labels, and the groups a tooltip or a
+  long-press sheet lists), `updateBadgePoll.ts` (the poll behind `useUpdateBadges`, on `activePoll.ts`), `countsPoll.ts`
+  (the poll behind `usePolledCounts`, on `activePoll.ts`), `focusAndOnline.ts` (whether the app is focused and online
+  through Query's adapters, and how a poll subscribes to a change), `limitedPoll.ts` (a poll on `activePoll.ts` that
+  reads on an interval while the app is focused and online and stops at a time limit, behind the Topic Post discussion
+  poll and the film rendering poll), `topicGateCopy.ts` (the invite-only gate's words), `podcastEpisodeCopy.ts` (the
+  words shown if a podcast episode fails to load or play, the lines shown while it records and while its film renders,
+  and the film section's title on the topic page and the podcast episode page), `topicPodcastEpisodeVideoDisplay.ts`
+  (what a film section shows for a podcast episode: the film player for a ready film, the rendering card while its film
+  renders, or nothing, and the section a topic's page shows while its only film is rendering), and
+  `voiceRecordingDecisions.ts` (what the voice recorder decides from each frame, with the `SilenceThresholdSettings`
+  type and the browser's default settings), `voiceRecordingRules.ts` (the mic's visibility, the recording timer, the
+  reopened recording's rejection, and the meter's callback), `voiceRecorder.ts` (the recorder adapter each app supplies:
+  the session a tap opens, the start, the recording's delete, the rejected microphone's action, and the background
+  listener), `spokenAnswerPlayer.ts` (the spoken answer player adapter each app supplies), and
+  `spokenQuestionsPaused.ts` (the mic's action past the spoken questions cutoff, and the plans page's upgrade lines),
+  and `storefrontPurchaseRules.ts` (whether a user may buy a plan and where a paid plan is managed, from the platform,
+  the store's offering, and the user's plan and billing provider, with each place's label). `sessionCopy.ts` also holds
+  the closing copy for a store subscriber, whose plan keeps billing through the store.
+- Imports: `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`, `react`, and `@tanstack/react-query`.
+  Never a server package or an app. Universal: the root rule. A module that needs a DOM type is a web module and lives
+  in `apps/web/src`.
 - Tests: `bun test packages/core`.
 
 ## Shared podcast playback
@@ -177,14 +196,14 @@ alphabetical room ordering, and `toProfileChatContext` for both apps. Reset the 
 `lib/chatCopy` holds shared composer, confirmation, empty-room, and completion wording. Account replacement also
 clears `chatRoomStore` and its opened-room markers. Member reads can reuse the current account's loaded Team page.
 
-`components/ThinkingLine` owns the stable waiting phrase with app-supplied text rendering. Its `ThinkingLineProps`
-names the component-owned props; `ThinkingLineTextProps` remains the shared adapter contract. Both apps consume a
-`Pick` of the shared props and retain module-level text adapters. This family is in the adopted component-convention
-set; other components remain report-only. `lib/thinkingLines` owns
-the shared phrase deck and shuffle, moved from web's common components and utilities. Web retains CSS shimmer;
-native motion and app activity stay in the mobile adapter. `lib/chatCopy` also owns individual-message deletion
-confirmation wording; platform adapters use the web confirmation dialog and native alert.
-`lib/chatRoomActions` shares confirmed deletion, accepted history refresh, failure notices, and retired-conversation guards.
+`components/ThinkingLine` owns the stable waiting phrase with app-supplied text rendering. Its `ThinkingLineProps` names
+the component-owned props; `ThinkingLineTextProps` remains the shared adapter contract. Both apps consume a `Pick` of
+the shared props and retain module-level text adapters. This family is in the adopted component-convention set; other
+components remain report-only. `lib/thinkingLines` owns the shared phrase deck and shuffle, moved from web's common
+components and utilities. Web retains CSS shimmer; native motion and app activity stay in the mobile adapter.
+`lib/chatCopy` also owns individual-message deletion confirmation wording; platform adapters use the web confirmation
+dialog and native alert. `lib/chatRoomActions` shares confirmed deletion, accepted history refresh, failure notices, and
+retired-conversation guards.
 
 `components/ScrollDownButton` shares the centered latest-message action, visibility, label, and Nightshift classes.
 Its adapters supply the browser button or native touch control and the Lucide arrow.
@@ -213,46 +232,45 @@ pure/controller/store tests remain platform-free.
 `hooks/useRowSort.ts` owns column ordering and `usePaginatedRowSort.ts` returns to page one after sorting.
 Web adds its server-rendered row policy; mobile renders the same selection with native page and row-count controls.
 
-`hooks/useTopicFeedState.ts` owns account-keyed Feed reads, optional visitor hydration, filter state, and reheat generations.
-Its exported `useTopicFeedFilters` also serves query-free component stories. Apps reset filters when their navigation changes.
-Reheat advances only when every requested read succeeds. A known-offline refresh returns immediately.
-`hooks/useTopicFindingActions.ts` owns Finding writes and the router-free page handlers. Web keeps its existing non-optimistic timing.
-Mobile opts into pending-mutation presentation and acknowledged cache updates across Home, Topic, and account-scoped search queries.
-A failed write removes only its tentative change. Writes never retry or enter an offline queue.
-Its optional `onChangeConfirmed` callback retains acknowledged edits in a separately mounted Finding sheet.
-`keepTopicFindingReactions` writes a saved reaction summary into the same caches with no request, and page handlers
-give it to the page's own change callback, so a reopened Finding shows the user's reaction.
+`hooks/useTopicFeedState.ts` owns account-keyed Feed reads, optional visitor hydration, filter state, and reheat
+generations. Its exported `useTopicFeedFilters` also serves query-free component stories. Apps reset filters when their
+navigation changes. Reheat advances only when every requested read succeeds. A known-offline refresh returns
+immediately. `hooks/useTopicFindingActions.ts` owns Finding writes and the router-free page handlers. Web keeps its
+existing non-optimistic timing. Mobile opts into pending-mutation presentation and acknowledged cache updates across
+Home, Topic, and account-scoped search queries. A failed write removes only its tentative change. Writes never retry or
+enter an offline queue. Its optional `onChangeConfirmed` callback retains acknowledged edits in a separately mounted
+Finding sheet. `keepTopicFindingReactions` writes a saved reaction summary into the same caches with no request, and
+page handlers give it to the page's own change callback, so a reopened Finding shows the user's reaction.
 
-`lib/topicFeed.ts` owns Feed/tag selection and Resource-kind reset, and `isUserTopicFeedEmpty`, which both apps'
-empty home pages read. Existing Finding filters and sorts keep their bookmark and tie rules.
-`lib/topicFindingChanges.ts` applies action fields and unread-count changes without changing source payloads.
-Its search adapter preserves result order and metadata while applying the same Finding edits across loaded pages.
-`lib/topicFeedLabels.ts` owns shared section, sort, view, tag, and empty-state labels, plus the Finding-view menu options and Team bookmark scopes.
-`lib/topicTutorialVideo.ts` owns tutorial openers, event properties, and first-play recording.
-`lib/activePoll.ts` serializes requests while an app-supplied activity predicate is true. `lib/scanPoll.ts` supplies the
-scan backoff shared by both clients and `toPolledTopicPage`, which keeps the related Topics, reactions, and comment
-thread that a poll response leaves out. `lib/topicSchedule.ts` owns schedule options, daily-slot permission, and
-allowance copy shared by both Topic forms. `lib/pageViews.ts` sends one view per Topic, profile, or team per web tab or
-native app runtime, shared by both apps' Topic, profile, and team screens. `components/ViewerCountLine` reads a
-profile's or a team's viewer count on the counts poll and shows it as Visitors through each app's line and count
-elements. `lib/cardSections.ts` names the card and the key of a Topic, Podcast Episode, film, or Topic Post card
-section, the three Featured titles a profile and a team share, and a team page's four card sections, Featured Films
-right before Featured Podcasts, and
+`lib/topicFeed.ts` owns Feed/tag selection and Resource-kind reset, and `isUserTopicFeedEmpty`, which both apps' empty
+home pages read. Existing Finding filters and sorts keep their bookmark and tie rules. `lib/topicFindingChanges.ts`
+applies action fields and unread-count changes without changing source payloads. Its search adapter preserves result
+order and metadata while applying the same Finding edits across loaded pages. `lib/topicFeedLabels.ts` owns shared
+section, sort, view, tag, and empty-state labels, plus the Finding-view menu options and Team bookmark scopes.
+`lib/topicTutorialVideo.ts` owns tutorial openers, event properties, and first-play recording. `lib/activePoll.ts`
+serializes requests while an app-supplied activity predicate is true. `lib/scanPoll.ts` supplies the scan backoff shared
+by both clients and `toPolledTopicPage`, which keeps the related Topics, reactions, and comment thread that a poll
+response leaves out. `lib/topicSchedule.ts` owns schedule options, daily-slot permission, and allowance copy shared by
+both Topic forms. `lib/pageViews.ts` sends one view per Topic, profile, or team per web tab or native app runtime,
+shared by both apps' Topic, profile, and team screens. `components/ViewerCountLine` reads a profile's or a team's viewer
+count on the counts poll and shows it as Visitors through each app's line and count elements. `lib/cardSections.ts`
+names the card and the key of a Topic, Podcast Episode, film, or Topic Post card section, the three Featured titles a
+profile and a team share, and a team page's four card sections, Featured Films right before Featured Podcasts, and
 `components/CardsSection` renders one section of cards, paged or whole, through each app's section, grid, and page
 buttons. `lib/profileSections.ts` holds a profile's four Featured sections, Featured Films right before Featured
 Podcasts and Featured Posts last with every post of the person, the rows of its rank dialogs for topics, films,
-podcasts, and posts, whose pins have no limit, the send of their moves, and which of them the action menu offers. `lib/rankDialog.ts` holds a rank dialog's rows,
-a Topic Post as a row, the moves, and the words for the home's pins and a profile's,
-and `components/RankDialog` is the list that orders, adds, and removes pins through each app's frame, rows, and
-picker. `lib/sourceResults.ts` shares Source footnote ordering, totals, detail labels,
-and the earlier-findings row. `lib/topicSources.ts` shares default/custom Source ordering, off states, screening
-messages, and staged Source summaries between both apps. `components/TopicSource` exports the shared `TopicSource` row
-and `TopicDefaultSource` enabled/add composition. Web supplies its existing DOM badges and tooltips; mobile supplies
-native Nightshift badges and buttons. `lib/topicScanRecap.ts` shares the diary fields, missing-entry copy, and copied
-note Markdown. Shared React components compose the recap and chart from these rules; platform adapters draw the
-elements. Web supplies its browser origin when building Markdown links. Pure tests live beside these modules. Live hook
-tests use web's React DOM harness in `apps/web/src/hooks/useTopicFeedState.test.tsx`. Core imports no router, DOM, React
-Native, native storage, or device API.
+podcasts, and posts, whose pins have no limit, the send of their moves, and which of them the action menu offers.
+`lib/rankDialog.ts` holds a rank dialog's rows, a Topic Post as a row, the moves, and the words for the home's pins and
+a profile's, and `components/RankDialog` is the list that orders, adds, and removes pins through each app's frame, rows,
+and picker. `lib/sourceResults.ts` shares Source footnote ordering, totals, detail labels, and the earlier-findings row.
+`lib/topicSources.ts` shares default/custom Source ordering, off states, screening messages, and staged Source summaries
+between both apps. `components/TopicSource` exports the shared `TopicSource` row and `TopicDefaultSource` enabled/add
+composition. Web supplies its existing DOM badges and tooltips; mobile supplies native Nightshift badges and buttons.
+`lib/topicScanRecap.ts` shares the diary fields, missing-entry copy, and copied note Markdown. Shared React components
+compose the recap and chart from these rules; platform adapters draw the elements. Web supplies its browser origin when
+building Markdown links. Pure tests live beside these modules. Live hook tests use web's React DOM harness in
+`apps/web/src/hooks/useTopicFeedState.test.tsx`. Core imports no router, DOM, React Native, native storage, or device
+API.
 
 ## Tasting Notes
 
@@ -262,24 +280,26 @@ The apps supply the enriched HTML library, routing, keyboard layout, native shar
 `lib/noteFormats.ts` owns format order, labels, commands, selection ranges, and safe link operations.
 `lib/noteLabels.ts` owns visibility descriptions and save/recovery messages. `lib/noteBadges.ts` owns count labels.
 
-`useNoteBodySave` debounces for 1,000 ms, with one request in flight and one pending body. `getDraft` exposes the
-latest HTML, original base version, local revision, conflict, and validation failure. `onDraftChange` runs after
-accepted edits and save outcomes; native storage persists it immediately. An acknowledgement cannot discard newer
-text. A conflict blocks transport but accepts more typing. Only an accepted deliberate Reload replaces that draft.
-Transport failure waits for another edit or explicit retry. Size rejection blocks lifecycle retries until the body
-changes. Unavailable access retires native content. `retire` fences every late callback and pending dispatch.
-`lib/noteDrafts.ts` owns pure edit, acknowledgement, conflict, Reload, and retirement transitions, plus validation of account-owned versioned records. Native storage and its controller registry stay in mobile.
+`useNoteBodySave` debounces for 1,000 ms, with one request in flight and one pending body. `getDraft` exposes the latest
+HTML, original base version, local revision, conflict, and validation failure. `onDraftChange` runs after accepted edits
+and save outcomes; native storage persists it immediately. An acknowledgement cannot discard newer text. A conflict
+blocks transport but accepts more typing. Only an accepted deliberate Reload replaces that draft. Transport failure
+waits for another edit or explicit retry. Size rejection blocks lifecycle retries until the body changes. Unavailable
+access retires native content. `retire` fences every late callback and pending dispatch. `lib/noteDrafts.ts` owns pure
+edit, acknowledgement, conflict, Reload, and retirement transitions, plus validation of account-owned versioned records.
+Native storage and its controller registry stay in mobile.
 
 `useCopyFeedback` owns the clipboard confirmation lifetime shared by copy controls and share dialogs.
 
-`useNoteManagement` shares rename, visibility, and deletion permission gates, serialized writes, failure messages, and accepted metadata. Apps own their confirmation controls and close behavior.
+`useNoteManagement` shares rename, visibility, and deletion permission gates, serialized writes, failure messages, and
+accepted metadata. Apps own their confirmation controls and close behavior.
 
-`useNoteComments` loads on open, retains failed-post text through the shared composition, and applies accepted writes
-in place. Native comments open in a sheet from a visible button. Web keeps its wide-screen column and phone-browser sheet.
+`useNoteComments` loads on open, retains failed-post text through the shared composition, and applies accepted writes in
+place. Native comments open in a sheet from a visible button. Web keeps its wide-screen column and phone-browser sheet.
 The editor and reader forward the optional comments-close callback to the platform layout without remounting the body.
 `useNoteBadges` polls every 45 seconds while focused and online, and refreshes on foreground and reconnect.
-`useNoteRead` runs only after a successful note load. Tentative clearing ends after acknowledgement and refresh;
-failed requests retain confirmed counts. Account generations reject late responses from a replaced session.
+`useNoteRead` runs only after a successful note load. Tentative clearing ends after acknowledgement and refresh; failed
+requests retain confirmed counts. Account generations reject late responses from a replaced session.
 
 `lib/safeNoteMarkdown.ts` parses recaps once through the non-UI Markdown entry point. It transforms the AST before
 web's `astToJSX` or native's `astToNative` renders it. Never serialize and reparse the safe tree. Only exact stored
@@ -289,10 +309,12 @@ Finding explanations remain plain text. Tasting Note editor headings retain the 
 
 ## Shared menu pages and forms
 
-`components/DataTable` owns table headings, rows, and totals. Pure domain columns live in `lib/ownerTopicsTableColumns.ts`,
-`topicsTableColumns.ts`, `topicScansTableColumns.ts`, `topicSubscriptionsTableColumns.ts`,
-`sentInvitesTableColumns.ts`, `teamMembersTableColumns.ts`, and `teamsMembershipTableColumns.ts`. Each app supplies its link, switch, action, and table elements. Native horizontal scrolling
-and a fixed first column belong to the mobile adapter. Web retains its expandable subtables and server-rendered rows.
+`components/DataTable` owns table headings, rows, and totals. Pure domain columns live in
+`lib/ownerTopicsTableColumns.ts`, `topicsTableColumns.ts`, `topicScansTableColumns.ts`,
+`topicSubscriptionsTableColumns.ts`, `sentInvitesTableColumns.ts`, `teamMembersTableColumns.ts`, and
+`teamsMembershipTableColumns.ts`. Each app supplies its link, switch, action, and table elements. Native horizontal
+scrolling and a fixed first column belong to the mobile adapter. Web retains its expandable subtables and
+server-rendered rows.
 
 `components/AccountBudget`, `AccountFields`, `PlanCard`, `MonthlyBudgetCutoffTable`, `InviteFields`, and `TeamFields`
 share page and form composition. `PlanCard` takes the store's price and billing note, a portal action with its label,
@@ -371,26 +393,24 @@ Podcast presentation is shared as actual React composition under `components/`: 
 `UnpublishedPodcastEpisodeCard`, `PodcastEpisodeDetails`, `PodcastEpisodePlayButton`, `PodcastEpisodePill`,
 `PlaybackControlButtons`, `PodcastEpisodeSeekBar`, `PodcastEpisodeChapters`, `PodcastEpisodeRow`, `PodcastPlayer`,
 `PodcastEpisodeTranscript`, `PodcastThemeSongCredits`, `PodcastFeedDialog`, `RemovePodcastEpisodeDialog`,
-`PodcastEpisodesCard`, and `PodcastEpisodeChapterTag`. `PodcastEpisodeVideoButton` is the button that opens the
-Video dialog and reports its section: a film card's play button on `PodcastEpisodeCard`'s video variant, the card's
-last child, which each app's `PodcastEpisodePlayButton` draws centered over the card's image under the label Play
-film, whose dialog plays the film once it loads, and a Video pill beside the play pill on a `NewsList` row whose
-Podcast Episode has a film, which `lib/newsEvents`' `toNewsEventVideoButton` decides. A film card shows the film's own
-image from the summary's `videoPosterUrl`, and only the title in its title row.
-Its thumbnail size is a play button over the film's poster, which `lib/podcastEpisodePlayback`'s
-`toPodcastEpisodePosterUrl` returns for it and for the film player. `TopicPodcastEpisodeVideoInfoSection` is the
-film's section of a Topic's info, only for a latest Podcast Episode with a ready film: a `PodcastEpisodeRow` with that
-thumbnail as its `playButton`, in its play button's place.
-Apps inject controls, links, images, scroll containers, and confirmation renderers; core owns ordering, labels,
-formatting, visibility, expansion, and action selection. `lib/podcastEpisodeStories.ts` supplies fictional shared
-fixtures and an inert player for both component browsers, without account writes or audio downloads.
-The season card owns five-row pagination, selection, season query preservation, and removal visibility. Web supplies
-its server-rendered overflow rows; mobile supplies scrolling tabs. Chat chapter tags share their labels and playback action.
-The pills and the chat chapter tag own their classes, which both app stylesheets scan explicitly. A pill is at least 24
-pixels tall, so it stays a large enough target with text right above it. Their accessible names start with their
-visible text.
-`lib/podcastEpisodesTableColumns.ts` and `podcastEpisodeChaptersTableColumns.ts` share table values, formatting,
-and totals. Web retains its DOM/SSR table renderers; mobile composes the existing shared DataTable.
+`PodcastEpisodesCard`, and `PodcastEpisodeChapterTag`. `PodcastEpisodeVideoButton` is the button that opens the Video
+dialog and reports its section: a film card's play button on `PodcastEpisodeCard`'s video variant, the card's last
+child, which each app's `PodcastEpisodePlayButton` draws centered over the card's image under the label Play film, whose
+dialog plays the film once it loads, and a Video pill beside the play pill on a `NewsList` row whose Podcast Episode has
+a film, which `lib/newsEvents`' `toNewsEventVideoButton` decides. A film card shows the film's own image from the
+summary's `videoPosterUrl`, and only the title in its title row. Its thumbnail size is a play button over the film's
+poster, which `lib/podcastEpisodePlayback`'s `toPodcastEpisodePosterUrl` returns for it and for the film player.
+`TopicPodcastEpisodeVideoInfoSection` is the film's section of a Topic's info, only for a latest Podcast Episode with a
+ready film: a `PodcastEpisodeRow` with that thumbnail as its `playButton`, in its play button's place. Apps inject
+controls, links, images, scroll containers, and confirmation renderers; core owns ordering, labels, formatting,
+visibility, expansion, and action selection. `lib/podcastEpisodeStories.ts` supplies fictional shared fixtures and an
+inert player for both component browsers, without account writes or audio downloads. The season card owns five-row
+pagination, selection, season query preservation, and removal visibility. Web supplies its server-rendered overflow
+rows; mobile supplies scrolling tabs. Chat chapter tags share their labels and playback action. The pills and the chat
+chapter tag own their classes, which both app stylesheets scan explicitly. A pill is at least 24 pixels tall, so it
+stays a large enough target with text right above it. Their accessible names start with their visible text.
+`lib/podcastEpisodesTableColumns.ts` and `podcastEpisodeChaptersTableColumns.ts` share table values, formatting, and
+totals. Web retains its DOM/SSR table renderers; mobile composes the existing shared DataTable.
 
 `hooks/usePodcastEpisodeChapterRating` owns chapter-rating selection, duplicate prevention, and rollback.
 `hooks/usePodcastFeed` scopes requests to account/Topic and requires confirmation before resetting a private feed.
@@ -411,19 +431,33 @@ adapters, confirmed deletion, and cache cleanup. `TopicPersonalSourcesSectionSto
 fixtures. `ExpandableRow.tsx` owns each inline disclosure, and `PersonalSourceEntryList.tsx` keeps one item open at a
 time. `TopicLinkedFinding.tsx` resolves links against the authorized Topic payload.
 
-`PersonalSourceLink.tsx` shares authorized Finding resolution and local opening state through core. Web adapts it to the existing `TopicResourceInfo` popover; mobile uses its existing sheet. External sources retain the browser icon and only pending sources show Next brew. `core/lib/topicFindingCopy.ts` supplies the common tooltip and native accessibility hint.
+`PersonalSourceLink.tsx` shares authorized Finding resolution and local opening state through core. Web adapts it to the
+existing `TopicResourceInfo` popover; mobile uses its existing sheet. External sources retain the browser icon and only
+pending sources show Next brew. `core/lib/topicFindingCopy.ts` supplies the common tooltip and native accessibility
+hint.
 
-`TopicInfoSection.tsx` shares labeled information-section composition through core, with thin same-name platform adapters and paired stories. Topic and Finding details reuse it without importing each other.
+`TopicInfoSection.tsx` shares labeled information-section composition through core, with thin same-name platform
+adapters and paired stories. Topic and Finding details reuse it without importing each other.
 
-`personalSourcesCopy.ts` identifies AI conversation destinations by exact host and distinguishes Claude Code paths. `personalSourcesConversationStories.ts` supplies fictional platform examples, including unknown destinations and local agents without a conversation URL. Both component browsers use the same gallery and expanded-item examples.
+`personalSourcesCopy.ts` identifies AI conversation destinations by exact host and distinguishes Claude Code paths.
+`personalSourcesConversationStories.ts` supplies fictional platform examples, including unknown destinations and local
+agents without a conversation URL. Both component browsers use the same gallery and expanded-item examples.
 
-`components/SearchResultRow.tsx` shares the rank/leading/title with the control beside it/metadata/action composition used by both search lists and the MCP picker. `TopicSearchResultDetails.tsx` shares Topic count formatting and the published podcast pill; apps supply controls and platform typography.
+`components/SearchResultRow.tsx` shares the rank/leading/title with the control beside it/metadata/action composition
+used by both search lists and the MCP picker. `TopicSearchResultDetails.tsx` shares Topic count formatting and the
+published podcast pill; apps supply controls and platform typography.
 
-`PersonalSourceEntryList.tsx` shares date-only received metadata and sender identity. Platform adapters draw AI provider marks or a mail icon with the sender address. The redundant transport suffix is omitted.
+`PersonalSourceEntryList.tsx` shares date-only received metadata and sender identity. Platform adapters draw AI provider
+marks or a mail icon with the sender address. The redundant transport suffix is omitted.
 
-Personal sources items, private summaries, and annotations have no automatic expiry. Their content remains encrypted until explicit deletion. Released read contracts retain nullable expiry fields as null. Optional conversation URLs survive the MCP picker outside matching and open from the shared AI sender label; missing references remain plain labels.
+Personal sources items, private summaries, and annotations have no automatic expiry. Their content remains encrypted
+until explicit deletion. Released read contracts retain nullable expiry fields as null. Optional conversation URLs
+survive the MCP picker outside matching and open from the shared AI sender label; missing references remain plain
+labels.
 
-Personal sources conversation metadata links the complete date, platform icon, and name when a real reference is supplied. Both apps consume the shared entry list and platform fixtures. A strict existing-chat Codex URI opens the system app; web references use the existing browser adapter. No entry retention sentence is shown.
+Personal sources conversation metadata links the complete date, platform icon, and name when a real reference is
+supplied. Both apps consume the shared entry list and platform fixtures. A strict existing-chat Codex URI opens the
+system app; web references use the existing browser adapter. No entry retention sentence is shown.
 
 ## Reactions and comment threads
 

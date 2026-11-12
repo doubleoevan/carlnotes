@@ -3,7 +3,7 @@ import {
 	type PodcastEpisode,
 	type PublishedPodcastEpisodeNumbers,
 } from "@carlnotes/contracts/podcast"
-import { PODCAST_NAME } from "@carlnotes/contracts/podcastEpisodes"
+import { PODCAST_ANCHOR_ID, PODCAST_NAME } from "@carlnotes/contracts/podcastEpisodes"
 import { toPodcastEpisodePath } from "@carlnotes/contracts/seo"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { useShownPodcastEpisode } from "@carlnotes/core/hooks/useShownPodcastEpisode"
@@ -55,6 +55,7 @@ export function PodcastEpisodePlayer({ topic, topicFeedHandlers, scanControl }: 
 	return (
 		<CollapsibleSection
 			value="podcast"
+			id={PODCAST_ANCHOR_ID}
 			title={PODCAST_NAME}
 			titleNote={<PodcastThemeSongNote />}
 			titleAside={titleAside}

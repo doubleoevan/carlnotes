@@ -8,7 +8,7 @@ import {
 } from "@carlnotes/client/teamClient"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { fn, mocked } from "storybook/test"
-import { SUBTABLE_CARD_CLASS } from "@/lib/styleClasses"
+import { SUBTABLE_CARD_CLASS } from "@/lib/tableClasses"
 import { STORY_PEOPLE } from "../../../.storybook/fixtures"
 import { STORY_TEAMS, type StoryTeamMember, toStoryTeamMember } from "../../../.storybook/fixtures/teams"
 import { StoryTable } from "../../../.storybook/tableDecorators"

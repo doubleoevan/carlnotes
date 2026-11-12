@@ -87,3 +87,6 @@ worker, and the evals all start. It imports `@carlnotes/db`, `@carlnotes/server`
 The `summarize-personal-sources-context.md` prompt is evaluated through `evals/personal-sources-context/`; ordinary fixture tests make no model calls.
 
 `prompts/score-personal-source-resource.md` produces page-only public explanations, supporting page excerpts, and numbered sender-private annotations in one premium call. Account IDs never enter the model.
+
+`prompts/write-dashboard-paragraph.md` writes Carl's paragraph above a Dashboard page's charts from counts and country
+names alone, built by `packages/pipeline/dashboardParagraph.ts` and evaluated through `evals/dashboard-paragraph/`.

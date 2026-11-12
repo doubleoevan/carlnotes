@@ -1,11 +1,11 @@
-import { toAvatarImagePath } from "@carlnotes/contracts/avatars"
+import { toAvatarImagePath, toTeamAvatarImagePath } from "@carlnotes/contracts/avatars"
 import type { PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
 import type { FindingSearchRow, SearchResultsPage, SearchRow } from "@carlnotes/contracts/search"
 import { SITE_URL } from "@carlnotes/contracts/site"
-import { toDotSeparatedText } from "@carlnotes/contracts/text"
+import { toCountLabel, toDotSeparatedText } from "@carlnotes/contracts/text"
 import type { TopicImageUrls } from "@carlnotes/contracts/topicImages"
 import type { TopicFindingActions } from "@carlnotes/core/hooks/useTopicFindingActions"
-import { toAgoLabel, toCountLabel } from "@carlnotes/core/lib/labels"
+import { toAgoLabel } from "@carlnotes/core/lib/labels"
 import { applySearchFindingChanges } from "@carlnotes/core/lib/topicFindingChanges"
 import { toPodcastEpisodeVideoPill } from "@carlnotes/core/lib/topicPodcastEpisodeVideoDisplay"
 import { cn } from "@carlnotes/nightshift/classNames"
@@ -159,7 +159,7 @@ function SearchRowIcon({ searchRow }: { searchRow: LinkedSearchRow }) {
 				name={searchRow.team.name}
 				imageUrl={
 					searchRow.team.avatarVersion
-						? `/api/team-avatars/${searchRow.team.teamId}?v=${searchRow.team.avatarVersion}`
+						? toTeamAvatarImagePath(searchRow.team.teamId, searchRow.team.avatarVersion)
 						: null
 				}
 			/>

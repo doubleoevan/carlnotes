@@ -1,6 +1,7 @@
 // email a finished Scan's outcome. a scheduled Scan emails the Topic's subscribers in batches, and any other Scan
 // emails whoever ran it or created the Topic. each accepted send is recorded with its Scan, so a retry never repeats it
 
+import { toUtcMonth } from "@carlnotes/contracts/time"
 import { db } from "@carlnotes/db"
 import { toTopicRoleFilter } from "@carlnotes/db/contentFilters"
 import { scans } from "@carlnotes/db/schema/scans"
@@ -27,6 +28,7 @@ import {
 	type EmailTopic,
 	type Recipient,
 	toManualScanEmailProps,
+	toTopicDashboardUrl,
 	toTopicScanEmailProps,
 	toTopicScanMessage,
 } from "./scanEmailContent"
@@ -111,12 +113,16 @@ export async function sendTopicScanEmailBatch({
 
 	// render every recipient's email from the same Scan, then send them in one call
 	const { subject, sharedProps } = await toTopicScanEmailProps(topic, scan)
+	const dashboardLinkMonth = toUtcMonth(new Date())
 	const messages = await Promise.all(
-		sendableRecipients.map((recipient) => toTopicScanMessage(recipient, topic.id, subject, sharedProps)),
+		sendableRecipients.map((recipient) =>
+			toTopicScanMessage({ recipient, topicId: topic.id, subject, sharedProps, dashboardLinkMonth }),
+		),
 	)
 	const scanEmailCallResult = await sendScanEmailCall({ scanId, messages })
 
-	// record the accepted sends at once, so that a retry never sends this batch again
+	// record the accepted sends at once, so that a retry never sends this batch again, and stamp the month on each
+	// recipient whose email linked their Topic Dashboard
 	if (scanEmailCallResult.outcome === "accepted") {
 		await recordScanEmailSends({
 			scanId,
@@ -124,8 +130,19 @@ export async function sendTopicScanEmailBatch({
 			emailKind: "topic-scan",
 			recipientUserIds: sendableRecipients.map((recipient) => recipient.userId),
 		})
+		await recordDashboardLinkMonth(sendableRecipients, dashboardLinkMonth)
 	}
 	return scanEmailCallResult
+}
+
+// stamp the month on the recipients whose topic scan email linked their Topic Dashboard
+async function recordDashboardLinkMonth(recipients: Recipient[], dashboardLinkMonth: string): Promise<void> {
+	const linkedUserIds = recipients
+		.filter((recipient) => toTopicDashboardUrl(recipient, dashboardLinkMonth))
+		.map((recipient) => recipient.userId)
+	if (linkedUserIds.length > 0) {
+		await db.update(users).set({ dashboardLinkMonth }).where(inArray(users.id, linkedUserIds))
+	}
 }
 
 // one manual-scan report to send, with its Scan and whoever ran the Scan or created the Topic
@@ -212,7 +229,7 @@ async function loadUnsentRecipients({
 async function loadTopicScanEmailSubscribers(topicId: string, userIds?: string[]): Promise<Recipient[]> {
 	// one subscription row per user and Topic means no address repeats
 	return db
-		.select({ userId: users.id, email: users.email })
+		.select({ userId: users.id, email: users.email, dashboardLinkMonth: users.dashboardLinkMonth })
 		.from(subscriptions)
 		.innerJoin(users, eq(subscriptions.subscriberUserId, users.id))
 		.innerJoin(topics, eq(subscriptions.topicId, topics.id))

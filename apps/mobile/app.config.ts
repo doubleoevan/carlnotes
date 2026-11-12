@@ -71,6 +71,8 @@ const expoConfig: ExpoConfig = {
 		eas: {
 			projectId: EAS_PROJECT_ID,
 		},
+		// whether the iOS build has the Google Maps SDK. without its key the Dashboard map draws on Apple Maps
+		isGoogleMapsOnIos: Boolean(process.env.GOOGLE_MAPS_IOS_API_KEY),
 	},
 	plugins: [
 		"expo-router",
@@ -86,6 +88,14 @@ const expoConfig: ExpoConfig = {
 				enableBackgroundRecording: false,
 				microphonePermission: MICROPHONE_PURPOSE,
 				recordAudioAndroid: true,
+			},
+		],
+		// the Dashboard map: Google Maps on each platform's own key, limited to the app's bundle id and package
+		[
+			"react-native-maps",
+			{
+				iosGoogleMapsApiKey: process.env.GOOGLE_MAPS_IOS_API_KEY,
+				androidGoogleMapsApiKey: process.env.GOOGLE_MAPS_ANDROID_API_KEY,
 			},
 		],
 		// films: picture-in-picture, and the film keeps talking with the phone locked or the app in the background

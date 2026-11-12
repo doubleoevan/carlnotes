@@ -19,6 +19,7 @@ part of `bun test` or the push gate. Run a prompt's eval before shipping a chang
 | `search-queries/` | the search queries that a Scan writes for a topic | `bun run eval:search-queries` |
 | `attachment-summaries/` | the summary of an attached document and the description of an attached image | `bun run eval:attachment-summaries` |
 | `updates-opener/` | Carl's opener above an updates list | `bun run eval:updates-opener` |
+| `dashboard-paragraph/` | Carl's paragraph above a Dashboard page's charts, from numbers alone | `bun run eval:dashboard-paragraph` |
 | `topic-post-summary/` | the summary a published Topic Post shows in its info popup | `bun run eval:topic-post-summary` |
 | `topic-post-discussion/` | the script of the two hosts' recorded talk about a Topic Post | `bun run eval:topic-post-discussion` |
 | `topic-post-chat/` | a question asked from a Topic Post's page, answered from the post and its shared Comments | `bun run eval:topic-post-chat` |

@@ -5,6 +5,7 @@
 import type { z } from "zod"
 import { accountRouteContracts } from "./accountRouteContracts"
 import { chatRouteContracts } from "./chatRouteContracts"
+import { dashboardRouteContracts } from "./dashboardRouteContracts"
 import { personalSourcesRouteContracts } from "./personalSourcesRouteContracts"
 import { podcastRouteContracts } from "./podcastRouteContracts"
 import { socialRouteContracts } from "./socialRouteContracts"
@@ -38,6 +39,7 @@ export const API_ROUTE_HELPERS: readonly string[] = [
 	"apiClient.showClientError",
 	"apiClient.showClientMessage",
 	"apiClient.toApiUrl",
+	"apiClient.toReadRequestInit",
 	"authClient.authClient",
 	"authClient.configureAuthClient",
 	"chatClient.toChatRejection",
@@ -66,6 +68,7 @@ export function toCapabilityKey(entryKey: string): string {
 export const API_ROUTE_CONTRACTS: Record<string, ApiRouteContract> = {
 	...accountRouteContracts,
 	...chatRouteContracts,
+	...dashboardRouteContracts,
 	...personalSourcesRouteContracts,
 	...podcastRouteContracts,
 	...socialRouteContracts,

@@ -38,6 +38,8 @@ export type TopicScanEmailProps = {
 	unsubscribeUrl?: string
 	// this scan's podcast episode, omitted if the scan has no podcast episode to show
 	podcastEpisode?: TopicScanEmailPodcastEpisode
+	// the recipient's Topic Dashboard, on the first topic scan email they get in a UTC month and omitted after it
+	topicDashboardUrl?: string
 }
 
 // the scan's podcast episode as the email shows the podcast episode, with its title, description, and url.
@@ -55,6 +57,7 @@ export default function TopicScanEmail({
 	topicUrl,
 	unsubscribeUrl,
 	podcastEpisode,
+	topicDashboardUrl,
 }: TopicScanEmailProps): ReactElement {
 	// the summary line up to the topic name, shown in the preheader and the intro
 	const summaryLeadText = summaryLead({ findingCount, hasPodcastEpisode: Boolean(podcastEpisode) })
@@ -77,6 +80,17 @@ export default function TopicScanEmail({
 				allowedUrls={new Set(allowedSummaryUrls ?? findings.map((finding) => finding.url))}
 			/>
 			<FindingCards findings={findings} />
+
+			{/* the month's one line to the recipient's Topic Dashboard */}
+			{topicDashboardUrl && (
+				<Text style={topicDashboardLine}>
+					{"Carl tallied the month's numbers. See how your topics are doing in "}
+					<Link href={topicDashboardUrl} style={summaryLink}>
+						Topic Specials
+					</Link>
+					{"."}
+				</Text>
+			)}
 
 			{/* the footer with the one-click unsubscribe link */}
 			<EmailFooter unsubscribeUrl={unsubscribeUrl}>
@@ -256,6 +270,7 @@ TopicScanEmail.PreviewProps = {
 		url: "https://carlnotes.example.com/topics/preview-topic?episode=preview-episode",
 		coverUrl: "https://carlnotes.example.com/api/podcast-covers/episode/preview-episode/preview-key-600.jpg",
 	},
+	topicDashboardUrl: "https://carlnotes.example.com/profiles/preview-user/specials/topics",
 } satisfies TopicScanEmailProps
 
 // render the template to an HTML string for sending. the worker calls this at send-email time
@@ -318,6 +333,7 @@ const summaryLabel: CSSProperties = {
 	textTransform: "uppercase",
 }
 const summaryBody: CSSProperties = { ...bodyText, margin: "6px 0" }
+const topicDashboardLine: CSSProperties = { ...bodyText, margin: "24px 0 0" }
 // the model picks its own heading levels, so every one is pinned to the same compact inline-styled scale
 const summaryHeading: CSSProperties = {
 	color: emailColors.foreground,

@@ -1,6 +1,6 @@
 // the raised card every table sits in: the surface, the border, and the padding a table's scroll box reaches into
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
-import { ONE_PAGE_TABLE_CARD_CLASS, TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
+import { ONE_PAGE_TABLE_CARD_CLASS, TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/tableClasses"
 import { TableCard } from "./TableCard"
 
 // the topics the sample table lists

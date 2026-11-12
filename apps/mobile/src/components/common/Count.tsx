@@ -3,7 +3,7 @@ import { View } from "react-native"
 import { Text } from "@/components/primitives/text"
 
 /**
- * Shows a count after its label, as in "Viewers: 12", with the label in the display font and the number emphasized
+ * Shows a count after its label, as in "Visitors: 12", with the label in the display font and the number emphasized
  * in the body font. The pair reads as one accessible element.
  */
 export function Count({ label, count }: { label: string; count: number }) {

@@ -59,10 +59,13 @@ export const AllZero: Story = { args: { details: toCountDetails([{ count: 0, nou
 // a Topic Post's date, reading time, comment count, and edited mark
 export const TopicPostDetails: Story = { args: { details: ["Nov 10, 2026", "3 min read", "4 hot takes", "edited"] } }
 
-// what follows the details ends the line, so the last detail keeps its dot
+// what follows the details ends the line, so the last detail keeps its dot. the ending is drawn in render, not passed
+// as an arg
 export const WithEnding: Story = {
-	args: {
-		details: ["Joined November 2026", "20 followers"],
-		children: <Text className="text-sm text-link">Blocked</Text>,
-	},
+	args: { details: ["Joined November 2026", "20 followers"] },
+	render: (args) => (
+		<DetailsLine {...args}>
+			<Text className="text-sm text-link">Blocked</Text>
+		</DetailsLine>
+	),
 }

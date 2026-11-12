@@ -29,7 +29,11 @@ import { Route as LayoutTopicsIndexRouteImport } from './routes/_layout/topics.i
 import { Route as LayoutTopicsTopicIdRouteImport } from './routes/_layout/topics.$topicId'
 import { Route as LayoutSignedInMcpConsentRouteImport } from './routes/_layout/_signedIn/mcp.consent'
 import { Route as LayoutSignedInTeamsIndexRouteImport } from './routes/_layout/_signedIn/teams.index'
+import { Route as LayoutSignedInTeamsSpecialsRouteImport } from './routes/_layout/_signedIn/teams.specials'
+import { Route as LayoutTeamsTeamIdSpecialsRouteImport } from './routes/_layout/teams.$teamId_.specials'
 import { Route as LayoutTopicsTopicIdTopicSlugRouteImport } from './routes/_layout/topics.$topicId_.$topicSlug'
+import { Route as LayoutProfilesUserIdSpecialsPodcastsRouteImport } from './routes/_layout/profiles.$userId_.specials.podcasts'
+import { Route as LayoutProfilesUserIdSpecialsTopicsRouteImport } from './routes/_layout/profiles.$userId_.specials.topics'
 import { Route as LayoutTopicsTopicIdTopicSlugPostsTopicPostIdRouteImport } from './routes/_layout/topics.$topicId_.$topicSlug_.posts.$topicPostId'
 import { Route as LayoutTopicsTopicIdTopicSlugEpisodesSeasonEpisodeNumberRouteImport } from './routes/_layout/topics.$topicId_.$topicSlug_.episodes.$season.$episodeNumber'
 import { Route as LayoutTopicsTopicIdTopicSlugPostsTopicPostIdPostSlugRouteImport } from './routes/_layout/topics.$topicId_.$topicSlug_.posts.$topicPostId_.$postSlug'
@@ -134,10 +138,34 @@ const LayoutSignedInTeamsIndexRoute =
     path: '/teams/',
     getParentRoute: () => LayoutSignedInRoute,
   } as any)
+const LayoutSignedInTeamsSpecialsRoute =
+  LayoutSignedInTeamsSpecialsRouteImport.update({
+    id: '/teams/specials',
+    path: '/teams/specials',
+    getParentRoute: () => LayoutSignedInRoute,
+  } as any)
+const LayoutTeamsTeamIdSpecialsRoute =
+  LayoutTeamsTeamIdSpecialsRouteImport.update({
+    id: '/teams/$teamId_/specials',
+    path: '/teams/$teamId/specials',
+    getParentRoute: () => LayoutRoute,
+  } as any)
 const LayoutTopicsTopicIdTopicSlugRoute =
   LayoutTopicsTopicIdTopicSlugRouteImport.update({
     id: '/topics/$topicId_/$topicSlug',
     path: '/topics/$topicId/$topicSlug',
+    getParentRoute: () => LayoutRoute,
+  } as any)
+const LayoutProfilesUserIdSpecialsPodcastsRoute =
+  LayoutProfilesUserIdSpecialsPodcastsRouteImport.update({
+    id: '/profiles/$userId_/specials/podcasts',
+    path: '/profiles/$userId/specials/podcasts',
+    getParentRoute: () => LayoutRoute,
+  } as any)
+const LayoutProfilesUserIdSpecialsTopicsRoute =
+  LayoutProfilesUserIdSpecialsTopicsRouteImport.update({
+    id: '/profiles/$userId_/specials/topics',
+    path: '/profiles/$userId/specials/topics',
     getParentRoute: () => LayoutRoute,
   } as any)
 const LayoutTopicsTopicIdTopicSlugPostsTopicPostIdRoute =
@@ -177,8 +205,12 @@ export interface FileRoutesByFullPath {
   '/topics/$topicId': typeof LayoutTopicsTopicIdRoute
   '/topics/': typeof LayoutTopicsIndexRoute
   '/mcp/consent': typeof LayoutSignedInMcpConsentRoute
+  '/teams/specials': typeof LayoutSignedInTeamsSpecialsRoute
+  '/teams/$teamId/specials': typeof LayoutTeamsTeamIdSpecialsRoute
   '/topics/$topicId/$topicSlug': typeof LayoutTopicsTopicIdTopicSlugRoute
   '/teams/': typeof LayoutSignedInTeamsIndexRoute
+  '/profiles/$userId/specials/podcasts': typeof LayoutProfilesUserIdSpecialsPodcastsRoute
+  '/profiles/$userId/specials/topics': typeof LayoutProfilesUserIdSpecialsTopicsRoute
   '/topics/$topicId/$topicSlug/posts/$topicPostId': typeof LayoutTopicsTopicIdTopicSlugPostsTopicPostIdRoute
   '/topics/$topicId/$topicSlug/episodes/$season/$episodeNumber': typeof LayoutTopicsTopicIdTopicSlugEpisodesSeasonEpisodeNumberRoute
   '/topics/$topicId/$topicSlug/posts/$topicPostId/$postSlug': typeof LayoutTopicsTopicIdTopicSlugPostsTopicPostIdPostSlugRoute
@@ -201,8 +233,12 @@ export interface FileRoutesByTo {
   '/topics/$topicId': typeof LayoutTopicsTopicIdRoute
   '/topics': typeof LayoutTopicsIndexRoute
   '/mcp/consent': typeof LayoutSignedInMcpConsentRoute
+  '/teams/specials': typeof LayoutSignedInTeamsSpecialsRoute
+  '/teams/$teamId/specials': typeof LayoutTeamsTeamIdSpecialsRoute
   '/topics/$topicId/$topicSlug': typeof LayoutTopicsTopicIdTopicSlugRoute
   '/teams': typeof LayoutSignedInTeamsIndexRoute
+  '/profiles/$userId/specials/podcasts': typeof LayoutProfilesUserIdSpecialsPodcastsRoute
+  '/profiles/$userId/specials/topics': typeof LayoutProfilesUserIdSpecialsTopicsRoute
   '/topics/$topicId/$topicSlug/posts/$topicPostId': typeof LayoutTopicsTopicIdTopicSlugPostsTopicPostIdRoute
   '/topics/$topicId/$topicSlug/episodes/$season/$episodeNumber': typeof LayoutTopicsTopicIdTopicSlugEpisodesSeasonEpisodeNumberRoute
   '/topics/$topicId/$topicSlug/posts/$topicPostId/$postSlug': typeof LayoutTopicsTopicIdTopicSlugPostsTopicPostIdPostSlugRoute
@@ -228,8 +264,12 @@ export interface FileRoutesById {
   '/_layout/topics/$topicId': typeof LayoutTopicsTopicIdRoute
   '/_layout/topics/': typeof LayoutTopicsIndexRoute
   '/_layout/_signedIn/mcp/consent': typeof LayoutSignedInMcpConsentRoute
+  '/_layout/_signedIn/teams/specials': typeof LayoutSignedInTeamsSpecialsRoute
+  '/_layout/teams/$teamId_/specials': typeof LayoutTeamsTeamIdSpecialsRoute
   '/_layout/topics/$topicId_/$topicSlug': typeof LayoutTopicsTopicIdTopicSlugRoute
   '/_layout/_signedIn/teams/': typeof LayoutSignedInTeamsIndexRoute
+  '/_layout/profiles/$userId_/specials/podcasts': typeof LayoutProfilesUserIdSpecialsPodcastsRoute
+  '/_layout/profiles/$userId_/specials/topics': typeof LayoutProfilesUserIdSpecialsTopicsRoute
   '/_layout/topics/$topicId_/$topicSlug_/posts/$topicPostId': typeof LayoutTopicsTopicIdTopicSlugPostsTopicPostIdRoute
   '/_layout/topics/$topicId_/$topicSlug_/episodes/$season/$episodeNumber': typeof LayoutTopicsTopicIdTopicSlugEpisodesSeasonEpisodeNumberRoute
   '/_layout/topics/$topicId_/$topicSlug_/posts/$topicPostId_/$postSlug': typeof LayoutTopicsTopicIdTopicSlugPostsTopicPostIdPostSlugRoute
@@ -254,8 +294,12 @@ export interface FileRouteTypes {
     | '/topics/$topicId'
     | '/topics/'
     | '/mcp/consent'
+    | '/teams/specials'
+    | '/teams/$teamId/specials'
     | '/topics/$topicId/$topicSlug'
     | '/teams/'
+    | '/profiles/$userId/specials/podcasts'
+    | '/profiles/$userId/specials/topics'
     | '/topics/$topicId/$topicSlug/posts/$topicPostId'
     | '/topics/$topicId/$topicSlug/episodes/$season/$episodeNumber'
     | '/topics/$topicId/$topicSlug/posts/$topicPostId/$postSlug'
@@ -278,8 +322,12 @@ export interface FileRouteTypes {
     | '/topics/$topicId'
     | '/topics'
     | '/mcp/consent'
+    | '/teams/specials'
+    | '/teams/$teamId/specials'
     | '/topics/$topicId/$topicSlug'
     | '/teams'
+    | '/profiles/$userId/specials/podcasts'
+    | '/profiles/$userId/specials/topics'
     | '/topics/$topicId/$topicSlug/posts/$topicPostId'
     | '/topics/$topicId/$topicSlug/episodes/$season/$episodeNumber'
     | '/topics/$topicId/$topicSlug/posts/$topicPostId/$postSlug'
@@ -304,8 +352,12 @@ export interface FileRouteTypes {
     | '/_layout/topics/$topicId'
     | '/_layout/topics/'
     | '/_layout/_signedIn/mcp/consent'
+    | '/_layout/_signedIn/teams/specials'
+    | '/_layout/teams/$teamId_/specials'
     | '/_layout/topics/$topicId_/$topicSlug'
     | '/_layout/_signedIn/teams/'
+    | '/_layout/profiles/$userId_/specials/podcasts'
+    | '/_layout/profiles/$userId_/specials/topics'
     | '/_layout/topics/$topicId_/$topicSlug_/posts/$topicPostId'
     | '/_layout/topics/$topicId_/$topicSlug_/episodes/$season/$episodeNumber'
     | '/_layout/topics/$topicId_/$topicSlug_/posts/$topicPostId_/$postSlug'
@@ -461,11 +513,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutSignedInTeamsIndexRouteImport
       parentRoute: typeof LayoutSignedInRoute
     }
+    '/_layout/_signedIn/teams/specials': {
+      id: '/_layout/_signedIn/teams/specials'
+      path: '/teams/specials'
+      fullPath: '/teams/specials'
+      preLoaderRoute: typeof LayoutSignedInTeamsSpecialsRouteImport
+      parentRoute: typeof LayoutSignedInRoute
+    }
+    '/_layout/teams/$teamId_/specials': {
+      id: '/_layout/teams/$teamId_/specials'
+      path: '/teams/$teamId/specials'
+      fullPath: '/teams/$teamId/specials'
+      preLoaderRoute: typeof LayoutTeamsTeamIdSpecialsRouteImport
+      parentRoute: typeof LayoutRoute
+    }
     '/_layout/topics/$topicId_/$topicSlug': {
       id: '/_layout/topics/$topicId_/$topicSlug'
       path: '/topics/$topicId/$topicSlug'
       fullPath: '/topics/$topicId/$topicSlug'
       preLoaderRoute: typeof LayoutTopicsTopicIdTopicSlugRouteImport
+      parentRoute: typeof LayoutRoute
+    }
+    '/_layout/profiles/$userId_/specials/podcasts': {
+      id: '/_layout/profiles/$userId_/specials/podcasts'
+      path: '/profiles/$userId/specials/podcasts'
+      fullPath: '/profiles/$userId/specials/podcasts'
+      preLoaderRoute: typeof LayoutProfilesUserIdSpecialsPodcastsRouteImport
+      parentRoute: typeof LayoutRoute
+    }
+    '/_layout/profiles/$userId_/specials/topics': {
+      id: '/_layout/profiles/$userId_/specials/topics'
+      path: '/profiles/$userId/specials/topics'
+      fullPath: '/profiles/$userId/specials/topics'
+      preLoaderRoute: typeof LayoutProfilesUserIdSpecialsTopicsRouteImport
       parentRoute: typeof LayoutRoute
     }
     '/_layout/topics/$topicId_/$topicSlug_/posts/$topicPostId': {
@@ -497,6 +577,7 @@ interface LayoutSignedInRouteChildren {
   LayoutSignedInActivityRoute: typeof LayoutSignedInActivityRoute
   LayoutSignedInAdminRoute: typeof LayoutSignedInAdminRoute
   LayoutSignedInMcpConsentRoute: typeof LayoutSignedInMcpConsentRoute
+  LayoutSignedInTeamsSpecialsRoute: typeof LayoutSignedInTeamsSpecialsRoute
   LayoutSignedInTeamsIndexRoute: typeof LayoutSignedInTeamsIndexRoute
 }
 
@@ -505,6 +586,7 @@ const LayoutSignedInRouteChildren: LayoutSignedInRouteChildren = {
   LayoutSignedInActivityRoute: LayoutSignedInActivityRoute,
   LayoutSignedInAdminRoute: LayoutSignedInAdminRoute,
   LayoutSignedInMcpConsentRoute: LayoutSignedInMcpConsentRoute,
+  LayoutSignedInTeamsSpecialsRoute: LayoutSignedInTeamsSpecialsRoute,
   LayoutSignedInTeamsIndexRoute: LayoutSignedInTeamsIndexRoute,
 }
 
@@ -523,7 +605,10 @@ interface LayoutRouteChildren {
   LayoutTeamsTeamIdRoute: typeof LayoutTeamsTeamIdRoute
   LayoutTopicsTopicIdRoute: typeof LayoutTopicsTopicIdRoute
   LayoutTopicsIndexRoute: typeof LayoutTopicsIndexRoute
+  LayoutTeamsTeamIdSpecialsRoute: typeof LayoutTeamsTeamIdSpecialsRoute
   LayoutTopicsTopicIdTopicSlugRoute: typeof LayoutTopicsTopicIdTopicSlugRoute
+  LayoutProfilesUserIdSpecialsPodcastsRoute: typeof LayoutProfilesUserIdSpecialsPodcastsRoute
+  LayoutProfilesUserIdSpecialsTopicsRoute: typeof LayoutProfilesUserIdSpecialsTopicsRoute
   LayoutTopicsTopicIdTopicSlugPostsTopicPostIdRoute: typeof LayoutTopicsTopicIdTopicSlugPostsTopicPostIdRoute
   LayoutTopicsTopicIdTopicSlugEpisodesSeasonEpisodeNumberRoute: typeof LayoutTopicsTopicIdTopicSlugEpisodesSeasonEpisodeNumberRoute
   LayoutTopicsTopicIdTopicSlugPostsTopicPostIdPostSlugRoute: typeof LayoutTopicsTopicIdTopicSlugPostsTopicPostIdPostSlugRoute
@@ -540,7 +625,12 @@ const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutTeamsTeamIdRoute: LayoutTeamsTeamIdRoute,
   LayoutTopicsTopicIdRoute: LayoutTopicsTopicIdRoute,
   LayoutTopicsIndexRoute: LayoutTopicsIndexRoute,
+  LayoutTeamsTeamIdSpecialsRoute: LayoutTeamsTeamIdSpecialsRoute,
   LayoutTopicsTopicIdTopicSlugRoute: LayoutTopicsTopicIdTopicSlugRoute,
+  LayoutProfilesUserIdSpecialsPodcastsRoute:
+    LayoutProfilesUserIdSpecialsPodcastsRoute,
+  LayoutProfilesUserIdSpecialsTopicsRoute:
+    LayoutProfilesUserIdSpecialsTopicsRoute,
   LayoutTopicsTopicIdTopicSlugPostsTopicPostIdRoute:
     LayoutTopicsTopicIdTopicSlugPostsTopicPostIdRoute,
   LayoutTopicsTopicIdTopicSlugEpisodesSeasonEpisodeNumberRoute:

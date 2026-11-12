@@ -52,11 +52,21 @@ test("hasNativeRoute is true for a native route path and false for any other", (
 		"/topics/t1/episodes/2026/7",
 		"/topics/t1/posts/p1",
 		"/teams/t1/notes/n1",
+		"/teams/t1/specials",
+		"/profiles/u1/specials/topics",
+		"/profiles/u1/specials/podcasts",
 		"/invite/k",
 	]) {
 		expect(hasNativeRoute(path)).toBe(true)
 	}
-	for (const path of ["/terms", "/docs/quickstart", "/topics", "/topics/t1/something", "/admin"]) {
+	for (const path of [
+		"/terms",
+		"/docs/quickstart",
+		"/topics",
+		"/topics/t1/something",
+		"/admin",
+		"/profiles/u1/specials",
+	]) {
 		expect(hasNativeRoute(path)).toBe(false)
 	}
 })

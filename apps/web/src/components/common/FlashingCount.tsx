@@ -2,8 +2,8 @@ import { cn } from "@carlnotes/nightshift/classNames"
 import { useEffect, useRef, useState } from "react"
 
 /**
- * Shows a count after its label, as in "Viewers: 12", with the number highlighted. The number flashes once each time the
- * count changes after its first value, and stays still for someone who prefers reduced motion.
+ * Shows a count after its label, as in "Visitors: 12", with the number highlighted. The number flashes once each time
+ * the count changes after its first value, and stays still for someone who prefers reduced motion.
  */
 export function FlashingCount({ label, count }: { label: string; count: number }) {
 	// each change after the first value gives the number a new key, which replays the flash

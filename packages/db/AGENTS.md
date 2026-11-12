@@ -1,11 +1,14 @@
 # packages/db/
 
-`personalSourcePayloads.ts` reads encrypted items in byte-bounded batches for the private link queue and context summarization. An oversized import occupies its own batch.
+`personalSourcePayloads.ts` reads encrypted items in byte-bounded batches for the private link queue and context
+summarization. An oversized import occupies its own batch.
 
-`personalSourcesSend.ts` wraps multiple receiving destinations in one transaction and one accepted-send charge. Sorted destination IDs enter every retry digest; any refusal rolls back the complete batch.
+`personalSourcesSend.ts` wraps multiple receiving destinations in one transaction and one accepted-send charge. Sorted
+destination IDs enter every retry digest; any refusal rolls back the complete batch.
 
 
-`personalSourcesAiAgentRecommendations.ts` derives connected-app suggestions from the owner's live accepted sends in bounded pages. It matches description words locally and persists no index, content copy, or routing counter.
+`personalSourcesAiAgentRecommendations.ts` derives connected-app suggestions from the owner's live accepted sends in
+bounded pages. It matches description words locally and persists no index, content copy, or routing counter.
 
 `personalSourcesAiAgentSetup.ts` adds an empty receiving Source from a verified live connection under confirmation's
 lock order. It also reads and dismisses the latest consent nudge without importing content or storing assistant history.
@@ -14,12 +17,13 @@ lock order. It also reads and dismisses the latest consent nudge without importi
 `personalSourcesEmailConfirmations.ts` stores ID-only durable handoffs, bounded retries, terminal refusals, and sweep
 recovery. `resendRateLimit.ts` shares one provider slot between inbound retrieval and the existing outbound email sends.
 
-`personalSourcesImports.ts` revalidates selected transcripts and commits an entire batch with permanent content fingerprints.
-`personalSourcesContext.ts` reads bounded live excerpts and commits encrypted summaries only for the current revision.
-`personalSourcesWork.ts` exposes content-free deadlines and dirty Topic IDs for Temporal and sweep recovery.
-`personalSourcesLinkQueue.ts` claims bounded live links, recovers unfinished leases, and records durable review outcomes.
-Only canonical URL fingerprints and positions live in queue metadata. Private sender preference is read per Topic.
-`quotas.ts` includes `personal_source_distillation_spends` in monthly totals. Unknown attempts keep a conservative cost estimate.
+`personalSourcesImports.ts` revalidates selected transcripts and commits an entire batch with permanent content
+fingerprints. `personalSourcesContext.ts` reads bounded live excerpts and commits encrypted summaries only for the
+current revision. `personalSourcesWork.ts` exposes content-free deadlines and dirty Topic IDs for Temporal and sweep
+recovery. `personalSourcesLinkQueue.ts` claims bounded live links, recovers unfinished leases, and records durable
+review outcomes. Only canonical URL fingerprints and positions live in queue metadata. Private sender preference is read
+per Topic. `quotas.ts` includes `personal_source_distillation_spends` in monthly totals. Unknown attempts keep a
+conservative cost estimate.
 
 `personalSourcesReceive.ts` accepts encrypted content, links, counters, and retry metadata in one transaction.
 `personalSourcesLocks.ts` locks the sender before the Topic when filing. Competing sends and access changes wait, while
@@ -32,9 +36,12 @@ connection state. `aiAgentConnections.ts` derives OAuth connections from existin
 creates, verifies, lists, and revokes digest-only send credentials. The development persistence smoke lives in
 `apps/api/personalSources/` and runs through `bun run smoke:personal-sources`.
 
-Personal sources migrations establish the existing Topic/Source composite unique keys before creating the Personal sources tables.
-The new context table uses an inline composite unique constraint so its foreign keys can be created in the same
-migration. Personal sources migrations are generated with `bun run db:generate`. The receiving schema uses two final-schema migrations: prerequisites first, then the receiving tables. The additive Finding bonus migration stores a constrained personal-source score bonus for stable re-scoring. Development adopts that chain after a content-preserving schema reconciliation; released migrations stay unchanged.
+Personal sources migrations establish the existing Topic/Source composite unique keys before creating the Personal
+sources tables. The new context table uses an inline composite unique constraint so its foreign keys can be created in
+the same migration. Personal sources migrations are generated with `bun run db:generate`. The receiving schema uses two
+final-schema migrations: prerequisites first, then the receiving tables. The additive Finding bonus migration stores a
+constrained personal-source score bonus for stable re-scoring. Development adopts that chain after a content-preserving
+schema reconciliation; released migrations stay unchanged.
 
 `@carlnotes/db`: Drizzle + Neon Postgres, the Redis store, and object storage, every store the app writes to.
 `@carlnotes/emails`, `models`, and `pipeline`, `apps/api`, and `apps/worker` import it; it imports `@carlnotes/server`
@@ -56,7 +63,9 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   that registered it so ending the session or closing the account deletes it, and the push sends the push service
   accepted, one per event, recipient, and phone, with each receipt, indexed by phone and recipient for the cascades),
   `viewerCounts.ts` (the saved HyperLogLog counter of each topic's viewers and each podcast episode's listeners),
-  `topicPosts.ts` (a topic's Topic Posts and the recorded discussions of them),
+  `topicPosts.ts` (a topic's Topic Posts and the recorded discussions of them), `dailyCounts.ts` (the daily view and
+  play daily counts per item, UTC day, and place, with each row's sketch of distinct people and no address or individual
+  event), `dashboards.ts` (the nightly dashboard snapshots, one per Dashboard, selection, and access level),
   `vectors.ts` (the topic and podcast episode vectors that rank related topics, related podcast episodes, and the
   podcast episode search, each table kept apart from the row it ranks so a read of a whole row never includes a vector,
   and each table's public and shown flag with its partial HNSW index), and `columns.ts` (the pgEnums and the column
@@ -131,16 +140,16 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   A sweep or reset that starts while another run's lease is live does nothing and returns null.
 - `topicImages.ts` — a topic's image row and its urls, one read per topic or for a list of them. `schema/topicImages.ts`
   holds `topic_images` and `topic_image_renders`, and `topics.image_hash` copies the current hash.
-- `homeOrder.ts` — a row's home order on the home page, generic over topics, podcast episodes, films, and Topic
-  Posts: `setHomeOrder` puts a row at a position inside the caller's transaction, `releaseHomeOrder` clears one and
-  closes its gap, and `releaseTopicHomeOrders` clears every podcast episode's or every Topic Post's of a topic.
-  `podcastEpisodeHomeOrder.ts` wraps it for one podcast episode, for the films of some podcast episodes, and for
-  every podcast episode and film of a topic that leaves the public set. `profileOrder.ts` holds the same for a
-  profile's pins: a topic's, a podcast episode's, and a film's among their topic's owner's, each limited to twelve,
-  and a Topic Post's among its author's, with no limit, with `releaseTopicProfileOrders`, which returns the users whose pins a
-  topic's change released, `releaseTopicPodcastEpisodeVideoProfileOrders` for the films of removed podcast episodes,
-  and `releaseTopicPostProfileOrder` for a deleted post. `pinnedOrder.ts` is the write and the release
-  both share. `topic_posts.home_order` and `topic_posts.profile_order` hold a Topic Post's two orders.
+- `homeOrder.ts` — a row's home order on the home page, generic over topics, podcast episodes, films, and Topic Posts:
+  `setHomeOrder` puts a row at a position inside the caller's transaction, `releaseHomeOrder` clears one and closes its
+  gap, and `releaseTopicHomeOrders` clears every podcast episode's or every Topic Post's of a topic.
+  `podcastEpisodeHomeOrder.ts` wraps it for one podcast episode, for the films of some podcast episodes, and for every
+  podcast episode and film of a topic that leaves the public set. `profileOrder.ts` holds the same for a profile's pins:
+  a topic's, a podcast episode's, and a film's among their topic's owner's, each limited to twelve, and a Topic Post's
+  among its author's, with no limit, with `releaseTopicProfileOrders`, which returns the users whose pins a topic's
+  change released, `releaseTopicPodcastEpisodeVideoProfileOrders` for the films of removed podcast episodes, and
+  `releaseTopicPostProfileOrder` for a deleted post. `pinnedOrder.ts` is the write and the release both share.
+  `topic_posts.home_order` and `topic_posts.profile_order` hold a Topic Post's two orders.
 - `quotas.ts` — the derived per-user limits, and `loadUserAccess`, the one read of a user's role, plan, budget
   override, and admin block, which the api and the worker share.
 - `inviteLimits.ts` — the daily invite limit. `toAccountSignalWeight` is the age and reputation factor that the invite
@@ -180,6 +189,16 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   request's cache hits and misses with the keys that missed, which `redis.ts` reports to it. A write statement clears
   the memo of the request that sent it. `countRequestStatement` is the one count, which the connection pool stub
   calls too, so a test's queries count the way real ones do.
+- `dailyCountBuffer.ts` — the Redis day buffer of the view and play daily-counts: a view once per person, item, and UTC
+  day, and a play once per person, podcast episode, and format in five minutes, each row's count in one hash and its
+  people in one HyperLogLog sketch until the worker's minute sweep takes them into Postgres. A person is counted under a
+  keyed hash of their viewer element, so no user id reaches Redis or a saved sketch, and nothing is counted without
+  `BETTER_AUTH_SECRET`. `toPlaceColumns` and `toDailyCountPlace` turn a place into a row's five place columns and back.
+  `redisFakeDailyCounts.ts` holds its scripts for the Redis test fake.
+- `dashboardSnapshotRows.ts` — deletes whole Dashboards' snapshots, which a rebuild, a closed account, and a deleted
+  team share, since a snapshot's subject has no foreign key. Each delete first starts a new snapshot generation in
+  Redis, and a build that read the old generation before it loaded the daily counts writes nothing.
+- `teamMembers.ts` — counts a team's active members, which the api and the worker share.
 - `redisFakeServer.ts` — the fake Redis server behind `redis.test.ts`, `redisRateLimits.test.ts`, and
   `redisGauges.test.ts`: in-memory clients that connect, drop, subscribe, and deliver published messages, with the
   reconnect delays shortened to nothing. `startFakeRedisStore` builds the store's clients on a fresh one, and
@@ -253,10 +272,15 @@ replies, durable mail confirmations, and summarization spend. Composite referenc
 sender consistent.
 
 `store.ts` exports the podcast audio URL lifetime beside its signer so the API reports the same expiry it signs.
+`toDashboardShareImageKey` names a Dashboard page's share image by its summary hash.
 
-`topicSourceCapacity.ts` enforces the ten fetched Sources under the Topic lock. Personal sources do not count toward that limit.
+`topicSourceCapacity.ts` enforces the ten fetched Sources under the Topic lock. Personal sources do not count toward
+that limit.
 
-`personalSourcesMigration.ts` assigns legacy Sources to their original sender and encrypts legacy generated explanations/reports before clearing shared text. `db:migrate` runs it after generated schema migrations. `findingPersonalAnnotations.ts` reads annotations by authenticated sender and current Finding visibility. Context and receiving Source identity are per (Topic, sender); edit authority permits contributions but never widens private reads.
+`personalSourcesMigration.ts` assigns legacy Sources to their original sender and encrypts legacy generated
+explanations/reports before clearing shared text. `db:migrate` runs it after generated schema migrations.
+`findingPersonalAnnotations.ts` reads annotations by authenticated sender and current Finding visibility. Context and
+receiving Source identity are per (Topic, sender); edit authority permits contributions but never widens private reads.
 
 Email confirmations retain replay identity and temporary encrypted reply snapshots. `personalSourcesEmailChoices` stores
 provider/thread references and encrypted Topic choices only, without email bodies. Sender-owned choices support
@@ -266,7 +290,10 @@ same-thread number/name replies, disappear after successful selection, and casca
 entry/Topic/sender matching, send-origin, and retained-entry checks. It reuses durable link outcomes and stored page
 titles.
 
-Personal sources items, private summaries, and annotations have no automatic expiry. Their content remains encrypted until explicit deletion. Released read contracts retain nullable expiry fields as null. Optional conversation URLs survive the MCP picker outside matching and open from the shared AI sender label; missing references remain plain labels.
+Personal sources items, private summaries, and annotations have no automatic expiry. Their content remains encrypted
+until explicit deletion. Released read contracts retain nullable expiry fields as null. Optional conversation URLs
+survive the MCP picker outside matching and open from the shared AI sender label; missing references remain plain
+labels.
 
 Topic Posts beyond their tables: `quotas.ts` holds `loadDiscussionRegenerationQuota` and sums a discussion's cost
 into the month's podcast spend. `topicImages.ts` holds `isImageReportedByUser`, which a Topic's and a Topic Post's

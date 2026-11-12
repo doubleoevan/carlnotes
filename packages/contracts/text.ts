@@ -72,3 +72,17 @@ export function toHtmlText(html: string): string {
 export function toDotSeparatedText(parts: (string | null | undefined)[]): string {
 	return parts.filter(Boolean).join(" · ")
 }
+
+/**
+ * Returns a regular noun for a count, singular if the count is one and plural otherwise, without the count.
+ */
+export function toCountNoun(count: number, noun: string): string {
+	return count === 1 ? noun : `${noun}s`
+}
+
+/**
+ * Returns a count with its noun, singular if the count is one.
+ */
+export function toCountLabel(count: number, noun: string): string {
+	return `${count.toLocaleString()} ${toCountNoun(count, noun)}`
+}

@@ -15,14 +15,15 @@ Apps, the deployable entry points:
   providers, and the DOM-bound hooks, lib, and stores. A public page renders on the server for a visitor and a crawler.
   The sign-in pages, a route behind sign-in, and every route when the request brings a session cookie render in the
   browser. Its Storybook, the Nightshift component browser, builds to static files the api serves at `/nightshift`,
-  and its MCP Apps views build to one bundle the api writes into each MCP view's html.
+  and its MCP Apps views build to two scripts and one stylesheet, which the api writes into each MCP view's html.
 - `apps/api/` — the Hono server: routes, authorization, billing, chat rooms, tasting notes, teams, invites, share cards,
 	  sender-only Personal sources and account-scoped agent routes under `personalSources/`,
   Topic Posts under `topicPost/`, the news under `news/`, a podcast episode's film beside it under `podcast/`,
-  the site search, page head data, viewer and listener counts, the MCP server and its MCP Apps views, and the document
-  routes (the sitemap, the feeds, the llms files, the IndexNow key, and security.txt).
+  the Dashboard pages' reads under `dashboard/`, the site search, page head data, viewer and listener counts, the MCP
+  server and its MCP Apps views, and the document routes (the sitemap, the feeds, the llms files, the IndexNow key, and
+  security.txt).
 - `apps/worker/` — the Temporal worker, its workflows and their activities under `workflows/`, the scheduled sweep, the
-  monthly budget reset, the docs embed, and the modules only the sweep reads.
+  monthly budget reset, the docs embed, the nightly dashboard snapshots, and the modules only the sweep reads.
 - `apps/docs/` — the Starlight docs site, built to static files the api serves at `/docs`, with the architecture, development services, deployment, design, and release notes guides beside it.
 - `apps/mobile/` — the Expo app: CarlNotes for iOS and Android on a development build, with the routes under
   `apps/mobile/app/`, the Nightshift theme through Uniwind, its implementations of the Nightshift component contracts
@@ -92,6 +93,7 @@ Each app and package has its own AGENTS.md with entry points, layout, and comman
 | Topic Post, its editor, its image, or the Topic Posts section | `apps/api/topicPost/`, `packages/contracts/topicPosts.ts`, `packages/core/components/TopicPost*.tsx`, `packages/core/hooks/useTopicPostSave.ts`, `packages/pipeline/topicPosts/`, `apps/worker/workflows/publishTopicPost.ts`, `apps/web/src/components/topicPost/`, `apps/web/src/pages/TopicPostPage.tsx`, `apps/mobile/src/components/topicPost/` | domain-model, jsx-conventions, prompt-authoring | `packages/db/migrations/`; `apps/api/note/` beyond the shared `apps/api/noteHtml.ts` |
 | Topic Post Discussion, or a question asked from a Topic Post's page | `apps/api/topicPost/topicPostDiscussionsRoute.ts`, `packages/pipeline/topicPosts/topicPostDiscussions.ts`, `topicPostDiscussionScript.ts`, `apps/worker/workflows/recordTopicPostDiscussion.ts`, `packages/core/components/TopicPostDiscussionCard.tsx`, `packages/pipeline/chat/retrieveTopicPost.ts`, `topicPostQuestionPrompt.ts`, `apps/api/chat/chatTurnAnswer.ts`, `packages/core/stores/topicPostChatStore.ts`, `packages/core/components/TopicPostTag.tsx` | domain-model, prompt-authoring, jsx-conventions | `packages/db/migrations/`; the podcast episode's own recording beyond `packages/pipeline/podcast/podcastEpisodeAudio.ts` and the shared player |
 | News, the day's opener, or a Comment Mention | `apps/api/news/`, `packages/contracts/news.ts`, `packages/client/newsClient.ts`, `packages/core/hooks/useNews.ts`, `useNewsList.ts`, `packages/core/lib/newsEvents.ts`, `packages/core/components/NewsList.tsx` with both apps' `components/social/NewsList.tsx`, `apps/api/topic/updatesOpener.ts`, `apps/api/social/commentMentions.ts`, `commentMentionsRoute.ts`, `packages/db/unseenCommentMentions.ts`, `packages/contracts/commentMentions.ts`, `packages/core/stores/commentMentionStore.ts`, `packages/core/components/CommentMentionBadge.tsx`, `CommentMentionList.tsx` | domain-model, jsx-conventions | `packages/db/migrations/` |
+| A Dashboard, which copy calls Specials, its charts, daily counts, snapshots, paragraph, or share image | `packages/contracts/dashboards.ts`, `packages/core/components/Dashboard.tsx`, `packages/core/lib/dashboardCharts.ts`, `dashboardMapPins.ts`, `wordCloud.ts`, `apps/web/src/components/dashboard/`, `apps/web/src/pages/DashboardPage.tsx`, `apps/api/dashboard/`, `apps/api/requestPlace.ts`, `packages/db/dailyCountBuffer.ts`, `packages/db/schema/dailyCounts.ts`, `dashboards.ts`, `apps/worker/saveDailyCounts.ts`, `apps/worker/workflows/buildDashboardSnapshots.ts`, `apps/worker/dashboards/`, `packages/pipeline/dashboardParagraph.ts`, `dashboardShareImage.ts`, `dashboardRebuild.ts`, `apps/api/mcp/dashboardTool.ts`, `apps/web/src/mcpViews/DashboardMcpView.tsx`, `apps/mobile/src/components/dashboard/` | domain-model, jsx-conventions, prompt-authoring | `packages/db/migrations/` |
 | Tasting note or sync change | `apps/api/note/`, `apps/web/src/components/note/`, `packages/core/hooks/` | domain-model | `apps/worker/`, `packages/pipeline/` |
 | API route or permission | `apps/api/<domain>/`, `apps/api/authorization.ts` | domain-model | `apps/worker/`; `packages/pipeline/` and `packages/models/` beyond the modules the route imports |
 | Temporal workflow change | `apps/worker/workflows/`, `apps/worker/temporal.ts` | — | `apps/web/`, `apps/api/` route files |

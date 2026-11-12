@@ -7,7 +7,8 @@ import {
 	SCAN_STOP_FAILED_TEXT,
 	toIdleScanLine,
 } from "@carlnotes/contracts/mcpScanStatus"
-import { SCAN_RUNNING_LABEL, STOP_SCAN_LABEL, toCountLabel } from "@carlnotes/core/lib/labels"
+import { toCountLabel } from "@carlnotes/contracts/text"
+import { SCAN_RUNNING_LABEL, STOP_SCAN_LABEL } from "@carlnotes/core/lib/labels"
 import { CirclePause } from "lucide-react"
 import { useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"

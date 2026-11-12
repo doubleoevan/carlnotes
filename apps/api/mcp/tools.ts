@@ -7,6 +7,7 @@ import { searchRequestPayload } from "@carlnotes/contracts/search"
 import type { CallToolResult } from "@modelcontextprotocol/server"
 import { z } from "zod"
 import { setTopicSubscription } from "../topic/subscriptions"
+import { registerDashboardTool } from "./dashboardTool"
 import { loadFindingsMcpViewData, loadSearchMcpViewData, toMcpViewMeta } from "./mcpViewData"
 import { registerNewsTool } from "./newsTool"
 import { registerPersonalSourcesTools } from "./personalSourcesTools"
@@ -52,9 +53,10 @@ export function registerTools(registerToolsOptions: RegisterToolsOptions): void 
 	registerTopicContextTool(registerToolsOptions)
 	registerFindingFeedbackTool(registerToolsOptions)
 	registerSocialTools(registerToolsOptions)
-	// register the news and the Topic Post reads
+	// register the news, the Topic Post reads, and the Dashboard read
 	registerNewsTool(registerToolsOptions)
 	registerTopicPostTools(registerToolsOptions)
+	registerDashboardTool(registerToolsOptions)
 }
 
 // register the read tools, the site search, and the consumed write

@@ -5,7 +5,9 @@ import {
 	sendRemoveTopicFromTeam,
 	sendTeamAvatarBody,
 } from "@carlnotes/client/teamClient"
+import { toTeamAvatarImagePath } from "@carlnotes/contracts/avatars"
 import { isLeaderRole } from "@carlnotes/contracts/enums"
+import { toTeamPath } from "@carlnotes/contracts/seo"
 import { type TeamPageResponse, toTeamPageTitle } from "@carlnotes/contracts/teams"
 import { TEAM_SECTIONS } from "@carlnotes/core/lib/cardSections"
 import { TEAM_AVATAR_UPLOAD_FAILED_TEXT, toAvatarRejectionText } from "@carlnotes/core/lib/imageUpload"
@@ -23,6 +25,8 @@ import { AnchorLink } from "@/components/common/AnchorLink"
 import { PagedCardsSection } from "@/components/common/CardsSection"
 import { DetailsLine } from "@/components/common/DetailsLine"
 import { LoadFailedNotice } from "@/components/common/LoadFailedNotice"
+import { PageHeaderIdentity } from "@/components/common/PageHeaderIdentity"
+import { PageHeaderRow } from "@/components/common/PageHeaderRow"
 import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { ViewerCountLine } from "@/components/common/ViewerCountLine"
 import { InviteMembersModal } from "@/components/invite/InviteMembersModal"
@@ -182,7 +186,7 @@ function TeamHeader({ team, noteCount, onReload }: TeamHeaderProps) {
 	})
 	return (
 		<View className="gap-2">
-			<View className="flex-row flex-wrap items-center gap-3">
+			<PageHeaderRow>
 				{isTeamLeader ? (
 					<Button
 						ref={teamAvatarPicker.triggerRef}
@@ -195,7 +199,7 @@ function TeamHeader({ team, noteCount, onReload }: TeamHeaderProps) {
 						<Avatar
 							ownerId={teamId}
 							name={team.name}
-							imageUrl={team.avatarVersion ? `/api/team-avatars/${teamId}?v=${team.avatarVersion}` : null}
+							imageUrl={team.avatarVersion ? toTeamAvatarImagePath(teamId, team.avatarVersion) : null}
 							size={PAGE_AVATAR_SIZE}
 						/>
 					</Button>
@@ -203,13 +207,13 @@ function TeamHeader({ team, noteCount, onReload }: TeamHeaderProps) {
 					<Avatar
 						ownerId={teamId}
 						name={team.name}
-						imageUrl={team.avatarVersion ? `/api/team-avatars/${teamId}?v=${team.avatarVersion}` : null}
+						imageUrl={team.avatarVersion ? toTeamAvatarImagePath(teamId, team.avatarVersion) : null}
 						size={PAGE_AVATAR_SIZE}
 					/>
 				)}
 				{teamAvatarPicker.filePickerMenu}
-				{/* below the avatar: the page's title, the details line of the team's counts, and its description */}
-				<View className="w-full">
+				{/* beside the avatar: the page's title and the details line of the team's counts */}
+				<PageHeaderIdentity>
 					<View className="flex-row items-center gap-2">
 						<Text accessibilityRole="header" className="shrink font-display text-2xl">
 							{toTeamPageTitle(team.name)}
@@ -217,10 +221,11 @@ function TeamHeader({ team, noteCount, onReload }: TeamHeaderProps) {
 						{/* the team chat room's unseen mentions and the team's note changes. the press opens the chat room */}
 						<PageUpdateCountBadge topicId={null} teamId={teamId} />
 					</View>
-					<DetailsLine className="mt-2" details={toTeamDetails({ teamPage: team, noteCount })} />
-					{team.description && <Text className="mt-1 text-sm">{team.description}</Text>}
-				</View>
-			</View>
+					<DetailsLine details={toTeamDetails({ teamPage: team, noteCount })} />
+				</PageHeaderIdentity>
+			</PageHeaderRow>
+			{/* the description under the avatar */}
+			{team.description && <Text className="text-sm">{team.description}</Text>}
 			{mutation.error && <Text className="text-sm text-destructive">{mutation.error}</Text>}
 		</View>
 	)
@@ -378,7 +383,7 @@ function TeamContent({
 			{/* the team's visitors, read while this team is the active route */}
 			<ViewerCountLine
 				viewerCountPage={{ kind: "team", id: teamId, isPublic: team.isPublic }}
-				isActiveRoute={pathname === `/teams/${teamId}`}
+				isActiveRoute={pathname === toTeamPath(teamId)}
 			/>
 		</>
 	)

@@ -170,7 +170,11 @@ export const podcastFeedsRoute = new Hono<AppEnv>()
 		// count a download through the listener's feed as one play in its format and as its listener, and report the play
 		if (context.req.method === "GET") {
 			const videoPlayCount = format === "video" ? 1 : 0
-			void countPodcastEpisodeListen(toRequestSender(context, podcastFeedTokenListener.userId), podcastEpisodeRow.id)
+			void countPodcastEpisodeListen({
+				requestSender: toRequestSender(context, podcastFeedTokenListener.userId),
+				podcastEpisodeId: podcastEpisodeRow.id,
+				format,
+			})
 			await db
 				.insert(podcastEpisodeListens)
 				.values({

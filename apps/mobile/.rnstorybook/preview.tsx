@@ -13,10 +13,7 @@ type StoryTheme = "light" | "dark"
 const preview: Preview = {
 	decorators: [
 		(Story, { globals, parameters }) => (
-			<StoryFrame
-				theme={globals.backgrounds?.value === "dark" ? "dark" : "light"}
-				isOnCard={parameters.surface === "card"}
-			>
+			<StoryFrame theme={toStoryTheme(globals)} isOnCard={parameters.surface === "card"}>
 				<Story />
 			</StoryFrame>
 		),
@@ -33,6 +30,13 @@ const preview: Preview = {
 }
 
 export default preview
+
+/**
+ * Returns the theme the light and dark toggle picked.
+ */
+export function toStoryTheme(globals: { backgrounds?: { value?: string } }): StoryTheme {
+	return globals.backgrounds?.value === "dark" ? "dark" : "light"
+}
 
 // a story in the toggle's theme, on the page fill or a card's
 function StoryFrame({ theme, isOnCard, children }: { theme: StoryTheme; isOnCard: boolean; children: ReactNode }) {

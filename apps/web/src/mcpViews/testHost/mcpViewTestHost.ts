@@ -4,6 +4,7 @@ import {
 	type McpViewContentSecurityPolicy,
 	toMcpViewContentSecurityPolicy,
 	toMcpViewHtmlFromBundle,
+	toMcpViewScriptFile,
 } from "@carlnotes/contracts/mcpViewHtml"
 import type { McpView } from "@carlnotes/contracts/mcpViews"
 import type {
@@ -201,8 +202,8 @@ async function toHostScript(): Promise<string> {
 
 // an MCP view's html as the api builds it, with its ui resource's policy in the place a host applies it
 async function toTestHostHtml(mcpView: McpView): Promise<string> {
-	// read the bundle
-	const mcpViewScript = await Bun.file(`${MCP_VIEWS_BUNDLE_ROOT}/mcpViews.js`).text()
+	// read the MCP view's script and the one stylesheet
+	const mcpViewScript = await Bun.file(`${MCP_VIEWS_BUNDLE_ROOT}/${toMcpViewScriptFile(mcpView)}`).text()
 	const mcpViewStylesheet = await Bun.file(`${MCP_VIEWS_BUNDLE_ROOT}/mcpViews.css`).text()
 	const mcpViewBundle = { mcpViewScript, mcpViewStylesheet }
 

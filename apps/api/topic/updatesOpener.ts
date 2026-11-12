@@ -1,8 +1,7 @@
 // the opener above an updates list: one model call per user per UTC day, and per Topic for a scoped list
 
-import { withTimeLimit } from "@carlnotes/contracts/time"
+import { toUtcDay, withTimeLimit } from "@carlnotes/contracts/time"
 import type { UpdatesFinding } from "@carlnotes/contracts/updates"
-import { toUtcDay } from "@carlnotes/db/quotas"
 import { cacheJson } from "@carlnotes/db/redis"
 import { loadOrProvisionUserLiteLLMKey } from "@carlnotes/models/litellm"
 import { isBudgetRejection } from "@carlnotes/models/models"

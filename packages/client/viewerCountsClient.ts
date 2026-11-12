@@ -1,5 +1,5 @@
-// the api client for a topic, a profile, and a team page's view and the topic, podcast episode, profile, and team
-// counts
+// the api client for a topic, a profile, a team, and a Topic Post page's view, and the topic, podcast episode, profile,
+// team, and Topic Post counts
 import {
 	type PodcastEpisodeCounts,
 	podcastEpisodeCounts,
@@ -8,7 +8,7 @@ import {
 	type ViewerCounts,
 	viewerCounts,
 } from "@carlnotes/contracts/viewerCounts"
-import { apiClient, readApiResponse } from "./apiClient"
+import { apiClient, readApiResponse, toReadRequestInit } from "./apiClient"
 
 /**
  * Sends a topic page's view, which outlives a page that unloads first. The response says nothing, so a failure is left
@@ -30,7 +30,7 @@ export async function fetchTopicCounts(
 	signal?: AbortSignal,
 ): Promise<TopicCounts | null> {
 	const response = await apiClient()
-		.api.counts.topics[":id"].$get({ param: { id: topicId } }, { init: toCountsRequestInit(isPublic, signal) })
+		.api.counts.topics[":id"].$get({ param: { id: topicId } }, { init: toReadRequestInit({ isPublic, signal }) })
 		.catch(() => null)
 	return response?.ok ? readApiResponse(topicCounts, response) : null
 }
@@ -47,7 +47,7 @@ export async function fetchPodcastEpisodeCounts(
 	const response = await apiClient()
 		.api.counts.episodes[":id"].$get(
 			{ param: { id: podcastEpisodeId } },
-			{ init: toCountsRequestInit(isPublic, signal) },
+			{ init: toReadRequestInit({ isPublic, signal }) },
 		)
 		.catch(() => null)
 	return response?.ok ? readApiResponse(podcastEpisodeCounts, response) : null
@@ -77,7 +77,7 @@ export function sendTeamView(teamId: string): void {
  */
 export async function fetchProfileViewerCounts(userId: string, signal?: AbortSignal): Promise<ViewerCounts | null> {
 	const response = await apiClient()
-		.api.counts.profiles[":userId"].$get({ param: { userId } }, { init: toCountsRequestInit(true, signal) })
+		.api.counts.profiles[":userId"].$get({ param: { userId } }, { init: toReadRequestInit({ isPublic: true, signal }) })
 		.catch(() => null)
 	return response?.ok ? readApiResponse(viewerCounts, response) : null
 }
@@ -91,13 +91,34 @@ export async function fetchTeamViewerCounts(
 	signal?: AbortSignal,
 ): Promise<ViewerCounts | null> {
 	const response = await apiClient()
-		.api.counts.teams[":id"].$get({ param: { id: teamId } }, { init: toCountsRequestInit(isPublic, signal) })
+		.api.counts.teams[":id"].$get({ param: { id: teamId } }, { init: toReadRequestInit({ isPublic, signal }) })
 		.catch(() => null)
 	return response?.ok ? readApiResponse(viewerCounts, response) : null
 }
 
-// a public topic's counts leave the session cookie behind, and any other topic's send it for the access check. a
-// read the caller abandons is aborted through its signal
-function toCountsRequestInit(isPublic: boolean, signal?: AbortSignal): RequestInit {
-	return { credentials: isPublic ? "omit" : "same-origin", signal }
+/**
+ * Sends a Topic Post page's view, which outlives a page that unloads first. A failure is left alone.
+ */
+export function sendTopicPostView(topicPostId: string): void {
+	apiClient()
+		.api.topicPosts[":id"].view.$post({ param: { id: topicPostId } }, { init: { keepalive: true } })
+		.catch(() => {})
+}
+
+/**
+ * Fetches a Topic Post's viewers, or null if the read fails. A Topic Post on a public Topic is read without
+ * credentials.
+ */
+export async function fetchTopicPostViewerCounts(
+	topicPostId: string,
+	isPublic: boolean,
+	signal?: AbortSignal,
+): Promise<ViewerCounts | null> {
+	const response = await apiClient()
+		.api.counts.topicPosts[":id"].$get(
+			{ param: { id: topicPostId } },
+			{ init: toReadRequestInit({ isPublic, signal }) },
+		)
+		.catch(() => null)
+	return response?.ok ? readApiResponse(viewerCounts, response) : null
 }

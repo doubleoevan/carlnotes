@@ -1,13 +1,16 @@
 import { authClient } from "@carlnotes/client/authClient"
-import { fetchTeams } from "@carlnotes/client/teamClient"
 import { toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
+import { AvatarHeader, AvatarHeaderSkeleton } from "@carlnotes/core/components/AvatarHeader"
+import { useTeams } from "@carlnotes/core/hooks/useTeams"
 import { toSectionCountLabel } from "@carlnotes/core/lib/labels"
-import { useQuery } from "@tanstack/react-query"
 import { Plus, Users } from "lucide-react-native"
 import { useState } from "react"
+import {
+	MOBILE_AVATAR_HEADER_ELEMENTS,
+	MOBILE_AVATAR_HEADER_SKELETON_ELEMENTS,
+} from "@/components/common/avatarHeaderElements"
 import { LoadFailedNotice } from "@/components/common/LoadFailedNotice"
 import { UserMenuUpdateCountBadge } from "@/components/common/UpdateCountBadge"
-import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { PageScreen } from "@/components/layout/PageScreen"
 import { PageSkeleton } from "@/components/layout/PageSkeleton"
 import { Button } from "@/components/primitives/button"
@@ -27,7 +30,7 @@ export default function TeamsScreen() {
 	// load memberships and invitations for the current account
 	const { data: session } = authClient().useSession()
 	const [isCreating, setIsCreating] = useState(false)
-	const query = useQuery({ queryKey: ["teams", session?.user.id], queryFn: fetchTeams })
+	const query = useTeams()
 	const handleReload = (): void => {
 		void query.refetch()
 	}
@@ -36,7 +39,16 @@ export default function TeamsScreen() {
 			title="Teams"
 			icon={Users}
 			titleBadge={<UserMenuUpdateCountBadge label="Teams" />}
-			byline={session && <UserProfileLink user={toSessionProfileIdentity(session.user)} />}
+			byline={
+				session ? (
+					<AvatarHeader
+						subject={{ subjectKind: "user", user: toSessionProfileIdentity(session.user) }}
+						elements={MOBILE_AVATAR_HEADER_ELEMENTS}
+					/>
+				) : (
+					<AvatarHeaderSkeleton elements={MOBILE_AVATAR_HEADER_SKELETON_ELEMENTS} />
+				)
+			}
 			contentClassName="mt-2 gap-0"
 			onRefresh={handleReload}
 			isRefreshing={query.isRefetching}

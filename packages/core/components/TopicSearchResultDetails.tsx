@@ -1,7 +1,6 @@
 import { isPublishedPodcastEpisode, type PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
-import { toDotSeparatedText } from "@carlnotes/contracts/text"
+import { toCountLabel, toDotSeparatedText } from "@carlnotes/contracts/text"
 import type { ComponentType, ReactNode } from "react"
-import { toCountLabel } from "../lib/labels"
 
 export type TopicSearchResultDetailsProps = {
 	viewerCount?: number | null
@@ -28,7 +27,7 @@ export function TopicSearchResultDetails({
 			<Text>
 				{toDotSeparatedText([
 					"Topic",
-					...(viewerCount == null ? [] : [toCountLabel(viewerCount, "viewer")]),
+					...(viewerCount == null ? [] : [toCountLabel(viewerCount, "visitor")]),
 					...(subscriberCount == null ? [] : [toCountLabel(subscriberCount, "follower")]),
 				])}
 			</Text>

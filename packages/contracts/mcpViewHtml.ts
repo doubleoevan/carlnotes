@@ -4,8 +4,11 @@ import type { McpView } from "./mcpViews"
 // the origins of the Google Fonts stylesheet the MCP view's stylesheet imports, and of the fonts it names
 const GOOGLE_FONTS_ORIGINS = ["https://fonts.googleapis.com", "https://fonts.gstatic.com"]
 
-// an MCP view bundle's two files: its one script and its one stylesheet
+// the two files of one MCP view's html: its script and the stylesheet every MCP view shares
 export type McpViewBundle = { mcpViewScript: string; mcpViewStylesheet: string }
+
+// the bundle's script files: the one every MCP view but the dashboard shares, and the dashboard MCP view's own
+export type McpViewScriptFile = "mcpViews.js" | "dashboardMcpView.js"
 
 // the domains a ui resource names for its content security policy
 export type McpViewContentSecurityPolicy = { resourceDomains: string[]; baseUriDomains: string[] }
@@ -39,6 +42,14 @@ export function toMcpViewHtmlFromBundle({
 		"</body>",
 		"</html>",
 	].join("\n")
+}
+
+/**
+ * Returns an MCP view's script file: the dashboard MCP view's own, which alone holds the charts and the map, or the one
+ * every other MCP view shares.
+ */
+export function toMcpViewScriptFile(mcpView: McpView): McpViewScriptFile {
+	return mcpView === "dashboard" ? "dashboardMcpView.js" : "mcpViews.js"
 }
 
 /**

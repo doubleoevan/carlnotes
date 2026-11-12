@@ -18,11 +18,14 @@ test("a link's path comes without its scheme and host", () => {
 test("the account screens and chat routes are behind sign-in", () => {
 	expect(isSignedInPath("/activity")).toBe(true)
 	expect(isSignedInPath("/teams")).toBe(true)
+	expect(isSignedInPath("/teams/specials")).toBe(true)
 	expect(isSignedInPath("/topics/topic-1/chat")).toBe(true)
 	expect(isSignedInPath("/teams/team-1/chat?chatTeamId=team-1")).toBe(true)
 
 	// the reading pages, the invitation, and Plans open to a visitor
 	expect(isSignedInPath("/topics/topic-1")).toBe(false)
+	expect(isSignedInPath("/profiles/user-1/specials/topics")).toBe(false)
+	expect(isSignedInPath("/teams/team-1/specials")).toBe(false)
 	expect(isSignedInPath("/teams/team-1")).toBe(false)
 	expect(isSignedInPath("/invite/token-1")).toBe(false)
 	expect(isSignedInPath("/plans")).toBe(false)

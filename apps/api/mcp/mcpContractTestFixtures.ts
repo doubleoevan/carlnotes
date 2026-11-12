@@ -27,6 +27,7 @@ const EXPECTED_TOOL_ANNOTATIONS = {
 	read_news: { readOnlyHint: true },
 	read_topic_posts: { readOnlyHint: true },
 	read_topic_post: { readOnlyHint: true },
+	read_dashboard: { readOnlyHint: true },
 }
 
 // each advertised tool's phrases, which its description lists so a model finds the tool from the user's words
@@ -62,6 +63,7 @@ const EXPECTED_TOOL_PHRASES: Record<string, readonly string[]> = {
 	read_news: ["Brews News", "what happened this week", "who mentioned me"],
 	read_topic_posts: ["Open Mic", "a topic's posts"],
 	read_topic_post: ["Open Mic", "a topic's posts"],
+	read_dashboard: ["Specials", "how are my topics doing", "how is my podcast doing"],
 }
 
 // wording that asks a model to act unprompted. a sentence that opens with Never forbids it instead

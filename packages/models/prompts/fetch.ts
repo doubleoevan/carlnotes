@@ -36,6 +36,7 @@ import topicPodcastEpisodeVideoImageStyleTemplate from "./topic-podcast-episode-
 }
 import updatesOpenerTemplate from "./updates-opener.md" with { type: "text" }
 import { stripFrontmatter } from "./write.ts"
+import writeDashboardParagraphTemplate from "./write-dashboard-paragraph.md" with { type: "text" }
 import writePodcastEpisodeSegmentTemplate from "./write-podcast-episode-segment.md" with { type: "text" }
 import writeTopicPostDiscussionTemplate from "./write-topic-post-discussion.md" with { type: "text" }
 
@@ -74,6 +75,7 @@ export const FALLBACK_PROMPT_TEMPLATES = {
 	"outline-podcast-episode": outlinePodcastEpisodeTemplate,
 	"write-podcast-episode-segment": writePodcastEpisodeSegmentTemplate,
 	"write-topic-post-discussion": writeTopicPostDiscussionTemplate,
+	"write-dashboard-paragraph": writeDashboardParagraphTemplate,
 } as const
 
 export type PromptName = keyof typeof FALLBACK_PROMPT_TEMPLATES

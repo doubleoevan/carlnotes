@@ -51,7 +51,7 @@ reviewer's decision or revise the submitted tool surface before submission. This
 that the transport, annotations, or privacy tests failed.
 
 The privacy policy describes collection, use/storage, sharing, retention, contact, receiving, imports, model/provider
-processing, revocation, deletion, and retained metadata. Review the twenty-two-tool inventory, OAuth flow, policy URL,
+processing, revocation, deletion, and retained metadata. Review the twenty-six-tool inventory, OAuth flow, policy URL,
 and documentation URL against the live submission form before submitting manually. Production flags remain off
 until controlled forwarding and the operator checklist are complete.
 

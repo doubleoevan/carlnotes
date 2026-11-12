@@ -8,6 +8,7 @@ import { topics } from "@carlnotes/db/schema/topics"
 import { countSocialWriteToday } from "@carlnotes/db/socialLimits"
 import { namedTopicColumns } from "@carlnotes/db/topicPermissions"
 import { MODERATION_TEXT_MAX_CHARS } from "@carlnotes/models/moderation"
+import { rebuildTopicDashboardsById } from "@carlnotes/pipeline/dashboardRebuild"
 import { startTopicPostPublishWorkflow, startTopicPostSummaryWorkflow } from "@carlnotes/pipeline/temporalClient"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { reportError } from "@carlnotes/server/monitoring"
@@ -27,16 +28,13 @@ import { clearVisitorTopicPages } from "../topic/feedCaches"
 import { clearHomeCaches } from "../topic/homeOrder"
 import {
 	canReadTopicPost,
-	createTopicPostDraft,
-	deleteTopicPost,
 	isTopicPostEditable,
 	loadTopicPostCards,
 	loadTopicPostRow,
-	publishTopicPost,
-	saveTopicPost,
 	type TopicPostRow,
 	toTopicPostResponse,
 } from "./topicPosts"
+import { createTopicPostDraft, deleteTopicPost, publishTopicPost, saveTopicPost } from "./topicPostWrites"
 
 // the path of a Topic Post's save, after the /api base, with a body limit of its own
 export const TOPIC_POST_PATH = "/topic-posts/:id"
@@ -276,12 +274,14 @@ export const topicPostsRoute = new Hono<AppEnv>()
 			trackEvent("social_topic_post_publish", userId, toTopicPostEventProperties(context, userId, topicPostRow))
 			startBestEffort(() => startTopicPostPublishWorkflow(topicPost.id), topicPost.id)
 
-			// a public topic's new post joins the home's cards and its author's profile page, and the topic's own page
+			// a public topic's new Topic Post joins the home's cards and its author's profile page
 			if (topicPostRow.topic.visibility === "public") {
 				await clearHomeCaches()
 				await purgeProfileAtEdge(userId)
 			}
+			// clear the topic page's caches and rebuild the topic's Dashboards
 			await clearVisitorTopicPages(topicPost.topicId)
+			await rebuildTopicDashboardsById(topicPost.topicId)
 		}
 		// return the post as it now reads
 		const publishedRow = await loadTopicPostRow(topicPost.id)
@@ -312,12 +312,16 @@ export const topicPostsRoute = new Hono<AppEnv>()
 		// the delete takes the post's thread and discussions with it, and is reported by its ids
 		await deleteTopicPost(topicPost.id)
 
-		// a published post left the home's cards, its author's profile page, and the topic's own page
+		// a published Topic Post left the home's cards, its author's profile page, the topic's own page, and the topic's
+		// Dashboards
 		if (topicPost.publishedAt) {
 			await clearHomeCaches()
 			await purgeProfileAtEdge(topicPost.authorUserId)
 			await clearVisitorTopicPages(topicPost.topicId)
+			await rebuildTopicDashboardsById(topicPost.topicId)
 		}
+
+		// report the delete
 		trackEvent("social_topic_post_delete", userId, toTopicPostEventProperties(context, userId, topicPostRow))
 		return context.json({ ok: true as const })
 	})

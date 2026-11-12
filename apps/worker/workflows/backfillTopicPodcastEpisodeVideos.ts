@@ -2,6 +2,7 @@
 // every ready film below the current render version again, a few at a time, on the platform's bill. a second start
 // joins the one running, and a run with nothing to render ends at once
 
+import { toChunks } from "@carlnotes/contracts/arrays"
 import { toWorkflowFailureReason } from "@carlnotes/contracts/scanFailure"
 import type { TopicPodcastEpisodeVideoBackfillSummary } from "@carlnotes/contracts/topicPodcastEpisodeVideoWork"
 import { continueAsNew, isCancellation, log, proxyActivities } from "@temporalio/workflow"
@@ -69,13 +70,13 @@ export async function backfillTopicPodcastEpisodeVideosWorkflow({
 
 	// render the podcast episodes a few at a time, adding each outcome to the counts
 	const { podcastEpisodeIds } = podcastEpisodePage
-	for (let i = 0; i < podcastEpisodeIds.length; i += concurrency) {
-		const batchPodcastEpisodeIds = podcastEpisodeIds.slice(i, i + concurrency)
+	let attemptedPodcastEpisodeCount = 0
+	for (const batchPodcastEpisodeIds of toChunks(podcastEpisodeIds, concurrency)) {
 		const backfillOutcomes = await Promise.all(batchPodcastEpisodeIds.map(runBackfillRender))
 		pageSummary = backfillOutcomes.reduce(addBackfillOutcome, pageSummary)
 
 		// log the counts so far, and how many podcast episodes the backfill has left
-		const attemptedPodcastEpisodeCount = Math.min(i + concurrency, podcastEpisodeIds.length)
+		attemptedPodcastEpisodeCount += batchPodcastEpisodeIds.length
 		const remainingPodcastEpisodeCount = Math.max(
 			0,
 			(podcastEpisodePage.remainingPodcastEpisodeCount ?? 0) - attemptedPodcastEpisodeCount,

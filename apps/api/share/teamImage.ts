@@ -1,5 +1,6 @@
 // the link-preview card a pasted team url renders as: the team's avatar and name, and what it holds
 
+import { toCountLabel } from "@carlnotes/contracts/text"
 import type { CardElement } from "@carlnotes/pipeline/cardElementPng"
 import type { PublishedAvatar } from "../avatars"
 import {
@@ -8,7 +9,6 @@ import {
 	toAvatarIdentity,
 	toBrandIcon,
 	toCardPng,
-	toCountLabel,
 	toOwnerAvatar,
 	toOwnerImageDataUri,
 } from "./previewImage"

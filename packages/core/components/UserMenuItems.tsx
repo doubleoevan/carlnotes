@@ -1,3 +1,4 @@
+import { type DashboardPageName, isTeamDashboardPath, toDashboardPageLinks } from "@carlnotes/contracts/dashboards"
 import { toProfilePageTitle } from "@carlnotes/contracts/profilePage"
 import { toProfilePath } from "@carlnotes/contracts/seo"
 import type { ComponentType, ReactNode } from "react"
@@ -9,6 +10,7 @@ type UserMenuIcon =
 	| "Teams"
 	| "Activity"
 	| "Account"
+	| DashboardPageName
 	| "Plans"
 	| "Brew with Carl"
 	| "What CarlNotes Is"
@@ -71,6 +73,15 @@ export function UserMenuItems({
 		{ label: "Activity", href: "/activity", badgeLabel: "Activity" },
 		{ label: "Account", href: "/account", badgeLabel: null },
 	]
+	// the Dashboard pages: the user's own Topic and Podcast Dashboards, and Team Dashboard, which opens their first team's
+	// and stays selected on any team's
+	const dashboardDestinations: Pick<UserMenuLinkProps, "label" | "href" | "isSelected">[] = toDashboardPageLinks(
+		userId,
+	).map(({ dashboardKind, label, path }) => ({
+		label,
+		href: path,
+		isSelected: dashboardKind === "teamDashboard" ? isTeamDashboardPath(pathname) : pathname === path,
+	}))
 	return (
 		<>
 			{/* account destinations and their optional live counts */}
@@ -80,6 +91,11 @@ export function UserMenuItems({
 				</Link>
 			))}
 			{mentionsRow}
+			<Divider />
+			{/* the Dashboard pages */}
+			{dashboardDestinations.map(({ label, href, isSelected }) => (
+				<Link key={label} label={label} href={href} isSelected={isSelected} onSelect={onNavigate} />
+			))}
 			<Divider />
 			{/* plans and learning */}
 			<Link label="Plans" href="/plans" isSelected={pathname === "/plans"} onSelect={onNavigate} />

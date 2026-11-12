@@ -1,0 +1,12 @@
+{
+	"name": "dashboard-paragraph",
+	"passedRunCount": 4,
+	"runCount": 4,
+	"ranOn": "2026-11-12",
+	"commit": "66ab48dc",
+	"hasUncommittedChanges": true,
+	"writerModelIds": [
+		"cheap-model"
+	],
+	"graderModelId": "chat-model"
+}

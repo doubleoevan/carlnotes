@@ -5,7 +5,7 @@ import type { TopicImageProps } from "@carlnotes/core/components/TopicImage"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Camera } from "lucide-react"
 import { TOPIC_IMAGE_FRAME_CLASS, TopicImage } from "@/components/primitives/topic-image"
-import { HEADER_TOPIC_IMAGE_CLASS, TOPIC_HEADER_AREA_CLASSES } from "@/lib/styleClasses"
+import { HEADER_TOPIC_IMAGE_CLASS, TOPIC_HEADER_AREA_CLASSES } from "@/lib/pageHeaderClasses"
 
 // the image, the button's accessible label, whether it is disabled, its click, the button's layout classes, and the
 // image's own classes inside its frame

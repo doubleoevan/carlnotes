@@ -132,6 +132,9 @@ the browser bundle and renders pages through the server build, behind its own ro
   the page's origin. Both read `window`. `installDeeplinks.ts` holds the Add to AI dialog's providers, their deeplinks
   and paste steps, and the remembered choice, `shareSheet.ts` opens the operating system's share sheet, and
   `staleBundleReload.ts` reloads the page once if a deploy removed a bundle file the open page still asks for.
+  `styleClasses.ts` holds the tailwind class strings pages share. The data tables' classes are in `tableClasses.ts`,
+  the chat panel's in `chatClasses.ts`, and the page headers', a topic header's and the avatar header's, in
+  `pageHeaderClasses.ts`.
 - `components/session/` — the login and signup pages' layout and their sign-in pieces. `SessionLayout.tsx` opens the
   Google, GitHub, and Apple sign-ins and says so if one does not open. `VerifyEmailNotice.tsx` is the
   notice the signup page shows after a password signup, with a button straight into the app.
@@ -173,7 +176,29 @@ the browser bundle and renders pages through the server build, behind its own ro
   the team save flow the team modal and the topic modal's teams field share: `createTeam`, `createTeamForInviteLink`,
   `saveTeam`, and `TEAM_REJECTION_REASONS`, the sentence for each team rejection.
 - `components/share/` — the share menus for a topic and a team, over the options they both use. `ShareTopic` takes
-  a `topicPost` to share a Topic Post in its topic's place.
+  a `topicPost` to share a Topic Post in its topic's place. `ShareDashboard.tsx` shares a Dashboard page and
+  `ShareTeam.tsx` a team, both through the option list in `PageShareDialog.tsx`, and `usePageShare.ts` holds the page's
+  title and url, the copy, the device's share sheet that falls back to the copy, and each option's report by its
+  channel.
+- `components/dashboard/` — the Dashboard pages' pieces. `DashboardHeader.tsx` is the header the page and the MCP view
+  share, with core's `DashboardSubjectHeader` and `AvatarHeaderSkeleton` through `common/avatarHeaderElements.tsx`,
+  the profile page's floated-avatar layout, which the Teams, Activity, and Account pages' `AvatarHeader` shares. `dashboardPageIcons.ts` holds each page's icon. `dashboardElements.tsx` adapts core's `Dashboard` with the
+  Activity page's accordion, table cards, and each title row's select and radio buttons, and
+  `webDashboardChartRenderers.tsx` holds the page's renderers, loaded with `import()` after hydration.
+  `DashboardBarChart.tsx` and `DashboardPieChart.tsx` draw the bar chart and the pie through `EChart.tsx`, one ECharts
+  chart on the svg renderer in the Nightshift chart theme, and `chartTooltipHtml.ts` builds their hover tooltips' html.
+  `DashboardTrendChart.tsx` draws the trend with its day tooltip and the day it pins on a click,
+  `DashboardWordCloud.tsx` draws the shared spiral layout in svg, and `PlaceMap.tsx` draws Google Maps with Advanced
+  Markers on the site's Map ID, or `OutlineMap.tsx`, an ECharts world outline, with no key or Map ID. `PlaceMap.tsx`
+  loads its map once the box scrolls into view and loads `OutlineMap.tsx` lazily. `pointDetailElements.tsx` draws a
+  point's detail on Google's info window, the outline map's open place, and the trend's pinned day, and
+  `PointDetailPanel.tsx` is the panel over the trend and the outline map. `TitleTooltip.tsx` shows a cut-off title in
+  full in a tooltip on the pinned trend day and the open place, and `PlacedTitleTooltip.tsx` shows a bar label's full
+  title at its place over the chart. `pages/DashboardPage.tsx` renders all three Dashboard pages, and
+  `lib/dashboardRoute.ts` is what their routes load on the server: the head and the public read of the default
+  selection. The routes are `profiles.$userId_.specials.topics.tsx`, `profiles.$userId_.specials.podcasts.tsx`, and
+  `teams.$teamId_.specials.tsx`, with `_signedIn/teams.specials.tsx`, which opens the user's first team's in
+  alphabetical order.
 - `components/search/` — the header's search bar, its Filters menu, its typeahead rows, and `SearchResultsList.tsx`,
   the numbered result rows, their skeleton, and the page row that the search page and the search MCP view render, over
   the row pieces in `SearchRowParts.tsx`. A Topic Post's row shows its image, its title, and `Post · age · Topic`, and
@@ -296,7 +321,9 @@ the browser bundle and renders pages through the server build, behind its own ro
   port 3000 on the server, and `showError`, which toasts the message; `router.tsx` calls it where both the server
   render and the browser pass, and the route tests' `-loadRouter.ts` calls it the same way.
 - `mcpViews/` — the MCP Apps views the mcp server's tools name: `main.tsx`, the entry `vite.mcpViews.config.ts` builds
-  into one script and one stylesheet in `dist/mcp-views/` as part of `build` or alone with `build:mcp-views`, and
+  into two scripts and one stylesheet in `dist/mcp-views/` as part of `build` or alone with `build:mcp-views`:
+  `mcpViews.js` for every MCP view but the dashboard, with `emptyDashboardMcpView.ts` in the dashboard MCP view's place,
+  and `dashboardMcpView.js`, which alone holds the charts and the map. Beside them is
   `McpViewApp.tsx`, which connects to the host with `@modelcontextprotocol/ext-apps` and follows its theme and display
   mode. `mcpViewRouter.tsx` holds the routes in a memory router, one for each MCP view, and the route the html's MCP
   view opens on. `McpViewShell.tsx` is the layout around them: the brand link, the back button, the display mode buttons
@@ -330,7 +357,8 @@ the browser bundle and renders pages through the server build, behind its own ro
   `McpViewTopicHeader.tsx` is the Topic's header the findings and posts MCP views share, and `mcpViewHop.ts` the
   one hop a link or a post card takes. The build also aliases the Topic Post editor to `mcpViewTopicPostEditor.ts`,
   which keeps the editor out of the bundle, and a post body's links to `mcpViewExternalLinks.ts`, which opens them
-  through the host.
+  through the host. `DashboardMcpView.tsx` renders the shared Dashboard from a `read_dashboard` result with the outline
+  map and links to the caller's three Dashboard pages, and another chart selection reads through the tool.
 - `stores/` — the stores that reach the browser or a component library, named `<thing>Store.ts` and built the way
   `packages/core/AGENTS.md` describes, on `@carlnotes/core/stores/storeListeners`. Reach for a store only when state
   outlives a page or crosses the tree; `useState` and `providers/` cover everything else. The DOM-free stores,
@@ -348,7 +376,8 @@ the browser bundle and renders pages through the server build, behind its own ro
 - `hooks/` — the React hooks that read the browser or a route, `useTopicPagePayload.ts` among them, the topic page's
   payload, its poll reload, and a signed-in reader's related topics from their own read, `useConfirmDialog.tsx`, which asks before an action runs, `useSiteAssetUrl.ts`, a
   site image's url, absolute in an MCP view's frame, and `useScanNote.ts`, a scan's note behind its recap popover, read
-  once the trigger is pointed at, focused, touched, or opened, and kept once the scan has finished; `providers/` —
+  once the trigger is pointed at, focused, touched, or opened, and kept once the scan has finished, and
+  `useColorMode.ts`, the color mode the page shows, kept current as the theme toggle switches it; `providers/` —
   context providers. The images the bundler imports, Carl's and Vienna's portraits, come from
   `@carlnotes/nightshift/assets/`. The DOM-free hooks `useNow`, `useAvatar`, `useUsernameChange`, `useNoteBodySave`, and
   `useNoteComments` live in `@carlnotes/core/hooks/`. A component that reads the browser during render, `localStorage`,
@@ -428,14 +457,17 @@ the browser bundle and renders pages through the server build, behind its own ro
   change to the component. The shared fixtures are in `.storybook/fixtures.ts`, with the date from
   `@carlnotes/core/lib/storyFixtures`, the sessions, and the people, and in one file per domain under
   `.storybook/fixtures/`: topics, a visitor's and a user's topic feeds, podcast episodes, teams, admin users, and
-  waiting updates. A story imports them from there, never from another story. `public/stories/` holds the short film
+  waiting updates. A story imports them from there, never from another story. The Dashboard stories read
+  `@carlnotes/core/lib/dashboardStories`, and `.storybook/seriesColorsDecorator.ts` gives a chart story the series
+  colors of the toolbar's palette. `public/stories/` holds the short film
   and its captions that the film stories play, which the web build serves at `/stories/` and
   `@carlnotes/core/lib/podcastEpisodeStories` names by url. `src/nightshift/` holds the Tokens,
   Typography, Inventory, and Layout pages, the swatch and specimen components they render, `ScrollingTable.tsx`, which renders
   their tables in the app's table classes with the first column fixed, and the pattern stories, each composed from
-  `lib/styleClasses.ts` where a shared class exists, the section label from `SECTION_LABEL_CLASS`, which
-  `lib/styleClasses.test.ts` checks against the sectionLabel type role in `@carlnotes/nightshift/typography`, as it
-  checks `LOGO_CLASS`, the name beside the mug in the logo, against the logo role. `src/nightshift/` also holds the
+  `lib/styleClasses.ts` and its sibling class modules where a shared class exists, the section label from
+  `SECTION_LABEL_CLASS`, which `lib/styleClasses.test.ts` checks against the sectionLabel type role in
+  `@carlnotes/nightshift/typography`, as it checks `LOGO_CLASS`, the name beside the mug in the logo, against the logo
+  role. `src/nightshift/` also holds the
   fetch guard and the in-memory storage the preview installs, outside `.storybook/` so that `bun test` finds their
   tests. `bun run dev:storybook` serves the component browser on port 6006 with Storybook's MCP server at
   `http://localhost:6006/mcp`, registered in `.mcp.json` and `opencode.json`: search its catalog before writing a

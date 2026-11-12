@@ -1,5 +1,5 @@
+import { toCountLabel } from "@carlnotes/contracts/text"
 import type { TopicFeedResponse } from "@carlnotes/contracts/topics"
-import { toCountLabel } from "@carlnotes/core/lib/labels"
 import { EMPTY_TOPIC_SECTION, TOPIC_SECTION_TITLES } from "@carlnotes/core/lib/topicFeedLabels"
 import { getRouteApi, Link } from "@tanstack/react-router"
 import type { MouseEvent } from "react"

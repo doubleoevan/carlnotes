@@ -1,6 +1,6 @@
 import { colors } from "@carlnotes/nightshift/colors"
 import { Switch, View } from "react-native"
-import { useUniwind } from "uniwind"
+import { useColorMode } from "@/theme"
 
 /**
  * Gives the native switch Nightshift's orange selected state and a platform-sized touch target.
@@ -16,8 +16,7 @@ export function PreferenceSwitch({
 	isDisabled?: boolean
 	onChange: (isChecked: boolean) => void
 }) {
-	const { theme } = useUniwind()
-	const mode = theme === "dark" ? "dark" : "light"
+	const colorMode = useColorMode()
 	return (
 		<View className="min-h-12 justify-center">
 			<Switch
@@ -25,8 +24,8 @@ export function PreferenceSwitch({
 				value={isChecked}
 				disabled={isDisabled}
 				onValueChange={onChange}
-				trackColor={{ false: colors.input[mode], true: colors.primary[mode] }}
-				thumbColor={colors.card[mode]}
+				trackColor={{ false: colors.input[colorMode], true: colors.primary[colorMode] }}
+				thumbColor={colors.card[colorMode]}
 			/>
 		</View>
 	)

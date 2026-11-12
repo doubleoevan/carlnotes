@@ -1,8 +1,9 @@
 import type { PodcastEpisodeChapter } from "@carlnotes/contracts/podcast"
 import { toHostWithoutWww } from "@carlnotes/contracts/seo"
+import { toCountLabel } from "@carlnotes/contracts/text"
 import type { ReactNode } from "react"
 import type { TableColumn } from "../components/DataTable"
-import { toClockLabel, toCountLabel } from "./labels"
+import { toClockLabel } from "./labels"
 
 /**
  * Defines chapter table columns and full-episode totals for both platform tables.

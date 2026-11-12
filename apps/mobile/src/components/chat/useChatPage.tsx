@@ -3,6 +3,7 @@ import { authClient } from "@carlnotes/client/authClient"
 import { fetchProfile, fetchProfileTeamStatuses } from "@carlnotes/client/profileClient"
 import { fetchTeamPage } from "@carlnotes/client/teamClient"
 import { fetchTopicPage } from "@carlnotes/client/topicClient"
+import { toTeamAvatarImagePath } from "@carlnotes/contracts/avatars"
 import type { ChatRoom } from "@carlnotes/contracts/chat"
 import type { TeamPageResponse } from "@carlnotes/contracts/teams"
 import { reloadChatRooms } from "@carlnotes/core/hooks/useUpdateBadges"
@@ -257,7 +258,7 @@ function toChatChoices({
 					name={chatRoom.teamName}
 					size={20}
 					imageUrl={
-						chatRoom.teamAvatarVersion ? `/api/team-avatars/${chatRoom.teamId}?v=${chatRoom.teamAvatarVersion}` : null
+						chatRoom.teamAvatarVersion ? toTeamAvatarImagePath(chatRoom.teamId, chatRoom.teamAvatarVersion) : null
 					}
 				/>
 			),

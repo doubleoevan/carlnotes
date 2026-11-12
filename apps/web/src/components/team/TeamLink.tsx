@@ -1,3 +1,4 @@
+import { toTeamPath } from "@carlnotes/contracts/seo"
 import type { TeamIdentity } from "@carlnotes/contracts/teamIdentity"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"
@@ -19,7 +20,7 @@ export function TeamLink({
 }) {
 	return (
 		<AnchorLink
-			href={`/teams/${team.teamId}`}
+			href={toTeamPath(team.teamId)}
 			className={cn("inline-flex items-center gap-2 hover:underline", className)}
 		>
 			<TeamAvatar team={team} className={avatarClassName} />

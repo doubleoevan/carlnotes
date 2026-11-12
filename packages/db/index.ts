@@ -11,6 +11,8 @@ import { traceQueries } from "./queryTracing"
 import * as billing from "./schema/billing"
 import * as chat from "./schema/chat"
 import * as columns from "./schema/columns"
+import * as dailyCounts from "./schema/dailyCounts"
+import * as dashboards from "./schema/dashboards"
 import * as invites from "./schema/invites"
 import * as jobLeases from "./schema/jobLeases"
 import * as mobileMinimumVersions from "./schema/mobileMinimumVersions"
@@ -69,6 +71,7 @@ export const schema = {
 	...billing,
 	...chat,
 	...columns,
+	...dashboards,
 	...invites,
 	...jobLeases,
 	...personalSources,
@@ -81,6 +84,7 @@ export const schema = {
 	...pushDevices,
 	...releases,
 	...reports,
+	...dailyCounts,
 	...scans,
 	...social,
 	...spendControlSettings,

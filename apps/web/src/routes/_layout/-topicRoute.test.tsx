@@ -206,7 +206,7 @@ test("the server render holds the empty counts line and no viewer count", async 
 	const { router } = await loadRouter(`/topics/${TOPIC_ID}/${TOPIC_SLUG}`)
 	const html = renderToString(<RouterProvider router={router} />)
 	expect(html).toContain(`<p class="${COUNTS_LINE_CLASS}"></p>`)
-	expect(html).not.toMatch(/\bviewers?\b/i)
+	expect(html).not.toMatch(/\bvisitors?\b/i)
 })
 
 // a long scan note renders whole on the server with no Read more

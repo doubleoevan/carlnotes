@@ -1,11 +1,13 @@
 # apps/worker/
 
-`workflows/receivePersonalSourcesEmail.ts` and `receivePersonalSourcesEmailActivities.ts` run on `personal-sources-email`, with four activity slots.
-Only confirmation IDs and retry delays cross workflow history. The sweep discovers pending or expired processing leases.
+`workflows/receivePersonalSourcesEmail.ts` and `receivePersonalSourcesEmailActivities.ts` run on
+`personal-sources-email`, with four activity slots. Only confirmation IDs and retry delays cross workflow history. The
+sweep discovers pending or expired processing leases.
 
-`workflows/summarizePersonalSourcesContext.ts` and `summarizePersonalSourcesContextActivities.ts` run on the `personal-sources` queue.
-They debounce committed revisions, rebuild bounded private context, and wake at its earliest expiry.
-The sweep calls `recoverPersonalSourcesWork` even when receiving is disabled. Activity errors and results contain no Personal sources text.
+`workflows/summarizePersonalSourcesContext.ts` and `summarizePersonalSourcesContextActivities.ts` run on the
+`personal-sources` queue. They debounce committed revisions, rebuild bounded private context, and wake at its earliest
+expiry. The sweep calls `recoverPersonalSourcesWork` even when receiving is disabled. Activity errors and results
+contain no Personal sources text.
 
 The `@carlnotes/worker` app: the Temporal worker, the sweep, the monthly budget reset, the docs embed, and the
 workflows the worker bundles. Nothing imports it. Every process starts through a root script, and the modules only the
@@ -44,13 +46,29 @@ quotes for a question about the app; a section whose hash is unchanged is not em
   The sweep selects scheduled Topics in one SQL query and reads each owner's quota, key budget, and daily scans cutoff
   once. For a Topic whose owner's key has spent its budget, the sweep saves a failed Scan with the budget reason instead
   of starting a Scan. The Topics of an owner with no key, or of an owner whose budget read fails, are scanned as usual.
-- `syncViewerCounts.ts` runs under its own job lease, `viewer-count-sync`. It takes the topics and podcast episodes
-  whose Redis counter changed, raises each one's count column to the counter's estimate and never lowers it, and saves
-  each counter to `viewer_counters`. On the first sync, and after a Redis restart, it first rebuilds Redis from
-  Postgres: it merges every saved counter back and adds the signed-in people that `viewerCountSeeds.ts` loads, each
-  topic's owner, active followers, and finding openers, and each podcast episode's listeners. A shown count never drops,
-  and the views counted since the last sweep are lost with a restart. A topic or podcast episode whose save fails is
-  listed as changed again for the next sweep.
+- `syncViewerCounts.ts` runs under its own job lease, `viewer-count-sync`. It takes the topics, profiles, teams, Topic
+  Posts, and podcast episodes whose Redis counter changed, raises each one's count column to the counter's estimate and
+  never lowers it, and saves each counter to `viewer_counters`. On the first sync, and after a Redis restart, it first
+  rebuilds Redis from Postgres: it merges every saved counter back and adds the signed-in people that
+  `viewerCountSeeds.ts` loads, each topic's owner, active followers, and finding openers, each published Topic Post's
+  author, and each podcast episode's listeners. A shown count never drops, and the views counted since the last sweep
+  are lost with a restart. A count whose save fails is listed as changed again for the next sweep. Under the same lease,
+  `saveDailyCounts.ts` then adds the day's buffered views and plays from Redis into `daily_view_counts` and
+  `daily_play_counts` a batch at a time, with one read of the batch's saved sketches, one Redis merge, and one upsert
+  per kind. It drops the plays of a deleted podcast episode and puts a failed batch back for the next sweep.
+- The sweep starts `workflows/buildDashboardSnapshots.ts` on the `dashboard-snapshots` queue once per UTC day, under the
+  id `dashboard-snapshots-<day>`, which only a failed run frees. Its activities in
+  `buildDashboardSnapshotsActivities.ts` read the modules under `dashboards/`: `dashboardSubjects.ts` lists each person
+  and team with a daily count row in the window, `dashboardDailyCountRows.ts` reads a Dashboard's rows with each item's
+  title, path, and visibility and leaves a private topic whose legacy Personal sources text is not converted yet out of
+  a team's Dashboard, `dashboardItemCounts.ts` counts each item's viewers by unioning the sketches in Redis through
+  `countRowGroups` or sums its plays, `dashboardSummaries.ts` counts the summary strip, `dashboardSeries.ts` builds
+  every chart's series for one selection with the places `shownPlaces.ts` lets a map show under the city minimum, and
+  `dashboardSnapshots.ts` writes the public snapshots and any full ones that differ. An unchanged snapshot is not
+  written again and keeps its paragraph and share image. A batch purges its Dashboards' edge cache tags, the changed
+  summaries' paragraphs and share images follow in batches of 25, and the run then deletes daily count rows past 400
+  days. A one-Dashboard rebuild runs the same workflow with a subject under one workflow id per Dashboard, and a change
+  during a rebuild signals it to build again.
 - `reportReminders.ts` reads the content reports still open and never reminded twelve hours after they were made,
   mails each one to `SUPPORT_EMAIL` through the report email template with its admin console link, and writes the
   report's reminded time, so a report is reminded once. Without `SUPPORT_EMAIL` it reads nothing.
@@ -92,13 +110,13 @@ quotes for a question about the app; a section whose hash is unchanged is not em
 - `workflows/runTopicScanActivities.ts` — the Scan's three stages. `ingestForScan` passes on the discovered Resources
   with the Source each is credited to, each Source's outcome narrowed by `toScannedSource` in
   `@carlnotes/pipeline/ingest/index` to the four fields the scan report reads, and each Source's result. `finishScan`
-  reads the urls of the Scan's kept Findings once, and `toScanSourceResults` in `workflows/scanSourceResults.ts` counts each one for the Source credited
-  with its Resource, or as earlier if no Source returned it. The found count adds the review's `earlierFoundCount`, the
-  earlier Findings it read again that no Source returned. The kept count and `source_results` go in the same update as
-  the found count and `problem_sources`, and a payload with no results, from a worker before them, writes `null`. A stop
-  and a failure write no results. `reviewForScan` gives each attempt's stage Budget a fresh model call wait deadline
-  through `toModelCallWaitDeadlineBudget`, 20 minutes into the review's 30. After it, a rate-limited model call stops
-  waiting and fails, and no new Resource starts.
+  reads the urls of the Scan's kept Findings once, and `toScanSourceResults` in `workflows/scanSourceResults.ts` counts
+  each one for the Source credited with its Resource, or as earlier if no Source returned it. The found count adds the
+  review's `earlierFoundCount`, the earlier Findings it read again that no Source returned. The kept count and
+  `source_results` go in the same update as the found count and `problem_sources`, and a payload with no results, from a
+  worker before them, writes `null`. A stop and a failure write no results. `reviewForScan` gives each attempt's stage
+  Budget a fresh model call wait deadline through `toModelCallWaitDeadlineBudget`, 20 minutes into the review's 30.
+  After it, a rate-limited model call stops waiting and fails, and no new Resource starts.
 - A completed Scan's email runs in its own workflow, `workflows/sendScanEmail.ts`, on the `scan-emails` queue that the
   file names, with its own Worker in `temporal.ts`. The scan workflow starts it as a child workflow that outlives the
   Scan's own, so a retrying email never holds up or fails the Scan. Each activity sends one batch or one report through
@@ -123,10 +141,11 @@ quotes for a question about the app; a section whose hash is unchanged is not em
   queue, whose Worker's concurrency is `TOPIC_PODCAST_EPISODE_VIDEO_CONCURRENCY`, default 1. The recording workflow
   starts the render as an abandoned child after the image step, behind the `topic-podcast-episode-video` patch, and the
   film route starts the rebuild for a new image on the same queue. The render is one activity, in
-  `workflows/renderTopicPodcastEpisodeVideoActivities.ts` beside the rebuild's, with a four-hour timeout, 3 attempts, and a heartbeat every 30 seconds, and the steps are in `@carlnotes/pipeline/topicPodcastEpisodeVideo/`. The
-  activity draws the film's own 16:9 image before the intro and the sign-off, and a failed draw leaves the podcast
-  episode's image. Before the chapters it fetches the Resource Images of each chapter's Resource, with no scrape, and
-  draws the generated images that give each chapter one distinct image for every 30 seconds, up to
+  `workflows/renderTopicPodcastEpisodeVideoActivities.ts` beside the rebuild's, with a four-hour timeout, 3 attempts,
+  and a heartbeat every 30 seconds, and the steps are in `@carlnotes/pipeline/topicPodcastEpisodeVideo/`. The activity
+  draws the film's own 16:9 image before the intro and the sign-off, and a failed draw leaves the podcast episode's
+  image. Before the chapters it fetches the Resource Images of each chapter's Resource, with no scrape, and draws the
+  generated images that give each chapter one distinct image for every 30 seconds, up to
   `TOPIC_PODCAST_EPISODE_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT` a film, default 40, and a failed draw leaves the chapter
   on the images it has. Each chapter is a montage, encoded as one ffmpeg run for each shot. A render of a ready film
   below the current render version renders it again while it keeps playing, then swaps its files in one update, and a
@@ -148,7 +167,7 @@ quotes for a question about the app; a section whose hash is unchanged is not em
 - `temporal.ts` starts Sentry (`@carlnotes/server/monitoring`) before Langfuse's tracer (`@carlnotes/models/telemetry`)
   and logs the connection pool, the event loop delay, the scan queue, and Redis once a minute, and the sweep reports a
   queue nothing polls and a backlog older than 15 minutes, both through `describeScanQueue` in
-  `@carlnotes/pipeline/temporalClient`.
+  `@carlnotes/pipeline/scanWorkflowClient`.
 - Smoke scripts: `scan.smoke.ts` (`bun run smoke:scan`) runs a full Scan, ingest then review, on a seeded topic and
   sends its report to Resend's test inbox; `review.smoke.ts` (`bun run smoke:review`) scans one busy feed and reports
   its time, limit overshoot, and kept resources; `links.smoke.ts` (`bun run smoke:links`) checks the links a url Source
@@ -164,14 +183,15 @@ quotes for a question about the app; a section whose hash is unchanged is not em
   65 MB, into the temp folder, and later runs reuse it. `recordPodcastEpisode.test.ts`,
   `renderTopicPodcastEpisodeVideo.test.ts`, and `backfillTopicPodcastEpisodeVideos.test.ts` use it.
 
-`workflows/personalSourcesContextLoop.ts` shares the durable revision decisions with deterministic virtual-time tests; Temporal supplies replayable waits and activity calls.
+`workflows/personalSourcesContextLoop.ts` shares the durable revision decisions with deterministic virtual-time tests;
+Temporal supplies replayable waits and activity calls.
 
 - `workflows/publishTopicPost.ts` and `publishTopicPostActivities.ts` run on the `topic-posts` queue:
   `publishTopicPostWorkflow` writes a published Topic Post's summary and starts its image's render, and
-  `summarizeTopicPostWorkflow` writes the summary again after an edit: one workflow per post, which waits 30 seconds
-  and summarizes the stored text, so the edits saved in that time share one rewrite. `publishTopicPostWorkflow` writes
-  a last summary once the edit time ends, if the post changed since its first one. Every step is best effort. The image render
-  itself is `renderTopicImageWorkflow`, which stores a Topic Post render's files under the post.
+  `summarizeTopicPostWorkflow` writes the summary again after an edit: one workflow per post, which waits 30 seconds and
+  summarizes the stored text, so the edits saved in that time share one rewrite. `publishTopicPostWorkflow` writes a
+  last summary once the edit time ends, if the post changed since its first one. Every step is best effort. The image
+  render itself is `renderTopicImageWorkflow`, which stores a Topic Post render's files under the post.
 
 Topic Post Discussions: `publishTopicPostWorkflow` waits out the post's edit time after the summary and the image,
 then starts the post's first discussion, billed to its author, through `startTopicPostPublishDiscussionActivity`.

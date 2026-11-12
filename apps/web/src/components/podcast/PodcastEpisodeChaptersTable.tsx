@@ -13,14 +13,8 @@ import { Popover } from "@/components/primitives/popover"
 import { TableCard } from "@/components/table/TableCard"
 import { ScriptedTablePagination, usePagination } from "@/components/table/TablePagination"
 import { TopicFindingSummary } from "@/components/topic/TopicFindingSummary"
-import {
-	PLAY_BUTTON_CLASS,
-	PLAY_BUTTON_MUTED_CLASS,
-	TABLE_CLASS,
-	TABLE_HEAD_CLASS,
-	TABLE_SCROLL_CLASS,
-	TABLE_WIDE_FIRST_COLUMN_CLASS,
-} from "@/lib/styleClasses"
+import { PLAY_BUTTON_CLASS, PLAY_BUTTON_MUTED_CLASS } from "@/lib/styleClasses"
+import { TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS, TABLE_WIDE_FIRST_COLUMN_CLASS } from "@/lib/tableClasses"
 import { usePlayerChapterPosition, usePodcastEpisodePlayer } from "@/stores/podcastEpisodePlayerStore"
 import { type ChapterTopicFeed, ChapterTopicFindingNote } from "./PodcastEpisodeChapters"
 

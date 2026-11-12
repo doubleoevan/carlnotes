@@ -1,4 +1,5 @@
 import { sendDeleteJoinRequest, sendJoinRequest } from "@carlnotes/client/teamClient"
+import { toTeamPath } from "@carlnotes/contracts/seo"
 import { Minus, Plus } from "lucide-react-native"
 import { Alert, View } from "react-native"
 import { hasSession } from "@/authClient"
@@ -40,7 +41,7 @@ export function JoinTeamButton({
 				disabled={mutation.isPending}
 				onPress={() => {
 					if (!hasSession()) {
-						openSessionScreen({ screen: "/sign-up", returnPath: `/teams/${teamId}`, cta: "team-join" })
+						openSessionScreen({ screen: "/sign-up", returnPath: toTeamPath(teamId), cta: "team-join" })
 						return
 					}
 					void mutation.run(async () => {

@@ -1,20 +1,23 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { isAdminRole } from "@carlnotes/contracts/enums"
 import { type ProfileIdentity, toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
+import { AvatarHeader, AvatarHeaderSkeleton } from "@carlnotes/core/components/AvatarHeader"
 import { useAccount } from "@carlnotes/core/hooks/useAccount"
 import { CircleDollarSign, Settings, User } from "lucide-react"
 import { useEffect } from "react"
 import { AccountBudget } from "@/components/account/AccountBudget"
 import { AccountSettings } from "@/components/account/AccountSettings"
 import { AccordionSection } from "@/components/common/AccordionSection"
-import { UserProfileLink } from "@/components/common/UserProfileLink"
-import { UserProfileLinkSkeleton } from "@/components/common/UserProfileLinkSkeleton"
+import {
+	WEB_AVATAR_HEADER_ELEMENTS,
+	WEB_AVATAR_HEADER_SKELETON_ELEMENTS,
+} from "@/components/common/avatarHeaderElements"
 import { PageSkeleton } from "@/components/layout/PageSkeleton"
 import { Accordion } from "@/components/primitives/accordion"
 import { Button } from "@/components/primitives/button"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { useSearchParams } from "@/hooks/useSearchParams"
-import { PAGE_CLASS, PAGE_HEADER_CLASS, PAGE_TITLE_CLASS } from "@/lib/styleClasses"
+import { PAGE_CLASS, PAGE_HEADER_CLASS, PAGE_TITLE_CLASS, SECTIONS_UNDER_AVATAR_HEADER_CLASS } from "@/lib/styleClasses"
 
 /**
  * The account page: the payment notice, the monthly spend against budget, the scan usage, and the current plan.
@@ -58,11 +61,11 @@ export function AccountPage() {
 					Account
 				</h1>
 			</div>
-			{/* the user whose account this is with a link to their profile, or the link's placeholder while an admin's
-			    view of another user's account loads */}
-			<AccountUserLink user={user} isLoadFailed={query.isError} />
+			{/* the avatar header of the user whose account this is, or its placeholder while an admin's view of another
+			    user's account loads */}
+			<AccountUserHeader user={user} isLoadFailed={query.isError} />
 			{/* the budget and the settings as expandable sections */}
-			<Accordion type="multiple" defaultValue={["budget", "settings"]} className="mt-4">
+			<Accordion type="multiple" defaultValue={["budget", "settings"]} className={SECTIONS_UNDER_AVATAR_HEADER_CLASS}>
 				<AccordionSection value="budget" title="Budget" icon={CircleDollarSign}>
 					<div className="space-y-6 pt-2 pb-4">
 						{billing && activity ? (
@@ -89,13 +92,13 @@ export function AccountPage() {
 	)
 }
 
-// the link to the profile of the user whose account this is, or its placeholder while that user loads
-function AccountUserLink({ user, isLoadFailed }: { user: ProfileIdentity | undefined; isLoadFailed: boolean }) {
+// the avatar header of the user whose account this is, or its placeholder while that user loads
+function AccountUserHeader({ user, isLoadFailed }: { user: ProfileIdentity | undefined; isLoadFailed: boolean }) {
 	if (user) {
-		return <UserProfileLink user={user} className="mt-2 text-sm" />
+		return <AvatarHeader subject={{ subjectKind: "user", user }} elements={WEB_AVATAR_HEADER_ELEMENTS} />
 	}
 	if (isLoadFailed) {
 		return null
 	}
-	return <UserProfileLinkSkeleton className="mt-2 text-sm" />
+	return <AvatarHeaderSkeleton elements={WEB_AVATAR_HEADER_SKELETON_ELEMENTS} />
 }

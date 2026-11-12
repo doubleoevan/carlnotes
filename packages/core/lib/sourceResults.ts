@@ -1,6 +1,7 @@
 import { toFallbackModeLabel } from "@carlnotes/contracts/sources"
+import { toCountLabel } from "@carlnotes/contracts/text"
 import type { SourceResult } from "@carlnotes/contracts/topics"
-import { toCountLabel, toExactDollarLabel, toExactDurationLabel } from "./labels"
+import { toExactDollarLabel, toExactDurationLabel } from "./labels"
 
 // the shared identity and explanation for findings read again from earlier scans
 export const EARLIER_ROW_ID = "earlier"
@@ -67,6 +68,7 @@ export function toSourceResultDetailParts(row: SourceResult): string[] {
  * Returns the fallback or failure line shared by both Source charts.
  */
 export function toSourceResultStatusLine(row: SourceResult): string | null {
+	// a fallback line names its mode, and a failure line its reason if it has one
 	if (row.status === "fallback") {
 		return `Fell back to ${toFallbackModeLabel(row.fallbackMode)}`
 	}

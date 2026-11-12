@@ -8,10 +8,10 @@ import { type ComponentRef, useEffect, useRef, useState } from "react"
 import { Animated, View } from "react-native"
 import { ScrollView } from "react-native-gesture-handler"
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg"
-import { useUniwind } from "uniwind"
 import { ScrollIndicator } from "@/components/common/ScrollIndicator"
 import { Text } from "@/components/primitives/text"
 import { MoreButton } from "@/components/topic/MoreButton"
+import { useColorMode } from "@/theme"
 
 /**
  * The app's transcript elements. A Topic Post's discussion card draws its transcript's lines with the same Text and
@@ -44,8 +44,7 @@ export function PodcastEpisodeTranscript({ transcript }: { transcript: PodcastEp
 
 // keep the transcript bounded while expanded and preserve its complete text for screen readers
 function TranscriptCard({ children, isExpanded }: React.ComponentProps<PodcastEpisodeTranscriptElements["Card"]>) {
-	const { theme } = useUniwind()
-	const fadeColor = theme === "dark" ? colors.card.dark : colors.card.light
+	const fadeColor = colors.card[useColorMode()]
 	const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null)
 	useEffect(() => {
 		if (!isExpanded) {

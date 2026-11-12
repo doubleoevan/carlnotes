@@ -19,7 +19,7 @@ import { cn } from "@carlnotes/nightshift/classNames"
 import { useState } from "react"
 import { Button } from "@/components/primitives/button"
 import { Slider } from "@/components/primitives/slider"
-import { TABLE_HEAD_CLASS } from "@/lib/styleClasses"
+import { TABLE_HEAD_CLASS } from "@/lib/tableClasses"
 
 // the daily signup rate whose spend per day sets the cutoff sliders' end
 const CUTOFF_SLIDER_SIGNUP_RATE = 1_000

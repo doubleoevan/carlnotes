@@ -2,7 +2,7 @@
 // hint on the rest
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { fn } from "storybook/test"
-import { ONE_PAGE_TABLE_CARD_CLASS } from "@/lib/styleClasses"
+import { ONE_PAGE_TABLE_CARD_CLASS } from "@/lib/tableClasses"
 import { StoryTable } from "../../../.storybook/tableDecorators"
 import { type RowSort, SortableHeader, useRowSort } from "./SortableHeader"
 

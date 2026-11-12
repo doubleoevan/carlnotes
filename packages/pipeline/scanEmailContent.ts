@@ -1,6 +1,7 @@
 // what a Scan's email says: the props the topic scan email and the report render from, with the new Findings, Carl's
 // recap, the Podcast Episode, and the links back into the app, and one subscriber's rendered message
 
+import { toDashboardPath } from "@carlnotes/contracts/dashboards"
 import { SMALL_PODCAST_COVER_SIZE, toPodcastEpisodeCover } from "@carlnotes/contracts/podcastEpisodes"
 import { toScanFailureLabel } from "@carlnotes/contracts/scanFailure"
 import { toTopicPath } from "@carlnotes/contracts/seo"
@@ -22,10 +23,24 @@ import { appBaseUrl } from "@carlnotes/server/appUrl"
 import { toLatestPodcastCoverPath } from "@carlnotes/server/podcastCoverPaths"
 import { and, desc, eq } from "drizzle-orm"
 
-// the Scan and Topic columns that an email reads, and one recipient's user id and address
+// the Scan and Topic columns that an email reads
 export type EmailScan = Pick<typeof scans.$inferSelect, "id" | "status" | "scanSummary" | "error">
 export type EmailTopic = Pick<typeof topics.$inferSelect, "id" | "name">
-export type Recipient = { userId: string; email: string }
+// a recipient's user id and address, and the UTC month, as `YYYY-MM`, that a topic scan email last linked their Topic
+// Dashboard
+export type Recipient = { userId: string; email: string; dashboardLinkMonth: string | null }
+
+/**
+ * Returns the recipient's Topic Dashboard url if no topic scan email linked it yet in the given month, or undefined
+ * after that or with no app base url.
+ */
+export function toTopicDashboardUrl(recipient: Recipient, dashboardLinkMonth: string): string | undefined {
+	const appUrl = appBaseUrl()
+	if (!appUrl || recipient.dashboardLinkMonth === dashboardLinkMonth) {
+		return undefined
+	}
+	return `${appUrl}${toDashboardPath({ dashboardKind: "topicDashboard", subjectId: recipient.userId })}`
+}
 
 /**
  * Returns the topic scan email's subject and the props every recipient renders from, minus their own unsubscribe link.
@@ -136,18 +151,33 @@ export async function toManualScanEmailProps(topic: EmailTopic, scan: EmailScan)
 	}
 }
 
+// the subscriber, the Topic, the email's subject and shared props, and the UTC month the email goes out in
+type ToTopicScanMessageOptions = {
+	recipient: Recipient
+	topicId: string
+	subject: string
+	sharedProps: TopicScanEmailProps
+	dashboardLinkMonth: string
+}
+
 /**
- * Renders one subscriber's scan email, with their own signed unsubscribe link and one-click header.
+ * Renders one subscriber's scan email, with their own signed unsubscribe link and one-click header, and the line to
+ * their Topic Dashboard on their first topic scan email of the month.
  */
-export async function toTopicScanMessage(
-	recipient: Recipient,
-	topicId: string,
-	subject: string,
-	sharedProps: TopicScanEmailProps,
-): Promise<EmailMessage> {
+export async function toTopicScanMessage({
+	recipient,
+	topicId,
+	subject,
+	sharedProps,
+	dashboardLinkMonth,
+}: ToTopicScanMessageOptions): Promise<EmailMessage> {
 	// the HTML and its plain-text version, rendered from the same email props to be in sync
 	const unsubscribeUrl = await toTopicUnsubscribeUrl(recipient.userId, topicId)
-	const emailProps = { ...sharedProps, unsubscribeUrl }
+	const emailProps = {
+		...sharedProps,
+		unsubscribeUrl,
+		topicDashboardUrl: toTopicDashboardUrl(recipient, dashboardLinkMonth),
+	}
 	return {
 		to: recipient.email,
 		subject,

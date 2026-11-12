@@ -1,3 +1,4 @@
+import { toTeamAvatarImagePath } from "@carlnotes/contracts/avatars"
 import type { TeamIdentity } from "@carlnotes/contracts/teamIdentity"
 import { Avatar } from "@/components/branding/Avatar"
 
@@ -13,6 +14,6 @@ export function TeamAvatar({
 	className?: string
 }) {
 	// the image url at the avatar's version
-	const imageUrl = team.avatarVersion === null ? null : `/api/team-avatars/${team.teamId}?v=${team.avatarVersion}`
+	const imageUrl = team.avatarVersion === null ? null : toTeamAvatarImagePath(team.teamId, team.avatarVersion)
 	return <Avatar imageUrl={imageUrl} ownerId={team.teamId} name={team.name} className={className} />
 }

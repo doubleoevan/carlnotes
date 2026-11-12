@@ -237,13 +237,11 @@ export async function recordView({
 }
 
 /**
- * Counts a visitor's open of a topic finding among its views, if a visitor may see it. A visitor has no read state, so
- * nothing else is recorded.
+ * Counts a visitor's open of a topic finding among its views, if a visitor may see it, and returns whether it counted.
+ * A visitor has no read state, so nothing else is recorded.
  */
-export async function countVisitorFindingView(findingId: string): Promise<void> {
-	if (await isTopicFindingVisible(null, findingId)) {
-		await addFindingView(findingId)
-	}
+export async function countVisitorFindingView(findingId: string): Promise<boolean> {
+	return (await isTopicFindingVisible(null, findingId)) && (await addFindingView(findingId))
 }
 
 // add one to the finding's views, returning false if the finding is gone

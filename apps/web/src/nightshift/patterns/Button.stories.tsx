@@ -4,10 +4,10 @@ import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { ArrowUp, ArrowUpDown, Clapperboard, Coffee, Mic, Paperclip, Play, RotateCcw, Rss, Share } from "lucide-react"
 import type * as React from "react"
 import { fn } from "storybook/test"
+import { COMPOSER_FRAME_CLASS, SEND_BUTTON_CLASS } from "@/lib/chatClasses"
 import { SKIP_BACK_SECONDS } from "@/lib/podcastEpisodePlayback"
 import {
 	CARD_CLASS,
-	COMPOSER_FRAME_CLASS,
 	HIGHLIGHTED_PAGE_BUTTON_CLASS,
 	ICON_BUTTON_CLASS,
 	ICON_TILE_BUTTON_CLASS,
@@ -20,7 +20,6 @@ import {
 	PLAYBACK_CONTROL_BUTTON_CLASS,
 	PODCAST_EPISODE_QUESTION_BUTTON_CLASS,
 	SEARCH_BAR_ICON_CLASS,
-	SEND_BUTTON_CLASS,
 } from "@/lib/styleClasses"
 
 // the fill under a button class in the app: the page under a top row's buttons, a card under the menu, player, table,

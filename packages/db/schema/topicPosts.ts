@@ -40,6 +40,8 @@ export const topicPosts = pgTable(
 		homeOrder: integer("home_order"),
 		// the author can pin this post to the top of their profile page and set its order
 		profileOrder: integer("profile_order"),
+		// the unique people who opened the post's page, all time
+		viewerCount: integer("viewer_count").notNull().default(0),
 		// created and updated timestamps
 		...timestamps(),
 	},

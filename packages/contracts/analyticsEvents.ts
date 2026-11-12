@@ -174,6 +174,12 @@ export type VisitAnalyticsEvent =
 	| "social_news_page_open"
 	// a mention badge's list opened, by the badge's place
 	| "social_mention_badge_open"
+	// a Dashboard page shown, a chart's item kind, format, or range changed, and a share
+	| "social_dashboard_view"
+	| "social_dashboard_item_kind_change"
+	| "social_dashboard_format_change"
+	| "social_dashboard_range_change"
+	| "social_dashboard_share"
 	// the home page shown, by face, and a home topic, podcast, or post card opened from it
 	| "home_view"
 	| "home_card_open"

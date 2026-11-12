@@ -79,10 +79,12 @@ Collected and not linked to identity, not used for tracking: Diagnostics (crash 
 
 Data Not Collected, which the code shows: Location, Financial info, Health and fitness, Contacts, Browsing history,
 Search history, Sensitive info, Advertising data, and Other user content outside the rows above.
-Device ID is collected once the person allows notifications: the Expo push token, for app functionality only. Location
-is off because geoip is off and no location module is installed. A search query goes to the api and
-is not stored or sent to analytics. No vendor, advertising, or installation identifier is read. The microphone
-records only after a mic tap, never in the background.
+Device ID is collected once the person allows notifications: the Expo push token, for app functionality only. The
+phone reads no location: geoip is off and no location module is installed. The api reads the country, region, and city
+from Cloudflare's headers when it counts a view or a play for Specials, and keeps only daily counts per item and place
+for 400 days, never with the account or the address. Whether the store forms declare that as approximate location is
+still open. A search query goes to the api and is not stored or sent to analytics. No vendor, advertising, or
+installation identifier is read. The microphone records only after a mic tap, never in the background.
 
 Tracking: No. The app has no advertising SDK, no data broker, and no cross-app identifier. The App Tracking
 Transparency prompt is never shown.

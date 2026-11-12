@@ -384,21 +384,20 @@ The allowlist SHALL include `https://carlnotes.com` and the configured applicati
 ### Requirement: Every advertised tool has a directory-safe annotation contract
 
 Every advertised tool SHALL have a nonempty title and explicit boolean safety hints. The four existing reads,
-`suggest_topics`, `read_scan_status`, `read_topic_context`, `read_hot_takes`, `read_news`, `read_topic_posts`, and
-`read_topic_post` SHALL use `readOnlyHint: true`. The
-seven existing account tools SHALL use `readOnlyHint: false` and conservative `destructiveHint: true`, including
-Source suggestions that consume allowance. `stop_scan` SHALL use `readOnlyHint: false` and `destructiveHint: true`,
-since a stop ends paid work and cannot be undone. `save_reaction` SHALL use `readOnlyHint: false` and
-`destructiveHint: true`, since a save replaces or removes the caller's Reaction. The additive `send_to_topic`,
-`read_updates`, `send_finding_feedback`, and `post_hot_take` tools SHALL use `readOnlyHint: false` and
-`destructiveHint: false`. `start_scan` SHALL use `readOnlyHint: false`, `destructiveHint: false`, and
-`openWorldHint: true`. Existing edit confirmations SHALL remain unchanged; new-Topic creation SHALL follow the
-explicit draft-confirmation flow.
+`suggest_topics`, `read_scan_status`, `read_topic_context`, `read_hot_takes`, `read_news`, `read_topic_posts`,
+`read_topic_post`, and `read_dashboard` SHALL use `readOnlyHint: true`. The seven existing account tools SHALL use
+`readOnlyHint: false` and conservative `destructiveHint: true`, including Source suggestions that consume allowance.
+`stop_scan` SHALL use `readOnlyHint: false` and `destructiveHint: true`, since a stop ends paid work and cannot be
+undone. `save_reaction` SHALL use `readOnlyHint: false` and `destructiveHint: true`, since a save replaces or removes
+the caller's Reaction. The additive `send_to_topic`, `read_updates`, `send_finding_feedback`, and `post_hot_take` tools
+SHALL use `readOnlyHint: false` and `destructiveHint: false`. `start_scan` SHALL use `readOnlyHint: false`,
+`destructiveHint: false`, and `openWorldHint: true`. Existing edit confirmations SHALL remain unchanged; new-Topic
+creation SHALL follow the explicit draft-confirmation flow.
 
 #### Scenario: Visitor and connected clients list the same annotated tools
 
 - **WHEN** either identity lists tools on either endpoint
-- **THEN** all twenty-five tools have titles and the expected safety hints
+- **THEN** all twenty-six tools have titles and the expected safety hints
 - **AND** idempotence and open-world hints remain accurate
 
 #### Scenario: An annotation regresses
@@ -556,9 +555,9 @@ Adding MCP disclosures SHALL preserve the policy's existing collection, use and 
 
 ### Requirement: MCP release gates include additive sends
 
-MCP smoke checks SHALL include both routes, all twenty-five tool annotations, identity and revocation checks,
+MCP smoke checks SHALL include both routes, all twenty-six tool annotations, identity and revocation checks,
 editable-Topic authorization and sender-only private layers, origin handling, and existing result-size/pagination
-guarantees. The nine UI resources, numbered suggestion text, name search, stable cursor pages, and atomic multi-Topic
+guarantees. The ten UI resources, numbered suggestion text, name search, stable cursor pages, and atomic multi-Topic
 send accounting SHALL be checked. Each new tool SHALL have a smoke section on both routes. New send results SHALL remain
 bounded and render as text if MCP Apps are unavailable.
 

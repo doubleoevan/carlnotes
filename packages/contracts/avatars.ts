@@ -45,6 +45,13 @@ export function toAvatarImagePath(userId: string, avatarVersion: string): string
 }
 
 /**
+ * Returns the api path of a team's avatar image at a version, which the web and the mobile app both load.
+ */
+export function toTeamAvatarImagePath(teamId: string, avatarVersion: string): string {
+	return `/api/team-avatars/${teamId}?v=${avatarVersion}`
+}
+
+/**
  * Returns the version in a user's avatar url, which is the upload's key id, oauth, or null for the initials.
  */
 export function toAvatarVersion(avatar: { avatarSource?: string | null; avatarKey?: string | null }): string | null {

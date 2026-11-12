@@ -1,8 +1,8 @@
 import { isLeaderRole } from "@carlnotes/contracts/enums"
 import type { TeamMember } from "@carlnotes/contracts/teams"
+import { toCountLabel } from "@carlnotes/contracts/text"
 import type { ReactNode } from "react"
 import type { TableColumn } from "../components/DataTable"
-import { toCountLabel } from "./labels"
 
 // the public and member views sort the same fields
 export const memberSortValues = {

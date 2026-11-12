@@ -1,6 +1,9 @@
 // the color names the web app's Tailwind theme maps onto the palette, as --color-<name> utilities
 import type { ColorName } from "./colors"
 
+// the modes the dark class switches the page between
+export type { ColorMode } from "./colors"
+
 /** The semantic names shadcn's components read. The theme lists them in this order. */
 export const shadcnThemeColorNames: ColorName[] = [
 	"background",

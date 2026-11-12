@@ -18,6 +18,7 @@ import * as homeOrder from "../topic/homeOrder"
 import type { TopicPostRow } from "./topicPosts"
 import * as topicPosts from "./topicPosts"
 import { topicPostsRoute } from "./topicPostsRoute"
+import * as topicPostWrites from "./topicPostWrites"
 
 // a body of a given count of words, as the editor saves it
 const toBodyHtml = (wordCount: number): string => `<p>${Array.from({ length: wordCount }, () => "word").join(" ")}</p>`
@@ -43,6 +44,7 @@ const DRAFT_ROW: TopicPostRow = {
 		imageUpdatedAt: null,
 		homeOrder: null,
 		profileOrder: null,
+		viewerCount: 0,
 		createdAt: new Date("2026-11-09T12:00:00Z"),
 		updatedAt: new Date("2026-11-09T12:00:00Z"),
 	},
@@ -95,9 +97,9 @@ function stubTopicPostRoutes(topicPostRow: TopicPostRow | null): {
 	spyOn(temporalClient, "startTopicPostPublishWorkflow").mockResolvedValue()
 	spyOn(temporalClient, "startTopicPostSummaryWorkflow").mockResolvedValue()
 	return {
-		saveSpy: spyOn(topicPosts, "saveTopicPost").mockResolvedValue({ status: "saved", version: 4 }),
-		publishSpy: spyOn(topicPosts, "publishTopicPost").mockResolvedValue(true),
-		deleteSpy: spyOn(topicPosts, "deleteTopicPost").mockResolvedValue(),
+		saveSpy: spyOn(topicPostWrites, "saveTopicPost").mockResolvedValue({ status: "saved", version: 4 }),
+		publishSpy: spyOn(topicPostWrites, "publishTopicPost").mockResolvedValue(true),
+		deleteSpy: spyOn(topicPostWrites, "deleteTopicPost").mockResolvedValue(),
 		// the caches a published post's delete clears
 		clearHomeSpy: spyOn(homeOrder, "clearHomeCaches").mockResolvedValue(),
 		purgeProfileSpy: spyOn(edgeCache, "purgeProfileAtEdge").mockResolvedValue(undefined),

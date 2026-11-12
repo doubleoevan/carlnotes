@@ -131,3 +131,10 @@ export type TeamDeleteResponse = z.infer<typeof teamDeleteResponse>
 export function toTeamPageTitle(teamName: string): string {
 	return `${teamName} Franchise`
 }
+
+/**
+ * Returns teams in alphabetical order by name, ignoring case and accents.
+ */
+export function toAlphabeticalTeams<Team extends { name: string }>(teams: Team[]): Team[] {
+	return [...teams].sort((first, second) => first.name.localeCompare(second.name, undefined, { sensitivity: "base" }))
+}

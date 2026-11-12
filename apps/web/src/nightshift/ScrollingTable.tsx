@@ -5,13 +5,8 @@ import type { Markdown } from "@storybook/addon-docs/blocks"
 import type { ComponentProps, ReactNode } from "react"
 import { TableCard } from "@/components/table/TableCard"
 import { useScrollRegionTabStop } from "@/hooks/useScrollRegionTabStop"
-import {
-	ONE_PAGE_TABLE_CARD_CLASS,
-	SCROLL_REGION_FOCUS_CLASS,
-	TABLE_CLASS,
-	TABLE_HEAD_CLASS,
-	TABLE_SCROLL_CLASS,
-} from "@/lib/styleClasses"
+import { SCROLL_REGION_FOCUS_CLASS } from "@/lib/styleClasses"
+import { ONE_PAGE_TABLE_CARD_CLASS, TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/tableClasses"
 import { CODE_STYLE } from "./pageStyles"
 
 // the header and body cells the app's tables write. Tailwind does not scan this folder, so each class here is one an

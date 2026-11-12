@@ -2,6 +2,7 @@
 // model reads
 
 import type { UnseenCommentMention } from "./commentMentions"
+import type { DashboardKind, DashboardResponse } from "./dashboards"
 import type { TopicFinding } from "./findings"
 import type { McpScanStatus } from "./mcpScanStatus"
 import type { NewsResponse, NewsWindow } from "./news"
@@ -26,12 +27,13 @@ export const MCP_VIEWS = [
 	"news",
 	"topic-posts",
 	"topic-post",
+	"dashboard",
 ] as const
 
 export type McpView = (typeof MCP_VIEWS)[number]
 
 // the version of the MCP view bundle a running api builds, always above every stored version
-export const MCP_VIEW_VERSION = 10
+export const MCP_VIEW_VERSION = 11
 
 /**
  * Returns an MCP view's ui resource uri at a version, the current one by default.
@@ -53,6 +55,22 @@ export type McpViewNews = {
 	commentMentions: UnseenCommentMention[]
 	newsPage: NewsResponse
 	nextCursor: string | null
+}
+
+// the read_dashboard tool's dashboardKind value for each Dashboard kind
+export const DASHBOARD_TOOL_KINDS = {
+	topicDashboard: "topics",
+	podcastDashboard: "podcasts",
+	teamDashboard: "team",
+} as const satisfies Record<DashboardKind, string>
+
+// what the dashboard MCP view reads of a read_dashboard result: whose Dashboard it is, whether the caller reads the
+// full snapshot, and one selection's read
+export type McpViewDashboard = {
+	dashboardKind: DashboardKind
+	subjectId: string
+	hasFullAccess: boolean
+	dashboard: DashboardResponse
 }
 
 // the topic a findings MCP view heads its rows with: a finding row's topic, its latest podcast episode, and whether the
@@ -89,6 +107,8 @@ export type McpViewData = {
 	// one page of a comment thread as the read_hot_takes tool read it, and the Comment the post_hot_take tool posted
 	commentThread?: CommentThreadResponse
 	postedComment?: Comment
+	// one Dashboard's read as the read_dashboard tool read it
+	dashboard?: McpViewDashboard
 }
 
 // the search tool's structured result: the search's page with every row's absolute url, the search that found it, and

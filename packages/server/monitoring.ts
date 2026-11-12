@@ -246,6 +246,7 @@ const reportedStages = [
 	"database",
 	"startup",
 	"worker",
+	"dashboard",
 ] as const
 
 // one of the stages above

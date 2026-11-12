@@ -5,6 +5,7 @@ import type { McpScanStatus } from "@carlnotes/contracts/mcpScanStatus"
 import {
 	MCP_VIEW_META_KEY,
 	type McpSearchPage,
+	type McpViewDashboard,
 	type McpViewData,
 	type McpViewNews,
 	type McpViewTopic,
@@ -26,6 +27,7 @@ import {
 } from "@carlnotes/contracts/topicPosts"
 import type { Updates } from "@carlnotes/contracts/updates"
 import { COMMENT_MENTION_STORIES } from "@carlnotes/core/lib/commentMentionStories"
+import { STORY_PODCAST_DASHBOARD, STORY_TOPIC_DASHBOARD } from "@carlnotes/core/lib/dashboardStories"
 import { EMPTY_NEWS_STORY, toNewsStoryPage } from "@carlnotes/core/lib/newsStories"
 import { TOPIC_POST_CARD_STORY, TOPIC_POST_DISCUSSION_STORY } from "@carlnotes/core/lib/topicPostStories"
 import { type McpViewToolResult, TEST_SITE_URL } from "./mcpViewTestHost"
@@ -322,6 +324,27 @@ export function toMcpViewToolResult({
  */
 export function toUpdatesToolResult(updates: Updates = UPDATES_RESULT): McpViewToolResult {
 	return toMcpViewToolResult({ structuredContent: MODEL_COPY, mcpViewData: { ...UPDATES_MCP_VIEW_DATA, updates } })
+}
+
+// the story user's Topic Dashboard as read_dashboard returns them to that user, who reads the full snapshot, and their
+// Podcast Dashboard
+export const TOPIC_DASHBOARD_RESULT: McpViewDashboard = {
+	dashboardKind: "topicDashboard",
+	subjectId: "user-vienna",
+	hasFullAccess: true,
+	dashboard: STORY_TOPIC_DASHBOARD,
+}
+export const PODCAST_DASHBOARD_RESULT: McpViewDashboard = {
+	...TOPIC_DASHBOARD_RESULT,
+	dashboardKind: "podcastDashboard",
+	dashboard: STORY_PODCAST_DASHBOARD,
+}
+
+/**
+ * Returns a read_dashboard result that holds one Dashboard's read.
+ */
+export function toDashboardToolResult(dashboard: McpViewDashboard = TOPIC_DASHBOARD_RESULT): McpViewToolResult {
+	return toMcpViewToolResult({ structuredContent: MODEL_COPY, mcpViewData: { ...USER_MCP_VIEW_DATA, dashboard } })
 }
 
 /**

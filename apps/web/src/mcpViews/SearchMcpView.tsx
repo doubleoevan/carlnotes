@@ -1,6 +1,6 @@
 import type { McpSearchPage } from "@carlnotes/contracts/mcpViews"
 import type { SearchRequest } from "@carlnotes/contracts/search"
-import { toCountLabel } from "@carlnotes/core/lib/labels"
+import { toCountLabel } from "@carlnotes/contracts/text"
 import { useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Button } from "@/components/primitives/button"

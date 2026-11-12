@@ -87,18 +87,7 @@ export function PageScreen({
 						</View>
 					)}
 					{/* the same heading and primary action as the web page */}
-					{header ?? (
-						<View className="flex-row flex-wrap items-center justify-between gap-3">
-							<View className="max-w-full flex-row items-center gap-2">
-								{icon && <Icon as={icon} className="size-6 text-foreground" />}
-								<Text accessibilityRole="header" className="shrink font-display text-2xl">
-									{title}
-								</Text>
-								{titleBadge}
-							</View>
-							{action}
-						</View>
-					)}
+					{header ?? <PageHeading title={title} icon={icon} titleBadge={titleBadge} action={action} />}
 					{byline && <View className="mt-2">{byline}</View>}
 					<View className={cn("mt-6 gap-6", contentClassName)}>
 						<SectionTargetContext value={sectionTargetRef}>{children}</SectionTargetContext>
@@ -106,6 +95,35 @@ export function PageScreen({
 					<Footer />
 				</ScrollView>
 			</ClassNameSafeAreaView>
+		</View>
+	)
+}
+
+/**
+ * Shows a screen's icon and heading with its badge, and the action at the right of the row, which wraps under the
+ * heading if the row is too narrow. A screen whose heading differs from its page name passes it as its header.
+ */
+export function PageHeading({
+	title,
+	icon,
+	titleBadge,
+	action,
+}: {
+	title: string
+	icon?: LucideIcon
+	titleBadge?: ReactNode
+	action?: ReactNode
+}) {
+	return (
+		<View className="flex-row flex-wrap items-center justify-between gap-3">
+			<View className="max-w-full flex-row items-center gap-2">
+				{icon && <Icon as={icon} className="size-6 text-foreground" />}
+				<Text accessibilityRole="header" className="shrink font-display text-2xl">
+					{title}
+				</Text>
+				{titleBadge}
+			</View>
+			{action}
 		</View>
 	)
 }

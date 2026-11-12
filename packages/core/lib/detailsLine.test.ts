@@ -95,8 +95,8 @@ test("a topic with nothing to count has no details, and one with no film the use
 	expect(toTopicDetails({ topic: bareTopic, ...withoutLoadedCounts })).toEqual([])
 })
 
-test("a topic's viewers and followers read in that order, each left out at zero, and nothing if they were not read", () => {
-	expect(toTopicCountsDetails({ viewerCount: 128, subscriberCount: 1 })).toEqual(["128 viewers", "1 follower"])
+test("a topic's viewers read as visitors before its followers, each left out at zero, and nothing if they were not read", () => {
+	expect(toTopicCountsDetails({ viewerCount: 128, subscriberCount: 1 })).toEqual(["128 visitors", "1 follower"])
 	expect(toTopicCountsDetails({ viewerCount: 0, subscriberCount: 3 })).toEqual(["3 followers"])
 	expect(toTopicCountsDetails({ viewerCount: 0, subscriberCount: 0 })).toEqual([])
 	expect(toTopicCountsDetails(undefined)).toEqual([])

@@ -1,5 +1,5 @@
-// keep the views of topic, profile, and team pages in memory for one web tab or native app runtime
-import { sendProfileView, sendTeamView, sendTopicView } from "@carlnotes/client/viewerCountsClient"
+// keep the views of topic, profile, team, and Topic Post pages in memory for one web tab or native app runtime
+import { sendProfileView, sendTeamView, sendTopicPostView, sendTopicView } from "@carlnotes/client/viewerCountsClient"
 
 // keep the pages this runtime has sent a view for, each as its kind and its id
 const viewedPageKeys = new Set<string>()
@@ -23,6 +23,13 @@ export function sendProfileViewOnce(userId: string): void {
  */
 export function sendTeamViewOnce(teamId: string): void {
 	sendViewOnce(`team:${teamId}`, () => sendTeamView(teamId))
+}
+
+/**
+ * Sends a Topic Post page's view once per web tab or native app runtime.
+ */
+export function sendTopicPostViewOnce(topicPostId: string): void {
+	sendViewOnce(`topicPost:${topicPostId}`, () => sendTopicPostView(topicPostId))
 }
 
 // send the view of a page this runtime has not sent one for yet

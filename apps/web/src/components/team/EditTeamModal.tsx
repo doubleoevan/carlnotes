@@ -1,3 +1,4 @@
+import { toTeamAvatarImagePath } from "@carlnotes/contracts/avatars"
 import type { TeamIdentity } from "@carlnotes/contracts/teamIdentity"
 import { TeamFields } from "@carlnotes/core/components/TeamFields"
 import { useTeamFields } from "@carlnotes/core/hooks/useTeamFields"
@@ -257,7 +258,7 @@ function TeamImagePicker({
 	const previewTeam = { teamId: editedTeam?.teamId ?? "", name: name || "Team", avatarVersion: null }
 	const avatarUrl = useObjectUrl(avatarFile)
 	const storedAvatarUrl = editedTeam?.avatarVersion
-		? `/api/team-avatars/${editedTeam.teamId}?v=${editedTeam.avatarVersion}`
+		? toTeamAvatarImagePath(editedTeam.teamId, editedTeam.avatarVersion)
 		: null
 	const previewAvatarUrl = avatarUrl ?? storedAvatarUrl
 

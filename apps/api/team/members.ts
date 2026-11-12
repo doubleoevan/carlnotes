@@ -7,6 +7,7 @@ import { teamMembers, teams } from "@carlnotes/db/schema/teams"
 import { teamTopics } from "@carlnotes/db/schema/teamTopics"
 import { subscriptions, topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
+import { countActiveTeamMembers } from "@carlnotes/db/teamMembers"
 import { clearUnseenCommentMentions } from "@carlnotes/db/unseenCommentMentions"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { and, count, eq, inArray, not, notInArray } from "drizzle-orm"
@@ -52,11 +53,8 @@ export async function joinTeam(userId: string, teamId: string, invitedByUserId: 
 			return false
 		}
 
-		const [memberCountRow] = await transaction
-			.select({ count: count() })
-			.from(teamMembers)
-			.where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.isActive, true)))
-		if (memberLimit !== null && (memberCountRow?.count ?? 0) >= memberLimit) {
+		const memberCount = await countActiveTeamMembers(teamId, transaction)
+		if (memberLimit !== null && memberCount >= memberLimit) {
 			return false
 		}
 

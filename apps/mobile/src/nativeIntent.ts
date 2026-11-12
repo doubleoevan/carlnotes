@@ -9,7 +9,15 @@ import { hasNativeRoute, toPlatformPath } from "./platformPath"
 export const OPEN_WEB_PATH = "/open-web"
 
 // the routes behind sign-in, and the chat routes after a Topic or a Team path
-const SIGNED_IN_PATHS = new Set(["/account", "/activity", "/chat", "/plans/billing", "/settings", "/teams"])
+const SIGNED_IN_PATHS = new Set([
+	"/account",
+	"/activity",
+	"/chat",
+	"/plans/billing",
+	"/settings",
+	"/teams",
+	"/teams/specials",
+])
 const CHAT_PATH_PATTERN = /^\/(topics|teams)\/[^/]+\/chat$/
 
 // a web link's scheme and host, and the app's own scheme, whose first segment is already the path's

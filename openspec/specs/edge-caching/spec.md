@@ -52,11 +52,12 @@ copy.
 ### Requirement: The edge caches by the origin's headers and bypasses a signed-in request
 
 Cloudflare SHALL treat as cacheable only the page paths, the discovery files, the client bundle, the docs,
-`/api/topic-feed`, the counts paths after `/api/counts/`, and the avatar, team avatar, favicon, and card paths, and
-SHALL cache each one only as long as the origin's headers allow, bypassing any response without a `Cache-Control`
-header. It SHALL bypass its cache for every request with a Better Auth session cookie. Every other api route, every SSE
-stream, `/mcp`, and every response that sets a cookie SHALL never be cached at the edge. The zone SHALL use SSL/TLS Full
-(strict), and no security rule SHALL challenge a request under `/.well-known/acme-challenge/`.
+`/api/topic-feed`, the counts paths after `/api/counts/`, the Dashboard paths after `/api/dashboards/`, and the avatar,
+team avatar, favicon, and card paths, and SHALL cache each one only as long as the origin's headers allow, bypassing
+any response without a `Cache-Control` header. It SHALL bypass its cache for every request with a Better Auth session
+cookie. Every other api route, every SSE stream, `/mcp`, and every response that sets a cookie SHALL never be cached at
+the edge. The zone SHALL use SSL/TLS Full (strict), and no security rule SHALL challenge a request under
+`/.well-known/acme-challenge/`.
 
 #### Scenario: A signed-in request is never served from the edge
 
@@ -65,7 +66,8 @@ stream, `/mcp`, and every response that sets a cookie SHALL never be cached at t
 
 #### Scenario: An authenticated api route is never cached
 
-- **WHEN** a request reaches an api route other than the signed-out feed, the counts, an avatar, a favicon, or a card
+- **WHEN** a request reaches an api route other than the signed-out feed, the counts, a Dashboard path, an avatar, a
+  favicon, or a card
 - **THEN** Cloudflare passes it to the origin and caches nothing
 
 #### Scenario: A certificate renewal reaches the origin

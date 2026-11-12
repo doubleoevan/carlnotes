@@ -2,6 +2,7 @@ import { authClient } from "@carlnotes/client/authClient"
 import { sendTeamAvatarBody } from "@carlnotes/client/teamClient"
 import { fetchAddableTopics } from "@carlnotes/client/topicClient"
 import { createTeamPayload } from "@carlnotes/contracts/payloads"
+import { toTeamPath } from "@carlnotes/contracts/seo"
 import { TeamFields } from "@carlnotes/core/components/TeamFields"
 import { useTeamFields } from "@carlnotes/core/hooks/useTeamFields"
 import { createTeamForInviteLink, saveTeam } from "@carlnotes/core/lib/saveTeam"
@@ -122,7 +123,7 @@ export function EditTeamModal({
 			if (onSaved) {
 				onSaved(savedTeamId)
 			} else {
-				router.push(`/teams/${savedTeamId}`)
+				router.push(toTeamPath(savedTeamId))
 			}
 		}
 	}

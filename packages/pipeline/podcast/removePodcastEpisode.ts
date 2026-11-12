@@ -27,6 +27,7 @@ import {
 import { toTopicPodcastEpisodeVideoKeys } from "@carlnotes/db/topicPodcastEpisodeVideoKeys"
 import { clearUnseenCommentMentions, loadPodcastEpisodeMentionedUserIds } from "@carlnotes/db/unseenCommentMentions"
 import { eq, inArray } from "drizzle-orm"
+import { rebuildTopicDashboardsById } from "../dashboardRebuild"
 import { deletePodcastEpisodeVectors } from "../meanVectors"
 import { toPodcastEpisodeImageObjectKeys } from "../topicImages/topicImageFiles"
 import { toChapterTurns } from "./podcastEpisodeScript"
@@ -43,6 +44,7 @@ export async function removePodcastEpisode(podcastEpisodeId: string): Promise<bo
 			status: podcastEpisodes.status,
 			script: podcastEpisodes.script,
 			imageHash: podcastEpisodes.imageHash,
+			topicId: podcastEpisodes.topicId,
 		})
 		.from(podcastEpisodes)
 		.where(eq(podcastEpisodes.id, podcastEpisodeId))
@@ -75,6 +77,11 @@ export async function removePodcastEpisode(podcastEpisodeId: string): Promise<bo
 	// delete the audio once the row is marked, and clear the cached unseen Comment Mentions that its Comments held
 	await deleteStoredObjects(objectKeys)
 	await clearUnseenCommentMentions(mentionedUserIds)
+
+	// the removed podcast episode leaves its topic's Dashboards at once
+	if (podcastEpisode.topicId) {
+		await rebuildTopicDashboardsById(podcastEpisode.topicId)
+	}
 	return true
 }
 

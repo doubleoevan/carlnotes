@@ -1,8 +1,9 @@
 import type { PersonalSourceEntry, TopicPersonalSources } from "@carlnotes/contracts/personalSources"
 import { isCodexConversationUrl } from "@carlnotes/contracts/personalSourcesUrls"
+import { toCountLabel } from "@carlnotes/contracts/text"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import type { AiProviderIcon } from "@carlnotes/nightshift/aiProviderIcons"
-import { toCountLabel } from "./labels"
+import { toMonthDayLabel } from "./labels"
 
 export const PERSONAL_SOURCES_PRIVACY_NOTICE =
 	"Only you can read your Personal sources items. They can help score any Topic you can edit. Shared explanations and podcasts use only the linked pages; changing Topic visibility never reveals your sent text."
@@ -55,9 +56,7 @@ export function canShowTopicPersonalSources(
  * Formats received dates identically on web and both phones.
  */
 export function toPersonalSourceDate(receivedAt: string): string {
-	return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).format(
-		new Date(receivedAt),
-	)
+	return toMonthDayLabel(receivedAt, { timeZone: "UTC" })
 }
 
 // identify conversation destinations by their exact host
@@ -87,6 +86,8 @@ export function toPersonalSourceConversationProvider(url: string): PersonalSourc
 		if (!/^https?:$/.test(parsedUrl.protocol) || parsedUrl.username || parsedUrl.password) {
 			return "other"
 		}
+
+		// the host without www or a trailing dot, and a Gemini share or a Copilot chat on a shared host
 		const hostname = parsedUrl.hostname.replace(/^www\./, "").replace(/\.$/, "")
 		if (hostname === "g.co" && /^\/gemini\/share\//.test(parsedUrl.pathname)) {
 			return "gemini"
@@ -94,12 +95,16 @@ export function toPersonalSourceConversationProvider(url: string): PersonalSourc
 		if (hostname === "m365.cloud.microsoft" && /^\/chat(?:\/|$)/.test(parsedUrl.pathname)) {
 			return "copilot"
 		}
+
+		// a Claude Code session on claude.ai and a Grok chat on x.com
 		if (hostname === "claude.ai" && /^\/code(?:\/|$)/.test(parsedUrl.pathname)) {
 			return "claude_code"
 		}
 		if (hostname === "x.com" && /^\/i\/grok(?:\/|$)/.test(parsedUrl.pathname)) {
 			return "grok"
 		}
+
+		// every other host by its exact name
 		return CONVERSATION_PROVIDERS.get(hostname) ?? "other"
 	} catch {
 		return "other"
@@ -148,6 +153,7 @@ export function toPersonalSourceSenderIdentity(entry: Pick<PersonalSourceEntry, 
 	label: string
 	provider: PersonalSourceConversationProvider
 } {
+	// name a conversation link by its destination, and anything else by its sender label
 	const provider = toPersonalSourceConversationProvider(entry.chatUrl ?? "")
 	if (entry.origin !== "email" && entry.chatUrl) {
 		return { label: provider === "other" ? entry.sender : CONVERSATION_PROVIDER_LABELS[provider], provider }

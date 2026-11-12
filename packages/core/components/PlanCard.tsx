@@ -1,8 +1,9 @@
 import { isPaidPlan } from "@carlnotes/contracts/enums"
 import { type BillingInterval, PLANS, type Plan, PURCHASE_COPY, userTopicLimit } from "@carlnotes/contracts/plans"
 import { SHARED_COMMENT_SLOTS } from "@carlnotes/contracts/social"
+import { toCountLabel } from "@carlnotes/contracts/text"
 import type { ComponentType, ReactNode } from "react"
-import { toBrewsWord, toCountLabel, toWholeDollarLabel } from "../lib/labels"
+import { toBrewsWord, toWholeDollarLabel } from "../lib/labels"
 import { isUsersPlan, toMonthlyScanEstimate, toPlanBadge } from "../lib/planCards"
 
 type Container = ComponentType<{ children: ReactNode }>

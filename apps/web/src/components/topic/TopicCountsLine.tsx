@@ -1,4 +1,5 @@
 import { fetchTopicCounts } from "@carlnotes/client/viewerCountsClient"
+import { VIEWER_COUNT_LABEL } from "@carlnotes/contracts/viewerCounts"
 import { usePolledCounts } from "@carlnotes/core/hooks/usePolledCounts"
 import { useCallback } from "react"
 import { FlashingCount } from "@/components/common/FlashingCount"
@@ -17,7 +18,7 @@ export function TopicCountsLine({ topicId, isPublic }: { topicId: string; isPubl
 		<p className={COUNTS_LINE_CLASS}>
 			{topicCounts && (
 				<>
-					<FlashingCount label="Viewers" count={topicCounts.viewerCount} />{" "}
+					<FlashingCount label={VIEWER_COUNT_LABEL} count={topicCounts.viewerCount} />{" "}
 					<FlashingCount label="Followers" count={topicCounts.subscriberCount} />
 				</>
 			)}

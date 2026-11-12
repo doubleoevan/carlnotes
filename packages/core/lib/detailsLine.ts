@@ -1,9 +1,9 @@
 // the details line under a page's byline: its details in order, each one unit of the line, and the counts a topic
 // page's line shows
 
+import { toCountLabel } from "@carlnotes/contracts/text"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import type { TopicCounts } from "@carlnotes/contracts/viewerCounts"
-import { toCountLabel } from "./labels"
 
 // one count of a details line with the noun it counts. a count that is not known yet is null or undefined
 export type CountDetail = { count: number | null | undefined; noun: string }
@@ -23,12 +23,12 @@ export function toDetailText(detail: string, isLastDetail: boolean): string {
 }
 
 /**
- * Returns a topic's viewers and followers for a details line, each left out at zero, or nothing for counts that were
- * not read.
+ * Returns a topic's viewers as its visitors and its followers for a details line, each left out at zero, or nothing
+ * for counts that were not read.
  */
 export function toTopicCountsDetails(topicCounts: TopicCounts | null | undefined): string[] {
 	return toCountDetails([
-		{ count: topicCounts?.viewerCount, noun: "viewer" },
+		{ count: topicCounts?.viewerCount, noun: "visitor" },
 		{ count: topicCounts?.subscriberCount, noun: "follower" },
 	])
 }

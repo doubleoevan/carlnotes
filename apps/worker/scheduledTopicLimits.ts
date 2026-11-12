@@ -2,7 +2,7 @@
 // Topics that run weekly past the daily scans cutoff, the owners whose key budget is spent, and the free owners past the
 // scheduled scans cutoff
 import { isDailyFrequency } from "@carlnotes/contracts/enums"
-import { HOUR_MS } from "@carlnotes/contracts/time"
+import { HOUR_MS, toUtcMonth } from "@carlnotes/contracts/time"
 import { db } from "@carlnotes/db"
 import { type DailySpendCutoffState, isDailySpendCutoffPassed } from "@carlnotes/db/dailySpendCutoffs"
 import { isMonthlyBudgetCutoffPassed } from "@carlnotes/db/monthlyBudgetCutoffs"
@@ -187,7 +187,7 @@ async function loadMatchingOwnerIds({
 // month. a failed cutoff read throws an error and caches nothing
 function isDailyScansCutoffPassed(ownerId: string, now: Date): Promise<boolean> {
 	return cacheJson({
-		key: `daily-scans-cutoff:${startOfUtcMonth(now).toISOString().slice(0, 7)}:${ownerId}`,
+		key: `daily-scans-cutoff:${toUtcMonth(now)}:${ownerId}`,
 		ttlMs: DAILY_SCANS_CUTOFF_TTL_MS,
 		load: () => isMonthlyBudgetCutoffPassed(ownerId, "dailyScans"),
 	})

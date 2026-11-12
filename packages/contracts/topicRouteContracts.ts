@@ -1,5 +1,5 @@
-// the topic routes the app reaches: topics, topic findings, viewer counts with a profile's and a team's, notes, and
-// the site search
+// the topic routes the app reaches: topics, topic findings, viewer counts with a profile's, a team's, and a Topic
+// Post's, notes, and the site search
 
 import { z } from "zod"
 import type { ApiRouteContract } from "./apiRouteContracts"
@@ -313,6 +313,13 @@ export const topicRouteContracts: Record<string, ApiRouteContract> = {
 	},
 	"viewerCountsClient.sendProfileView": { method: "POST", path: "/api/profiles/:userId/view", params: userIdParam },
 	"viewerCountsClient.sendTeamView": { method: "POST", path: "/api/teams/:id/view", params: idParam },
+	"viewerCountsClient.fetchTopicPostViewerCounts": {
+		method: "GET",
+		path: "/api/counts/topicPosts/:id",
+		params: idParam,
+		response: viewerCounts,
+	},
+	"viewerCountsClient.sendTopicPostView": { method: "POST", path: "/api/topicPosts/:id/view", params: idParam },
 
 	// notes, on a topic and on a team
 	"noteClient.createNote": {

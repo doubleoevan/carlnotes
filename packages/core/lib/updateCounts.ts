@@ -5,7 +5,7 @@ import type { ChatMention } from "@carlnotes/contracts/chat"
 import type { UnseenCommentMention } from "@carlnotes/contracts/commentMentions"
 import type { TopicInviteBadge } from "@carlnotes/contracts/invites"
 import { type NoteBadge, toNoteCount } from "@carlnotes/contracts/notes"
-import { toCountLabel, toCountNoun } from "./labels"
+import { toCountLabel, toCountNoun } from "@carlnotes/contracts/text"
 import { toNoteChangeLabel } from "./noteBadges"
 import { CARL_NAME } from "./socialLabels"
 

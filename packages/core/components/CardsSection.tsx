@@ -1,8 +1,8 @@
 import { CARDS_PAGE_SIZE } from "@carlnotes/contracts/home"
+import { toCountLabel } from "@carlnotes/contracts/text"
 import type { ComponentType, ReactNode } from "react"
 import { type PageSelection, usePagination } from "../hooks/usePagination"
 import type { CardSection } from "../lib/cardSections"
-import { toCountLabel } from "../lib/labels"
 
 // the platform elements of a card section: the collapsible section with its title, its count, and the control a
 // section may have above its cards, the cards' grid, one card's cell, and the page buttons. a cell off the page shown

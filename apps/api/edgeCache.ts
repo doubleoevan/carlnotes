@@ -105,14 +105,71 @@ export function purgeHomeAtEdge(): Promise<unknown> {
  * credentials, or private otherwise.
  */
 export function setCountsCacheHeaders(request: Request, response: Response, isPublic: boolean): void {
-	if (!isPublic || response.status !== 200 || hasCredentials(request)) {
+	// counts that are not public stay in the browser alone
+	if (!isPublic) {
+		response.headers.set("Cache-Control", PRIVATE_CACHE_CONTROL)
+		return
+	}
+	setPublicReadCacheHeaders({ request, response, edgeCacheControl: COUNTS_EDGE_CACHE_CONTROL })
+}
+
+// the edge caches a public Dashboard's snapshot for a day unless a purge by its tag clears it first
+const DASHBOARD_EDGE_CACHE_CONTROL = "max-age=86400"
+
+// the response a Dashboard's cache headers go on, whether it holds the public snapshot, and the Dashboard's tag
+type SetDashboardCacheHeadersOptions = {
+	request: Request
+	response: Response
+	isPublic: boolean
+	cacheTag: string
+}
+
+/**
+ * Marks a Dashboard's response shared at the edge under its tag if it holds the public snapshot and was read with no
+ * credentials. A response that holds private items is never stored, and a signed-in user's public one stays in the
+ * browser.
+ */
+export function setDashboardCacheHeaders({
+	request,
+	response,
+	isPublic,
+	cacheTag,
+}: SetDashboardCacheHeadersOptions): void {
+	// a private read is never cached
+	if (!isPublic) {
+		response.headers.set("Cache-Control", PRIVATE_NO_STORE_CACHE_CONTROL)
+		return
+	}
+	setPublicReadCacheHeaders({ request, response, edgeCacheControl: DASHBOARD_EDGE_CACHE_CONTROL, cacheTag })
+}
+
+// a public read's response and request, how long the edge caches it, and the tag it is cached under, if any
+type SetPublicReadCacheHeadersOptions = {
+	request: Request
+	response: Response
+	edgeCacheControl: string
+	cacheTag?: string
+}
+
+// mark a public read shared at the edge if it is a 200 read with no credentials, and cache an error or a signed-in
+// read in the browser alone
+function setPublicReadCacheHeaders({
+	request,
+	response,
+	edgeCacheControl,
+	cacheTag,
+}: SetPublicReadCacheHeadersOptions): void {
+	if (response.status !== 200 || hasCredentials(request)) {
 		response.headers.set("Cache-Control", PRIVATE_CACHE_CONTROL)
 		return
 	}
 
-	// the browser always revalidates, and only the edge caches a copy
+	// the browser always revalidates, and only the edge caches a copy, under the read's tag if it has one
 	response.headers.set("Cache-Control", REVALIDATE_CACHE_CONTROL)
-	response.headers.set("CDN-Cache-Control", COUNTS_EDGE_CACHE_CONTROL)
+	response.headers.set("CDN-Cache-Control", edgeCacheControl)
+	if (cacheTag) {
+		response.headers.set("Cache-Tag", cacheTag)
+	}
 }
 
 // whether the request has a session cookie or an authorization header, either of which makes a response personal

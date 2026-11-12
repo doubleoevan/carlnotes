@@ -5,6 +5,7 @@
 	"type": "module",
 	"dependencies": {
 		"@carlnotes/contracts": "workspace:*",
+		"@carlnotes/core": "workspace:*",
 		"@carlnotes/db": "workspace:*",
 		"@carlnotes/emails": "workspace:*",
 		"@carlnotes/models": "workspace:*",

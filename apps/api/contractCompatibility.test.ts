@@ -1,10 +1,11 @@
 // the frozen 0.1.0 contracts still hold on the live routes: each fixture's request satisfies the frozen request
 // schemas, goes through its route in-process as its user over the stubbed pool and Redis, comes back 2xx, and
 // has a body the frozen response schema accepts
-import { afterEach, beforeEach, expect, test } from "bun:test"
+import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import { API_ROUTE_CONTRACTS } from "@carlnotes/contracts/apiRouteContracts"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
+import * as temporalClient from "@carlnotes/pipeline/temporalClient"
 import { Ajv2020, type ValidateFunction } from "ajv/dist/2020"
 import { apiRoute } from "./api"
 import { CONTRACT_FIXTURES, type ContractFixture } from "./contractFixtures"
@@ -34,16 +35,20 @@ const validatorBySchema = new WeakMap<object, ValidateFunction>()
 // the auth secret that signs the app sign-up challenge and the podcast cover urls, set for each test and put back after
 let savedAuthSecret: string | undefined
 
+// the secret, the Redis stub, and the Dashboard rebuild a topic change starts, which never reaches Temporal here
 beforeEach(() => {
 	savedAuthSecret = Bun.env.BETTER_AUTH_SECRET
 	Bun.env.BETTER_AUTH_SECRET = "test-secret"
 	stubRedisClient()
+	spyOn(temporalClient, "startDashboardRebuildWorkflow").mockResolvedValue()
 })
 
+// put back the secret, the pool, Redis, and the rebuild's start
 afterEach(() => {
 	Bun.env.BETTER_AUTH_SECRET = savedAuthSecret
 	restoreConnectionPool()
 	restoreRedisClient()
+	mock.restore()
 })
 
 // the schema's errors on the data, each naming the key and the part, or none. validate the params and the query on a

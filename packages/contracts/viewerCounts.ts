@@ -16,8 +16,11 @@ export const viewerCounts = z.object({ viewerCount: z.number() })
 
 export type ViewerCounts = z.infer<typeof viewerCounts>
 
-// what a viewer count line counts: a user's profile page, which is always public, or a team's page
-export type ViewerCountPage = { kind: "profile"; id: string } | { kind: "team"; id: string; isPublic: boolean }
+// what a viewer count line counts: a user's profile page, which is always public, a team's page, or a Topic Post's
+// page, whose Topic may be public
+export type ViewerCountPage =
+	| { kind: "profile"; id: string }
+	| { kind: "team" | "topicPost"; id: string; isPublic: boolean }
 
-// the label of a profile's and a team's viewer count
+// the label of every viewer count: a topic's, a profile's, a team's, and a Topic Post's
 export const VIEWER_COUNT_LABEL = "Visitors"

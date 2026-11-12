@@ -1,6 +1,6 @@
 import type { DataTableElements } from "@carlnotes/core/components/DataTable"
 import { cn } from "@carlnotes/nightshift/classNames"
-import { TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
+import { TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/tableClasses"
 import { SortableHeader } from "./SortableHeader"
 
 // semantic DOM elements for the same table composition used by native screens

@@ -10,7 +10,13 @@ import { zValidator } from "@hono/zod-validator"
 import { and, desc, eq, gt, type SQL, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { loadOrFetchLinkPreview } from "../chat/linkPreviews"
-import { countSenderRateLimitHit, countWithinRateLimit, isCountedSender, toRequestSender } from "../counts/viewerCounts"
+import {
+	countFindingDailyView,
+	countSenderRateLimitHit,
+	countWithinRateLimit,
+	isCountedSender,
+	toRequestSender,
+} from "../counts/viewerCounts"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { linkPreviewRateLimiter } from "../rateLimit"
 import { isSameOriginRequest } from "../sameOrigin"
@@ -269,18 +275,28 @@ export const findingsRoute = new Hono<AppEnv>()
 				await countWithinRateLimit({
 					requestSender,
 					rateLimitName: "finding-view",
-					count: () => countVisitorFindingView(context.req.param("id")),
+					count: async () => {
+						if (await countVisitorFindingView(context.req.param("id"))) {
+							await countFindingDailyView(requestSender, context.req.param("id"))
+						}
+					},
 				})
 			}
 			return context.body(null, 204)
 		}
-		// opening a resource marks the finding consumed, and counts a view within the count rate limit
+		// opening a resource marks the finding consumed, and counts a view within the count rate limit among the finding's
+		// views and the day's views
+		const requestSender = toRequestSender(context)
+		const isViewCounted = await countSenderRateLimitHit(requestSender, "finding-view")
 		const isViewed = await recordView({
 			userId,
 			findingId: context.req.param("id"),
 			analyticsProperties: toAnalyticsProperties(context),
-			isViewCounted: await countSenderRateLimitHit(toRequestSender(context), "finding-view"),
+			isViewCounted,
 		})
+		if (isViewed && isViewCounted) {
+			void countFindingDailyView(requestSender, context.req.param("id"))
+		}
 		return isViewed ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
 	})
 	.post("/topic-findings/:id/feedback", zValidator("json", findingFeedbackPayload), async (context) => {

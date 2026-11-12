@@ -6,7 +6,7 @@ import {
 	type PersonalSourcesSendResult,
 } from "@carlnotes/contracts/personalSources"
 import { toTopicPath } from "@carlnotes/contracts/seo"
-import { DAY_MS } from "@carlnotes/contracts/time"
+import { DAY_MS, toUtcDay } from "@carlnotes/contracts/time"
 import { appUrl } from "@carlnotes/server/appUrl"
 import { toAuthSecretSignature } from "@carlnotes/server/hmac"
 import { encryptPrivateText } from "@carlnotes/server/privateText"
@@ -17,7 +17,6 @@ import { decryptPersonalSourceEntry, invalidatePersonalSourcesContext } from "./
 import { toPersonalSourcesLinkFingerprint } from "./personalSourcesLinkQueue"
 import { lockPersonalSourcesSender, lockPersonalSourcesTopic } from "./personalSourcesLocks"
 import { readPersonalSourcesDailyCount } from "./personalSourcesQuota"
-import { toUtcDay } from "./quotas"
 import {
 	personalSourceEntries,
 	personalSourcesDailyCounts,
@@ -30,17 +29,21 @@ import { users } from "./schema/users"
 
 // authenticated adapters supply the delivery identity
 export type ReceivePersonalSourceEntryOptions = {
+	// who sent the delivery, to which Topic, and how it arrived
 	userId: string
 	topicId: string
 	senderIdentity: string
 	requestId: string
 	origin: "send" | "email" | "import"
+	// the entry and the source it files under
 	config: AiAgentSourceConfig | Record<string, never>
 	payload: PersonalSourceEntryPayload
 	omittedLinkCount?: number
 	existingSourceId?: string
+	// a send to several Topics, or one conversation of an import
 	sendBatch?: { topicIds: string[]; isFirstTopic: boolean }
 	importBatch?: { topic?: typeof topics.$inferSelect; sourceId?: string }
+	// the adapter's check, under the sender's lock, that the sender is still connected
 	authorizeSender: (transaction: DbTransaction) => Promise<boolean>
 }
 
@@ -62,6 +65,7 @@ async function receiveLockedPersonalSourceEntry(
 	transaction: DbTransaction,
 	options: ReceivePersonalSourceEntryOptions,
 ): Promise<PersonalSourcesSendResult> {
+	// a sender whose connection is gone gets a disconnected result
 	if (
 		(!options.importBatch?.topic && !(await lockPersonalSourcesSender(transaction, options.userId))) ||
 		!(await options.authorizeSender(transaction))
@@ -111,17 +115,21 @@ async function acceptIdentifiedEntry(
 		return { status: "quota", resetAt: new Date(Date.parse(`${day}T00:00:00Z`) + DAY_MS).toISOString() }
 	}
 
-	// the Topic must exist, and the sender must hold the capability for this origin
+	// the Topic must exist
 	const topic = options.importBatch?.topic ?? (await lockPersonalSourcesTopic(transaction, options.topicId))
 	if (!topic) {
 		return { status: "not_found" }
 	}
+
+	// the sender must hold the capability for this origin
 	const capability =
 		origin === "email"
 			? "personalSources:email"
 			: origin === "import"
 				? "personalSources:import"
 				: "personalSources:send"
+
+	// a sender without the capability gets the same result as a missing Topic
 	if (!(await decidePersonalSourcesCapability({ userId, capability, topic, transaction }))) {
 		return { status: "not_found" }
 	}
@@ -306,13 +314,18 @@ async function replayPersonalSourcesDelivery(
 		topic: typeof topics.$inferSelect
 	},
 ): Promise<PersonalSourcesSendResult> {
+	// a retry with another payload or topic conflicts
 	if (priorDelivery.payloadDigest !== payloadDigest || priorDelivery.topicId !== topic.id) {
 		return { status: "conflict", reason: "retry_mismatch" }
 	}
+
+	// the entry the first delivery stored
 	const [entry] = await transaction
 		.select({ encryptedPayload: personalSourceEntries.encryptedPayload })
 		.from(personalSourceEntries)
 		.where(and(eq(personalSourceEntries.id, priorDelivery.entryId)))
+
+	// an entry the sender removed conflicts, and a retained one returns the first delivery's confirmation
 	const payload = entry ? decryptPersonalSourceEntry(entry.encryptedPayload) : null
 	if (!payload) {
 		return { status: "conflict", reason: "removed" }

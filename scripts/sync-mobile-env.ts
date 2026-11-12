@@ -9,6 +9,9 @@ const MOBILE_VALUES = [
 	{ name: "EXPO_PUBLIC_PLAY_CLOUD_PROJECT_NUMBER", visibility: "plaintext" },
 	{ name: "EXPO_PUBLIC_REVENUECAT_APPLE_API_KEY", visibility: "plaintext" },
 	{ name: "EXPO_PUBLIC_REVENUECAT_GOOGLE_API_KEY", visibility: "plaintext" },
+	// the Google Maps keys the native builds embed for the Dashboard map, each limited to its app in Google Cloud
+	{ name: "GOOGLE_MAPS_IOS_API_KEY", visibility: "sensitive" },
+	{ name: "GOOGLE_MAPS_ANDROID_API_KEY", visibility: "sensitive" },
 	{ name: "SENTRY_AUTH_TOKEN", visibility: "secret" },
 ] as const
 

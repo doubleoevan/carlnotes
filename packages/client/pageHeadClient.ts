@@ -1,4 +1,5 @@
-// the api client for the page head of a topic, profile, team, or join page
+// the api client for the page head of a topic, profile, team, Dashboard, or join page
+import type { DashboardSubject } from "@carlnotes/contracts/dashboards"
 import type { PageHead } from "@carlnotes/contracts/pageHead"
 import { type ApiResponse, apiClient } from "./apiClient"
 import type { PodcastEpisodePageParams } from "./podcastEpisodeClient"
@@ -44,6 +45,15 @@ export function fetchProfilePageHead(userId: string): Promise<PageHead | null> {
  */
 export function fetchTeamPageHead(teamId: string): Promise<PageHead | null> {
 	return readPageHead(apiClient().api.teams[":teamId"].head.$get({ param: { teamId } }))
+}
+
+/**
+ * A Dashboard page's head, or null for a missing person, or a missing or private team.
+ */
+export function fetchDashboardPageHead({ dashboardKind, subjectId }: DashboardSubject): Promise<PageHead | null> {
+	return readPageHead(
+		apiClient().api.dashboards[":dashboardKind"][":subjectId"].head.$get({ param: { dashboardKind, subjectId } }),
+	)
 }
 
 /**

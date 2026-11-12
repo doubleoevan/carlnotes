@@ -2,11 +2,10 @@
 // Podcast Episode has a film
 import type { NewsEvent, NewsPlace } from "@carlnotes/contracts/news"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
-import { toDotSeparatedText } from "@carlnotes/contracts/text"
+import { toCountLabel, toDotSeparatedText } from "@carlnotes/contracts/text"
 import type { TopicPodcastEpisodeVideoDialogSurface } from "@carlnotes/contracts/visitAnalytics"
 import type { PodcastEpisodeVideoButtonProps } from "../components/PodcastEpisodeVideoButton"
 import { toTimeAgoLabel } from "./chatMessages"
-import { toCountLabel } from "./labels"
 import { CARL_NAME } from "./socialLabels"
 import { toPodcastEpisodeVideoPill } from "./topicPodcastEpisodeVideoDisplay"
 

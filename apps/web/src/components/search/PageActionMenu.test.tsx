@@ -85,3 +85,24 @@ test("the common navigation selects the current account, names the user's Café,
 	expect(html).not.toContain('href="/admin"')
 	expect(renderToStaticMarkup(<UserMenuItems {...props} isAdmin />)).toContain('href="/admin"')
 })
+
+test("the menu's Dashboard section holds exactly the three Dashboard page links between dividers", () => {
+	const html = renderToStaticMarkup(
+		<UserMenuItems
+			elements={ELEMENTS}
+			userId="reader"
+			username="Reader"
+			isAdmin={false}
+			pathname="/profiles/reader/specials/podcasts"
+			onNavigate={() => {}}
+			onPlayTutorial={() => {}}
+			onSignOut={() => {}}
+		/>,
+	)
+	const dashboardSection = html.split("<hr/>")[1]
+	expect(dashboardSection).toBe(
+		'<a href="/profiles/reader/specials/topics">Topic Specials</a>' +
+			'<a href="/profiles/reader/specials/podcasts" aria-current="page">Podcast Specials</a>' +
+			'<a href="/teams/specials">Team Specials</a>',
+	)
+})

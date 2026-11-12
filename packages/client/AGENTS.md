@@ -19,8 +19,9 @@ session-only account routes. The one-time key response must remain in the curren
   off, `credentials`, and `onUnauthorized`, which a 401 from any request calls. `apiClient()` returns the
   `hc` client over `AppType`, `fetchApi(path, init)` is the one plain fetch, at the base url with the configured
   headers and credentials, `toApiUrl` prefixes a path with the base url for a url the platform loads itself, such as
-  an avatar image or an `EventSource`, and `showClientError` shows a message the way the app configured. Until an app
-  configures it, a request goes to the page's own origin and an error goes to the console. `readApiErrorMessage` reads
+  an avatar image or an `EventSource`, `toReadRequestInit` leaves a public read's session cookie behind, and
+  `showClientError` shows a message the way the app configured. Until an app configures it, a request goes to the
+  page's own origin and an error goes to the console. `readApiErrorMessage` reads
   the api's error message from a failed response, and `ApiResponse` is the `ok`, `status`, `json`, and `text` of a
   response, the part the helpers read. Every response body is read through `readApiResponse(schema, response)`, which
   parses it with the contract schema through the app's `toResponseSchema` (the web configures none, the app passes
@@ -41,16 +42,18 @@ session-only account routes. The one-time key response must remain in the curren
   `voiceClient.ts`, use `fetchApi` instead. `pageHeadClient.ts` reads a page's head data.
   `updatesClient.ts` reads the day's opener. `newsClient.ts` reads one page of the signed-in user's news or of a
   profile's, and `commentMentionClient.ts` reads the signed-in user's unseen Comment Mentions and marks them seen.
+  `dashboardClient.ts` reads a Dashboard page's snapshot for one chart selection, the full one for its owner or a
+  team's member, and the Google Maps settings.
   `topicPostClient.ts` reads a Topic's Topic Posts and one post, and
   creates, saves, publishes, and deletes one, returning why a write changed nothing. It also sets a post's place among
   its author's profile pins, and for an admin its place among the home's pins, with the rows the admin's dialog lists.
   `viewerCountsClient.ts` sends a topic page's view and reads a topic's or a podcast episode's counts, a public
-  topic's without credentials so the edge can cache them. `userBlockClient.ts` blocks and unblocks a user and reads the
-  block list, `pushClient.ts` registers and unregisters the phone's push token and saves one push preference, passing
-  the token through and keeping nothing, `reportClient.ts` reads the admin console's open reports and resolves one, and
-  `termsClient.ts` records
-  the signed-in user's acceptance of the published Terms. `apiClient()`'s fetch calls the app's `onTermsOutdated` on a
-  403 whose body is the terms rejection, so the app opens its acceptance dialog.
+  topic's through `toReadRequestInit` without credentials so the edge can cache them, as `dashboardClient.ts` does.
+  `userBlockClient.ts` blocks and unblocks a user and reads the block list, `pushClient.ts` registers and unregisters
+  the phone's push token and saves one push preference, passing the token through and keeping nothing, `reportClient.ts`
+  reads the admin console's open reports and resolves one, and `termsClient.ts` records the signed-in user's acceptance
+  of the published Terms. `apiClient()`'s fetch calls the app's `onTermsOutdated` on a 403 whose body is the terms
+  rejection, so the app opens its acceptance dialog.
   `voiceClient.ts` posts a recording as a `VoiceRecordingBody`, the browser's `Blob` or the app's `NativeFilePart`,
   which `apiClient.ts`'s `appendNativeFilePart` adds to a form as the attachment and avatar uploads do. It reads a
   spoken part's audio through the reader that `configureVoiceClient({ readSpokenPartAudio })` sets. The browser keeps

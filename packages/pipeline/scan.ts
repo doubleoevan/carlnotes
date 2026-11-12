@@ -4,8 +4,13 @@ import { db } from "@carlnotes/db"
 import { scans } from "@carlnotes/db/schema/scans"
 import { isGrpcDeadlineError } from "@temporalio/client"
 import { and, desc, eq, isNull } from "drizzle-orm"
-import type { ScanTrigger } from "./temporalClient"
-import { cancelTopicScanWorkflow, type ScanCancel, type ScanStart, startTopicScanWorkflow } from "./temporalClient"
+import {
+	cancelTopicScanWorkflow,
+	type ScanCancel,
+	type ScanStart,
+	type ScanTrigger,
+	startTopicScanWorkflow,
+} from "./scanWorkflowClient"
 
 // a persisted Scan row
 type Scan = typeof scans.$inferSelect

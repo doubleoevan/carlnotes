@@ -18,7 +18,7 @@ import {
 	type ScanQueueDescription,
 	type ScanTrigger,
 	toScanBacklogCrossing,
-} from "@carlnotes/pipeline/temporalClient"
+} from "@carlnotes/pipeline/scanWorkflowClient"
 import { toPositiveInteger } from "@carlnotes/server/envSettings"
 import { reportError, reportThresholdCrossing } from "@carlnotes/server/monitoring"
 import { and, asc, eq, getTableColumns, isNotNull, isNull, sql } from "drizzle-orm"

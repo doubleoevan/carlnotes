@@ -2,8 +2,9 @@
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { Copy, LoaderCircle, RotateCcw, Trash2 } from "lucide-react"
 import { fn } from "storybook/test"
+import { SEND_BUTTON_CLASS } from "@/lib/chatClasses"
 import { SKIP_BACK_SECONDS } from "@/lib/podcastEpisodePlayback"
-import { PLAYBACK_CONTROL_BUTTON_CLASS, SEND_BUTTON_CLASS } from "@/lib/styleClasses"
+import { PLAYBACK_CONTROL_BUTTON_CLASS } from "@/lib/styleClasses"
 import { IconButton } from "./IconButton"
 
 const meta = {

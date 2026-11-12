@@ -2,7 +2,7 @@ import type { DataTableElements } from "@carlnotes/core/components/DataTable"
 import type { RowSort } from "@carlnotes/core/hooks/useRowSort"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { DATA_TABLE_ELEMENTS } from "@/components/table/DataTable"
-import { TABLE_HEAD_CLASS } from "@/lib/styleClasses"
+import { TABLE_HEAD_CLASS } from "@/lib/tableClasses"
 
 // the columns a narrow container leaves to a row's expanded details
 const WIDE_COLUMN_KEYS = ["source", "published"]

@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Button, buttonVariants } from "@/components/primitives/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/primitives/dialog"
+import { PAGE_AVATAR_SKELETON_CLASS, PAGE_HEADER_FLOW_CLASS, PAGE_HEADER_TITLE_CLASS } from "@/lib/pageHeaderClasses"
 import { JoinTeamButton } from "./JoinTeamButton"
 
 // the decorative rows the gated page draws where its tables would be
@@ -14,9 +15,12 @@ const TEAM_SKELETON_ROWS = ["members", "topics", "footer"]
 export function TeamSkeleton({ teamName }: { teamName: string }) {
 	return (
 		<>
-			<header className="flex items-center gap-4">
-				<div aria-hidden="true" className="bg-muted size-16 shrink-0 animate-pulse rounded-full" />
-				<h1 className="font-display text-2xl">{teamName}</h1>
+			{/* the team header's layout: the avatar's circle floats beside the name */}
+			<header className={PAGE_HEADER_FLOW_CLASS}>
+				<div aria-hidden="true" className={PAGE_AVATAR_SKELETON_CLASS} />
+				<div className={PAGE_HEADER_TITLE_CLASS}>
+					<h1 className="font-display text-2xl">{teamName}</h1>
+				</div>
 			</header>
 			{/* everything below the name is decorative pulse, hidden from assistive tech as one block */}
 			<div aria-hidden="true" className="mt-6 space-y-4">

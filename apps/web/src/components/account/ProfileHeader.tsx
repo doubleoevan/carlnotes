@@ -12,11 +12,11 @@ import { AnchorLink } from "@/components/common/AnchorLink"
 import { UpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import {
 	PAGE_AVATAR_CLASS,
-	PAGE_HEADER_AVATAR_CELL_CLASS,
-	PAGE_HEADER_DETAILS_CELL_CLASS,
-	PAGE_HEADER_GRID_CLASS,
-	PAGE_HEADER_TITLE_CELL_CLASS,
-} from "@/lib/styleClasses"
+	PAGE_HEADER_AVATAR_FLOAT_CLASS,
+	PAGE_HEADER_DETAILS_CLASS,
+	PAGE_HEADER_FLOW_CLASS,
+	PAGE_HEADER_TITLE_CLASS,
+} from "@/lib/pageHeaderClasses"
 import { ProfileSummaryLine } from "./ProfileSummaryLine"
 
 // the person's own avatar, which opens the picker, with the one count of their topics' unread chat mentions and note
@@ -37,14 +37,14 @@ function OwnProfileAvatar({ userId, username }: { userId: string; username: stri
 
 // the web's elements, with the avatar at the height of a topic's image on the Topics page
 const PROFILE_HEADER_ELEMENTS: ProfileHeaderElements = {
-	Row: ({ children }) => <div className={PAGE_HEADER_GRID_CLASS}>{children}</div>,
+	Row: ({ children }) => <div className={PAGE_HEADER_FLOW_CLASS}>{children}</div>,
 	OwnAvatar: (ownAvatarProps) => (
-		<div className={PAGE_HEADER_AVATAR_CELL_CLASS}>
+		<div className={PAGE_HEADER_AVATAR_FLOAT_CLASS}>
 			<OwnProfileAvatar {...ownAvatarProps} />
 		</div>
 	),
 	Avatar: ({ userId, username, avatarVersion }) => (
-		<div className={PAGE_HEADER_AVATAR_CELL_CLASS}>
+		<div className={PAGE_HEADER_AVATAR_FLOAT_CLASS}>
 			<UserAvatar userId={userId} username={username} avatarVersion={avatarVersion} className={PAGE_AVATAR_CLASS} />
 		</div>
 	),
@@ -52,7 +52,7 @@ const PROFILE_HEADER_ELEMENTS: ProfileHeaderElements = {
 	Heading: ({ isAccountLink, children }) => {
 		const heading = <h1 className="font-display text-2xl">{children}</h1>
 		return (
-			<div className={PAGE_HEADER_TITLE_CELL_CLASS}>
+			<div className={PAGE_HEADER_TITLE_CLASS}>
 				{isAccountLink ? (
 					<AnchorLink href="/account" className="rounded-md hover:underline">
 						{heading}
@@ -64,7 +64,7 @@ const PROFILE_HEADER_ELEMENTS: ProfileHeaderElements = {
 		)
 	},
 	SummaryLine: (summaryLineProps) => (
-		<div className={PAGE_HEADER_DETAILS_CELL_CLASS}>
+		<div className={PAGE_HEADER_DETAILS_CLASS}>
 			<ProfileSummaryLine {...summaryLineProps} />
 		</div>
 	),

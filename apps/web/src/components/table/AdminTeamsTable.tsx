@@ -2,21 +2,18 @@ import { fetchAdminTeamMembers, fetchAdminTeamTopics } from "@carlnotes/client/b
 import type { OwnerTopic } from "@carlnotes/contracts/activity"
 import type { AdminTeamRow } from "@carlnotes/contracts/admin"
 import { DEFAULT_PAGE_SIZE } from "@carlnotes/contracts/pagination"
+import { toTeamPath } from "@carlnotes/contracts/seo"
 import type { TeamPageResponse } from "@carlnotes/contracts/teams"
-import { toCentsLabel, toCountLabel, toDateLabel } from "@carlnotes/core/lib/labels"
+import { toCountLabel } from "@carlnotes/contracts/text"
+import { toCentsLabel, toDateLabel } from "@carlnotes/core/lib/labels"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useState } from "react"
 import { toast } from "sonner"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
-import {
-	STANDALONE_LINK_CLASS,
-	SUBTABLE_CARD_CLASS,
-	TABLE_CLASS,
-	TABLE_HEAD_CLASS,
-	TABLE_SCROLL_CLASS,
-} from "@/lib/styleClasses"
+import { STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
+import { SUBTABLE_CARD_CLASS, TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/tableClasses"
 import { TopicsSubtableRow } from "./OwnerTopicsTable"
 import { SortableHeader } from "./SortableHeader"
 import { SubtableCountButton } from "./SubtableCountButton"
@@ -143,7 +140,7 @@ function TeamRow({ team }: { team: AdminTeamRow }) {
 			<tr className="border-b">
 				<td className="py-2 pr-4">
 					{/* the team's avatar and name, linking to its team page */}
-					<AnchorLink href={`/teams/${team.teamId}`} className={cn(STANDALONE_LINK_CLASS, "flex items-center gap-2")}>
+					<AnchorLink href={toTeamPath(team.teamId)} className={cn(STANDALONE_LINK_CLASS, "flex items-center gap-2")}>
 						<TeamAvatar team={team} className="size-6" />
 						{team.name}
 					</AnchorLink>

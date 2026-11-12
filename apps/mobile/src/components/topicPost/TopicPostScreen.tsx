@@ -6,6 +6,7 @@ import {
 	TopicPostPage as SharedTopicPostPage,
 	type TopicPostPageElements,
 } from "@carlnotes/core/components/TopicPostPage"
+import { useTopicPostView } from "@carlnotes/core/hooks/useTopicPostView"
 import { toNoteLinkUrl } from "@carlnotes/core/lib/noteFormats"
 import { PROFILE_RANK_OPTION_LABELS, toTopicPostRankedItem } from "@carlnotes/core/lib/rankDialog"
 import { EDIT_IMAGE_DIALOG_TITLES } from "@carlnotes/core/lib/topicImageEditor"
@@ -22,7 +23,7 @@ import {
 import { useIsPodcastPlayerShown } from "@carlnotes/core/stores/podcastEpisodePlayerStore"
 import { registerChatTopicPost, useRegisterChatTopicPost } from "@carlnotes/core/stores/topicPostChatStore"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { router, useFocusEffect, useLocalSearchParams } from "expo-router"
+import { router, useFocusEffect, useLocalSearchParams, usePathname } from "expo-router"
 import { NotebookPen, Pencil, Share as ShareIcon, Trash2, X } from "lucide-react-native"
 import { type ReactNode, useCallback, useState } from "react"
 import { KeyboardAvoidingView, View } from "react-native"
@@ -32,6 +33,7 @@ import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { DetailsLine } from "@/components/common/DetailsLine"
 import { LoadFailedNotice } from "@/components/common/LoadFailedNotice"
 import { ProfileRankDialog } from "@/components/common/RankDialog"
+import { ViewerCountLine } from "@/components/common/ViewerCountLine"
 import { Header } from "@/components/layout/Header"
 import { PageScreen } from "@/components/layout/PageScreen"
 import { PageSkeleton } from "@/components/layout/PageSkeleton"
@@ -148,6 +150,9 @@ export function TopicPostScreen() {
 			}
 		}, [chatTopicPostId, chatTopicPostTitle, chatTopicPostPath, chatTopicPostTopicId]),
 	)
+	// send a published post's view once per app runtime
+	useTopicPostView(publishedTopicPost?.id)
+
 	const isEditorShown = Boolean(topicPost && isTopicPostEditorShown(topicPost, isEditing))
 	useFocusEffect(
 		useCallback(() => {
@@ -201,6 +206,8 @@ export function TopicPostScreen() {
 				isTopicOwner={topicPost.isTopicOwner}
 				onCommentCountChange={setCommentCount}
 			/>
+			{/* a published post's visitors, the page's last line */}
+			<TopicPostVisitorsLine topicPost={topicPost} />
 		</SharedTopicPostPage>
 	)
 	if (isEditorShown) {
@@ -366,5 +373,19 @@ function TopicPostBody({ html }: { html: string }) {
 		<View className="my-3 rounded-lg border border-border bg-card px-4 py-4 shadow-raised">
 			<NoteReader html={html} onOpenLink={handleOpenLink} />
 		</View>
+	)
+}
+
+// a published post's Visitors line, read while the post's screen is the active route. a draft has none
+function TopicPostVisitorsLine({ topicPost }: { topicPost: TopicPostResponse }) {
+	const pathname = usePathname()
+	if (!topicPost.publishedAt) {
+		return null
+	}
+	return (
+		<ViewerCountLine
+			viewerCountPage={{ kind: "topicPost", id: topicPost.id, isPublic: topicPost.isTopicPublic }}
+			isActiveRoute={pathname === `/topics/${topicPost.topicId}/posts/${topicPost.id}`}
+		/>
 	)
 }

@@ -68,7 +68,7 @@ export const NEWS_LIST_ELEMENTS: NewsListElements = {
 			{picker}
 		</div>
 	),
-	Opener: ({ children }) => <p className="mb-4">{children}</p>,
+	Opener: ({ children }) => <p className="font-display antialiased leading-relaxed tracking-wide mb-4">{children}</p>,
 	WindowPicker: ({ label, children }) => (
 		// a window's press chooses the window, which opens a closed list, and never closes an open one
 		// biome-ignore lint/a11y/useSemanticElements: a fieldset draws its own border and legend, and the group only names its three buttons

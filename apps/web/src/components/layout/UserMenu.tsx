@@ -1,4 +1,5 @@
 import { authClient } from "@carlnotes/client/authClient"
+import { toValuesByDashboardPageName } from "@carlnotes/contracts/dashboards"
 import { toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
 import { UserMenuItems as SharedUserMenuItems, type UserMenuElements } from "@carlnotes/core/components/UserMenuItems"
 import { useUserMenuUpdateBadges } from "@carlnotes/core/hooks/useUpdateCounts"
@@ -9,6 +10,7 @@ import { useState } from "react"
 import { UserAvatar } from "@/components/branding/UserAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { MenuTriggerUpdateCountBadge, UpdateCountBadge } from "@/components/common/UpdateCountBadge"
+import { DASHBOARD_PAGE_ICONS } from "@/components/dashboard/dashboardPageIcons"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { signOutAndReload } from "@/components/session/signOut"
 import { CommentMentionMenuRow } from "@/components/social/CommentMentionBadge"
@@ -145,6 +147,7 @@ const MENU_ICONS = {
 	Teams: Users,
 	Activity,
 	Account: User,
+	...toValuesByDashboardPageName(DASHBOARD_PAGE_ICONS),
 	Plans: Columns3Cog,
 	"What CarlNotes Is": BookOpen,
 	Admin: ShieldUser,

@@ -7,9 +7,9 @@ import { fontFamilies } from "@carlnotes/nightshift/typography"
 import { type ComponentProps, useMemo } from "react"
 import { View } from "react-native"
 import { EnrichedMarkdownText } from "react-native-enriched-markdown"
-import { useUniwind } from "uniwind"
 import { openExternalLink } from "@/components/common/AnchorLink"
 import { useIsReduceMotionEnabled } from "@/hooks/useIsReduceMotionEnabled"
+import { useColorMode } from "@/theme"
 
 type MarkdownStyle = ComponentProps<typeof EnrichedMarkdownText>["markdownStyle"]
 
@@ -18,9 +18,9 @@ type MarkdownStyle = ComponentProps<typeof EnrichedMarkdownText>["markdownStyle"
  */
 export function ChatMarkdown({ markdown, isStreaming = false }: { markdown: string; isStreaming?: boolean }) {
 	// parse safe content once per chunk and resolve colors once per theme
-	const { theme } = useUniwind()
+	const colorMode = useColorMode()
 	const isReduceMotionEnabled = useIsReduceMotionEnabled()
-	const markdownStyle = useMemo(() => toMarkdownStyle(theme === "dark" ? "dark" : "light"), [theme])
+	const markdownStyle = useMemo(() => toMarkdownStyle(colorMode), [colorMode])
 	const chatMarkdownSegments = useMemo(() => toNativeChatMarkdown(markdown, isStreaming), [markdown, isStreaming])
 	return (
 		<View className="gap-1.5">

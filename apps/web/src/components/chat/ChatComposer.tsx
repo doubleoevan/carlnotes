@@ -10,15 +10,8 @@ import { FileDropZone } from "@/components/common/FileDropZone"
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { useConfirmDialog } from "@/hooks/useConfirmDialog"
-import {
-	COMPOSER_BAR_CLASS,
-	COMPOSER_BOX_CLASS,
-	COMPOSER_FRAME_CLASS,
-	ICON_BUTTON_CLASS,
-	SECTION_LABEL_CLASS,
-	SEND_BUTTON_CLASS,
-	STANDALONE_LINK_CLASS,
-} from "@/lib/styleClasses"
+import { COMPOSER_BAR_CLASS, COMPOSER_BOX_CLASS, COMPOSER_FRAME_CLASS, SEND_BUTTON_CLASS } from "@/lib/chatClasses"
+import { ICON_BUTTON_CLASS, SECTION_LABEL_CLASS, STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
 import { CHAT_FILE_PICKER_ACCEPT, isSendKey, isTouchScreen, isWideScreen } from "@/lib/utils"
 import { ChatAttachmentChips } from "./ChatAttachmentChips"
 import { isMicShown, MicButton } from "./MicButton"

@@ -1,6 +1,6 @@
 // a topic's byline: the team or the owner of the topic, with its avatar
-import { toAvatarImagePath } from "@carlnotes/contracts/avatars"
-import { toProfilePath } from "@carlnotes/contracts/seo"
+import { toAvatarImagePath, toTeamAvatarImagePath } from "@carlnotes/contracts/avatars"
+import { toProfilePath, toTeamPath } from "@carlnotes/contracts/seo"
 import { SITE_URL } from "@carlnotes/contracts/site"
 import type { TopicDetails } from "@carlnotes/contracts/topics"
 import { cn } from "@carlnotes/nightshift/classNames"
@@ -35,10 +35,10 @@ export function TopicByline({
 	// use the same identity routes and avatar versions as the web
 	const name = team?.name ?? owner?.username ?? ""
 	const ownerId = team?.teamId ?? owner?.userId ?? ""
-	const path = team ? `/teams/${team.teamId}` : toProfilePath(ownerId)
+	const path = team ? toTeamPath(team.teamId) : toProfilePath(ownerId)
 	let imageUrl: string | null = null
 	if (team?.avatarVersion) {
-		imageUrl = `/api/team-avatars/${team.teamId}?v=${team.avatarVersion}`
+		imageUrl = toTeamAvatarImagePath(team.teamId, team.avatarVersion)
 	} else if (!team && owner?.avatarVersion) {
 		imageUrl = toAvatarImagePath(owner.userId, owner.avatarVersion)
 	}

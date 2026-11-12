@@ -30,8 +30,8 @@ export const Default: Story = {
 		await expect(popover.getByRole("button", { name: /^Share/ })).toBeVisible()
 		await expect(popover.getByRole("link", { name: TOPIC_POST_DISCUSSION_STORY.topicName })).toBeVisible()
 
-		// the Topic's viewers and followers sit under its name
-		await expect(popover.getByText("128 viewers ·")).toBeVisible()
+		// the Topic's visitors and followers sit under its name
+		await expect(popover.getByText("128 visitors ·")).toBeVisible()
 		await expect(popover.getByText("14 followers")).toBeVisible()
 		await expect(popover.getByText("Coffee Break Discussion")).toBeVisible()
 		await expect(popover.getByText(TOPIC_POST_DISCUSSION_STORY.summary ?? "")).toBeVisible()

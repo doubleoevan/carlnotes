@@ -1,7 +1,7 @@
 // what a report names, resolved under the same visibility rule that lets the reporter see it
 import type { ReportSubjectKind } from "@carlnotes/contracts/reports"
 import { toReportText } from "@carlnotes/contracts/reports"
-import { toTopicPath, toTopicPostPath } from "@carlnotes/contracts/seo"
+import { toTeamPath, toTopicPath, toTopicPostPath } from "@carlnotes/contracts/seo"
 import { toHtmlText } from "@carlnotes/contracts/text"
 import { db } from "@carlnotes/db"
 import { chatRoomMessages } from "@carlnotes/db/schema/chat"
@@ -126,7 +126,7 @@ async function toReportedTeam(userId: string, teamId: string): Promise<ReportedS
 		kind: "team",
 		id: team.id,
 		label: team.name,
-		path: `/teams/${team.id}`,
+		path: toTeamPath(team.id),
 		text: toReportText([team.name, team.description].filter(Boolean).join("\n")),
 		authorUserId: null,
 	}
@@ -168,7 +168,7 @@ async function toReportedChatMessage(userId: string, chatMessageId: string): Pro
 	}
 
 	// the decrypted text is what the reporter read
-	const path = chatRoom.topic ? toTopicPath(chatRoom.topic) : `/teams/${chatMessage.teamId}`
+	const path = chatRoom.topic ? toTopicPath(chatRoom.topic) : toTeamPath(chatMessage.teamId)
 	return {
 		kind: "chatMessage",
 		id: String(chatMessage.id),
@@ -233,5 +233,5 @@ async function toReportedNoteComment(userId: string, noteCommentId: string): Pro
 
 // the page a note lives on: its topic's page or its team's page
 function toNotePagePath(page: NotePage): string {
-	return page.kind === "topic" ? toTopicPath(page.topic) : `/teams/${page.team.id}`
+	return page.kind === "topic" ? toTopicPath(page.topic) : toTeamPath(page.team.id)
 }

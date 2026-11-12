@@ -20,7 +20,8 @@ import {
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { ScrollBox } from "@/components/common/ScrollBox"
 import { PodcastEpisodeTranscript } from "@/components/podcast/PodcastEpisodeTranscript"
-import { CARD_CLASS, SEARCH_BAR_ICON_CLASS, STANDALONE_LINK_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
+import { CARD_CLASS, SEARCH_BAR_ICON_CLASS, STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
+import { TABLE_SCROLL_CLASS } from "@/lib/tableClasses"
 
 // the scan note's paragraphs a vertical box overflows with
 const SCAN_NOTE_PARAGRAPHS = [

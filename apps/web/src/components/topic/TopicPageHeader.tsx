@@ -10,13 +10,8 @@ import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { Badge } from "@/components/primitives/badge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { ReactionRow } from "@/components/social/ReactionRow"
-import {
-	ACTIVE_ICON_CLASS,
-	HIGHLIGHTED_PAGE_BUTTON_CLASS,
-	PLAIN_PAGE_BUTTON_CLASS,
-	TOPIC_HEADER_AREA_CLASSES,
-	toTopicHeaderGridClass,
-} from "@/lib/styleClasses"
+import { TOPIC_HEADER_AREA_CLASSES, toTopicHeaderGridClass } from "@/lib/pageHeaderClasses"
+import { ACTIVE_ICON_CLASS, HIGHLIGHTED_PAGE_BUTTON_CLASS, PLAIN_PAGE_BUTTON_CLASS } from "@/lib/styleClasses"
 import { toSubscribeTooltip } from "@/lib/utils"
 import { setChatPanelState } from "@/stores/chatPanelStore"
 import { TopicInfoPopover } from "./Topic"

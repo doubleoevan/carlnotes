@@ -6,7 +6,7 @@ import { useState } from "react"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
 import { ThinkingLine } from "@/components/common/ThinkingLine"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { ANSWER_BUBBLE_CLASS } from "@/lib/styleClasses"
+import { ANSWER_BUBBLE_CLASS } from "@/lib/chatClasses"
 import { copyToClipboard } from "@/lib/utils"
 import { ChatAuthor } from "./ChatAuthor"
 

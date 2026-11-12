@@ -1,12 +1,12 @@
 import { PODCAST_NAME } from "@carlnotes/contracts/podcastEpisodes"
 import { toTopicPath } from "@carlnotes/contracts/seo"
+import { toCountLabel } from "@carlnotes/contracts/text"
 import type { TopicDetails, TopicResponse } from "@carlnotes/contracts/topics"
 import { MAX_TOPIC_SOURCES } from "@carlnotes/contracts/topics"
 import {
 	TopicPodcastEpisodeVideoInfoSection,
 	type TopicPodcastEpisodeVideoInfoSectionElements,
 } from "@carlnotes/core/components/TopicPodcastEpisodeVideoInfoSection"
-import { toCountLabel } from "@carlnotes/core/lib/labels"
 import { toTopicSourceRows } from "@carlnotes/core/lib/topicSources"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { AudioLines, Diamond, Download, ExternalLink, Globe, Link, Lock, Mail, Plug, Puzzle, Rss } from "lucide-react"

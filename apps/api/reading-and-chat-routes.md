@@ -13,11 +13,14 @@
   rate, and bookmark a finding, and `loadTopicFindingPermissions`, the rate and bookmark rules for many topics in two
   reads.
 - `counts/` — the viewer and listener counts: `countsRoute.ts` (`POST /api/topics/:id/view`, the view a topic page
-  sends, counted only from the app's own origin and returning 204, and the `/api/counts/` reads of a topic's viewers
-  and followers and a podcast episode's listeners), and `viewerCounts.ts` (counting a topic view or a podcast episode
-  listener into its Redis counter, skipping a crawler or an unfurler, and reading a count as the larger of the counter's
-  estimate and the saved column). The audio routes in `podcast/` and a playback start count a listener through it.
-  `countWithinRateLimit` limits the topic view and the `/episodes/:id/audio.mp3` listen to 30 a minute per sender.
+  sends, counted only from the app's own origin and returning 204, `POST /api/topicPosts/:id/view` the same for a Topic
+  Post page through `topicPost/topicPostViewerCounts.ts`, and the `/api/counts/` reads of a topic's viewers and
+  followers, a podcast episode's listeners, and a Topic Post's viewers), and `viewerCounts.ts` (counting a topic view or
+  a podcast episode listener into its Redis counter, skipping a crawler or an unfurler, buffering a topic or finding
+  view and a play with its place into the day's daily counts through `@carlnotes/db/dailyCountBuffer`, and reading a
+  count as the larger of the counter's estimate and the saved column). The audio routes in `podcast/` and a playback
+  start count a listener through it. `countWithinRateLimit` limits the topic view and the `/episodes/:id/audio.mp3`
+  listen to 30 a minute per sender.
 - `sameOrigin.ts` — `isSameOriginRequest`, true if the request's `Sec-Fetch-Site` header is `same-origin`, or with no
   such header, if the mobile app's `x-carlnotes-platform` header names ios or android, or if its `Origin` header is the
   app's origin. The api serves no CORS headers, so a browser on another origin cannot add the platform header.

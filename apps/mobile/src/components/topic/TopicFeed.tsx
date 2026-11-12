@@ -1,6 +1,6 @@
+import { toCountLabel } from "@carlnotes/contracts/text"
 import type { TopicFeedResponse, TopicSectionKey } from "@carlnotes/contracts/topics"
 import type { TopicFeedState } from "@carlnotes/core/hooks/useTopicFeedState"
-import { toCountLabel } from "@carlnotes/core/lib/labels"
 import { TOPIC_SECTION_TITLES } from "@carlnotes/core/lib/topicFeedLabels"
 import { FlashList } from "@shopify/flash-list"
 import { type ReactElement, useMemo, useState } from "react"

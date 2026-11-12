@@ -5,7 +5,7 @@ import {
 	type SearchRequest,
 	type SearchResultsPage,
 } from "@carlnotes/contracts/search"
-import { toCountLabel } from "@carlnotes/core/lib/labels"
+import { toCountLabel } from "@carlnotes/contracts/text"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router"
 import { Search } from "lucide-react"

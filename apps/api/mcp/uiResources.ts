@@ -4,6 +4,7 @@ import {
 	type McpViewBundle,
 	toMcpViewContentSecurityPolicy,
 	toMcpViewHtmlFromBundle,
+	toMcpViewScriptFile,
 } from "@carlnotes/contracts/mcpViewHtml"
 import { MCP_VIEWS, type McpView, toMcpUiResourceUri } from "@carlnotes/contracts/mcpViews"
 import { STORED_MCP_VIEW_VERSIONS, type StoredMcpViewVersion } from "@carlnotes/contracts/mcpViewVersions"
@@ -18,7 +19,7 @@ import { MCP_VIEWS_BUNDLE_ROOT } from "../bundlePaths"
 export const MISSING_MCP_VIEW_BUNDLE_MESSAGE = "The MCP view bundle is not built. Run bun run build:ui."
 
 // the versions from before the first stored one, which serve the current build
-const ALIASED_MCP_VIEW_VERSIONS = [2, 3, 4, 5, 6, 7, 8, 9]
+const ALIASED_MCP_VIEW_VERSIONS = [2, 3, 4, 5, 6, 7, 8, 9, 10]
 
 // what each MCP view shows, for the resource list
 const MCP_VIEW_DESCRIPTIONS: Record<McpView, string> = {
@@ -32,6 +33,7 @@ const MCP_VIEW_DESCRIPTIONS: Record<McpView, string> = {
 	news: "Brews News: who mentioned the user, then what happened on their topics over a week, a day, or an hour.",
 	"topic-posts": "A topic's Open Mic posts as cards, newest first, each opening its post.",
 	"topic-post": "An Open Mic post with its image, its body, its Coffee Break Discussion, and its hot takes.",
+	dashboard: "Topic, Podcast, or Team Specials: the summary, Carl's paragraph, and the charts of visitors and plays.",
 }
 
 /**
@@ -104,7 +106,7 @@ async function toMcpViewHtml(mcpView: McpView): Promise<string> {
 	}
 
 	// read the bundle, then build and keep this MCP view's html
-	const mcpViewBundle = await readMcpViewBundle(MCP_VIEWS_BUNDLE_ROOT)
+	const mcpViewBundle = await readMcpViewBundle(MCP_VIEWS_BUNDLE_ROOT, mcpView)
 	const mcpViewHtml = toMcpViewHtmlFromBundle({ mcpView, mcpViewBundle, siteUrl: appUrl() })
 	uiResourceHtmlByMcpView.set(mcpView, mcpViewHtml)
 	return mcpViewHtml
@@ -123,7 +125,7 @@ async function toStoredMcpViewHtml(mcpView: McpView, version: number): Promise<s
 	}
 	try {
 		const [mcpViewScript, mcpViewStylesheet] = await Promise.all([
-			getResourceContent(toMcpViewBundleKey(version, "mcpViews.js")),
+			getResourceContent(toMcpViewBundleKey(version, toMcpViewScriptFile(mcpView))),
 			getResourceContent(toMcpViewBundleKey(version, "mcpViews.css")),
 		])
 		const mcpViewBundle = { mcpViewScript, mcpViewStylesheet }
@@ -138,10 +140,10 @@ async function toStoredMcpViewHtml(mcpView: McpView, version: number): Promise<s
 }
 
 /**
- * Reads an MCP view bundle's script and stylesheet from where build:ui writes them, or throws an error naming that build.
+ * Reads an MCP view's script and the stylesheet from where build:ui writes them, or throws an error naming that build.
  */
-export async function readMcpViewBundle(bundleRoot: string): Promise<McpViewBundle> {
-	const mcpViewScriptFile = Bun.file(`${bundleRoot}/mcpViews.js`)
+export async function readMcpViewBundle(bundleRoot: string, mcpView: McpView): Promise<McpViewBundle> {
+	const mcpViewScriptFile = Bun.file(`${bundleRoot}/${toMcpViewScriptFile(mcpView)}`)
 	const mcpViewStylesheetFile = Bun.file(`${bundleRoot}/mcpViews.css`)
 	if (!(await mcpViewScriptFile.exists()) || !(await mcpViewStylesheetFile.exists())) {
 		throw new Error(MISSING_MCP_VIEW_BUNDLE_MESSAGE)

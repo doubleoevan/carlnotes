@@ -3,7 +3,7 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { sendAcceptInvite } from "@carlnotes/client/topicClient"
 import { type InviteNoticeRejection, isInviteToken } from "@carlnotes/contracts/invites"
-import { toInvitePath } from "@carlnotes/contracts/seo"
+import { toInvitePath, toTeamPath } from "@carlnotes/contracts/seo"
 import { toInviteDestination } from "@carlnotes/core/lib/inviteRejections"
 import { router, useLocalSearchParams } from "expo-router"
 import { useCallback, useEffect, useRef, useState } from "react"
@@ -37,7 +37,7 @@ export default function InviteScreen() {
 			} else if (inviteDestination.kind === "topic") {
 				router.replace(`/topics/${inviteDestination.topicId}`)
 			} else if (inviteDestination.kind === "team") {
-				router.replace(`/teams/${inviteDestination.teamId}`)
+				router.replace(toTeamPath(inviteDestination.teamId))
 			} else {
 				setInviteRejection(inviteDestination.rejection)
 			}

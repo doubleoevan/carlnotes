@@ -37,3 +37,24 @@ export async function withTimeLimit<Result>({
 		clearTimeout(timeLimitTimer)
 	}
 }
+
+/**
+ * Returns a time's UTC day as its ISO date.
+ */
+export function toUtcDay(moment: Date): string {
+	return moment.toISOString().slice(0, 10)
+}
+
+/**
+ * Returns the last completed UTC day before now, yesterday's ISO date.
+ */
+export function toLastCompletedUtcDay(now: Date = new Date()): string {
+	return toUtcDay(new Date(now.getTime() - DAY_MS))
+}
+
+/**
+ * Returns the UTC month a time falls in as `YYYY-MM`.
+ */
+export function toUtcMonth(moment: Date): string {
+	return moment.toISOString().slice(0, 7)
+}

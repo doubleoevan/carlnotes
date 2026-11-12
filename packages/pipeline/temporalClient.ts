@@ -1,5 +1,7 @@
 // the Temporal client that the api and the sweep use to start durable workflows
 
+import type { DashboardSubject } from "@carlnotes/contracts/dashboards"
+import { DASHBOARD_REBUILD_SIGNAL } from "@carlnotes/contracts/dashboardWork"
 import {
 	PERSONAL_SOURCES_CONTEXT_SIGNAL,
 	PERSONAL_SOURCES_EMAIL_TASK_QUEUE,
@@ -14,20 +16,12 @@ import {
 	type TopicPodcastEpisodeVideoBackfillSummary,
 	toTopicPodcastEpisodeVideoRebuildWorkflowId,
 } from "@carlnotes/contracts/topicPodcastEpisodeVideoWork"
-import type { ThresholdCrossing } from "@carlnotes/server/monitoring"
-import { Client, Connection, WorkflowExecutionAlreadyStartedError, WorkflowNotFoundError } from "@temporalio/client"
+import { Client, Connection, WorkflowExecutionAlreadyStartedError } from "@temporalio/client"
 import { CHAT_MENTION_PUSH_WORKFLOW, PUSH_TASK_QUEUE } from "./pushWorkflows"
-
-// what asked for a Scan, which decides what its end announces
-export type ScanTrigger = "manual" | "scheduled" | "creation"
 
 // the task queue the attachment worker polls, and the workflow it runs started by name
 export const ATTACHMENT_TASK_QUEUE = "attachment-processing"
 const ATTACHMENT_WORKFLOW = "processAttachment"
-
-// scans poll their own queue instead of sharing the attachment one
-export const SCAN_TASK_QUEUE = "topic-scans"
-const SCAN_WORKFLOW = "runTopicScanWorkflow"
 
 // a url Source's screen gets its own queue because a Worker binds one workflow bundle to one queue
 export const SOURCE_TASK_QUEUE = "source-screening"
@@ -49,28 +43,12 @@ const TOPIC_IMAGE_WORKFLOW = "renderTopicImageWorkflow"
 const TOPIC_IMAGE_BACKFILL_WORKFLOW = "backfillTopicImagesWorkflow"
 const TOPIC_IMAGE_BACKFILL_WORKFLOW_ID = "topic-image-backfill"
 
+// the Dashboard build's queue and name
+export const DASHBOARD_TASK_QUEUE = "dashboard-snapshots"
+const DASHBOARD_WORKFLOW = "buildDashboardSnapshotsWorkflow"
+
 // how long a connect, a workflow start, a cancel, and a task queue description may each take before it fails
 const CLIENT_CALL_TIMEOUT_MS = 10_000
-
-// Temporal's TASK_QUEUE_TYPE_ACTIVITY, the Scan queue's activity side, where a Scan's activities wait for a scan slot
-const ACTIVITY_TASK_QUEUE_TYPE = 2
-
-// how long the oldest waiting Scan activity may wait for a slot before the backlog is reported
-const SCAN_BACKLOG_ALERT_MS = 15 * 60 * 1000
-
-// the Scan queue's pollers and its activity backlog: how many tasks wait, and how long the oldest one has waited,
-// which is null if the server cannot say
-export type ScanQueueDescription = { pollerCount: number; backlogCount: number; oldestBacklogAgeMs: number | null }
-
-// whether the Scan was handed to Temporal, and a call that waits for it to end.
-// it is a call, not a promise, so a process that only starts a Scan opens no long-poll and exits on its own
-// biome-ignore format: one line keeps the union under the comment-density hook's limit
-export type ScanStart = { status: "started"; whenFinished: () => Promise<void> } | { status: "running" }
-
-// whether a cancel reached a running Scan, and a call that waits for the cancelled Scan to wind down.
-// it is a call for the same reason as ScanStart's, and it resolves once the workflow has ended, however it ended
-// biome-ignore format: one line keeps the union under the comment-density hook's limit
-export type ScanCancel = { status: "cancelled"; whenStopped: () => Promise<void> } | { status: "idle" }
 
 // the reused client promise, built on first use from the TEMPORAL_ADDRESS endpoint
 let clientPromise: Promise<Client> | undefined
@@ -103,15 +81,53 @@ export async function startPersonalSourcesEmailWorkflow(confirmationId: string):
 	})
 }
 
-// one workflow to start: its name, the queue it runs on, its id, and the arguments it takes
-type StartWorkflowOnceOptions = { workflow: string; taskQueue: string; workflowId: string; args: unknown[] }
+/**
+ * Starts the nightly Dashboard build for the last completed UTC day. A build that ran or runs under that day's id is
+ * not started again, and only a failed one is.
+ */
+export async function startDashboardSnapshotsWorkflow(lastDay: string): Promise<void> {
+	await startWorkflowOnce({
+		workflow: DASHBOARD_WORKFLOW,
+		taskQueue: DASHBOARD_TASK_QUEUE,
+		workflowId: `dashboard-snapshots-${lastDay}`,
+		args: [{ lastDay }],
+		workflowIdReusePolicy: "ALLOW_DUPLICATE_FAILED_ONLY",
+	})
+}
+
+/**
+ * Starts one Dashboard's rebuild, named by the Dashboard, or signals the rebuild already running to build again once
+ * its current build ends.
+ */
+export async function startDashboardRebuildWorkflow(subject: DashboardSubject, lastDay: string): Promise<void> {
+	const client = await getClient()
+	await withClientDeadline(client, () =>
+		client.workflow.signalWithStart(DASHBOARD_WORKFLOW, {
+			taskQueue: DASHBOARD_TASK_QUEUE,
+			workflowId: `dashboard-rebuild-${subject.dashboardKind}-${subject.subjectId}`,
+			args: [{ lastDay, subject }],
+			signal: DASHBOARD_REBUILD_SIGNAL,
+			signalArgs: [lastDay],
+		}),
+	)
+}
+
+// one workflow to start: its name, the queue it runs on, its id, the arguments it takes, and whether a closed workflow
+// under its id may run again
+type StartWorkflowOnceOptions = {
+	workflow: string
+	taskQueue: string
+	workflowId: string
+	args: unknown[]
+	workflowIdReusePolicy?: "ALLOW_DUPLICATE_FAILED_ONLY"
+}
 
 // start one workflow under its id, under the call deadline. a workflow already started under that id needs no second
 // start, and anything else is a real failure
-async function startWorkflowOnce({ workflow, taskQueue, workflowId, args }: StartWorkflowOnceOptions): Promise<void> {
+async function startWorkflowOnce({ workflow, ...workflowOptions }: StartWorkflowOnceOptions): Promise<void> {
 	const client = await getClient()
 	try {
-		await withClientDeadline(client, () => client.workflow.start(workflow, { taskQueue, workflowId, args }))
+		await withClientDeadline(client, () => client.workflow.start(workflow, workflowOptions))
 	} catch (error) {
 		// swallow the duplicate id, and raise anything else
 		if (!(error instanceof WorkflowExecutionAlreadyStartedError)) {
@@ -299,129 +315,13 @@ export async function startChatMentionPushWorkflow(chatMessageId: number): Promi
 	})
 }
 
-/**
- * Start the durable workflow for a Scan row that is already open. Temporal owns the Scan from here,
- * so it runs to a terminal status even if this process goes away.
- */
-export async function startTopicScanWorkflow(
-	scanId: string,
-	topicId: string,
-	ownerId: string,
-	trigger: ScanTrigger,
-): Promise<ScanStart> {
-	const client = await getClient()
-	try {
-		// the workflow id is derived from the topic
-		const workflowHandle = await withClientDeadline(client, () =>
-			client.workflow.start(SCAN_WORKFLOW, {
-				taskQueue: SCAN_TASK_QUEUE,
-				workflowId: `scan-${topicId}`,
-				args: [scanId, topicId, ownerId, trigger],
-			}),
-		)
-		// return the wait as a call that opens its long-poll only when asked
-		return { status: "started", whenFinished: () => workflowHandle.result() }
-	} catch (error) {
-		// a Topic already scanning is an expected answer, not a failure. anything else is
-		if (error instanceof WorkflowExecutionAlreadyStartedError) {
-			return { status: "running" }
-		}
-		throw error
-	}
-}
-
-/**
- * Cancel the Scan a Topic is running. The workflow id is derived from the Topic, so the caller needs no stored id.
- * A Topic with nothing running anymore returns "idle".
- */
-export async function cancelTopicScanWorkflow(topicId: string): Promise<ScanCancel> {
-	const client = await getClient()
-	try {
-		const workflowHandle = client.workflow.getHandle(`scan-${topicId}`)
-
-		// the server accepts a cancel on a finished workflow, so read its status first
-		const { status } = await withClientDeadline(client, () => workflowHandle.describe())
-		if (status.name !== "RUNNING") {
-			return { status: "idle" }
-		}
-		await withClientDeadline(client, () => workflowHandle.cancel())
-
-		// the result rejects with the cancellation once the workflow has wound down, which is the wait's end
-		return {
-			status: "cancelled",
-			whenStopped: () =>
-				workflowHandle.result().then(
-					() => undefined,
-					() => undefined,
-				),
-		}
-	} catch (error) {
-		// a workflow that is missing leaves nothing to cancel
-		if (error instanceof WorkflowNotFoundError) {
-			return { status: "idle" }
-		}
-		throw error
-	}
-}
-
-/**
- * Describes the Scan queue: how many workers poll it, and how many Scan activities wait for a slot and for how long.
- * Zero pollers means no Scan will run at all, however healthy the api looks.
- */
-export async function describeScanQueue(): Promise<ScanQueueDescription> {
-	const client = await getClient()
-
-	// the stats a current server reports, and the backlog hint an older one returns instead, under the call deadline
-	const queue = await withClientDeadline(client, () =>
-		client.workflowService.describeTaskQueue({
-			namespace: client.options.namespace,
-			taskQueue: { name: SCAN_TASK_QUEUE },
-			taskQueueType: ACTIVITY_TASK_QUEUE_TYPE,
-			reportStats: true,
-			includeTaskQueueStatus: true,
-		}),
-	)
-
-	// a server without stats gives a depth from its hint and no age
-	const pollerCount = queue.pollers?.length ?? 0
-	if (!queue.stats) {
-		return { pollerCount, backlogCount: Number(queue.taskQueueStatus?.backlogCountHint ?? 0), oldestBacklogAgeMs: null }
-	}
-	const backlogAge = queue.stats.approximateBacklogAge
-	return {
-		pollerCount,
-		backlogCount: Number(queue.stats.approximateBacklogCount ?? 0),
-		oldestBacklogAgeMs: backlogAge
-			? Number(backlogAge.seconds ?? 0) * 1000 + Math.round((backlogAge.nanos ?? 0) / 1_000_000)
-			: null,
-	}
-}
-
-/**
- * Returns the Scan queue's backlog as a threshold crossing if its oldest Scan activity
- * has waited over 15 minutes for a slot, and null otherwise, including if the server cannot say how long.
- */
-export function toScanBacklogCrossing({
-	backlogCount,
-	oldestBacklogAgeMs,
-}: ScanQueueDescription): ThresholdCrossing | null {
-	if (oldestBacklogAgeMs === null || oldestBacklogAgeMs <= SCAN_BACKLOG_ALERT_MS) {
-		return null
-	}
-	return {
-		condition: "scan-backlog",
-		message: "a scan waited over 15 minutes for a slot",
-		values: { backlogCount, oldestBacklogAgeMs },
-	}
-}
-
 // run one client call under the call deadline, so a server that never answers fails the call instead of the request
-function withClientDeadline<Result>(client: Client, runCall: () => Promise<Result>): Promise<Result> {
+export function withClientDeadline<Result>(client: Client, runCall: () => Promise<Result>): Promise<Result> {
 	return client.connection.withDeadline(Date.now() + CLIENT_CALL_TIMEOUT_MS, runCall)
 }
 
 // the reused Temporal client instance, connected to the TEMPORAL_ADDRESS endpoint on first use
-function getClient(): Promise<Client> {
+export function getClient(): Promise<Client> {
 	// connect once and reuse the client, giving the connect the call deadline. clear a failed connection so the next
 	// call connects again
 	clientPromise ??= Connection.connect({ address: Bun.env.TEMPORAL_ADDRESS, connectTimeout: CLIENT_CALL_TIMEOUT_MS })

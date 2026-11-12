@@ -3,7 +3,7 @@
 import type { PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
 import { cn } from "@carlnotes/nightshift/classNames"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
-import { TABLE_WIDE_FIRST_COLUMN_CLASS } from "@/lib/styleClasses"
+import { TABLE_WIDE_FIRST_COLUMN_CLASS } from "@/lib/tableClasses"
 import { PODCAST_EPISODE_FIXTURES } from "../../../.storybook/fixtures/podcastEpisodes"
 import { toOwnFrameDocs } from "../../../.storybook/parameters"
 import { PagedTableSection } from "./PagedTableSection"

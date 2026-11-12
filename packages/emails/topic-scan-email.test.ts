@@ -167,3 +167,14 @@ test("renderTopicScanEmail's footer says the reader follows the topic", async ()
 	expect(html).toContain("because you follow ")
 	expect(html).not.toContain("subscribe to emails")
 })
+
+// the month's first topic scan email links the recipient's Topic Dashboard, and an email with no Dashboard url has no
+// line
+test("renderTopicScanEmail links the Topic Dashboard only if the email has its url", async () => {
+	const emailProps = { topicName: "LLM tooling", findingCount: 0, findings: [] }
+	const topicDashboardUrl = "https://carlnotes.example.com/profiles/user-1/specials/topics"
+	const linkedHtml = await renderTopicScanEmail({ ...emailProps, topicDashboardUrl })
+	expect(linkedHtml).toContain(`href="${topicDashboardUrl}"`)
+	expect(linkedHtml).toContain("Topic Specials")
+	expect(await renderTopicScanEmail(emailProps)).not.toContain("Topic Specials")
+})

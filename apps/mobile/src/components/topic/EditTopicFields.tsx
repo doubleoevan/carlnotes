@@ -15,11 +15,12 @@ import { router } from "expo-router"
 import { Coffee } from "lucide-react-native"
 import { useState } from "react"
 import { Alert, Platform, View } from "react-native"
-import { useCSSVariable, useUniwind } from "uniwind"
+import { useCSSVariable } from "uniwind"
 import { PlansLink } from "@/components/account/PlansLink"
 import { ChoiceSelect } from "@/components/common/ChoiceSelect"
 import { Button } from "@/components/primitives/button"
 import { Text } from "@/components/primitives/text"
+import { useColorMode } from "@/theme"
 
 /**
  * Keeps the web schedule choices and uses the device's time picker.
@@ -35,7 +36,7 @@ export function ScheduleFields<Attachment>({
 	dailyTopicLimit?: number
 	topicFrequency?: string
 }) {
-	const { theme } = useUniwind()
+	const colorMode = useColorMode()
 	const accent = useCSSVariable("--color-primary") as string
 	const [isPickingTime, setIsPickingTime] = useState(false)
 	const [hours, minutes] = fields.scheduledTime.split(":").map(Number)
@@ -100,7 +101,7 @@ export function ScheduleFields<Attachment>({
 					value={time}
 					mode="time"
 					display={Platform.OS === "ios" ? "spinner" : "default"}
-					themeVariant={theme === "dark" ? "dark" : "light"}
+					themeVariant={colorMode}
 					accentColor={accent}
 					onChange={(event, value) => {
 						if (Platform.OS !== "ios" || event.type === "dismissed") {

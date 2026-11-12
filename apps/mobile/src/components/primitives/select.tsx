@@ -29,13 +29,18 @@ export function SelectValue({ className, ...props }: ComponentProps<typeof Selec
 }
 
 /**
- * Opens an anchored dropdown with the shared field styling and a native touch target.
+ * Opens an anchored dropdown with the shared field styling and a native touch target, with an optional chevron class
+ * for a highlighted trigger.
  */
 export function SelectTrigger({
 	className,
+	iconClassName,
 	children,
 	...props
-}: Omit<ComponentProps<typeof SelectPrimitive.Trigger>, "children"> & { children?: ReactNode }) {
+}: Omit<ComponentProps<typeof SelectPrimitive.Trigger>, "children"> & {
+	children?: ReactNode
+	iconClassName?: string
+}) {
 	return (
 		<SelectPrimitive.Trigger
 			className={cn(
@@ -47,7 +52,7 @@ export function SelectTrigger({
 			{...props}
 		>
 			{children}
-			<Icon as={ChevronDown} className="size-4 text-muted-foreground" />
+			<Icon as={ChevronDown} className={cn("size-4 text-muted-foreground", iconClassName)} />
 		</SelectPrimitive.Trigger>
 	)
 }

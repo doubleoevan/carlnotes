@@ -5,12 +5,11 @@ import {
 } from "@carlnotes/core/components/DetailsLine"
 import { cn } from "@carlnotes/nightshift/classNames"
 
-// the web's elements: a wrapping row of small muted text, where each detail is one item that wraps whole
+// the web's elements: a line of small muted text, where each detail is an inline block that wraps whole, so the line
+// flows around a floated avatar
 const DETAILS_LINE_ELEMENTS: DetailsLineElements = {
-	Line: ({ className, children }) => (
-		<p className={cn("text-muted-foreground flex flex-wrap items-center gap-x-1 text-sm", className)}>{children}</p>
-	),
-	Detail: ({ children }) => <span>{children}</span>,
+	Line: ({ className, children }) => <p className={cn("text-muted-foreground text-sm", className)}>{children}</p>,
+	Detail: ({ children }) => <span className="mr-1 inline-block">{children}</span>,
 }
 
 /**

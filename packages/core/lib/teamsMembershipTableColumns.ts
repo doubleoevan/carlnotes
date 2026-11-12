@@ -1,9 +1,10 @@
 import { CHAT_NAME } from "@carlnotes/contracts/chat"
 import { isLeaderRole } from "@carlnotes/contracts/enums"
 import type { TeamSummary, TeamsPageResponse } from "@carlnotes/contracts/teams"
+import { toCountLabel } from "@carlnotes/contracts/text"
 import type { ReactNode } from "react"
 import type { TableColumn } from "../components/DataTable"
-import { toCentsLabel, toCountLabel } from "./labels"
+import { toCentsLabel } from "./labels"
 
 export type ReceivedInvite = TeamsPageResponse["receivedInvites"][number]
 export type TeamsPageRow = { membership: TeamSummary } | { invite: ReceivedInvite }
@@ -47,12 +48,14 @@ export function toTeamsMembershipTableColumns({
 	teams: TeamSummary[]
 	receivedInvites: ReceivedInvite[]
 	isReadOnly: boolean
+	// the cell renderers each app supplies with its own elements
 	renderText: (text: string) => ReactNode
 	renderTeam: (row: TeamsPageRow) => ReactNode
 	renderDescription: (row: TeamsPageRow) => ReactNode
 	renderInvitedBy: (row: TeamsPageRow) => ReactNode
 	renderMembers: (row: TeamsPageRow) => ReactNode
 	renderTopics: (row: TeamsPageRow) => ReactNode
+	// the active and remove cells, left out of a read-only table
 	renderActive: (row: TeamsPageRow) => ReactNode
 	renderRemove: (row: TeamsPageRow) => ReactNode
 }): TableColumn<TeamsPageRow>[] {

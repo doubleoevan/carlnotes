@@ -1,5 +1,6 @@
 import type { PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
-import { toCountLabel, toPodcastEpisodeTitleLabel } from "@carlnotes/core/lib/labels"
+import { toCountLabel } from "@carlnotes/contracts/text"
+import { toPodcastEpisodeTitleLabel } from "@carlnotes/core/lib/labels"
 import {
 	podcastEpisodeSortValues,
 	toPodcastEpisodesTableColumns,

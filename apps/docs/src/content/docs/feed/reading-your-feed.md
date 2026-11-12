@@ -43,17 +43,18 @@ Sort the feed by **Relevance**, **Newest**, or **Trending**. Use the **Filters**
 tags, or by view. The **Reheat** button reloads the topic feed in place.
 
 **Trending** orders findings by their views and hot takes, newest first among ties, and a hot take counts for five
-views. Your bookmarks stay on top. On the homepage, Trending also orders the topics in each section by viewers, then by
+views. Your bookmarks stay on top. On the homepage, Trending also orders the topics in each section by visitors, then by
 followers, then by their newest finding. Featured topics keep their order.
 
-## Viewers, followers, listeners, and views
+## Visitors, followers, listeners, and views
 
-The bottom of every topic page shows how many people have viewed the topic and how many follow it, as **Viewers** and
-**Followers**. A podcast episode page shows **Listeners**: how many people have played the podcast episode here or
+The bottom of every topic page shows how many people have visited the topic and how many follow it, as **Visitors**
+and **Followers**. A podcast episode page shows **Listeners**: how many people have played the podcast episode here or
 downloaded it in a podcast app. A number flashes when it changes, and it updates about once a minute while the page is
 open.
 
-![The bottom of a topic page reading Viewers: 4, with the 4 flashing, and Followers: 27](../../../assets/screenshots/topic-viewer-counts.png)
+![The bottom of a topic page reading Visitors: 35, with the 35 flashing, and Followers:
+27](../../../assets/screenshots/topic-viewer-counts.png)
 
 Each count is an approximate all-time total. A person counts once, signed in or not, however often they come back.
 

@@ -1,7 +1,7 @@
 ---
 title: Add to AI
 description: >-
-  Connect CarlNotes to Claude, ChatGPT, and coding AI Agents. Set up OAuth sign-in, understand all twenty-five MCP tools,
+  Connect CarlNotes to Claude, ChatGPT, and coding AI Agents. Set up OAuth sign-in, understand all twenty-six MCP tools,
   and manage access to your topics and findings.
 sidebar:
   order: 2
@@ -109,6 +109,9 @@ Connect an account to unlock the rest:
   read or seen.
 - **Open Mic.** Your AI lists a topic's Open Mic posts and reads one, with its summary. It reads the hot takes on a
   post and leaves yours. It never writes or publishes a post. A public topic's posts read without an account.
+- **Specials.** Say "how are my topics doing" and your AI reads your Topic Specials, Podcast Specials, or Team
+  Specials: the totals and Carl's paragraph, with a link to the page. Anyone's public Specials read without an account.
+  See [Daily Specials Board](/docs/account/specials/).
 - **Brew now.** Start a brew of a topic you own, watch it, and stop it. It takes one of your daily brews, and it
   records its podcast episode like any other brew. Your AI never charges an overage: past your daily limit, it sends you
   to CarlNotes.
@@ -123,7 +126,7 @@ without one.
 
 ## Tool reference
 
-The server advertises the same twenty-five tools to visitors and connected accounts. Sign-in changes permission, not the
+The server advertises the same twenty-six tools to visitors and connected accounts. Sign-in changes permission, not the
 tool list. Public tools also read private or invite topics when your account has access.
 
 | Tool | What it does | Account and effects |
@@ -153,6 +156,7 @@ tool list. Public tools also read private or invite topics when your account has
 | `read_news` | Reads your Brews News for the last week, day, or hour: who mentioned you in a hot take, then what happened on your topics, your teams' topics, and the topics you follow, twenty to a page. | Requires an account. Marks nothing read or seen. Other people's words come back marked as data. Read-only. |
 | `read_topic_posts` | Lists a topic's published Open Mic posts, newest first, twenty to a page, each with its title, author, publish time, summary, and link. | Public topics work without sign-in. Private and invite topics need access. Read-only. |
 | `read_topic_post` | Reads one published Open Mic post: its title, author, publish time, summary, and body as text, and whether it has a Coffee Break Discussion. | Public topics work without sign-in. Private and invite topics need access. No tool writes or publishes a post. Read-only. |
+| `read_dashboard` | Reads a person's Topic Specials or Podcast Specials, or a team's Team Specials: the totals, Carl's paragraph, the last day it counts, and the page's link. | A named person's or team's public Specials work without sign-in. Your own Specials, or your first team's, need an account and count your private items. Someone not on a team reads only its totals. Read-only. |
 
 Account tools carry conservative change annotations, so your AI app can ask before calling them. That prompt does
 not replace CarlNotes' permission checks. For a public-visibility change or source removal, `edit_topic` first returns
@@ -194,6 +198,7 @@ calls a tool when you ask, and never on its own.
 | "Carl, give me the Brews News", "what happened this week", "who mentioned me" | `read_news` |
 | "what's on this topic's Open Mic", "show this topic's posts" | `read_topic_posts` |
 | "read that Open Mic post", "read this post to me" | `read_topic_post` |
+| "show my Specials", "how are my topics doing", "how is my podcast doing", "how is my team doing" | `read_dashboard` |
 
 ### Send and suggestion arguments
 
@@ -249,7 +254,8 @@ colors apply where it shares them, and a row or a recap opens one step in the ch
 **Brews News** shows your mentions first, then the news, with the same Week, Day, and Hour choice as the card on your
 home page. **Open Mic** shows a topic's posts as cards. Choose a card to open its post with its image, its Coffee Break
 Discussion to play, and its hot takes, where you can read the conversation and leave your own. Writing and publishing
-a post stay on CarlNotes.
+a post stay on CarlNotes. **Specials** shows a page's totals, Carl's paragraph, and its charts, with links to your three
+Specials pages on CarlNotes.
 
 The Topic picker asks **Where should this go?** It shows five editable Topics per page with best matches checked. Search offers matching Topic names as you type. Choose a suggestion to add it, or press Enter/Search to filter the list. **Topics to share this chat with** shows every checked destination as a removable tag pill. Checking or unchecking a box updates the pills immediately, and removing a pill unchecks its Topic across pages.
 

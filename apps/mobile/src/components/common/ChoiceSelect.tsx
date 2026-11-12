@@ -1,3 +1,4 @@
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Check, ChevronDown, type LucideIcon } from "lucide-react-native"
 import { type ComponentRef, isValidElement, type ReactElement, useRef, useState } from "react"
 import { useWindowDimensions, View } from "react-native"
@@ -18,6 +19,8 @@ export function ChoiceSelect({
 	isDisabled,
 	presentation = "dropdown",
 	numberOfLines,
+	isHighlighted,
+	isTriggerIconShown = true,
 	onChange,
 	onOpen,
 }: {
@@ -35,6 +38,10 @@ export function ChoiceSelect({
 	isDisabled?: boolean
 	presentation?: "dropdown" | "sheet"
 	numberOfLines?: number
+	// whether the dropdown's trigger takes the primary fill, as a page's highlighted button
+	isHighlighted?: boolean
+	// whether the trigger shows the selected choice's icon beside its label, or the label alone
+	isTriggerIconShown?: boolean
 	onChange: (value: string) => void
 	// what opening the choice list does besides showing it
 	onOpen?: () => void
@@ -46,6 +53,7 @@ export function ChoiceSelect({
 	const [isOpen, setIsOpen] = useState(false)
 	const triggerRef = useRef<ComponentRef<typeof View>>(null)
 	const selectedOption = options.find((option) => option.value === value)
+	const triggerIcon = isTriggerIconShown ? selectedOption?.icon : undefined
 	if (presentation === "sheet") {
 		return (
 			<>
@@ -64,7 +72,7 @@ export function ChoiceSelect({
 				>
 					<ChoiceLabel
 						label={selectedOption?.label ?? label}
-						icon={selectedOption?.icon}
+						icon={triggerIcon}
 						badge={selectedOption?.badge}
 						numberOfLines={numberOfLines ?? selectedOption?.numberOfLines}
 					/>
@@ -112,13 +120,14 @@ export function ChoiceSelect({
 		>
 			<SelectTrigger
 				accessibilityLabel={label}
-				className="min-w-0 px-2"
+				className={cn("min-w-0 px-2", isHighlighted && "border-transparent bg-primary")}
+				iconClassName={isHighlighted ? "text-primary-foreground" : undefined}
 				onLayout={(event) => setTriggerWidth(event.nativeEvent.layout.width)}
 			>
-				{selectedOption?.icon ? (
+				{selectedOption && triggerIcon ? (
 					<ChoiceLabel {...selectedOption} numberOfLines={numberOfLines ?? selectedOption.numberOfLines} />
 				) : (
-					<SelectValue placeholder={label} />
+					<SelectValue placeholder={label} className={isHighlighted ? "text-primary-foreground" : undefined} />
 				)}
 			</SelectTrigger>
 			<SelectContent

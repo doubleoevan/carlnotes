@@ -11,6 +11,7 @@ import { deletePodcastFeedCache } from "@carlnotes/db/podcastFeedCache"
 import { releaseTopicProfileOrders } from "@carlnotes/db/profileOrder"
 import { topics } from "@carlnotes/db/schema/topics"
 import { clearUnseenCommentMentions, loadTopicMentionedUserIds } from "@carlnotes/db/unseenCommentMentions"
+import { rebuildTopicDashboards } from "@carlnotes/pipeline/dashboardRebuild"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { isPodcastEpisodeRecordingConfigured } from "@carlnotes/server/podcastEpisodeSettings"
 import { eq } from "drizzle-orm"
@@ -166,10 +167,11 @@ export async function updateTopicFields({
 		releasedProfileUserIds,
 	})
 
-	// a changed visibility changes who may read the topic's comments, so clear the cached mentions of its mentioned
-	// users
+	// a changed visibility changes who may read the topic's comments and see it on a Dashboard, so clear the cached
+	// mentions of its mentioned users and rebuild its Dashboards
 	if (savedTopic.visibility !== editableTopic.topic.visibility) {
 		await clearUnseenCommentMentions(await loadTopicMentionedUserIds(topicId))
+		await rebuildTopicDashboards(editableTopic.topic)
 	}
 
 	// tell IndexNow if the edit made the topic public or changed its url

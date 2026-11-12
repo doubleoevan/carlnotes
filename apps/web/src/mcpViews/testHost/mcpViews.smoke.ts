@@ -35,6 +35,7 @@ import {
 } from "./mcpViewTestHarness"
 import type { ToolCallResponder } from "./mcpViewTestHost"
 import { type OpenMcpViewOptions, TEST_SITE_URL } from "./mcpViewTestHost"
+import "./dashboardMcpViewSmokeSections"
 import "./findingsMcpViewSmokeSections"
 import "./newsMcpViewSmokeSections"
 import "./scanMcpViewSmokeSections"

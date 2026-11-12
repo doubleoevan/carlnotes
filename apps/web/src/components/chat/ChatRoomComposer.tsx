@@ -15,13 +15,8 @@ import { ArrowUp, Paperclip } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { FileDropZone } from "@/components/common/FileDropZone"
-import {
-	COMPOSER_BAR_CLASS,
-	COMPOSER_BOX_CLASS,
-	COMPOSER_FRAME_CLASS,
-	ICON_BUTTON_CLASS,
-	SEND_BUTTON_CLASS,
-} from "@/lib/styleClasses"
+import { COMPOSER_BAR_CLASS, COMPOSER_BOX_CLASS, COMPOSER_FRAME_CLASS, SEND_BUTTON_CLASS } from "@/lib/chatClasses"
+import { ICON_BUTTON_CLASS } from "@/lib/styleClasses"
 import { CHAT_FILE_PICKER_ACCEPT, isSendKey, isTouchScreen, isWideScreen } from "@/lib/utils"
 import { ChatAttachmentChips } from "./ChatAttachmentChips"
 import { MentionSuggestionList, useMentionAutocomplete } from "./MentionSuggestionList"

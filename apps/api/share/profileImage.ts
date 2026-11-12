@@ -1,6 +1,7 @@
 // the link-preview card a pasted profile url renders as
 
 import { toProfilePageTitle } from "@carlnotes/contracts/profilePage"
+import { toCountLabel } from "@carlnotes/contracts/text"
 import type { CardElement } from "@carlnotes/pipeline/cardElementPng"
 import type { PublishedAvatar } from "../avatars"
 import {
@@ -9,7 +10,6 @@ import {
 	toAvatarIdentity,
 	toBrandIcon,
 	toCardPng,
-	toCountLabel,
 	toOwnerAvatar,
 	toOwnerImageDataUri,
 } from "./previewImage"

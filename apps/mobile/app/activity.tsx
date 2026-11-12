@@ -1,13 +1,17 @@
 import { fetchActivity } from "@carlnotes/client/activityClient"
 import { authClient } from "@carlnotes/client/authClient"
 import { toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
+import { AvatarHeader, AvatarHeaderSkeleton } from "@carlnotes/core/components/AvatarHeader"
 import { toSectionCountLabel } from "@carlnotes/core/lib/labels"
 import { useQuery } from "@tanstack/react-query"
 import { Activity } from "lucide-react-native"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import {
+	MOBILE_AVATAR_HEADER_ELEMENTS,
+	MOBILE_AVATAR_HEADER_SKELETON_ELEMENTS,
+} from "@/components/common/avatarHeaderElements"
 import { LoadFailedNotice } from "@/components/common/LoadFailedNotice"
 import { UserMenuUpdateCountBadge } from "@/components/common/UpdateCountBadge"
-import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { PageScreen } from "@/components/layout/PageScreen"
 import { PageSkeleton } from "@/components/layout/PageSkeleton"
 import { Text } from "@/components/primitives/text"
@@ -37,7 +41,16 @@ export default function ActivityScreen() {
 			title="Activity"
 			icon={Activity}
 			titleBadge={<UserMenuUpdateCountBadge label="Activity" />}
-			byline={session && <UserProfileLink user={toSessionProfileIdentity(session.user)} />}
+			byline={
+				session ? (
+					<AvatarHeader
+						subject={{ subjectKind: "user", user: toSessionProfileIdentity(session.user) }}
+						elements={MOBILE_AVATAR_HEADER_ELEMENTS}
+					/>
+				) : (
+					<AvatarHeaderSkeleton elements={MOBILE_AVATAR_HEADER_SKELETON_ELEMENTS} />
+				)
+			}
 			contentClassName="mt-2 gap-0"
 			action={<NewTopicButton />}
 			onRefresh={handleReload}

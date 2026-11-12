@@ -1,6 +1,7 @@
 // the pgEnums and the column helpers that every schema file shares
 
 import { MOBILE_PLATFORMS } from "@carlnotes/contracts/clientTelemetry"
+import { dashboardAccessLevels, dashboardKinds, viewItemKinds } from "@carlnotes/contracts/dashboards"
 import {
 	attachmentStatuses,
 	avatarSources,
@@ -35,6 +36,7 @@ import {
 	topicPostDiscussionStatuses,
 	visibilities,
 } from "@carlnotes/contracts/enums"
+import { podcastEpisodeFormats } from "@carlnotes/contracts/podcast"
 import { customType, pgEnum, text, timestamp } from "drizzle-orm/pg-core"
 
 // domain pgEnums built from the shared value sets
@@ -70,6 +72,12 @@ export const avatarSource = pgEnum("avatar_source", avatarSources)
 // a member's team role, and who may address an invite to a user
 export const teamRole = pgEnum("team_role", teamRoles)
 export const inviteAccess = pgEnum("invite_access", inviteAccesses)
+// a Dashboard's kind, and who a dashboard snapshot is built for
+export const dashboardKind = pgEnum("dashboard_kind", dashboardKinds)
+export const dashboardAccessLevel = pgEnum("dashboard_access_level", dashboardAccessLevels)
+// what a daily view count counts, and the format a daily play count counts
+export const viewItemKind = pgEnum("view_item_kind", viewItemKinds)
+export const podcastEpisodeFormat = pgEnum("podcast_episode_format", podcastEpisodeFormats)
 // who may see a note
 export const noteVisibility = pgEnum("note_visibility", noteVisibilities)
 // where a topic prompt version was saved from

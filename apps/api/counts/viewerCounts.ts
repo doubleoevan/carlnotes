@@ -1,9 +1,11 @@
-// counting the viewers of a topic, a profile, and a team and a podcast episode's listeners, and reading their counts
-// for the pages
+// counting the viewers of a topic, a profile, and a team and a podcast episode's listeners, buffering the day's views
+// and plays into the daily counts, and reading the counts for the pages
 
+import type { PodcastEpisodeFormat } from "@carlnotes/contracts/podcast"
 import { isCountedUserAgent } from "@carlnotes/contracts/userAgent"
 import type { PodcastEpisodeCounts, TopicCounts, ViewerCounts } from "@carlnotes/contracts/viewerCounts"
 import { db } from "@carlnotes/db"
+import { addDailyPlay, addDailyView } from "@carlnotes/db/dailyCountBuffer"
 import { countRateLimitHit } from "@carlnotes/db/redisRateLimits"
 import { topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
@@ -15,6 +17,7 @@ import { isAllowed } from "../authorization"
 import { type AppEnv, currentUser } from "../currentUser"
 import { loadAccessiblePodcastEpisode } from "../podcast/podcastEpisodeRows"
 import { toRateLimitKey } from "../rateLimit"
+import { readRequestPlace } from "../requestPlace"
 import { loadTeamPageAccess } from "../team/teamPageAccess"
 import { gatedTopicColumns } from "../topic/permissions"
 import { resolveClientAddress } from "../trustedProxies"
@@ -24,7 +27,7 @@ const COUNT_RATE_LIMIT = 30
 const COUNT_RATE_LIMIT_WINDOW_MS = 60_000
 
 // a page's counts, and whether the page is public: its topic, its team, or a profile, which always is
-type CountsResult<Counts> = { counts: Counts; isPublic: boolean }
+export type CountsResult<Counts> = { counts: Counts; isPublic: boolean }
 
 // who sent a view or a listen, the name its rate limit counts under, and the count to run if the sender is within it
 type CountWithinRateLimitOptions = { requestSender: RequestSender; rateLimitName: string; count: () => Promise<void> }
@@ -42,18 +45,47 @@ export async function countTopicView(requestSender: RequestSender, topicId: stri
 	// count only a view of a topic the sender may see
 	const [topicRow] = await db.select(gatedTopicColumns).from(topics).where(eq(topics.id, topicId))
 	if (topicRow && (await isAllowed(requestSender.userId, "topic:view", topicRow))) {
-		await addViewer({ kind: "topic", id: topicId }, element)
+		await Promise.all([
+			addViewer({ kind: "topic", id: topicId }, element),
+			addDailyView({ itemKind: "topic", itemId: topicId, element, place: requestSender.place }),
+		])
+	}
+}
+
+// who played or downloaded a podcast episode, the podcast episode, and its format
+type CountPodcastEpisodeListenOptions = {
+	requestSender: RequestSender
+	podcastEpisodeId: string
+	format: PodcastEpisodeFormat
+}
+
+/**
+ * Counts a play or a download of a podcast episode in its format, which the caller already checked access to, among the
+ * listeners and the day's plays. A crawler, a link unfurler, a visitor with no address, and a Redis failure all count
+ * nothing.
+ */
+export async function countPodcastEpisodeListen({
+	requestSender,
+	podcastEpisodeId,
+	format,
+}: CountPodcastEpisodeListenOptions): Promise<void> {
+	const element = toCountedElement(requestSender)
+	if (element) {
+		await Promise.all([
+			addViewer({ kind: "podcastEpisode", id: podcastEpisodeId }, element),
+			addDailyPlay({ podcastEpisodeId, format, element, place: requestSender.place }),
+		])
 	}
 }
 
 /**
- * Counts a play or a download of a podcast episode the caller already checked access to. A crawler, a link unfurler,
- * a visitor with no address, and a Redis failure all count nothing.
+ * Counts an open of a finding, whose access the caller already checked, among the day's views. A crawler, a link
+ * unfurler, a visitor with no address, and a Redis failure all count nothing.
  */
-export async function countPodcastEpisodeListen(requestSender: RequestSender, podcastEpisodeId: string): Promise<void> {
+export async function countFindingDailyView(requestSender: RequestSender, findingId: string): Promise<void> {
 	const element = toCountedElement(requestSender)
 	if (element) {
-		await addViewer({ kind: "podcastEpisode", id: podcastEpisodeId }, element)
+		await addDailyView({ itemKind: "finding", itemId: findingId, element, place: requestSender.place })
 	}
 }
 
@@ -203,22 +235,27 @@ export async function loadTeamViewerCounts(
 
 /**
  * Returns who sent the request: the user that a feed token names if given, else the signed-in user, with the request's
- * address and user agent.
+ * address, user agent, and place.
  */
 export function toRequestSender(context: Context<AppEnv>, feedTokenUserId?: string): RequestSender {
 	return {
 		userId: feedTokenUserId ?? currentUser(context),
 		clientAddress: resolveClientAddress(context.req.raw),
 		userAgent: context.req.header("user-agent") ?? null,
+		place: readRequestPlace(context.req.raw),
 	}
 }
 
-// the larger of the live estimate and the saved column, so a shown count never drops after a Redis restart
-async function readViewerCount(viewerCountRef: ViewerCountRef, savedCount: number): Promise<number> {
+/**
+ * Returns the larger of the live estimate and the saved column, so a shown count never drops after a Redis restart.
+ */
+export async function readViewerCount(viewerCountRef: ViewerCountRef, savedCount: number): Promise<number> {
 	return Math.max((await readViewerEstimate(viewerCountRef)) ?? 0, savedCount)
 }
 
-// the element a counted sender adds, or null for a crawler, a link unfurler, or a visitor with no address
-function toCountedElement(requestSender: RequestSender): string | null {
+/**
+ * Returns the element a counted sender adds, or null for a crawler, a link unfurler, or a visitor with no address.
+ */
+export function toCountedElement(requestSender: RequestSender): string | null {
 	return isCountedUserAgent(requestSender.userAgent) ? toViewerElement(requestSender) : null
 }
