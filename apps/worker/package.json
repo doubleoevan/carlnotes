@@ -19,6 +19,6 @@
 	},
 	"devDependencies": {
 		"@temporalio/testing": "^1.25.0",
-		"ai": "^7.0.162"
+		"ai": "^7.0.166"
 	}
 }
