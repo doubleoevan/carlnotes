@@ -86,6 +86,27 @@ test("a render asked for 16:9 posts that aspect ratio", async () => {
 	})
 })
 
+test("a render asked for the 2K size names it in the image config", async () => {
+	Bun.env.LITELLM_BASE_URL = "http://litellm.test"
+	Bun.env.LITELLM_MASTER_KEY = "sk-master"
+	const sentRequests: SentRenderRequest[] = []
+	stubRenderFetch(sentRequests, toImageResponse)
+
+	// the image config names the wide ratio and the larger size
+	const model = "gemini-3.1-flash-image"
+	await renderTopicImage({ prompt: "A harbor.", model, aspectRatio: "16:9", drawSize: "2K" })
+	expect(sentRequests[0]?.requestBody.generationConfig).toEqual({
+		responseModalities: ["IMAGE"],
+		imageConfig: { aspectRatio: "16:9", imageSize: "2K" },
+	})
+})
+
+test("a render at the 2K size costs the 2K rate, and a model with none costs its 1K rate", () => {
+	expect(topicImageCostDollars("gemini-3.1-flash-image", "2K")).toBe(0.101)
+	expect(topicImageCostDollars("gemini-3.1-flash-image")).toBe(0.067)
+	expect(topicImageCostDollars("gemini-3.1-flash-lite-image", "2K")).toBe(0.034)
+})
+
 test("a spent budget, a rejection, a server failure, and an empty response are sorted", async () => {
 	Bun.env.LITELLM_BASE_URL = "http://litellm.test"
 	Bun.env.LITELLM_MASTER_KEY = "sk-master"

@@ -1,4 +1,4 @@
-// the film image routes. a film's poster and a chapter's imagined image, each gated by the film's topic's visibility,
+// the film image routes. a film's poster and a chapter's generated image, each gated by the film's topic's visibility,
 // and an editor's regenerate and upload of the film's own image
 
 import {
@@ -9,11 +9,11 @@ import {
 import { db } from "@carlnotes/db"
 import { podcastEpisodes, topicPodcastEpisodeVideos } from "@carlnotes/db/schema/podcast"
 import { topics } from "@carlnotes/db/schema/topics"
+import { attachmentExists } from "@carlnotes/db/store"
 import {
-	attachmentExists,
 	toTopicPodcastEpisodeVideoChapterImageKey,
 	toTopicPodcastEpisodeVideoImageKey,
-} from "@carlnotes/db/store"
+} from "@carlnotes/db/topicPodcastEpisodeVideoKeys"
 import { topicImageRegenerateModel } from "@carlnotes/models/topicImageModel"
 import { startTopicImageRender } from "@carlnotes/pipeline/topicImages/topicImageRenders"
 import {
@@ -71,7 +71,7 @@ export const topicPodcastEpisodeVideoImagesRoute = new Hono<AppEnv>()
 			contentType: "image/jpeg",
 		})
 	})
-	// a chapter's imagined image, to anyone who may see the topic of its ready film
+	// a chapter's generated image, to anyone who may see the topic of its ready film
 	.get("/topic-podcast-episode-video-images/:podcastEpisodeId/chapters/:position/image.jpg", async (context) => {
 		// the chapter position the url names, which is a whole number
 		const { podcastEpisodeId, position } = context.req.param()
@@ -87,7 +87,7 @@ export const topicPodcastEpisodeVideoImagesRoute = new Hono<AppEnv>()
 				)
 			: []
 
-		// an unknown position, a podcast episode with no ready film, and a chapter with no imagined image are not found
+		// an unknown position, a podcast episode with no ready film, and a chapter with no generated image are not found
 		const objectKey = toTopicPodcastEpisodeVideoChapterImageKey(podcastEpisodeId, Number(position))
 		if (!topicPodcastEpisodeVideoTopic || !(await attachmentExists(objectKey))) {
 			return context.json({ error: "not found" }, 404)

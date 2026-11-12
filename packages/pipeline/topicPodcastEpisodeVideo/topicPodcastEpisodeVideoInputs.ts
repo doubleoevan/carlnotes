@@ -1,5 +1,5 @@
-// what a podcast episode film is drawn from: the published podcast episode, the image its film shows, its chapters,
-// and each chapter's image, read from the stored link preview or fetched once
+// what a podcast episode film is drawn from: the published podcast episode, the image its film shows, and its
+// chapters with the Resource each one narrates
 
 import type { PodcastEpisodeScript } from "@carlnotes/contracts/podcast"
 import {
@@ -10,17 +10,21 @@ import {
 } from "@carlnotes/contracts/podcastEpisodes"
 import { toHostWithoutWww } from "@carlnotes/contracts/seo"
 import { db } from "@carlnotes/db"
-import { linkPreviews } from "@carlnotes/db/schema/chat"
 import { podcastEpisodeChapters, podcastEpisodes, topicPodcastEpisodeVideos } from "@carlnotes/db/schema/podcast"
 import { resources } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
-import { getAttachmentBytes, toTopicPodcastEpisodeVideoImageKey } from "@carlnotes/db/store"
-import { and, asc, eq, isNotNull } from "drizzle-orm"
-import { fetchLinkPreviewImage, fetchLinkPreviewMetadata, toNormalizedLinkPreviewUrl } from "../linkPreview"
+import { getAttachmentBytes } from "@carlnotes/db/store"
+import {
+	toTopicPodcastEpisodeVideoImageKey,
+	toTopicPodcastEpisodeVideoImageLargeOriginalKey,
+} from "@carlnotes/db/topicPodcastEpisodeVideoKeys"
+import { asc, eq } from "drizzle-orm"
+import sharp from "sharp"
 import { toChapterTurns } from "../podcast/podcastEpisodeScript"
 import { toPodcastEpisodeImageOriginalKey, toTopicImageOriginalKey } from "../topicImages/topicImageFiles"
 import type { VideoCaptionChapter } from "./videoCaptions"
-import { type LowerThirdText, loadPodcastCardStillPng, toVideoStillPng } from "./videoFrames"
+import { type LowerThirdText, loadPodcastCardStillPng, PODCAST_CARD_ZOOM_LIMIT, toVideoStillPng } from "./videoFrames"
+import { toShotZoomLimit } from "./videoShots"
 
 // the image hash that names a film drawn from Carl and Vienna's podcast card, for a podcast episode with no image
 const PODCAST_CARD_IMAGE_HASH = "podcast-card"
@@ -37,18 +41,22 @@ export type TopicPodcastEpisodeVideoEpisode = {
 	// or else its topic's
 	imageHash: string
 	imageOriginalKey: string | null
+	// the larger original of the film's own image, which the intro and the sign-off zoom into. null for any other image
+	imageLargeOriginalKey: string | null
 	// the lower thirds of the intro and the sign-off
 	introText: LowerThirdText
 	signOffText: LowerThirdText
 }
 
-// one chapter as its film segment reads it
+// one chapter as its film segment reads it, with the Resource it narrates
 export type VideoChapterRow = {
 	position: number
 	title: string
 	sourceUrl: string
 	startSeconds: number
 	endSeconds: number
+	// the Resource the chapter narrates, and whether that Resource was judged unsafe
+	resourceId: string
 	isUnsafe: boolean
 }
 
@@ -122,6 +130,10 @@ type ToShownImageOptions = {
 	topicPodcastEpisodeVideoImageHash?: string | null
 }
 
+// the image a film's intro and sign-off show: its hash, its stored original, and for the film's own image the larger
+// original that the intro and the sign-off zoom into
+type ShownImage = { imageHash: string; imageOriginalKey: string | null; imageLargeOriginalKey: string | null }
+
 /**
  * Returns the hash and the stored original of the image a film's intro and sign-off show: the film's own, or else its
  * podcast episode's, its topic's, or the podcast card, which has no stored original.
@@ -132,40 +144,69 @@ export function toShownImage({
 	podcastEpisodeImageHash,
 	topicImageHash,
 	topicPodcastEpisodeVideoImageHash,
-}: ToShownImageOptions): { imageHash: string; imageOriginalKey: string | null } {
+}: ToShownImageOptions): ShownImage {
 	// a film with its own image shows it, whatever its podcast episode shows
 	if (topicPodcastEpisodeVideoImageHash) {
+		const ownImageHash = topicPodcastEpisodeVideoImageHash
 		return {
-			imageHash: topicPodcastEpisodeVideoImageHash,
-			imageOriginalKey: toTopicPodcastEpisodeVideoImageKey(podcastEpisodeId, topicPodcastEpisodeVideoImageHash),
+			imageHash: ownImageHash,
+			imageOriginalKey: toTopicPodcastEpisodeVideoImageKey(podcastEpisodeId, ownImageHash),
+			imageLargeOriginalKey: toTopicPodcastEpisodeVideoImageLargeOriginalKey(podcastEpisodeId, ownImageHash),
 		}
 	}
 
 	// otherwise the image its podcast episode shows
 	if (podcastEpisodeImageHash) {
-		return {
-			imageHash: podcastEpisodeImageHash,
-			imageOriginalKey: toPodcastEpisodeImageOriginalKey(podcastEpisodeId, podcastEpisodeImageHash),
+		const imageOriginalKey = toPodcastEpisodeImageOriginalKey(podcastEpisodeId, podcastEpisodeImageHash)
+		return { imageHash: podcastEpisodeImageHash, imageOriginalKey, imageLargeOriginalKey: null }
+	}
+
+	// or else its topic's, or the podcast card
+	if (topicImageHash) {
+		const imageOriginalKey = toTopicImageOriginalKey(topicId, topicImageHash)
+		return { imageHash: topicImageHash, imageOriginalKey, imageLargeOriginalKey: null }
+	}
+	return { imageHash: PODCAST_CARD_IMAGE_HASH, imageOriginalKey: null, imageLargeOriginalKey: null }
+}
+
+// the still of the image a film's intro and sign-off show, how far that image may zoom in a chapter's shot, and
+// whether the film shows the podcast card in place of an image
+export type ShownImageStill = { stillPng: Uint8Array; zoomLimit: number; isPodcastCard: boolean }
+
+/**
+ * Returns the still of the image a film's intro and sign-off show, from the larger original of the film's own image if
+ * it has one. A film with no image, or whose image cannot be read, shows the podcast card.
+ */
+export async function loadShownImageStill({
+	imageOriginalKey,
+	imageLargeOriginalKey,
+}: Pick<ShownImage, "imageOriginalKey" | "imageLargeOriginalKey">): Promise<ShownImageStill> {
+	// the larger original first, then the stored original
+	for (const imageKey of [imageLargeOriginalKey, imageOriginalKey]) {
+		const shownImageStill = imageKey ? await loadImageStill(imageKey) : null
+		if (shownImageStill) {
+			return shownImageStill
 		}
 	}
-	if (topicImageHash) {
-		return { imageHash: topicImageHash, imageOriginalKey: toTopicImageOriginalKey(topicId, topicImageHash) }
+	return { stillPng: await loadPodcastCardStillPng(), zoomLimit: PODCAST_CARD_ZOOM_LIMIT, isPodcastCard: true }
+}
+
+// one stored image as a still with the zoom its pixels hold, or null for an image that is missing or cannot be read
+async function loadImageStill(imageKey: string): Promise<ShownImageStill | null> {
+	try {
+		// read the image's pixel size, then compose its still
+		const imageBytes = await getAttachmentBytes(imageKey)
+		const { width = 0, height = 0 } = await sharp(imageBytes).metadata()
+		const stillPng = await toVideoStillPng(imageBytes)
+		return { stillPng, zoomLimit: toShotZoomLimit({ width, height }), isPodcastCard: false }
+	} catch {
+		return null
 	}
-	return { imageHash: PODCAST_CARD_IMAGE_HASH, imageOriginalKey: null }
 }
 
 /**
- * Returns the still of the image a film's intro and sign-off show. An image that cannot be read shows the podcast card.
- */
-export async function loadShownImageStillPng(imageOriginalKey: string | null): Promise<Uint8Array> {
-	if (!imageOriginalKey) {
-		return loadPodcastCardStillPng()
-	}
-	return toVideoStillPng(await getAttachmentBytes(imageOriginalKey)).catch(() => loadPodcastCardStillPng())
-}
-
-/**
- * Returns a podcast episode's chapters in order, with whether each one's Resource was judged unsafe.
+ * Returns a podcast episode's chapters in order, with the Resource each one narrates and whether that Resource was
+ * judged unsafe.
  */
 export function loadVideoChapterRows(podcastEpisodeId: string): Promise<VideoChapterRow[]> {
 	return db
@@ -175,6 +216,7 @@ export function loadVideoChapterRows(podcastEpisodeId: string): Promise<VideoCha
 			sourceUrl: podcastEpisodeChapters.sourceUrl,
 			startSeconds: podcastEpisodeChapters.startSeconds,
 			endSeconds: podcastEpisodeChapters.endSeconds,
+			resourceId: podcastEpisodeChapters.resourceId,
 			isUnsafe: resources.isUnsafe,
 		})
 		.from(podcastEpisodeChapters)
@@ -188,52 +230,6 @@ export function loadVideoChapterRows(podcastEpisodeId: string): Promise<VideoCha
  */
 export function toChapterLowerThirdText(videoChapterRow: VideoChapterRow): LowerThirdText {
 	return { title: videoChapterRow.title, detail: toHostWithoutWww(videoChapterRow.sourceUrl) }
-}
-
-/**
- * Returns a chapter's still from its Finding's link preview image: the stored link preview's image if one exists, or
- * else the page's image fetched once and stored nowhere. Returns null for an unsafe Resource, a missing image, and an
- * image that cannot be read.
- */
-export async function loadChapterLinkPreviewStillPng(videoChapterRow: VideoChapterRow): Promise<Uint8Array | null> {
-	// an unsafe Resource never shows its image
-	if (videoChapterRow.isUnsafe) {
-		return null
-	}
-
-	// a missing image or one that cannot be read gives no still
-	try {
-		const imageBytes = await loadChapterImageBytes(videoChapterRow.sourceUrl)
-		return imageBytes ? await toVideoStillPng(imageBytes) : null
-	} catch {
-		return null
-	}
-}
-
-// the link preview image of a page: the stored link preview's, or else fetched from the page's own tags
-async function loadChapterImageBytes(sourceUrl: string): Promise<Uint8Array | null> {
-	// a link preview that a chat already stored with an image
-	const [storedLinkPreview] = await db
-		.select({ imageObjectKey: linkPreviews.imageObjectKey })
-		.from(linkPreviews)
-		.where(
-			and(
-				eq(linkPreviews.url, toNormalizedLinkPreviewUrl(sourceUrl)),
-				eq(linkPreviews.status, "ready"),
-				isNotNull(linkPreviews.imageObjectKey),
-			),
-		)
-	if (storedLinkPreview?.imageObjectKey) {
-		return getAttachmentBytes(storedLinkPreview.imageObjectKey)
-	}
-
-	// otherwise the page's image, fetched through the public url guard
-	const { imageUrl } = await fetchLinkPreviewMetadata(sourceUrl)
-	if (!imageUrl) {
-		return null
-	}
-	const { bytes } = await fetchLinkPreviewImage(imageUrl)
-	return bytes
 }
 
 /**

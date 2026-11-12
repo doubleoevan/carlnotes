@@ -1,174 +1,197 @@
-// the film's ffmpeg arguments: a segment's frames, settings, fades, and slide, and the film's mux and rebuild
+// the film's ffmpeg arguments: a shot's move, crossfade, lower third, and fades, the intro's and the sign-off's zoom,
+// and the film's mux and rebuild
 import { expect, test } from "bun:test"
 import {
 	toFilmMuxArguments,
 	toFilmRemuxArguments,
-	toSlideDirection,
-	toVideoSegmentArguments,
-	type VideoSegmentEncode,
+	toImagePartPushSeconds,
+	toVideoImagePartArguments,
+	toVideoShotArguments,
+	type VideoImagePartEncode,
+	type VideoShotEncode,
+	type VideoShotPicture,
 } from "./videoEncode"
 
-// a three-second chapter segment that fades in
-const CHAPTER_SEGMENT: VideoSegmentEncode = {
-	stillPath: "/work/still.png",
-	lowerThirdPath: "/work/lower-third.png",
-	frameCount: 72,
-	segmentKind: "chapter",
-	slideDirection: null,
-	segmentPath: "/work/chapter-0.mp4",
+// a six-second shot of an image that holds a zoom to 2, which another shot follows
+const SHOT_PICTURE: VideoShotPicture = {
+	stillPath: "/work/chapter-0-still-1.png",
+	zoomLimit: 2,
+	move: "zoom-in",
+	frameCount: 134,
+	screenFrameCount: 144,
 }
 
-// a segment's filter graph
-function toFilterGraph(videoSegmentEncode: VideoSegmentEncode): string {
-	const videoSegmentArguments = toVideoSegmentArguments(videoSegmentEncode)
-	return videoSegmentArguments[videoSegmentArguments.indexOf("-filter_complex") + 1] ?? ""
+// the shot before it, of a smaller image that pans
+const PREVIOUS_SHOT_PICTURE: VideoShotPicture = {
+	stillPath: "/work/chapter-0-still-0.png",
+	zoomLimit: 1.25,
+	move: "pan-left",
+	frameCount: 120,
+	screenFrameCount: 130,
 }
 
-// how far a sliding still is from its place at a time, in pixels along its axis, read from the overlay's expression:
-// its sign and axis, the two weights of the back ease, and the slide's length
-function toSlidePixelsAt(filterGraph: string, seconds: number): number {
-	const match = filterGraph.match(/'(-?)([WH])\*\(([\d.]+)\*pow\(min\(t\/([\d.]+),1\)-1,3\)\+([\d.]+)\*pow\(/)
-	const [, sign, axis, cubicWeight, slideSeconds, squareWeight] = match ?? []
-	const easeTime = Math.min(seconds / Number(slideSeconds), 1) - 1
-	const slideOffset = Number(cubicWeight) * easeTime ** 3 + Number(squareWeight) * easeTime ** 2
-	return (sign === "-" ? -1 : 1) * (axis === "W" ? 1280 : 720) * slideOffset
+// a shot in the middle of its segment, past the lower third
+const MIDDLE_SHOT: VideoShotEncode = {
+	...SHOT_PICTURE,
+	previousShot: PREVIOUS_SHOT_PICTURE,
+	lowerThird: null,
+	isSegmentStart: false,
+	isSegmentEnd: false,
+	shotPath: "/work/chapter-0-shot-3.mp4",
 }
 
-// the zoom a filter graph gives one frame, from its start or end zoom, its range, and its eased progress
-function toZoomAt(filterGraph: string, frame: number): number {
-	const match = filterGraph.match(/z='([\d.]+)([+-])([\d.]+)\*\(1-cos\(PI\*on\/(\d+)\)\)\/2'/)
-	const [, zoomStart, sign, zoomRange, lastFrame] = match ?? []
-	const easedProgress = (1 - Math.cos((Math.PI * frame) / Number(lastFrame))) / 2
-	return Number(zoomStart) + (sign === "-" ? -1 : 1) * Number(zoomRange) * easedProgress
+// a forty-second intro
+const INTRO_PART: VideoImagePartEncode = {
+	stillPath: "/work/shown-image-still.png",
+	lowerThirdPath: "/work/intro-lower-third.png",
+	frameCount: 960,
+	part: "intro",
+	partPath: "/work/intro.mp4",
 }
 
-// a segment stops at its frames, keeps a keyframe every two seconds, and writes video only
-test("a segment encodes its exact frames with fixed keyframes and no audio", () => {
-	const videoSegmentArguments = toVideoSegmentArguments(CHAPTER_SEGMENT)
-	expect(videoSegmentArguments.join(" ")).toContain("-frames:v 72")
-	expect(videoSegmentArguments.join(" ")).toContain("-g 48 -keyint_min 48 -sc_threshold 0")
-	expect(videoSegmentArguments.join(" ")).toContain("-crf 28")
-	expect(videoSegmentArguments.slice(-2)).toEqual(["-an", "/work/chapter-0.mp4"])
+// a run's filter graph
+function toFilterGraph(ffmpegArguments: string[]): string {
+	return ffmpegArguments[ffmpegArguments.indexOf("-filter_complex") + 1] ?? ""
+}
+
+// an intro's zoom some seconds in: the push to its end, then the creep
+function toIntroZoomAt(seconds: number, partSeconds: number): number {
+	const pushSeconds = toImagePartPushSeconds(partSeconds)
+	return 1.12 ** Math.min(seconds, pushSeconds) * 1.005 ** Math.max(seconds - pushSeconds, 0)
+}
+
+// a shot stops at its own frames, keeps a keyframe every two seconds, and writes video only
+test("a shot encodes its exact frames with fixed keyframes and no audio", () => {
+	const shotArguments = toVideoShotArguments(MIDDLE_SHOT)
+	expect(shotArguments.join(" ")).toContain("-frames:v 134")
+	expect(shotArguments.join(" ")).toContain("-g 48 -keyint_min 48 -sc_threshold 0")
+	expect(shotArguments.join(" ")).toContain("-crf 28")
+	expect(shotArguments.slice(-2)).toEqual(["-an", "/work/chapter-0-shot-3.mp4"])
 })
 
-// the intro zooms in to 1.8 on its last frame, and the sign-off starts there and zooms back out to 1
-test("the intro zooms in and the sign-off zooms out", () => {
-	// read each filter graph's zoom
-	const introGraph = toVideoSegmentArguments({ ...CHAPTER_SEGMENT, segmentKind: "intro" }).join(" ")
-	const signOffGraph = toVideoSegmentArguments({ ...CHAPTER_SEGMENT, segmentKind: "sign-off" }).join(" ")
-	expect(toZoomAt(introGraph, 0)).toBeCloseTo(1, 6)
-	expect(toZoomAt(introGraph, 71)).toBeCloseTo(1.8, 6)
-	expect(toZoomAt(signOffGraph, 0)).toBeCloseTo(1.8, 6)
-	expect(toZoomAt(signOffGraph, 71)).toBeCloseTo(1, 6)
+// a zoom grows by the same share each second, and a zoom out runs the same zoom backward over the frames on screen
+test("a zoom in grows 8 percent a second, and a zoom out ends on the full image", () => {
+	const zoomInGraph = toFilterGraph(toVideoShotArguments(MIDDLE_SHOT))
+	const zoomOutGraph = toFilterGraph(toVideoShotArguments({ ...MIDDLE_SHOT, move: "zoom-out" }))
+	expect(zoomInGraph).toContain("[0:v]zoompan=z='pow(1.08,(on+0)/24)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=134:")
+	expect(zoomOutGraph).toContain("[0:v]zoompan=z='pow(1.08,(144-(on+0))/24)':")
 })
 
-// the zoom moves least in its first and last frames and most in its middle
-test("a zoom eases in and out", () => {
-	const introGraph = toVideoSegmentArguments({ ...CHAPTER_SEGMENT, segmentKind: "intro" }).join(" ")
-	const firstStep = toZoomAt(introGraph, 1) - toZoomAt(introGraph, 0)
-	const middleStep = toZoomAt(introGraph, 36) - toZoomAt(introGraph, 35)
-	const lastStep = toZoomAt(introGraph, 71) - toZoomAt(introGraph, 70)
-	expect(middleStep).toBeGreaterThan(firstStep * 10)
-	expect(middleStep).toBeGreaterThan(lastStep * 10)
+// an image that holds less zoom moves slower, so it ends on its limit as it leaves the screen
+test("a small image zooms slower, to its limit", () => {
+	const slowGraph = toFilterGraph(toVideoShotArguments({ ...MIDDLE_SHOT, zoomLimit: 1.25 }))
+	const [, zoomRate] = slowGraph.match(/z='pow\(([\d.]+),\(on\+0\)\/24\)'/) ?? []
+	expect(Number(zoomRate)).toBeLessThan(1.08)
+	expect(Number(zoomRate) ** 6).toBeCloseTo(1.25, 4)
 })
 
-// a segment shorter than both fades splits its length between them
+// a pan holds its zoom and crosses the room that its zoom leaves, from the right to the left or the other way
+test("a pan holds its zoom and travels across the image", () => {
+	const panLeftGraph = toFilterGraph(toVideoShotArguments({ ...MIDDLE_SHOT, move: "pan-left" }))
+	const panRightGraph = toFilterGraph(toVideoShotArguments({ ...MIDDLE_SHOT, move: "pan-right" }))
+	expect(panLeftGraph).toContain("zoompan=z='1.48':x='(iw-iw/zoom)*(1-(on+0)/144)':y='ih/2-(ih/zoom/2)':d=134:")
+	expect(panRightGraph).toContain("zoompan=z='1.48':x='(iw-iw/zoom)*(on+0)/144':y='ih/2-(ih/zoom/2)':d=134:")
+})
+
+// the still before a shot keeps its own move from where its run stopped, for ten frames, and fades out over them
+test("a shot crossfades from the still before it, which keeps moving", () => {
+	const shotArguments = toVideoShotArguments(MIDDLE_SHOT)
+	const filterGraph = toFilterGraph(shotArguments)
+	expect(shotArguments.slice(0, 5)).toEqual(["-y", "-i", SHOT_PICTURE.stillPath, "-i", PREVIOUS_SHOT_PICTURE.stillPath])
+
+	// the pan goes on from frame 120 of its 130, and the tail fades out over the shot
+	expect(filterGraph).toContain("[1:v]zoompan=z='1.25':x='(iw-iw/zoom)*(1-(on+120)/130)':y='ih/2-(ih/zoom/2)':d=10:")
+	expect(filterGraph).toMatch(/format=yuva420p,fade=t=out:st=0:d=0\.41\d+:alpha=1\[tail\]/)
+	expect(filterGraph).toContain("[shot][tail]overlay=0:0:eof_action=pass[crossfaded]")
+	expect(filterGraph).toContain("[crossfaded]format=yuv420p[segment]")
+})
+
+// a segment's first shot has no still before it, and fades in from espresso
+test("a segment's first shot has no crossfade and fades in from espresso", () => {
+	const firstShot = { ...MIDDLE_SHOT, previousShot: null, isSegmentStart: true }
+	const shotArguments = toVideoShotArguments(firstShot)
+	const filterGraph = toFilterGraph(shotArguments)
+	expect(shotArguments.filter((argument) => argument === "-i")).toHaveLength(1)
+	expect(filterGraph).not.toContain("[tail]")
+	expect(filterGraph).toContain("[shot]fade=t=in:st=0:d=0.3:color=0x0f0c09,format=yuv420p[segment]")
+})
+
+// a segment's last shot fades out to espresso over its last 0.3 seconds, and a shot in the middle fades neither way
+test("only a segment's ends fade through espresso", () => {
+	const lastShotGraph = toFilterGraph(toVideoShotArguments({ ...MIDDLE_SHOT, isSegmentEnd: true }))
+	const middleShotGraph = toFilterGraph(toVideoShotArguments(MIDDLE_SHOT))
+	expect(lastShotGraph).toMatch(/fade=t=out:st=5\.28\d*:d=0\.3:color=0x0f0c09,format=yuv420p\[segment\]/)
+	expect(middleShotGraph).not.toContain("color=0x0f0c09")
+})
+
+// a one-shot segment shorter than both fades splits its length between them
 test("a short segment fades for half its length each way", () => {
-	const shortGraph = toVideoSegmentArguments({ ...CHAPTER_SEGMENT, frameCount: 24 }).join(" ")
-	expect(shortGraph).toContain("fade=t=in:st=0:d=0.5:color=0x")
-	expect(shortGraph).toContain("fade=t=out:st=0.5:d=0.5:color=0x")
+	const shortShot = { ...MIDDLE_SHOT, previousShot: null, frameCount: 12, isSegmentStart: true, isSegmentEnd: true }
+	const shortGraph = toFilterGraph(toVideoShotArguments(shortShot))
+	expect(shortGraph).toContain("fade=t=in:st=0:d=0.25:color=0x0f0c09,fade=t=out:st=0.25:d=0.25:color=0x0f0c09")
 })
 
-// the zoom reaches 1.35 on the last frame, and the segment fades out over its last 1.2 seconds
-test("a chapter zooms to 1.35 and fades out at its end", () => {
-	// read the filter graph and the zoom's step per frame
-	const videoSegmentArguments = toVideoSegmentArguments(CHAPTER_SEGMENT)
-	const filterGraph = videoSegmentArguments[videoSegmentArguments.indexOf("-filter_complex") + 1]
-	expect(toZoomAt(filterGraph ?? "", 71)).toBeCloseTo(1.35, 6)
-	expect(filterGraph).toContain("fade=t=out:st=1.8:d=1.2:color=0x0f0c09")
-})
+// the lower third's fades are timed from the segment's start, whichever shot they fall in
+test("the lower third keeps its segment's fades in a shot that starts later", () => {
+	const lowerThird = { lowerThirdPath: "/work/chapter-0-lower-third.png", shotStartSeconds: 5.5 }
+	const shotArguments = toVideoShotArguments({ ...MIDDLE_SHOT, lowerThird })
+	const filterGraph = toFilterGraph(shotArguments)
 
-// a segment with no slide keeps the graph it had: the still, the lower third over it, and both fades
-test("a chapter with no slide fades in and has no background", () => {
-	const filterGraph = toFilterGraph(CHAPTER_SEGMENT)
-	expect(filterGraph).not.toContain("[background]")
+	// the lower third loops as the third input, after the two stills
+	expect(shotArguments.join(" ")).toContain("-framerate 24 -loop 1 -i /work/chapter-0-lower-third.png")
 	expect(filterGraph).toContain(
-		"[zoomed][lowerThird]overlay=0:0,fade=t=in:st=0:d=1.2:color=0x0f0c09,fade=t=out:st=1.8:d=1.2:color=0x0f0c09,format=yuv420p[segment]",
+		"[2:v]format=rgba,setpts=PTS+5.5/TB,fade=t=in:st=0.6:d=0.4:alpha=1,fade=t=out:st=7.6:d=0.4:alpha=1,setpts=PTS-5.5/TB[lowerThird]",
 	)
+	expect(filterGraph).toContain("[crossfaded][lowerThird]overlay=0:0[titled]")
+	expect(filterGraph).toContain("[titled]format=yuv420p[segment]")
 })
 
-// the still slides in over an espresso frame, under the lower third, and the segment only fades out
-test("a chapter with a slide moves its still in over espresso instead of fading in", () => {
-	const filterGraph = toFilterGraph({ ...CHAPTER_SEGMENT, slideDirection: "left" })
-	expect(filterGraph).toContain("color=c=0x0f0c09:s=1280x720:r=24[background]")
-	expect(filterGraph).toContain(
-		"[background][zoomed]overlay=x='W*(1.83*pow(min(t/0.9,1)-1,3)+0.83*pow(min(t/0.9,1)-1,2))':y='0'[slid]",
+// a shot the lower third never reaches has no lower third input
+test("a shot past the lower third draws none", () => {
+	const shotArguments = toVideoShotArguments(MIDDLE_SHOT)
+	expect(shotArguments).not.toContain("-loop")
+	expect(toFilterGraph(shotArguments)).not.toContain("[lowerThird]")
+})
+
+// a forty-second intro pushes for 6.6 seconds to 2.1 times, then creeps to 2.5 times at its end
+test("the intro pushes in, then creeps to 2.5 times at its end", () => {
+	expect(toImagePartPushSeconds(40)).toBeCloseTo(6.62, 2)
+	expect(toIntroZoomAt(0, 40)).toBe(1)
+	expect(toIntroZoomAt(6.62, 40)).toBeCloseTo(2.12, 2)
+	expect(toIntroZoomAt(40, 40)).toBeCloseTo(2.5, 6)
+
+	// the filter graph holds the same push and creep, by the seconds since the intro's start
+	const introGraph = toFilterGraph(toVideoImagePartArguments(INTRO_PART))
+	expect(introGraph).toContain("zoompan=z='pow(1.12,min(on/24,6.616))*pow(1.005,max(on/24-6.616,0))':")
+	expect(introGraph).toContain(":d=960:s=1280x720:fps=24[zoomed]")
+})
+
+// the sign-off runs the intro's zoom by the seconds to its end, so it starts at 2.5 times and ends on the full image
+test("the sign-off runs the same zoom backward", () => {
+	const signOffGraph = toFilterGraph(toVideoImagePartArguments({ ...INTRO_PART, part: "sign-off" }))
+	expect(signOffGraph).toContain("zoompan=z='pow(1.12,min((959-on)/24,6.616))*pow(1.005,max((959-on)/24-6.616,0))':")
+})
+
+// an intro too short to reach 2.5 times pushes for its whole length
+test("a short intro is the push alone", () => {
+	expect(toImagePartPushSeconds(5)).toBe(5)
+	expect(toIntroZoomAt(5, 5)).toBeCloseTo(1.76, 2)
+	expect(toImagePartPushSeconds(8)).toBe(8)
+	expect(toImagePartPushSeconds(8.2)).toBeLessThan(8.2)
+})
+
+// the intro's and the sign-off's lower third fades in and stays, and the part fades through espresso both ways
+test("an image part keeps its lower third and fades in and out", () => {
+	const introArguments = toVideoImagePartArguments(INTRO_PART)
+	const introGraph = toFilterGraph(introArguments)
+	expect(introGraph).toContain("[1:v]format=rgba,fade=t=in:st=0.6:d=0.4:alpha=1[lowerThird]")
+	expect(introGraph).not.toContain("alpha=1,fade=t=out")
+
+	// the part's own fades, and the file it writes
+	expect(introGraph).toContain(
+		"[zoomed][lowerThird]overlay=0:0,fade=t=in:st=0:d=0.3:color=0x0f0c09,fade=t=out:st=39.7:d=0.3:color=0x0f0c09,format=yuv420p[part]",
 	)
-	expect(filterGraph).toContain(
-		"[slid][lowerThird]overlay=0:0,fade=t=out:st=1.8:d=1.2:color=0x0f0c09,format=yuv420p[segment]",
-	)
-	expect(filterGraph).not.toMatch(/fade=t=in:[^,;]*color=/)
-
-	// the frames, the settings, and the inputs are the ones a fading segment has
-	const slideArguments = toVideoSegmentArguments({ ...CHAPTER_SEGMENT, slideDirection: "left" })
-	const fadeArguments = toVideoSegmentArguments(CHAPTER_SEGMENT)
-	const filterGraphIndex = slideArguments.indexOf("-filter_complex") + 1
-	expect(slideArguments.toSpliced(filterGraphIndex, 1)).toEqual(fadeArguments.toSpliced(filterGraphIndex, 1))
-})
-
-// each edge's still starts a whole frame outside it and ends exactly in place
-test("a slide starts outside the frame on its edge and ends in place", () => {
-	const startPixels = { left: -1280, right: 1280, top: -720, bottom: 720 }
-	for (const slideDirection of ["left", "right", "top", "bottom"] as const) {
-		// the still moves along one axis and the other stays at 0
-		const filterGraph = toFilterGraph({ ...CHAPTER_SEGMENT, slideDirection })
-		const isHorizontal = slideDirection === "left" || slideDirection === "right"
-		expect(filterGraph).toContain(isHorizontal ? "':y='0'[slid]" : "overlay=x='0':y='")
-		expect(toSlidePixelsAt(filterGraph, 0)).toBeCloseTo(startPixels[slideDirection], 6)
-		expect(Math.abs(toSlidePixelsAt(filterGraph, 0.9))).toBe(0)
-		expect(Math.abs(toSlidePixelsAt(filterGraph, 3))).toBe(0)
-	}
-})
-
-// the still is most of the way in after a third of the slide, passes its place by 2 to 3 percent, and comes back
-test("a slide moves fast at first, passes its place a little, and settles", () => {
-	// sample the slide from the left once per frame
-	const filterGraph = toFilterGraph({ ...CHAPTER_SEGMENT, slideDirection: "left" })
-	const slidePixels = Array.from({ length: 23 }, (_, frame) => toSlidePixelsAt(filterGraph, frame / 24))
-	const furthestPixels = Math.max(...slidePixels)
-	expect(toSlidePixelsAt(filterGraph, 0.3)).toBeGreaterThan(-1280 * 0.25)
-	expect(furthestPixels).toBeGreaterThan(1280 * 0.02)
-	expect(furthestPixels).toBeLessThan(1280 * 0.03)
-	expect(slidePixels.at(-1)).toBeLessThan(furthestPixels / 10)
-})
-
-// a one-second chapter slides for its first half and fades out for its second
-test("a short chapter slides for half its length at most", () => {
-	const shortGraph = toFilterGraph({ ...CHAPTER_SEGMENT, frameCount: 24, slideDirection: "bottom" })
-	expect(shortGraph).toContain("y='-H*(1.83*pow(min(t/0.5,1)-1,3)+0.83*pow(min(t/0.5,1)-1,2))'")
-	expect(shortGraph).toContain("overlay=0:0,fade=t=out:st=0.5:d=0.5:color=0x0f0c09")
-})
-
-// the edge is a pure function of the podcast episode and the position, and every edge is used
-test("a chapter's slide direction is stable and varies across a film's chapters", () => {
-	// the same chapter gets the same edge on every call
-	const podcastEpisodeId = "0b9f6c1e-3f0a-4c58-9a51-6d2f4f8f2c11"
-	const positions = Array.from({ length: 24 }, (_, position) => position)
-	const slideDirections = positions.map((position) => toSlideDirection({ podcastEpisodeId, position }))
-	expect(positions.map((position) => toSlideDirection({ podcastEpisodeId, position }))).toEqual(slideDirections)
-
-	// all four edges occur, and another podcast episode gets another order
-	expect(new Set(slideDirections)).toEqual(new Set(["left", "right", "top", "bottom"]))
-	const otherSlideDirections = positions.map((position) => toSlideDirection({ podcastEpisodeId: "other", position }))
-	expect(otherSlideDirections).not.toEqual(slideDirections)
-})
-
-// a chapter's lower third fades out by eight seconds, and an intro's stays
-test("a chapter's lower third fades out and an intro's does not", () => {
-	const chapterVideoSegmentArguments = toVideoSegmentArguments(CHAPTER_SEGMENT).join(" ")
-	const introVideoSegmentArguments = toVideoSegmentArguments({ ...CHAPTER_SEGMENT, segmentKind: "intro" }).join(" ")
-	expect(chapterVideoSegmentArguments).toContain("fade=t=out:st=7.6:d=0.4:alpha=1")
-	expect(introVideoSegmentArguments).not.toContain("alpha=1,fade=t=out")
+	expect(introArguments.slice(-2)).toEqual(["-an", "/work/intro.mp4"])
 })
 
 // the film copies the video, encodes the MP3 as AAC, and muxes the captions as mov_text

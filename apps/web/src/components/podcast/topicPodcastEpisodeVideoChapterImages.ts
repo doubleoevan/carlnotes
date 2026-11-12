@@ -6,7 +6,7 @@ const PODCAST_CARD_IMAGE_PATH = "/podcast-cover-placeholder.jpg"
 
 // one image a chapter's tooltip may show: which of the film's choices it is, and its url on this site
 export type TopicPodcastEpisodeVideoChapterImage = {
-	kind: "linkPreview" | "imagined" | "podcastCard"
+	kind: "linkPreview" | "generated" | "podcastCard"
 	url: string
 }
 
@@ -23,7 +23,7 @@ type ToTopicPodcastEpisodeVideoChapterImagesOptions = {
 
 /**
  * Returns the images a chapter's tooltip tries, each after the one before it fails to load: the Finding's link preview
- * image, then the chapter's imagined image, which is not found for a chapter with none, then the podcast card. An
+ * image, then the chapter's generated image, which is not found for a chapter with none, then the podcast card. An
  * image that already failed to load on this page is left out.
  */
 export function toTopicPodcastEpisodeVideoChapterImages({
@@ -33,7 +33,7 @@ export function toTopicPodcastEpisodeVideoChapterImages({
 }: ToTopicPodcastEpisodeVideoChapterImagesOptions): TopicPodcastEpisodeVideoChapterImage[] {
 	// the two images every chapter may fall back to
 	const fallbackImages: TopicPodcastEpisodeVideoChapterImage[] = [
-		{ kind: "imagined", url: toTopicPodcastEpisodeVideoChapterImageUrl(podcastEpisodeId, chapterPosition) },
+		{ kind: "generated", url: toTopicPodcastEpisodeVideoChapterImageUrl(podcastEpisodeId, chapterPosition) },
 		{ kind: "podcastCard", url: PODCAST_CARD_IMAGE_PATH },
 	]
 

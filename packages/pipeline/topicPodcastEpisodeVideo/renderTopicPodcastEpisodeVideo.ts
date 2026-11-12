@@ -1,24 +1,25 @@
 // a published podcast episode's film: rendered from its own audio on temp files, stored as three parts and the joined
-// film with its captions, and billed to the podcast episode's owner
+// film with its captions, and billed to the podcast episode's owner. a ready film below the current render version is
+// rendered again while it keeps playing, and its files are swapped once the new ones are stored
 
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { isMonthlyBudgetCutoffPassed } from "@carlnotes/db/monthlyBudgetCutoffs"
 import { deletePodcastFeedCache } from "@carlnotes/db/podcastFeedCache"
+import { deleteStoredObjects, downloadPodcastEpisodeFile } from "@carlnotes/db/store"
 import {
-	deleteStoredObjects,
-	downloadPodcastEpisodeFile,
 	toTopicPodcastEpisodeVideoCaptionsKey,
 	toTopicPodcastEpisodeVideoChaptersKey,
 	toTopicPodcastEpisodeVideoImageKey,
+	toTopicPodcastEpisodeVideoImageLargeOriginalKey,
 	toTopicPodcastEpisodeVideoImagePartKey,
-} from "@carlnotes/db/store"
+} from "@carlnotes/db/topicPodcastEpisodeVideoKeys"
 import { probeDurationSeconds } from "@carlnotes/models/ffmpeg"
 import { reportError } from "@carlnotes/server/monitoring"
 import { drawTopicPodcastEpisodeVideoImage } from "./topicPodcastEpisodeVideoImage"
 import {
-	loadShownImageStillPng,
+	loadShownImageStill,
 	loadTopicPodcastEpisodeVideoEpisode,
 	loadVideoChapterRows,
 	type RenderableTopicPodcastEpisodeVideoEpisode,
@@ -28,23 +29,27 @@ import {
 } from "./topicPodcastEpisodeVideoInputs"
 import {
 	type FilmObjectKeys,
-	isTopicPodcastEpisodeVideoReady,
+	loadTopicPodcastEpisodeVideoRenderState,
 	saveTopicPodcastEpisodeVideoReady,
 	saveTopicPodcastEpisodeVideoRendering,
+	saveTopicPodcastEpisodeVideoRerendered,
+	saveTopicPodcastEpisodeVideoRerenderFailed,
 	saveTopicPodcastEpisodeVideoSkipped,
+	TOPIC_PODCAST_EPISODE_VIDEO_RENDER_VERSION,
 	toTopicPodcastEpisodeVideoCostDollars,
 	uploadTopicPodcastEpisodeVideoFile,
 } from "./topicPodcastEpisodeVideoRows"
 import { detectPauseSeconds, toVideoCaptionCues, toWebVtt } from "./videoCaptions"
-import { prepareChapterFrames } from "./videoChapterStills"
+import { prepareChapterImages } from "./videoChapterImages"
 import { loadHotTakesStartSeconds } from "./videoHotTakes"
-import { renderVideoChaptersPart, renderVideoImageParts, writeVideoFilm } from "./videoParts"
+import { renderVideoChaptersPart, renderVideoImageParts, type VideoSegmentImage, writeVideoFilm } from "./videoParts"
 import { toVideoTimeline } from "./videoTimeline"
 
-// what a render did. it drew the film, or skipped a podcast episode that is not published, a film already ready, an
-// owner past the podcast episode spend cutoff, or a podcast episode missing its audio, transcript, or chapters
+// what a render did. it drew the film, or skipped a podcast episode that is not published, a film already ready at the
+// current render version, an owner past the podcast episode spend cutoff, or a podcast episode missing its audio,
+// transcript, or chapters
 export type RenderTopicPodcastEpisodeVideoResult =
-	| { outcome: "rendered"; renderSeconds: number; byteSize: number }
+	| { outcome: "rendered"; renderSeconds: number; byteSize: number; generatedChapterImageCount: number }
 	| { outcome: "skipped"; reason: "unpublished" | "ready" | "spend-cutoff" | "missing-inputs" }
 
 // the podcast episode, whether the platform pays for the film instead of the owner, as the backfill does, and a signal
@@ -56,10 +61,12 @@ type RenderTopicPodcastEpisodeVideoOptions = {
 }
 
 /**
- * Renders and stores a published podcast episode's film, then marks its row ready with its keys and cost. A podcast
- * episode missing its inputs, or whose owner is past the spend cutoff, gets a failed row, so it is never tried again.
- * A failure deletes what it uploaded and throws an error, so another attempt starts clean. An aborted signal kills
- * the ffmpeg run in progress and fails the render before it uploads.
+ * Renders and stores a published podcast episode's film at the current render version, then marks its row ready with
+ * its keys and cost. A ready film below that version is rendered again: it keeps playing until the new files are
+ * stored, then its row takes the new keys, and a failure leaves it as it was. A podcast episode missing its inputs, or
+ * whose owner is past the spend cutoff, gets a failed row, so it is never tried again. A failure deletes what it
+ * uploaded and throws an error, so another attempt starts clean. An aborted signal kills the ffmpeg run in progress
+ * and fails the render before it uploads.
  */
 export async function renderTopicPodcastEpisodeVideo({
 	podcastEpisodeId,
@@ -73,19 +80,21 @@ export async function renderTopicPodcastEpisodeVideo({
 		return topicPodcastEpisodeVideoInputs
 	}
 
-	// the row shows the film rendering, and the film's own image is drawn before the intro and the sign-off
-	const { videoChapterRows } = topicPodcastEpisodeVideoInputs
-	await saveTopicPodcastEpisodeVideoRendering(podcastEpisodeId)
-	const topicPodcastEpisodeVideoEpisode = await drawOwnImage({
-		topicPodcastEpisodeVideoEpisode: topicPodcastEpisodeVideoInputs.topicPodcastEpisodeVideoEpisode,
-		isPlatformBilled,
-	})
+	// a first render shows its row rendering and draws the film's own image before the intro and the sign-off. a film
+	// rendered again keeps its row ready and the image it shows, so a failure leaves the row as it was
+	const { videoChapterRows, isRerender } = topicPodcastEpisodeVideoInputs
+	const topicPodcastEpisodeVideoEpisode = isRerender
+		? topicPodcastEpisodeVideoInputs.topicPodcastEpisodeVideoEpisode
+		: await startFirstRender({
+				topicPodcastEpisodeVideoEpisode: topicPodcastEpisodeVideoInputs.topicPodcastEpisodeVideoEpisode,
+				isPlatformBilled,
+			})
 
 	// the render works in its own temp folder
 	const workDirectory = await mkdtemp(join(tmpdir(), "episode-video-"))
 	const uploadedKeys: string[] = []
 	try {
-		// render on disk, upload unless the render was stopped, and mark the row ready with its cost
+		// render on disk, and upload unless the render was stopped
 		const renderedFilm = await renderFilmFiles({
 			topicPodcastEpisodeVideoEpisode,
 			videoChapterRows,
@@ -95,19 +104,29 @@ export async function renderTopicPodcastEpisodeVideo({
 		})
 		signal?.throwIfAborted()
 		const objectKeys = await uploadFilmFiles({ topicPodcastEpisodeVideoEpisode, renderedFilm, uploadedKeys })
+
+		// mark the row ready with its cost, or swap a film rendered again for the one that plays
 		const byteSize = Bun.file(renderedFilm.filmPath).size
-		await saveTopicPodcastEpisodeVideoReady({
+		const renderedRow = {
 			podcastEpisodeId,
 			objectKeys,
 			byteSize,
 			durationSeconds: renderedFilm.durationSeconds,
 			imageHash: topicPodcastEpisodeVideoEpisode.imageHash,
 			costDollars: isPlatformBilled ? 0 : toTopicPodcastEpisodeVideoCostDollars(renderedFilm.durationSeconds),
-		})
+		}
+		await (isRerender
+			? saveTopicPodcastEpisodeVideoRerendered(renderedRow)
+			: saveTopicPodcastEpisodeVideoReady(renderedRow))
+
+		// the saved row plays the uploaded files, so a failure after the save deletes none of them
+		uploadedKeys.length = 0
 
 		// the film feeds list the finished film on their next fetch
 		await deletePodcastFeedCache(topicPodcastEpisodeVideoEpisode.topicId)
-		return { outcome: "rendered", renderSeconds: (performance.now() - renderStartMs) / 1000, byteSize }
+		const { generatedChapterImageCount } = renderedFilm
+		const renderSeconds = (performance.now() - renderStartMs) / 1000
+		return { outcome: "rendered", renderSeconds, byteSize, generatedChapterImageCount }
 	} catch (error) {
 		// an attempt that fails leaves no files behind
 		await deleteStoredObjects(uploadedKeys)
@@ -118,19 +137,20 @@ export async function renderTopicPodcastEpisodeVideo({
 }
 
 // the podcast episode as loaded, and whether the platform pays for the image
-type DrawOwnImageOptions = {
+type StartFirstRenderOptions = {
 	topicPodcastEpisodeVideoEpisode: RenderableTopicPodcastEpisodeVideoEpisode
 	isPlatformBilled: boolean
 }
 
-// draw the film's own image if it has none, and return the podcast episode showing it. a failed draw is reported, and
-// the film shows the image its podcast episode shows
-async function drawOwnImage({
+// mark a first render's row rendering, draw the film's own image if it has none, and return the podcast episode
+// showing it. a failed draw is reported, and the film shows the image its podcast episode shows
+async function startFirstRender({
 	topicPodcastEpisodeVideoEpisode,
 	isPlatformBilled,
-}: DrawOwnImageOptions): Promise<RenderableTopicPodcastEpisodeVideoEpisode> {
-	// draw the image, and report a failure without stopping the film
+}: StartFirstRenderOptions): Promise<RenderableTopicPodcastEpisodeVideoEpisode> {
+	// show the row rendering, then draw the image, and report a failure without stopping the film
 	const { podcastEpisodeId } = topicPodcastEpisodeVideoEpisode
+	await saveTopicPodcastEpisodeVideoRendering(podcastEpisodeId)
 	const imageHash = await drawTopicPodcastEpisodeVideoImage({ podcastEpisodeId, isPlatformBilled }).catch(
 		(error: unknown) => {
 			reportError(error, "topic-podcast-episode-video", { podcastEpisodeId, step: "image" })
@@ -146,41 +166,51 @@ async function drawOwnImage({
 		...topicPodcastEpisodeVideoEpisode,
 		imageHash,
 		imageOriginalKey: toTopicPodcastEpisodeVideoImageKey(podcastEpisodeId, imageHash),
+		imageLargeOriginalKey: toTopicPodcastEpisodeVideoImageLargeOriginalKey(podcastEpisodeId, imageHash),
 	}
 }
 
-// what a render reads before it starts: the podcast episode and its chapters, or the reason it is skipped
+// what a render reads before it starts: the podcast episode, its chapters, and whether it renders a ready film again,
+// or the reason the render is skipped
 type RenderInputs =
 	| {
 			outcome: "ready"
 			topicPodcastEpisodeVideoEpisode: RenderableTopicPodcastEpisodeVideoEpisode
 			videoChapterRows: VideoChapterRow[]
+			isRerender: boolean
 	  }
 	| Extract<RenderTopicPodcastEpisodeVideoResult, { outcome: "skipped" }>
 
-// load the podcast episode and its chapters, skipping a film already ready and an owner past the cutoff unless the
-// platform pays. an owner past the cutoff gets a failed row, and so does a podcast episode missing its audio,
-// transcript, or chapters, with a warning
+// load the podcast episode and its chapters, skipping a film already ready at the current render version and an owner
+// past the cutoff unless the platform pays. on a first render an owner past the cutoff gets a failed row, and so does a
+// podcast episode missing its audio, transcript, or chapters, with a warning. a film rendered again keeps its row
 async function loadRenderInputs({
 	podcastEpisodeId,
 	isPlatformBilled,
 }: Required<
 	Pick<RenderTopicPodcastEpisodeVideoOptions, "podcastEpisodeId" | "isPlatformBilled">
 >): Promise<RenderInputs> {
-	// only a published podcast episode without a ready film renders
+	// only a published podcast episode renders
 	const topicPodcastEpisodeVideoEpisode = await loadTopicPodcastEpisodeVideoEpisode(podcastEpisodeId)
 	if (!topicPodcastEpisodeVideoEpisode) {
 		return { outcome: "skipped", reason: "unpublished" }
 	}
-	if (await isTopicPodcastEpisodeVideoReady(podcastEpisodeId)) {
+
+	// a film ready at the current render version is done. one ready below it is rendered again, and replaces its files
+	const renderState = await loadTopicPodcastEpisodeVideoRenderState(podcastEpisodeId)
+	const isReady = renderState?.status === "ready"
+	if (isReady && renderState.renderVersion >= TOPIC_PODCAST_EPISODE_VIDEO_RENDER_VERSION) {
 		return { outcome: "skipped", reason: "ready" }
 	}
+	const isRerender = isReady
 
-	// the owner pays for the film unless the platform does. an owner past the cutoff gets no film, and the skip is
-	// marked once, so the backfill's listing never renders the film on the platform's bill
+	// the owner pays for the film unless the platform does. an owner past the cutoff gets no film, and on a first
+	// render the skip is marked once, so the backfill's listing never renders the film on the platform's bill
 	const { ownerId, audioKey, script } = topicPodcastEpisodeVideoEpisode
 	if (!isPlatformBilled && (await isMonthlyBudgetCutoffPassed(ownerId, "podcastEpisodes"))) {
-		await saveTopicPodcastEpisodeVideoSkipped(podcastEpisodeId, "spend-cutoff")
+		if (!isRerender) {
+			await saveTopicPodcastEpisodeVideoSkipped(podcastEpisodeId, "spend-cutoff")
+		}
 		return { outcome: "skipped", reason: "spend-cutoff" }
 	}
 
@@ -188,27 +218,35 @@ async function loadRenderInputs({
 	const videoChapterRows = await loadVideoChapterRows(podcastEpisodeId)
 	if (!audioKey || !script || videoChapterRows.length === 0) {
 		console.warn(`podcast episode ${podcastEpisodeId} has no audio, transcript, or chapters, so it gets no film`)
-		await saveTopicPodcastEpisodeVideoSkipped(podcastEpisodeId, "missing-inputs")
+		await (isRerender
+			? saveTopicPodcastEpisodeVideoRerenderFailed(podcastEpisodeId)
+			: saveTopicPodcastEpisodeVideoSkipped(podcastEpisodeId, "missing-inputs"))
 		return { outcome: "skipped", reason: "missing-inputs" }
 	}
+
+	// everything the render reads is there
 	return {
 		outcome: "ready",
 		topicPodcastEpisodeVideoEpisode: { ...topicPodcastEpisodeVideoEpisode, audioKey, script },
 		videoChapterRows,
+		isRerender,
 	}
 }
 
-// the film's files on disk, and its length in seconds
+// the film's files on disk, its length in seconds, and how many generated images the render drew
 type RenderedFilm = {
+	// the three parts, null for a part the timeline had no frames for
 	introPath: string | null
 	chaptersPath: string | null
 	signOffPath: string | null
+	// the captions, the joined film, and what the render measured
 	captionsPath: string
 	filmPath: string
 	durationSeconds: number
+	generatedChapterImageCount: number
 }
 
-// the podcast episode, the temp folder, whether the platform pays for the imagined images, and the signal that stops
+// the podcast episode, the temp folder, whether the platform pays for the generated images, and the signal that stops
 // the ffmpeg runs
 type RenderFilmFilesOptions = {
 	topicPodcastEpisodeVideoEpisode: RenderableTopicPodcastEpisodeVideoEpisode
@@ -242,34 +280,8 @@ async function renderFilmFiles({
 	})
 	const segments = toVideoTimeline({ chapterTimes: videoChapterRows, hotTakesStartSeconds, durationSeconds })
 
-	// the intro and the sign-off from the image the film shows
-	const imageParts = await renderVideoImageParts({
-		workDirectory,
-		segments,
-		shownImageStillPng: await loadShownImageStillPng(topicPodcastEpisodeVideoEpisode.imageOriginalKey),
-		introText: topicPodcastEpisodeVideoEpisode.introText,
-		signOffText: topicPodcastEpisodeVideoEpisode.signOffText,
-		signal,
-	})
-
-	// the chapters from their Findings' images, with an imagined image for the longest chapters that have none
-	const loadChapterFrame = await prepareChapterFrames({
-		podcastEpisodeId,
-		ownerId,
-		isPlatformBilled,
-		videoChapterRows,
-		segments,
-		workDirectory,
-	})
-	const chaptersPath = await renderVideoChaptersPart({
-		podcastEpisodeId,
-		workDirectory,
-		segments,
-		loadChapterFrame,
-		signal,
-	})
-
-	// the captions from the script, timed with the pauses in the audio, and held above each lower third
+	// the captions from the script, timed with the pauses in the audio, and shown above each lower third. the shots cut
+	// where a caption starts
 	const captionCues = toVideoCaptionCues({
 		chapters: toVideoCaptionChapters(script, videoChapterRows),
 		pauseSeconds,
@@ -278,10 +290,47 @@ async function renderFilmFiles({
 	const captionsPath = join(workDirectory, "captions.vtt")
 	await Bun.write(captionsPath, toWebVtt(captionCues))
 
+	// the intro and the sign-off from the image the film shows
+	const shownImageStill = await loadShownImageStill(topicPodcastEpisodeVideoEpisode)
+	const imageParts = await renderVideoImageParts({
+		workDirectory,
+		segments,
+		shownImageStillPng: shownImageStill.stillPng,
+		introText: topicPodcastEpisodeVideoEpisode.introText,
+		signOffText: topicPodcastEpisodeVideoEpisode.signOffText,
+		signal,
+	})
+
+	// each chapter's images: its Resource's, then the generated images it lacks, then the podcast card
+	const filmImage: VideoSegmentImage | null = shownImageStill.isPodcastCard
+		? null
+		: { loadStillPng: async () => shownImageStill.stillPng, zoomLimit: shownImageStill.zoomLimit }
+	const preparedChapterImages = await prepareChapterImages({
+		podcastEpisodeId,
+		ownerId,
+		isPlatformBilled,
+		videoChapterRows,
+		segments,
+		filmImage,
+		signal,
+	})
+
+	// the chapters as montages, cut where a caption starts
+	const chaptersPath = await renderVideoChaptersPart({
+		podcastEpisodeId,
+		workDirectory,
+		segments,
+		chapterImages: preparedChapterImages.chapterImages,
+		podcastCardImages: preparedChapterImages.podcastCardImages,
+		captionStartSeconds: captionCues.map((captionCue) => captionCue.startSeconds),
+		signal,
+	})
+
 	// the film joined from the parts, with the audio and the captions
 	const filmPath = join(workDirectory, "film.mp4")
 	await writeVideoFilm({ workDirectory, ...imageParts, chaptersPath, audioPath, captionsPath, filmPath, signal })
-	return { ...imageParts, chaptersPath, captionsPath, filmPath, durationSeconds }
+	const generatedChapterImageCount = preparedChapterImages.drawnGeneratedChapterImageCount
+	return { ...imageParts, chaptersPath, captionsPath, filmPath, durationSeconds, generatedChapterImageCount }
 }
 
 // the podcast episode, the rendered files, and the keys uploaded so far, which a failure deletes
@@ -291,7 +340,8 @@ type UploadFilmFilesOptions = {
 	uploadedKeys: string[]
 }
 
-// upload each file under its key, recording a pending deletion before each upload so a crash leaves nothing behind
+// upload each file under its key at the current render version, recording a pending deletion before each upload so a
+// crash leaves nothing behind
 async function uploadFilmFiles({
 	topicPodcastEpisodeVideoEpisode,
 	renderedFilm,
@@ -303,22 +353,16 @@ async function uploadFilmFiles({
 
 	// the parts drawn from the image are keyed by its hash, and the chapters and captions by the podcast episode alone
 	const { podcastEpisodeId, imageHash } = topicPodcastEpisodeVideoEpisode
+	const renderVersion = TOPIC_PODCAST_EPISODE_VIDEO_RENDER_VERSION
 	const toImagePartKey = (part: "intro" | "sign-off" | "film"): string =>
-		toTopicPodcastEpisodeVideoImagePartKey({ podcastEpisodeId, part, imageHash })
+		toTopicPodcastEpisodeVideoImagePartKey({ podcastEpisodeId, part, imageHash, renderVersion })
+	const chaptersKey = toTopicPodcastEpisodeVideoChaptersKey(podcastEpisodeId, renderVersion)
+	const captionsKey = toTopicPodcastEpisodeVideoCaptionsKey(podcastEpisodeId, renderVersion)
 	return {
 		introKey: await uploadFile(renderedFilm.introPath, toImagePartKey("intro"), "video/mp4"),
-		chaptersKey: await uploadFile(
-			renderedFilm.chaptersPath,
-			toTopicPodcastEpisodeVideoChaptersKey(podcastEpisodeId),
-			"video/mp4",
-		),
+		chaptersKey: await uploadFile(renderedFilm.chaptersPath, chaptersKey, "video/mp4"),
 		signOffKey: await uploadFile(renderedFilm.signOffPath, toImagePartKey("sign-off"), "video/mp4"),
 		filmKey: (await uploadFile(renderedFilm.filmPath, toImagePartKey("film"), "video/mp4")) ?? "",
-		captionsKey:
-			(await uploadFile(
-				renderedFilm.captionsPath,
-				toTopicPodcastEpisodeVideoCaptionsKey(podcastEpisodeId),
-				"text/vtt",
-			)) ?? "",
+		captionsKey: (await uploadFile(renderedFilm.captionsPath, captionsKey, "text/vtt")) ?? "",
 	}
 }

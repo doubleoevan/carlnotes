@@ -23,8 +23,8 @@ import {
 	recordPendingObjectDeletions,
 	toPodcastEpisodeAudioKey,
 	toPodcastEpisodeChapterKey,
-	toTopicPodcastEpisodeVideoKeys,
 } from "@carlnotes/db/store"
+import { toTopicPodcastEpisodeVideoKeys } from "@carlnotes/db/topicPodcastEpisodeVideoKeys"
 import { clearUnseenCommentMentions, loadPodcastEpisodeMentionedUserIds } from "@carlnotes/db/unseenCommentMentions"
 import { eq, inArray } from "drizzle-orm"
 import { deletePodcastEpisodeVectors } from "../meanVectors"

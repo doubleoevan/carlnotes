@@ -74,7 +74,7 @@ test("a published podcast episode starts its film on the film queue if films are
 		filmActivities: {
 			renderTopicPodcastEpisodeVideoActivity: async ({ podcastEpisodeId }) => {
 				renderedPodcastEpisodeIds.push(podcastEpisodeId)
-				return { outcome: "rendered", renderSeconds: 1, byteSize: 1 }
+				return { outcome: "rendered", renderSeconds: 1, byteSize: 1, generatedChapterImageCount: 0 }
 			},
 		},
 	})
@@ -94,7 +94,7 @@ test("films off starts no film", async () => {
 		filmActivities: {
 			renderTopicPodcastEpisodeVideoActivity: async ({ podcastEpisodeId }) => {
 				renderedPodcastEpisodeIds.push(podcastEpisodeId)
-				return { outcome: "rendered", renderSeconds: 1, byteSize: 1 }
+				return { outcome: "rendered", renderSeconds: 1, byteSize: 1, generatedChapterImageCount: 0 }
 			},
 		},
 	})

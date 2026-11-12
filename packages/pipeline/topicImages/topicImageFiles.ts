@@ -14,8 +14,9 @@ import {
 } from "@carlnotes/contracts/topicImages"
 import { uploadAttachment } from "@carlnotes/db/store"
 import type { PromptName } from "@carlnotes/models/prompts/fetch"
-import type { TopicImageAspectRatio } from "@carlnotes/models/topicImageModel"
+import type { TopicImageAspectRatio, TopicImageDrawSize } from "@carlnotes/models/topicImageModel"
 import sharp from "sharp"
+import { toUprightImageSize } from "../uprightImageSize"
 
 // the jpeg quality of a stored original and the webp quality of a derived file
 const ORIGINAL_JPEG_QUALITY = 90
@@ -24,8 +25,14 @@ const DERIVED_WEBP_QUALITY = 82
 // the file name of the stored original
 const ORIGINAL_FILE_NAME = "original.jpg"
 
-// a stored original: its jpeg bytes and its pixel size
-export type TopicImageOriginal = { jpegBytes: Uint8Array; width: number; height: number }
+// a stored original: its jpeg bytes and its pixel size, and a larger jpeg of the same picture for a format that keeps
+// one and an image with the pixels for it
+export type TopicImageOriginal = {
+	jpegBytes: Uint8Array
+	width: number
+	height: number
+	largeOriginalJpegBytes?: Uint8Array
+}
 
 // what an original is drawn as: the prompt whose house style follows its scene, the aspect ratio the image model draws
 // at, and the pixel size it is cropped and resized to
@@ -34,6 +41,11 @@ export type TopicImageFormat = {
 	aspectRatio: TopicImageAspectRatio
 	width: number
 	height: number
+	// the size the image model draws at if it is larger than the model's own, and the most pixels of the larger jpeg
+	// kept beside the original
+	drawSize?: TopicImageDrawSize
+	largeOriginalWidth?: number
+	largeOriginalHeight?: number
 }
 
 // the format of a topic's, a podcast episode's, and a Topic Post's image
@@ -64,16 +76,45 @@ export function toTopicImageUploadType(imageBytes: Uint8Array): (typeof TOPIC_IM
 // to a huge bitmap is rejected before it costs memory
 const MAX_IMAGE_INPUT_PIXELS = 40_000_000
 
+// the pixel sizes an original takes from a format: its own, and the larger jpeg's if the format keeps one
+type TopicImageOriginalSizes = Pick<TopicImageFormat, "width" | "height" | "largeOriginalWidth" | "largeOriginalHeight">
+
 /**
  * Returns the original an image's bytes make: center-cropped to the format's ratio, which is 3:2 if none is given,
- * resized to its size, every piece of metadata stripped, and encoded as a jpeg. A render's output and an upload take
- * the same path.
+ * resized to its size, every piece of metadata stripped, and encoded as a jpeg. A format that keeps a larger jpeg gets
+ * one from the same bytes, never enlarged past the image's own pixels, if the image has more pixels than the original.
+ * A render's output and an upload take the same path.
  */
 export async function toTopicImageOriginal(
 	imageBytes: Uint8Array,
-	{ width, height }: Pick<TopicImageFormat, "width" | "height"> = TOPIC_IMAGE_FORMAT,
+	{ width, height, largeOriginalWidth, largeOriginalHeight }: TopicImageOriginalSizes = TOPIC_IMAGE_FORMAT,
 ): Promise<TopicImageOriginal> {
-	// sharp's cover fit crops the center to the ratio and resizes in one pass, and a fresh encode keeps no metadata
+	// the original at the format's size
+	const original = await toCoverJpeg(imageBytes, { width, height })
+	if (!largeOriginalWidth || !largeOriginalHeight) {
+		return original
+	}
+
+	// the widest the image's center holds at the format's ratio, up to the larger jpeg's size
+	const imageSize = toUprightImageSize(await sharp(imageBytes).metadata())
+	const centerWidth = Math.min(imageSize.width, (imageSize.height * largeOriginalWidth) / largeOriginalHeight)
+	const largeJpegWidth = Math.min(largeOriginalWidth, Math.floor(centerWidth))
+	if (largeJpegWidth <= width) {
+		return original
+	}
+
+	// the larger jpeg, cut from the same center
+	const largeJpegHeight = Math.round((largeJpegWidth * largeOriginalHeight) / largeOriginalWidth)
+	const largeJpeg = await toCoverJpeg(imageBytes, { width: largeJpegWidth, height: largeJpegHeight })
+	return { ...original, largeOriginalJpegBytes: largeJpeg.jpegBytes }
+}
+
+// an image's center at a pixel size as a jpeg with no metadata. sharp's cover fit crops the center to the ratio and
+// resizes in one pass
+async function toCoverJpeg(
+	imageBytes: Uint8Array,
+	{ width, height }: { width: number; height: number },
+): Promise<TopicImageOriginal> {
 	const { data, info } = await sharp(imageBytes, { limitInputPixels: MAX_IMAGE_INPUT_PIXELS })
 		.rotate()
 		.resize(width, height, { fit: "cover", position: "centre" })

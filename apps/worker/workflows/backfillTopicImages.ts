@@ -3,6 +3,7 @@
 
 import type { TopicImageBackfillMode, TopicImageBackfillSummary } from "@carlnotes/pipeline/temporalClient"
 import { continueAsNew, executeChild, isCancellation, ParentClosePolicy, proxyActivities } from "@temporalio/workflow"
+import type { BackfillTopicCursor } from "./backfillTopicCursor"
 import type * as activities from "./backfillTopicImagesActivities"
 import type { RenderTopicImageWorkflowInput } from "./renderTopicImage"
 import { renderTopicImageWorkflow } from "./renderTopicImage"
@@ -20,7 +21,7 @@ const WRITE_ATTEMPTS = 3
 // the backfill's input: the mode, and on a continued run the page cursor and the counts so far
 export type BackfillTopicImagesWorkflowInput = {
 	mode: TopicImageBackfillMode
-	afterTopic?: activities.BackfillTopicCursor
+	afterTopic?: BackfillTopicCursor
 	summary?: TopicImageBackfillSummary
 }
 

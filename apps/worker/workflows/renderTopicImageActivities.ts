@@ -129,11 +129,12 @@ export async function renderAndStoreTopicImage({
 	// failure throws for another attempt
 	const model = render.model ?? ""
 	const isTopicPodcastEpisodeVideoImage = Boolean(render.topicPodcastEpisodeVideoId)
+	const format = isTopicPodcastEpisodeVideoImage ? TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_FORMAT : undefined
 	const original = await renderTopicImageOriginal({
 		scene,
 		isHouseStyle: isTopicPodcastEpisodeVideoImage || !imagePrompt,
 		model,
-		format: isTopicPodcastEpisodeVideoImage ? TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_FORMAT : undefined,
+		format,
 		litellmApiKey: await loadRenderLitellmApiKey(render.userId),
 	}).catch((error: unknown) => {
 		throw toRenderActivityFailure(error)
@@ -146,7 +147,7 @@ export async function renderAndStoreTopicImage({
 		scene,
 		model,
 		imagePrompt,
-		costDollars: topicImageCostDollars(model),
+		costDollars: topicImageCostDollars(model, format?.drawSize),
 	})
 	trackRenderEvent(render)
 }

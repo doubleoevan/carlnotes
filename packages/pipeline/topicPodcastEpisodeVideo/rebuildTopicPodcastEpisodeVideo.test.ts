@@ -1,9 +1,17 @@
-// the film rebuild's skips, with the connection pool stubbed: a film drawn from the image it shows now, its own or else
-// its podcast episode's, and an owner past the spend cutoff are left as they are
-import { afterEach, expect, spyOn, test } from "bun:test"
+// the film rebuild's skips and its swap, with the connection pool stubbed: a film drawn from the image it shows now,
+// its own or else its podcast episode's, and an owner past the spend cutoff are left as they are, and a rebuild swaps
+// only the film it read
+import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as monthlyBudgetCutoffs from "@carlnotes/db/monthlyBudgetCutoffs"
+import * as podcastFeedCache from "@carlnotes/db/podcastFeedCache"
+import * as storage from "@carlnotes/db/store"
+import * as ffmpeg from "@carlnotes/models/ffmpeg"
+import * as analytics from "@carlnotes/server/analytics"
 import { rebuildTopicPodcastEpisodeVideo } from "./rebuildTopicPodcastEpisodeVideo"
+import * as topicPodcastEpisodeVideoInputs from "./topicPodcastEpisodeVideoInputs"
+import * as topicPodcastEpisodeVideoRows from "./topicPodcastEpisodeVideoRows"
+import * as videoParts from "./videoParts"
 
 // a published podcast episode with audio and its own image, in the column order the film's read selects
 const PUBLISHED_PODCAST_EPISODE_ROW = [
@@ -20,9 +28,10 @@ const PUBLISHED_PODCAST_EPISODE_ROW = [
 	null,
 ]
 
-// put the connection pool back after each test
+// put the connection pool and every spy back after each test
 afterEach(() => {
 	restoreConnectionPool()
+	mock.restore()
 })
 
 // answer the podcast episode read and the film read, which was drawn from an image of the given hash. the film has
@@ -31,7 +40,7 @@ function stubRebuildReads(
 	renderedImageHash: string,
 	topicPodcastEpisodeVideoImageHash: string | null = null,
 ): SentQuery[] {
-	const readyFilmRow = ["ready", "intro.mp4", "chapters.mp4", "sign-off.mp4", "film.mp4", renderedImageHash]
+	const readyFilmRow = ["ready", "intro.mp4", "chapters.mp4", "sign-off.mp4", "film.mp4", renderedImageHash, 1]
 	return stubConnectionPool(({ text }) => {
 		// the podcast episode read with its film's own image last, then the film read, and no rows for anything else
 		if (text.includes('from "episodes" inner join "topics"')) {
@@ -76,4 +85,59 @@ test("an owner past the spend cutoff keeps the stale film", async () => {
 
 	// nothing was written
 	expect(isFilmRowUpdated(sentQueries)).toBe(false)
+})
+
+// a rebuild that a re-render overtook finds no film with the chapters part it read, so it swaps nothing and its new
+// files stay pending deletion
+test("a rebuild swaps only a film that still has the chapters part it read", async () => {
+	// a film at render version 2 drawn from an old image, whose swap finds no row
+	const readyFilmRow = ["ready", "intro.mp4", "chapters-v2.mp4", "sign-off.mp4", "film.mp4", "image-old", 2]
+	const sentQueries = stubConnectionPool(({ text }) => {
+		if (text.includes('from "episodes" inner join "topics"')) {
+			return [[...PUBLISHED_PODCAST_EPISODE_ROW, null]]
+		}
+		return text.startsWith('select "status"') ? [readyFilmRow] : []
+	})
+
+	// the steps that read storage and run ffmpeg, and an upload that records each key
+	spyOn(monthlyBudgetCutoffs, "isMonthlyBudgetCutoffPassed").mockResolvedValue(false)
+	spyOn(storage, "downloadPodcastEpisodeFile").mockResolvedValue(undefined)
+	spyOn(ffmpeg, "probeDurationSeconds").mockResolvedValue(60)
+	const stillPng = new Uint8Array([7])
+	spyOn(topicPodcastEpisodeVideoInputs, "loadShownImageStill").mockResolvedValue({
+		stillPng,
+		zoomLimit: 2,
+		isPodcastCard: false,
+	})
+	spyOn(videoParts, "renderVideoImageParts").mockResolvedValue({ introPath: "/work/intro.mp4", signOffPath: null })
+	spyOn(videoParts, "rewriteVideoFilm").mockResolvedValue(undefined)
+	spyOn(podcastFeedCache, "deletePodcastFeedCache").mockResolvedValue(undefined)
+	spyOn(analytics, "trackEvent").mockImplementation(() => {})
+
+	// each upload records its key
+	const uploadedKeys: string[] = []
+	spyOn(topicPodcastEpisodeVideoRows, "uploadTopicPodcastEpisodeVideoFile").mockImplementation(
+		async ({ filePath, key }) => {
+			if (filePath) {
+				uploadedKeys.push(key)
+			}
+			return filePath ? key : null
+		},
+	)
+	await rebuildTopicPodcastEpisodeVideo("episode-1")
+
+	// the new parts are keyed by the new image and the film's render version
+	expect(uploadedKeys).toEqual([
+		"episodes/episode-1/video/intro-image-new-v2.mp4",
+		"episodes/episode-1/video/film-image-new-v2.mp4",
+	])
+
+	// the swap names the image and the chapters part the rebuild read, and with no row swapped nothing else is written
+	const [swapUpdate] = sentQueries.filter((sentQuery) =>
+		sentQuery.text.startsWith('update "topic_podcast_episode_videos"'),
+	)
+	expect(swapUpdate?.text).toContain('"rendered_image_hash" = $')
+	expect(swapUpdate?.text).toContain('"chapters_key" = $')
+	expect(swapUpdate?.values).toContain("chapters-v2.mp4")
+	expect(sentQueries.some((sentQuery) => sentQuery.text.includes('"pending_object_deletions"'))).toBe(false)
 })

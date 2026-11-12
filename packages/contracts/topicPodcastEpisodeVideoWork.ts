@@ -11,11 +11,13 @@ export const TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_TASK_QUEUE = "episode-video-ba
 export const TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_WORKFLOW = "backfillTopicPodcastEpisodeVideosWorkflow"
 export const TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_WORKFLOW_ID = "episode-video-backfill"
 
-// what the backfill did: the films it rendered, skipped, and failed, the seconds the renders took, and the bytes stored
+// what the backfill did: the films it rendered, skipped, and failed, the generated images it drew for them, the seconds
+// the renders took, and the bytes stored
 export type TopicPodcastEpisodeVideoBackfillSummary = {
 	renderedCount: number
 	skippedCount: number
 	failedCount: number
+	generatedChapterImageCount: number
 	renderSeconds: number
 	byteSize: number
 }

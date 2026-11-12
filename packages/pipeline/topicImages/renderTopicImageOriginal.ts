@@ -48,6 +48,7 @@ export async function renderTopicImageOriginal({
 		prompt: isHouseStyle ? await toTopicImagePrompt(scene, format.stylePromptName) : scene,
 		model,
 		aspectRatio: format.aspectRatio,
+		drawSize: format.drawSize,
 		litellmApiKey,
 	})
 	if (renderResult.outcome !== "rendered") {

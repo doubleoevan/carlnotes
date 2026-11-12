@@ -79,6 +79,8 @@ about the app; a section whose hash is unchanged is not embedded again).
   the render and the store, with a spent budget and a rejection non-retryable, and a failure recorded on the row so the
   drawn covers stay. `workflows/backfillTopicImages.ts` is the one-off `topic-image-backfill` workflow that
   `bun run topic-images:backfill` starts, three children at a time, in the `missing`, `redo`, or `resize` mode.
+  `workflows/backfillTopicCursor.ts` is the public-first, oldest-first Topic order and its page cursor, which this
+  backfill and the film backfill both list by.
   `workflows/topicImageWorkflows.ts` is the one bundle the topic image worker loads, both workflows, and
   `topicImageWorkflowActivities.ts` registers both activity sets as one namespace.
 - `workflows/runTopicScanActivities.ts` — the Scan's three stages. `ingestForScan` passes on the discovered Resources
@@ -117,19 +119,25 @@ about the app; a section whose hash is unchanged is not embedded again).
   film route starts the rebuild for a new image on the same queue. The render is one activity, in
   `workflows/renderTopicPodcastEpisodeVideoActivities.ts` beside the rebuild's, with a four-hour timeout, 3 attempts, and a heartbeat every 30 seconds, and the steps are in `@carlnotes/pipeline/topicPodcastEpisodeVideo/`. The
   activity draws the film's own 16:9 image before the intro and the sign-off, and a failed draw leaves the podcast
-  episode's image. Before the chapters it draws an imagined image for the longest chapters with no link preview image
-  that run `TOPIC_PODCAST_EPISODE_VIDEO_IMAGINED_CHAPTER_IMAGE_MINIMUM_SECONDS` or longer, default 90, up to
-  `TOPIC_PODCAST_EPISODE_VIDEO_IMAGINED_CHAPTER_IMAGE_LIMIT` a film, default 4, and a
-  failed draw leaves the podcast card. An editor's regeneration of that image runs as a `renderTopicImage` workflow on the `topic-images`
-  queue, whose render row names the film, and its store starts the film's rebuild. A
+  episode's image. Before the chapters it fetches the Resource Images of each chapter's Resource, with no scrape, and
+  draws the generated images that give each chapter one distinct image for every 30 seconds, up to
+  `TOPIC_PODCAST_EPISODE_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT` a film, default 40, and a failed draw leaves the chapter
+  on the images it has. Each chapter is a montage, encoded as one ffmpeg run for each shot. A render of a ready film
+  below the current render version renders it again while it keeps playing, then swaps its files in one update, and a
+  failure leaves the film that plays. An editor's regeneration of the film's own image runs as a `renderTopicImage`
+  workflow on the `topic-images` queue, whose render row names the film, and its store starts the film's rebuild. A
   concurrency of 0 turns films off: no film Worker polls, and no recording or backfill starts a film.
-- `workflows/backfillTopicPodcastEpisodeVideos.ts` gives each Topic's latest published podcast episode a film, and only
-  that one, on the platform's bill. It runs under the fixed id `episode-video-backfill` on the `episode-video-backfill`
-  queue at `TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_CONCURRENCY`, default 1, public Topics first, 100 Topics a page with
-  `continueAsNew`, each page listed by `workflows/backfillTopicPodcastEpisodeVideosActivities.ts`. `temporal.ts`
-  starts or joins it once the Workers poll, without waiting, and `bun run films:backfill`, the root script
-  `scripts/backfill-topic-podcast-episode-videos.ts`, starts or joins it and prints the summary. A podcast episode missing its inputs or failing
-  every attempt gets a failed film row, so no later listing finds it again. The queue names live in
+- `workflows/backfillTopicPodcastEpisodeVideos.ts` gives each Topic's latest published podcast episode a film, and of
+  the podcast episodes with no film only that one, then re-renders every ready film below the current render version,
+  all on the platform's bill. It runs under the fixed id `episode-video-backfill` on the `episode-video-backfill`
+  queue at `TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_CONCURRENCY`, default 1, public Topics first, 100 a page with
+  `continueAsNew`, each page listed by `workflows/backfillTopicPodcastEpisodeVideosActivities.ts`: the Topics with no
+  film first, then the films to render again, without a film whose re-render failed at this version. It logs the
+  counts so far and the films left after each batch. `temporal.ts` starts or joins it once the Workers poll, without
+  waiting, and `bun run films:backfill`, the root script `scripts/backfill-topic-podcast-episode-videos.ts`, starts or
+  joins it and prints the summary. A podcast episode missing its inputs or failing every attempt gets a failed film
+  row, so no later listing finds it again, and a re-render that fails for good leaves the film that plays and records
+  the failed render version. The queue names live in
   `@carlnotes/contracts/topicPodcastEpisodeVideoWork`, which the workflow files may import.
 - `temporal.ts` starts Sentry (`@carlnotes/server/monitoring`) before Langfuse's tracer (`@carlnotes/models/telemetry`)
   and logs the connection pool, the event loop delay, the scan queue, and Redis once a minute, and the sweep reports a

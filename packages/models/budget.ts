@@ -86,6 +86,12 @@ export const TOPIC_IMAGE_COST_DOLLARS: Record<string, number> = {
 	"gemini-3.1-flash-image": 0.067,
 }
 
+// what one topic image render costs in dollars at the 2K size, by the models that draw at it: Google's per-image price
+// for 1,680 image tokens
+export const TOPIC_IMAGE_2K_COST_DOLLARS: Record<string, number> = {
+	"gemini-3.1-flash-image": 0.101,
+}
+
 // what one minute of podcast episode film costs to render in dollars. one film minute took 79 cpu seconds on a laptop
 // core, so about 160 on a Northflank vCPU, which is 0.044 vCPU hours at $0.01667 each, or $0.00074. the worker's
 // memory for the same time adds about $0.0002, so the rate is rounded up to a tenth of a cent

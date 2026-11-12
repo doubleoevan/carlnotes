@@ -41,7 +41,9 @@ migration. Personal sources migrations are generated with `bun run db:generate`.
 and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
 
 - `schema/` — the schema, one file per domain: `users.ts` (users and Better Auth's tables), `topics.ts`, `scans.ts`
-  (scans, resources, findings, and the finding markers), `topicEmailSends.ts` (the emails a Topic sent), `teams.ts`,
+  (scans, resources, findings, the finding markers, and `resource_images`, the images of a Resource's own page that
+  its films show, with `resources.images_fetched_at` recording that their fetch ran), `topicEmailSends.ts` (the
+  emails a Topic sent), `teams.ts`,
   `teamTopics.ts` (the topics shared into a team beyond its owning team), `invites.ts`, `chat.ts`, `notes.ts`,
   `podcast.ts`, `billing.ts` (each user's one billing subscription and the provider that bills it), `releases.ts`,
   `jobLeases.ts` (each job's lease row), `storage.ts` (favicons and the pending object deletions),
@@ -82,7 +84,15 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   transaction, and an upload records its key first with `recordPendingObjectDeletionBeforeUpload`, with a grace period,
   and clears it with `clearPendingObjectDeletion` in the row insert's transaction.
   `apps/worker/retryPendingObjectDeletions.ts` retries the pending keys after the sweep. Resource content deletes
-  through `deleteStoredObject` with no pending row. Its key is fixed per Resource, and the next fetch rewrites it.
+  through `deleteStoredObject` with no pending row. Its key is fixed per Resource, and the next fetch rewrites it. A
+  Resource Image sits beside it at `toResourceImageKey`, `resources/<id>/images/<position>.jpg`.
+  `topicPodcastEpisodeVideoKeys.ts` holds a film's object keys. A film's part,
+  chapters, and captions keys include the film's render version from version 2 (`render_version` on
+  `topic_podcast_episode_videos`, with `failed_render_version` for a re-render that failed for good), so a re-render
+  never writes over the film that plays. `toTopicPodcastEpisodeVideoImageLargeOriginalKey` is the larger original of a
+  film's own image, and `toTopicPodcastEpisodeVideoChapterImageKeys` lists the
+  `GENERATED_CHAPTER_IMAGE_LIMIT_PER_CHAPTER` generated image keys a chapter may have, the first at the key
+  the api serves.
   `store.smoke.ts` (`bun run smoke:store`) uploads a fake resource's content, reads it back, and checks the key, size,
   and body round-trip against the live bucket.
 - `redis.ts` — the Redis store, on Bun's built-in client from `REDIS_URL`.

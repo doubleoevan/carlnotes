@@ -161,25 +161,49 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
   drops a topic's cached podcast feeds and the stored covers drawn over its image after a change.
 - `topicPodcastEpisodeVideo/` — a published podcast episode's film, the steps of the worker's film workflows.
   `videoTimeline.ts` turns the chapter times into frame-exact segments, `videoCaptions.ts` writes the WebVTT captions
-  from the script, timed with the pauses in the audio, `videoHotTakes.ts` finds where the hosts turn to hot takes,
-  which show the podcast card, `videoFrames.ts` draws the stills and lower thirds, and
-  `videoEncode.ts` and `videoParts.ts` encode the intro, chapters, and sign-off parts with ffmpeg and join the film.
+  from the script, timed with the pauses in the audio, `videoHotTakes.ts` finds where the hosts turn to the Comments,
+  and `videoFrames.ts` draws the stills and lower thirds. `videoShots.ts` plans a segment's montage: shots of 5 to 8
+  seconds that loop through the segment's images, each cut moved to a caption break within a second, no image twice in a row, a
+  move (zoom in, zoom out, pan left, or pan right) that differs from the move of the shot before it, and the zoom an image's size holds without
+  blur. `videoEncode.ts` encodes the intro and the sign-off, which push into the film's image at 12 percent a second
+  and pull back out of it, and one shot at a time with its move, its crossfade from the shot before, and the lower
+  third, and `videoParts.ts` renders the three parts and joins the film.
   `topicPodcastEpisodeVideoInputs.ts` reads the podcast episode, the image its film shows (the film's own, or else
-  the podcast episode's, its topic's, or the podcast card), and each chapter's link preview image.
-  `videoChapterStills.ts` settles each chapter's still before the chapters are encoded: the link preview image, or an
-  imagined image for the longest chapters that run the minimum seconds and have none, up to the limit, or the podcast
-  card. An imagined image is drawn by the film image's own draw from the Finding's title and public relevance
-  explanation alone, checked by the image moderation, stored beside the film's parts, where a second attempt reuses
-  it, and billed to the film's row unless the platform pays. Any failure leaves the podcast card.
-  `topicPodcastEpisodeVideoImage.ts` holds the film's own image: its 16:9 format at the film's frame size, the first
-  draw, the scene input for an editor's regeneration, and the replace that stores the jpeg beside the film's parts,
-  swaps the hash, and starts the rebuild.
-  `renderTopicPodcastEpisodeVideo.ts` draws the film's image if it has none, falling back to the podcast episode's on a
-  failed draw, then renders, uploads, and bills a film, writing a failed row for missing inputs and for an owner past
-  the spend cutoff, which keeps the backfill from rendering that film, and `rebuildTopicPodcastEpisodeVideo.ts` draws only the intro and the sign-off again for a new image and joins them with
-  the stored chapters part. `topicPodcastEpisodeVideoRows.ts` is the film row both of them write: the skipped,
-  rendering, ready, and failed writes, the ready check, the upload that records its pending deletion first, and what a
-  film's rendered minutes cost. `topicPodcastEpisodeVideo.test.ts` renders a fixture podcast episode with ffmpeg.
+  the podcast episode's, its topic's, or the podcast card) with its larger original, and each chapter's Resource.
+  `videoChapterImages.ts` settles each chapter's images before the chapters are encoded: its Resource's images from
+  `resourceImages/`, then the generated images that bring it to one distinct image for every 30 seconds, at most 12 a
+  chapter and the film's limit across its chapters, then the podcast card. A chapter with no image and the Comments
+  segment cut between the podcast card and the film's own image. `generatedChapterImages.ts` draws a generated image
+  by the film image's own draw from the Finding's title and public relevance explanation alone, checks it with the
+  image moderation, stores it beside the film's parts, where a second attempt reuses it, and bills it to the film's
+  row unless the platform pays. An owner past the spend cutoff draws no more, and a failed draw leaves the chapter
+  on the images it has.
+  `topicPodcastEpisodeVideoImage.ts` holds the film's own image: its 16:9 format, the first draw at 2K, the scene
+  input for an editor's regeneration, and the replace that stores the jpeg and its larger original beside the film's
+  parts, swaps the hash, and starts the rebuild.
+  `renderTopicPodcastEpisodeVideo.ts` draws the film's image if it has none, falling back to the podcast episode's on
+  a failed draw, then renders, uploads, and bills a film, writing a failed row for missing inputs and for an owner
+  past the spend cutoff, which keeps the backfill from rendering that film. A ready film below the current render
+  version renders again under versioned keys while it keeps playing, and one guarded update swaps it in.
+  `rebuildTopicPodcastEpisodeVideo.ts` draws only the intro and the sign-off again for a new image and joins them
+  with the stored chapters part. `topicPodcastEpisodeVideoRows.ts` is the film row both of them write: the render
+  version, the skipped, rendering, ready, re-rendered, and failed writes, the render state read, the upload that
+  records its pending deletion first, and what a film's rendered minutes cost. `topicPodcastEpisodeVideo.test.ts`
+  renders a fixture podcast episode with ffmpeg.
+- `uprightImageSize.ts` — an image's pixel size as it shows, read from its metadata, which the film's stills, the
+  topic image originals, and the Resource Images share.
+- `resourceImages/` — a Resource's images for the films that narrate it. `fetchResourceImages.ts` returns each
+  Resource's stored images, fetching them once for a Resource whose fetch has not run: the images its stored
+  Markdown shows, then its link preview image (a YouTube video's largest thumbnail first), each fetched through
+  `linkPreview.ts`'s guarded image fetch, with no scrape. Each kept image passes the image moderation before it is
+  stored. One film fetches a Resource at a time under a job lease, and a film that finds another one fetching waits
+  for what it stores. An unsafe Resource
+  has none and loses any stored.
+  `resourceImageCandidates.ts` reads the images a page's main-content Markdown shows outside any link, without a url
+  that names a logo, an avatar, an icon, or an advert. `resourceImageFilter.ts` keeps a jpeg, png, webp, or avif that
+  covers a third of the film's frame with a shape from 2:3 to 21:9, one copy of each picture by a difference hash with
+  the larger copy kept, at most six, and writes the stored jpeg within 2560 by 1440.
+  `resourceImageTestFixtures.ts` draws the test pictures its tests share.
 - `cardElementPng.ts` lays out an element with satori and rasterizes it with resvg in the fonts under
   `assets/fonts/`: the api's share cards and podcast covers and the film's lower thirds draw through it.
 - `meanVectors.ts` saves the vectors that rank related topics, related podcast episodes, and the podcast episode search,

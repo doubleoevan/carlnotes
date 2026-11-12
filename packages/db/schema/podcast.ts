@@ -205,6 +205,10 @@ export const topicPodcastEpisodeVideos = pgTable(
 		durationSeconds: integer("duration_seconds"),
 		// the content hash of the image that the intro and the sign-off were drawn from
 		renderedImageHash: text("rendered_image_hash"),
+		// the render version the stored film was rendered at, and the version whose re-render failed for good, null if
+		// none did. a film from before render versions is at version 1
+		renderVersion: integer("render_version").notNull().default(1),
+		failedRenderVersion: integer("failed_render_version"),
 		// the content hash of the film's own image, which its intro, sign-off, and poster show. null until it is drawn,
 		// and the film shows the podcast episode's image until then
 		imageHash: text("image_hash"),

@@ -2,8 +2,9 @@
 // drawn over it
 
 import { darkRoast } from "@carlnotes/nightshift/colors"
-import sharp from "sharp"
+import sharp, { type Sharp } from "sharp"
 import { type CardElement, toCardElementPng } from "../cardElementPng"
+import { toUprightImageSize } from "../uprightImageSize"
 
 // the film's size, and how many times larger its stills are composed. the zoom moves a whole pixel of the still at a
 // time, so a still four times the film's size moves a quarter of a film pixel at a time and the slow zoom stays smooth
@@ -18,8 +19,8 @@ export const ESPRESSO = darkRoast.hero
 const LOWER_THIRD_TITLE_COLOR = darkRoast.heroForeground
 const LOWER_THIRD_DETAIL_COLOR = darkRoast.heroMuted
 
-// how much a filled still's backdrop is blurred, in the still's own pixels, and darkened
-const BACKDROP_BLUR_SIGMA = 20 * COMPOSED_SCALE
+// how much a filled still's backdrop is blurred, in the film's pixels, and darkened
+const BACKDROP_BLUR_SIGMA = 20
 const BACKDROP_BRIGHTNESS = 0.45
 
 // how close to 16:9 a wide image must be to cover the frame without a backdrop
@@ -35,6 +36,9 @@ const PODCAST_COVER_ILLUSTRATION_URL = new URL("../../../apps/docs/design/podcas
 // where the podcast card's band starts, as a share of the illustration's width: under the dark band a cover's title
 // sits on, so the 16:9 band shows both hosts, their mugs, and the microphone
 const PODCAST_CARD_BAND_TOP_RATIO = 560 / 3000
+
+// how far the podcast card may zoom in a shot. its illustration is 3000 pixels wide
+export const PODCAST_CARD_ZOOM_LIMIT = 2
 
 // a still covers the frame, or fits inside it over a blurred backdrop of itself
 export type VideoStillFit = "cover" | "fill"
@@ -54,33 +58,35 @@ export function toVideoStillFit({ width, height }: { width: number; height: numb
  * an error for an image that cannot be decoded.
  */
 export async function toVideoStillPng(imageBytes: Uint8Array): Promise<Uint8Array> {
-	// read the image's size, turned upright, from its first frame
-	const uprightImage = sharp(imageBytes, { limitInputPixels: MAX_STILL_INPUT_PIXELS }).rotate()
-	const uprightBytes = await uprightImage.png().toBuffer()
-	const { width = 0, height = 0 } = await sharp(uprightBytes).metadata()
+	// read the image's size, turned upright, without decoding it
+	const toUprightImage = (): Sharp => sharp(imageBytes, { limitInputPixels: MAX_STILL_INPUT_PIXELS }).rotate()
+	const { width, height } = toUprightImageSize(await sharp(imageBytes).metadata())
 
-	// the backdrop covers the frame, and a covering image is the whole still
-	const coverImage = sharp(uprightBytes)
-		.flatten({ background: ESPRESSO })
-		.resize(COMPOSED_WIDTH, COMPOSED_HEIGHT, { fit: "cover" })
+	// a covering image is the whole still
+	const coverImage = toUprightImage().flatten({ background: ESPRESSO })
 	if (toVideoStillFit({ width, height }) === "cover") {
-		return coverImage.png().toBuffer()
+		return coverImage.resize(COMPOSED_WIDTH, COMPOSED_HEIGHT, { fit: "cover" }).png().toBuffer()
 	}
 
-	// otherwise blur and darken the backdrop, and scale the image to fit at most four times its own size
-	const backdropBytes = await coverImage
+	// otherwise the backdrop covers the frame, blurred and darkened at the film's size, where a blur costs far less
+	const backdrop = await coverImage
+		.resize(VIDEO_WIDTH, VIDEO_HEIGHT, { fit: "cover" })
 		.blur(BACKDROP_BLUR_SIGMA)
 		.modulate({ brightness: BACKDROP_BRIGHTNESS })
-		.toBuffer()
-	const foregroundBytes = await sharp(uprightBytes)
+		.raw()
+		.toBuffer({ resolveWithObject: true })
+
+	// the image fits at most four times its own size
+	const foregroundBytes = await toUprightImage()
 		.resize(Math.min(COMPOSED_WIDTH, width * COMPOSED_SCALE), Math.min(COMPOSED_HEIGHT, height * COMPOSED_SCALE), {
 			fit: "inside",
 		})
 		.png()
 		.toBuffer()
 
-	// center the image over the backdrop
-	return sharp(backdropBytes)
+	// enlarge the backdrop to the still's size, and center the image over it
+	return sharp(backdrop.data, { raw: backdrop.info })
+		.resize(COMPOSED_WIDTH, COMPOSED_HEIGHT)
 		.composite([{ input: foregroundBytes, gravity: "center" }])
 		.png()
 		.toBuffer()

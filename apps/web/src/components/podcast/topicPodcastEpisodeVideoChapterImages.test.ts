@@ -6,9 +6,9 @@ import {
 	toTopicPodcastEpisodeVideoChapterImages,
 } from "./topicPodcastEpisodeVideoChapterImages"
 
-// the two images every chapter falls back to: its imagined image by position, then the podcast card
+// the two images every chapter falls back to: its generated image by position, then the podcast card
 const FALLBACK_IMAGES: TopicPodcastEpisodeVideoChapterImage[] = [
-	{ kind: "imagined", url: "/api/topic-podcast-episode-video-images/episode-1/chapters/2/image.jpg" },
+	{ kind: "generated", url: "/api/topic-podcast-episode-video-images/episode-1/chapters/2/image.jpg" },
 	{ kind: "podcastCard", url: "/podcast-cover-placeholder.jpg" },
 ]
 
@@ -24,7 +24,7 @@ test("a chapter whose Finding has a link preview image shows it first", () => {
 	])
 })
 
-test("a chapter with no link preview image tries its imagined image, then the podcast card", () => {
+test("a chapter with no link preview image tries its generated image, then the podcast card", () => {
 	const chapterImages = toTopicPodcastEpisodeVideoChapterImages({
 		podcastEpisodeId: "episode-1",
 		chapterPosition: 2,
@@ -34,7 +34,7 @@ test("a chapter with no link preview image tries its imagined image, then the po
 })
 
 test("a chapter's own image that failed to load is left out for the rest of the page", () => {
-	// fail every image of another podcast episode's chapter: its link preview image, its imagined image, and the card
+	// fail every image of another podcast episode's chapter: its link preview image, its generated image, and the card
 	const chapter = {
 		podcastEpisodeId: "episode-with-failed-images",
 		chapterPosition: 4,

@@ -9,18 +9,14 @@ import { db } from "@carlnotes/db"
 import { isMonthlyBudgetCutoffPassed } from "@carlnotes/db/monthlyBudgetCutoffs"
 import { deletePodcastFeedCache } from "@carlnotes/db/podcastFeedCache"
 import { topicPodcastEpisodeVideos } from "@carlnotes/db/schema/podcast"
-import {
-	clearPendingObjectDeletion,
-	deleteStoredObjects,
-	downloadPodcastEpisodeFile,
-	toTopicPodcastEpisodeVideoImagePartKey,
-} from "@carlnotes/db/store"
+import { clearPendingObjectDeletion, deleteStoredObjects, downloadPodcastEpisodeFile } from "@carlnotes/db/store"
+import { toTopicPodcastEpisodeVideoImagePartKey } from "@carlnotes/db/topicPodcastEpisodeVideoKeys"
 import { probeDurationSeconds } from "@carlnotes/models/ffmpeg"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { and, eq, sql } from "drizzle-orm"
 import { recordReplacedImageDeletions } from "../topicImages/topicImageRenders"
 import {
-	loadShownImageStillPng,
+	loadShownImageStill,
 	loadTopicPodcastEpisodeVideoEpisode,
 	loadVideoChapterRows,
 	type TopicPodcastEpisodeVideoEpisode,
@@ -38,13 +34,14 @@ export type RebuildTopicPodcastEpisodeVideoResult =
 	| { outcome: "rebuilt"; renderSeconds: number }
 	| { outcome: "skipped"; reason: "unpublished" | "not-ready" | "current" | "spend-cutoff" }
 
-// the ready film's stored keys and the image hash it was drawn from
+// the ready film's stored keys, the image hash it was drawn from, and the render version it was rendered at
 type ReadyTopicPodcastEpisodeVideo = {
 	introKey: string | null
 	chaptersKey: string
 	signOffKey: string | null
 	filmKey: string
 	renderedImageHash: string
+	renderVersion: number
 }
 
 /**
@@ -77,6 +74,9 @@ export async function rebuildTopicPodcastEpisodeVideo(
 		})
 		signal?.throwIfAborted()
 		await saveRebuiltFilm({ topicPodcastEpisodeVideoEpisode, readyTopicPodcastEpisodeVideo, rebuiltFilm, uploadedKeys })
+
+		// the saved row plays the uploaded files, so a failure after the save deletes none of them
+		uploadedKeys.length = 0
 
 		// the film feeds list the rebuilt film's size on their next fetch
 		await deletePodcastFeedCache(topicPodcastEpisodeVideoEpisode.topicId)
@@ -150,6 +150,7 @@ async function loadReadyTopicPodcastEpisodeVideo(
 			signOffKey: topicPodcastEpisodeVideos.signOffKey,
 			filmKey: topicPodcastEpisodeVideos.filmKey,
 			renderedImageHash: topicPodcastEpisodeVideos.renderedImageHash,
+			renderVersion: topicPodcastEpisodeVideos.renderVersion,
 		})
 		.from(topicPodcastEpisodeVideos)
 		.where(eq(topicPodcastEpisodeVideos.podcastEpisodeId, podcastEpisodeId))
@@ -198,10 +199,11 @@ async function rebuildFilmFiles({
 	await downloadPodcastEpisodeFile({ key: readyTopicPodcastEpisodeVideo.filmKey, filePath: currentFilmPath })
 
 	// the new intro and sign-off, joined with the chapters by stream copy
+	const shownImageStill = await loadShownImageStill(topicPodcastEpisodeVideoEpisode)
 	const imageParts = await renderVideoImageParts({
 		workDirectory,
 		segments,
-		shownImageStillPng: await loadShownImageStillPng(topicPodcastEpisodeVideoEpisode.imageOriginalKey),
+		shownImageStillPng: shownImageStill.stillPng,
 		introText: topicPodcastEpisodeVideoEpisode.introText,
 		signOffText: topicPodcastEpisodeVideoEpisode.signOffText,
 		signal,
@@ -231,12 +233,13 @@ async function saveRebuiltFilm({
 	rebuiltFilm,
 	uploadedKeys,
 }: SaveRebuiltFilmOptions): Promise<void> {
-	// the new files are keyed by the current image's hash
+	// the new files are keyed by the current image's hash and the render version the film was rendered at
 	const { podcastEpisodeId, imageHash } = topicPodcastEpisodeVideoEpisode
+	const { renderVersion } = readyTopicPodcastEpisodeVideo
 	const uploadImagePart = (filePath: string | null, part: "intro" | "sign-off" | "film"): Promise<string | null> =>
 		uploadTopicPodcastEpisodeVideoFile({
 			filePath,
-			key: toTopicPodcastEpisodeVideoImagePartKey({ podcastEpisodeId, part, imageHash }),
+			key: toTopicPodcastEpisodeVideoImagePartKey({ podcastEpisodeId, part, imageHash, renderVersion }),
 			contentType: "video/mp4",
 			uploadedKeys,
 		})
@@ -246,8 +249,14 @@ async function saveRebuiltFilm({
 		filmKey: (await uploadImagePart(rebuiltFilm.filmPath, "film")) ?? "",
 	}
 
-	// swap the keys only on the film this rebuild read, so a film removed meanwhile keeps its new files pending deletion
+	// swap the keys only on the film this rebuild read: the same image and the same chapters part. a film removed or
+	// rendered again meanwhile keeps its new files pending deletion
 	const costDollars = toTopicPodcastEpisodeVideoCostDollars(rebuiltFilm.renderedSeconds)
+	const isFilmAsRead = and(
+		eq(topicPodcastEpisodeVideos.podcastEpisodeId, podcastEpisodeId),
+		eq(topicPodcastEpisodeVideos.renderedImageHash, readyTopicPodcastEpisodeVideo.renderedImageHash),
+		eq(topicPodcastEpisodeVideos.chaptersKey, readyTopicPodcastEpisodeVideo.chaptersKey),
+	)
 	await db.transaction(async (transaction) => {
 		const swappedRows = await transaction
 			.update(topicPodcastEpisodeVideos)
@@ -257,12 +266,7 @@ async function saveRebuiltFilm({
 				byteSize: Bun.file(rebuiltFilm.filmPath).size,
 				cost: sql`${topicPodcastEpisodeVideos.cost} + ${costDollars.toFixed(6)}`,
 			})
-			.where(
-				and(
-					eq(topicPodcastEpisodeVideos.podcastEpisodeId, podcastEpisodeId),
-					eq(topicPodcastEpisodeVideos.renderedImageHash, readyTopicPodcastEpisodeVideo.renderedImageHash),
-				),
-			)
+			.where(isFilmAsRead)
 			.returning({ id: topicPodcastEpisodeVideos.id })
 		if (swappedRows.length === 0) {
 			return

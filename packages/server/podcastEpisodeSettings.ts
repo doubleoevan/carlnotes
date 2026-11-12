@@ -1,5 +1,5 @@
 // the podcast episode settings that read the environment: the speech model that records episodes, how many films
-// render at once, and which chapters of a film get an imagined image
+// render at once, and how many generated images a film draws
 
 import { toPositiveInteger, toWholeNumber } from "./envSettings"
 
@@ -43,29 +43,16 @@ export function topicPodcastEpisodeVideoBackfillConcurrency(): number {
 	)
 }
 
-// a chapter with no link preview image gets an imagined image if it runs this many seconds or longer, and a film gets
-// at most this many imagined images
-const DEFAULT_IMAGINED_CHAPTER_IMAGE_MINIMUM_SECONDS = 90
-const DEFAULT_IMAGINED_CHAPTER_IMAGE_LIMIT = 4
+// how many generated images one film draws at most, across all its chapters
+const DEFAULT_GENERATED_CHAPTER_IMAGE_LIMIT = 40
 
 /**
- * Returns how many seconds a film's chapter runs before it may get an imagined image, from
- * TOPIC_PODCAST_EPISODE_VIDEO_IMAGINED_CHAPTER_IMAGE_MINIMUM_SECONDS.
+ * Returns how many generated images one film draws at most, from
+ * TOPIC_PODCAST_EPISODE_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT. Zero turns generated images off.
  */
-export function imaginedChapterImageMinimumSeconds(): number {
-	return toPositiveInteger(
-		Bun.env.TOPIC_PODCAST_EPISODE_VIDEO_IMAGINED_CHAPTER_IMAGE_MINIMUM_SECONDS,
-		DEFAULT_IMAGINED_CHAPTER_IMAGE_MINIMUM_SECONDS,
-	)
-}
-
-/**
- * Returns how many imagined images one film gets at most, from TOPIC_PODCAST_EPISODE_VIDEO_IMAGINED_CHAPTER_IMAGE_LIMIT.
- * Zero turns imagined images off.
- */
-export function imaginedChapterImageLimit(): number {
+export function generatedChapterImageLimit(): number {
 	return toWholeNumber(
-		Bun.env.TOPIC_PODCAST_EPISODE_VIDEO_IMAGINED_CHAPTER_IMAGE_LIMIT,
-		DEFAULT_IMAGINED_CHAPTER_IMAGE_LIMIT,
+		Bun.env.TOPIC_PODCAST_EPISODE_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT,
+		DEFAULT_GENERATED_CHAPTER_IMAGE_LIMIT,
 	)
 }

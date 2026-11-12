@@ -66,6 +66,24 @@ test("a film's image drawn from an image prompt is still sent in the film house 
 	})
 })
 
+test("a film's regenerated image is billed at the size it is drawn at, and a topic's at the model's own", async () => {
+	// a regenerate of a film's image on the model that draws at 2K
+	spyImageRender({ topicPodcastEpisodeVideoId: "film-1", model: "gemini-3.1-flash-image" })
+	const replaceFilmImage = spyOn(
+		topicPodcastEpisodeVideoImage,
+		"replaceTopicPodcastEpisodeVideoImage",
+	).mockResolvedValue("film-image-hash")
+	await renderAndStoreTopicImage({ renderId: "render-1", scene: SCENE })
+	expect(replaceFilmImage.mock.calls[0]?.[0].costDollars).toBe(0.101)
+
+	// a regenerate of a topic's image on the same model costs the 1K rate
+	spyImageRender({ model: "gemini-3.1-flash-image" })
+	spyOn(topicImageFiles, "storeTopicImageFiles").mockResolvedValue("topic-image-hash")
+	const replaceTopicImage = spyOn(topicImageRenders, "replaceTopicImage").mockResolvedValue(undefined)
+	await renderAndStoreTopicImage({ renderId: "render-1", scene: SCENE })
+	expect(replaceTopicImage.mock.calls[0]?.[0].costDollars).toBe(0.067)
+})
+
 test("a topic's image drawn from an image prompt is sent without the house style", async () => {
 	// a regenerate of a topic's image, with an image prompt
 	const renderOriginal = spyImageRender({})

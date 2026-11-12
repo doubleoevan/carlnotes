@@ -1,35 +1,27 @@
-// a podcast episode film's ffmpeg runs: one segment from its still, the join of segments or parts by stream copy, and
-// the film's mux with its audio and captions. each run has a timeout and stops once the render's signal aborts
+// a podcast episode film's ffmpeg runs: one shot from its still, the intro or the sign-off from the film's image, the
+// join of shots or parts by stream copy, and the film's mux with its audio and captions. each run has a timeout and
+// stops once the render's signal aborts
 
-import { createHash } from "node:crypto"
 import { runFfmpeg } from "@carlnotes/models/ffmpeg"
 import { ESPRESSO, VIDEO_HEIGHT, VIDEO_WIDTH } from "./videoFrames"
+import { SHOT_CROSSFADE_FRAMES, toShotPanZoom, toShotZoomRatePerSecond, type VideoShotMove } from "./videoShots"
 import {
 	LOWER_THIRD_FADE_SECONDS,
 	LOWER_THIRD_IN_SECONDS,
 	LOWER_THIRD_OUT_SECONDS,
 	SEGMENT_FADE_SECONDS,
-	SEGMENT_SLIDE_SECONDS,
 	toSegmentSeconds,
 	VIDEO_FRAMES_PER_SECOND,
-	type VideoSegment,
 } from "./videoTimeline"
 
-// how far the slow zoom goes. a chapter's still drifts in a little. the intro zooms further in to the film's image,
-// and the sign-off zooms back out of it
-const CHAPTER_ZOOM_END = 1.35
-const IMAGE_ZOOM_END = 1.8
+// the intro's zoom into the film's image: a push that grows 12 percent each second, then a creep of half a percent
+// each second, to 2.5 times at the intro's end. the sign-off runs the same zoom backward
+const IMAGE_PART_PUSH_RATE_PER_SECOND = 1.12
+const IMAGE_PART_CREEP_RATE_PER_SECOND = 1.005
+const IMAGE_PART_ZOOM_END = 2.5
 
-// the edges of the frame a still can slide in from
-const VIDEO_SLIDE_DIRECTIONS = ["left", "right", "top", "bottom"] as const
-export type VideoSlideDirection = (typeof VIDEO_SLIDE_DIRECTIONS)[number]
-
-// the overshoot of the slide's back ease. at 0.83 the still passes its place by 2.5 percent of the frame, 32 pixels
-// across and 18 down, before it settles
-const SLIDE_OVERSHOOT = 0.83
-
-// every segment's H.264 settings. the same settings in every part let parts join by stream copy, and a keyframe every
-// two seconds that never moves for a scene change opens every part on a keyframe and keeps seeks fast
+// every run's H.264 settings. the same settings in every run let shots and parts join by stream copy, and a keyframe
+// every two seconds that never moves for a scene change opens every run on a keyframe and keeps seeks fast
 const H264_ARGUMENTS = [
 	"-c:v",
 	"libx264",
@@ -62,142 +54,242 @@ const H264_ARGUMENTS = [
 // the film's audio: AAC-LC at 96 kbps, one channel at 44.1 kHz, the same as the podcast episode's MP3
 const AAC_ARGUMENTS = ["-c:a", "aac", "-b:a", "96k", "-ac", "1", "-ar", "44100"]
 
-// how long a segment's encode may take before it is killed: a minute to start, and twelve times the segment's length.
-// a worker with one core encodes a segment in about three times its length
-const SEGMENT_ENCODE_START_TIMEOUT_MS = 60_000
-const SEGMENT_ENCODE_TIMEOUT_MS_PER_SECOND = 12_000
+// how long a run's encode may take before it is killed: a minute to start, and twelve times the run's length. a
+// worker with one core encodes a run in about three times its length
+const ENCODE_START_TIMEOUT_MS = 60_000
+const ENCODE_TIMEOUT_MS_PER_SECOND = 12_000
 
 // how long a run that encodes no video may take before it is killed. a join and a rebuilt film's remux copy their
 // streams, and the film's mux also encodes the audio
 const STREAM_COPY_TIMEOUT_MS = 5 * 60 * 1000
 const FILM_MUX_TIMEOUT_MS = 10 * 60 * 1000
 
-// one segment: its still and lower third pngs, its frames, which kind of segment it is, the edge its still slides in
-// from, or null for a segment that fades in, and the file it writes. the kind sets the zoom, and an intro's and a
-// sign-off's lower third stays for the whole segment
-export type VideoSegmentEncode = {
+// the film's size and frame rate as zoompan's options, and a zoom's center
+const ZOOM_OUTPUT = `s=${VIDEO_WIDTH}x${VIDEO_HEIGHT}:fps=${VIDEO_FRAMES_PER_SECOND}`
+const ZOOM_CENTER = "x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
+
+// the espresso the film fades through, as ffmpeg writes a color
+const ESPRESSO_COLOR = `0x${ESPRESSO.slice(1)}`
+
+// one image part: the film's image as a still and the part's lower third png, the part's frames, which part it is, and
+// the file it writes
+export type VideoImagePartEncode = {
 	stillPath: string
 	lowerThirdPath: string
 	frameCount: number
-	segmentKind: VideoSegment["kind"]
-	slideDirection: VideoSlideDirection | null
-	segmentPath: string
+	part: "intro" | "sign-off"
+	partPath: string
 }
 
 /**
- * Encodes one video-only segment: the still with a slow zoom, the lower third over it, a slide in or a slow fade from
- * espresso at its start, and a slow fade to espresso at its end. The encode is killed at its timeout or once the
- * signal aborts.
+ * Encodes the intro or the sign-off, video only: the film's image with its zoom, the lower third over it for the whole
+ * part, and a fade from espresso and to it. The encode is killed at its timeout or once the signal aborts.
  */
-export async function encodeVideoSegment(videoSegmentEncode: VideoSegmentEncode, signal?: AbortSignal): Promise<void> {
-	// give the encode a minute to start and six times the segment's length
-	const segmentSeconds = toSegmentSeconds(videoSegmentEncode.frameCount)
+export async function encodeVideoImagePart(
+	videoImagePartEncode: VideoImagePartEncode,
+	signal?: AbortSignal,
+): Promise<void> {
 	await runFfmpeg({
-		ffmpegArguments: toVideoSegmentArguments(videoSegmentEncode),
-		timeoutMs: SEGMENT_ENCODE_START_TIMEOUT_MS + segmentSeconds * SEGMENT_ENCODE_TIMEOUT_MS_PER_SECOND,
+		ffmpegArguments: toVideoImagePartArguments(videoImagePartEncode),
+		timeoutMs: toEncodeTimeoutMs(videoImagePartEncode.frameCount),
 		signal,
 	})
 }
 
-// the film's podcast episode, and the chapter's position in it
-type ToSlideDirectionOptions = { podcastEpisodeId: string; position: number }
-
 /**
- * Returns the edge a chapter's still slides in from. The edge varies from chapter to chapter and is the same every
- * time the film renders.
+ * Returns ffmpeg's arguments for the intro or the sign-off. The intro pushes in to the film's image at 12 percent a
+ * second, then creeps in to 2.5 times at its end, and the sign-off runs the same zoom backward. The lower third fades
+ * in after 0.6 seconds and stays. The part fades in from espresso and out to it over 0.3 seconds, and a short part
+ * splits its length between the two fades.
  */
-export function toSlideDirection({ podcastEpisodeId, position }: ToSlideDirectionOptions): VideoSlideDirection {
-	// pick the edge by the first byte of a hash of the podcast episode and the position
-	const [hashByte = 0] = createHash("sha256").update(`${podcastEpisodeId}:${position}`).digest()
-	return VIDEO_SLIDE_DIRECTIONS[hashByte % VIDEO_SLIDE_DIRECTIONS.length] ?? "left"
-}
-
-/**
- * Returns ffmpeg's arguments for one segment. A chapter's still and its hot takes' zoom from 1 to 1.35 across the
- * frames, the intro's zooms in from 1 to 1.8, and the sign-off's zooms out from 1.8 to 1. Each zoom eases in and out.
- * The lower third fades in after 0.6 seconds, and a chapter's and its hot takes' fades out by 8 seconds. The segment fades out to espresso over 1.2
- * seconds. It fades in from espresso as slowly, or its still slides in over espresso in 0.9 seconds. A short segment
- * splits its length between its start and its end.
- */
-export function toVideoSegmentArguments({
+export function toVideoImagePartArguments({
 	stillPath,
 	lowerThirdPath,
 	frameCount,
-	segmentKind,
-	slideDirection,
-	segmentPath,
-}: VideoSegmentEncode): string[] {
-	// the zoom is centered, at the film's size, and the sign-off's runs backward. it eases: it starts slowly, moves
-	// fastest in the middle, and settles at the end
-	const isFilmImageSegment = segmentKind === "intro" || segmentKind === "sign-off"
-	const zoomEnd = isFilmImageSegment ? IMAGE_ZOOM_END : CHAPTER_ZOOM_END
-	const zoomRange = Number((zoomEnd - 1).toFixed(4))
-	const easedProgress = `(1-cos(PI*on/${Math.max(frameCount - 1, 1)}))/2`
-	const zoomExpression =
-		segmentKind === "sign-off" ? `${zoomEnd}-${zoomRange}*${easedProgress}` : `1+${zoomRange}*${easedProgress}`
-	const zoomFilter = `zoompan=z='${zoomExpression}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frameCount}:s=${VIDEO_WIDTH}x${VIDEO_HEIGHT}:fps=${VIDEO_FRAMES_PER_SECOND}`
+	part,
+	partPath,
+}: VideoImagePartEncode): string[] {
+	// the intro's zoom by the seconds since its start, and the sign-off's by the seconds to its end
+	const partSeconds = toSegmentSeconds(frameCount)
+	const pushSeconds = Number(toImagePartPushSeconds(partSeconds).toFixed(4))
+	const zoomSeconds =
+		part === "intro" ? `on/${VIDEO_FRAMES_PER_SECOND}` : `(${frameCount - 1}-on)/${VIDEO_FRAMES_PER_SECOND}`
+	const pushZoom = `pow(${IMAGE_PART_PUSH_RATE_PER_SECOND},min(${zoomSeconds},${pushSeconds}))`
+	const creepZoom = `pow(${IMAGE_PART_CREEP_RATE_PER_SECOND},max(${zoomSeconds}-${pushSeconds},0))`
+	const zoomFilter = `zoompan=z='${pushZoom}*${creepZoom}':${ZOOM_CENTER}:d=${frameCount}:${ZOOM_OUTPUT}`
 
-	// the lower third fades in, and a chapter's and its hot takes' fades out
+	// the lower third fades in and stays, and the part fades in from espresso and out to it
 	const lowerThirdFadeIn = `fade=t=in:st=${LOWER_THIRD_IN_SECONDS}:d=${LOWER_THIRD_FADE_SECONDS}:alpha=1`
-	const lowerThirdFadeOutStart = LOWER_THIRD_OUT_SECONDS - LOWER_THIRD_FADE_SECONDS
-	const lowerThirdFadeOut = isFilmImageSegment
-		? ""
-		: `,fade=t=out:st=${lowerThirdFadeOutStart}:d=${LOWER_THIRD_FADE_SECONDS}:alpha=1`
-
-	// the whole segment fades out to espresso, and one with no slide fades in from it. a short segment splits its
-	// length between the two fades
-	const espressoColor = `0x${ESPRESSO.slice(1)}`
-	const segmentSeconds = toSegmentSeconds(frameCount)
-	const fadeSeconds = Math.min(SEGMENT_FADE_SECONDS, segmentSeconds / 2)
-	const fadeIn = `fade=t=in:st=0:d=${fadeSeconds}:color=${espressoColor}`
-	const fadeOut = `fade=t=out:st=${segmentSeconds - fadeSeconds}:d=${fadeSeconds}:color=${espressoColor}`
-	const segmentFades = slideDirection ? fadeOut : `${fadeIn},${fadeOut}`
-
-	// a sliding still moves in under the lower third, which keeps its place. a short segment's slide takes half its
-	// length at most
-	const slideSeconds = Math.min(SEGMENT_SLIDE_SECONDS, segmentSeconds / 2)
-	const slideFilters = slideDirection ? toSlideFilters({ slideDirection, slideSeconds, espressoColor }) : []
+	const segmentFades = toSegmentFades({ frameCount, isSegmentStart: true, isSegmentEnd: true }).join(",")
 	const filterGraph = [
 		`[0:v]${zoomFilter}[zoomed]`,
-		...slideFilters,
-		`[1:v]format=rgba,${lowerThirdFadeIn}${lowerThirdFadeOut}[lowerThird]`,
-		`[${slideDirection ? "slid" : "zoomed"}][lowerThird]overlay=0:0,${segmentFades},format=yuv420p[segment]`,
+		`[1:v]format=rgba,${lowerThirdFadeIn}[lowerThird]`,
+		`[zoomed][lowerThird]overlay=0:0,${segmentFades},format=yuv420p[part]`,
 	].join(";")
 
 	// the still is read once and the zoom draws every frame from it. the lower third loops at the film's frame rate, and
-	// the output stops at the segment's frames
-	const frameRate = String(VIDEO_FRAMES_PER_SECOND)
+	// the output stops at the part's frames
 	return [
 		...["-y", "-i", stillPath],
-		...["-framerate", frameRate, "-loop", "1", "-i", lowerThirdPath],
-		...["-filter_complex", filterGraph, "-map", "[segment]", "-frames:v", String(frameCount)],
+		...toLowerThirdInput(lowerThirdPath),
+		...["-filter_complex", filterGraph, "-map", "[part]", "-frames:v", String(frameCount)],
 		...H264_ARGUMENTS,
-		...["-an", segmentPath],
+		...["-an", partPath],
 	]
 }
 
-// the edge the still slides in from, how long the slide takes, and the espresso it slides over
-type ToSlideFiltersOptions = { slideDirection: VideoSlideDirection; slideSeconds: number; espressoColor: string }
+/**
+ * Returns how many seconds an intro of a length pushes in at 12 percent a second before it creeps, so that the zoom is
+ * 2.5 times at its end. An intro too short to reach 2.5 times pushes for its whole length.
+ */
+export function toImagePartPushSeconds(partSeconds: number): number {
+	// a short part never reaches the zoom's end, so it only pushes
+	const pushGrowth = Math.log(IMAGE_PART_PUSH_RATE_PER_SECOND)
+	const creepGrowth = Math.log(IMAGE_PART_CREEP_RATE_PER_SECOND)
+	const zoomEndGrowth = Math.log(IMAGE_PART_ZOOM_END)
+	if (partSeconds * pushGrowth <= zoomEndGrowth) {
+		return partSeconds
+	}
 
-// the filters that slide the zoomed still in over an espresso frame, as the [slid] stream. the still starts outside
-// the frame on its edge, moves fast, passes its place a little, and settles back on it, as if pulled in by hand
-function toSlideFilters({ slideDirection, slideSeconds, espressoColor }: ToSlideFiltersOptions): string[] {
-	// how far the still is from its place, as a share of the frame: -1 on the first frame and 0 once the slide is over.
-	// a back ease in the time since the segment started, with no state from frame to frame
-	const easeTime = `min(t/${slideSeconds},1)-1`
-	const cubicWeight = Number((SLIDE_OVERSHOOT + 1).toFixed(4))
-	const slideOffset = `(${cubicWeight}*pow(${easeTime},3)+${SLIDE_OVERSHOOT}*pow(${easeTime},2))`
+	// the push takes what the creep leaves of the zoom, and a part too long for any push only creeps
+	return Math.max(0, (zoomEndGrowth - partSeconds * creepGrowth) / (pushGrowth - creepGrowth))
+}
 
-	// move the still along one axis: from the left or the top it starts before the frame, and from the right or the
-	// bottom it starts after it
-	const isHorizontal = slideDirection === "left" || slideDirection === "right"
-	const isFromStart = slideDirection === "left" || slideDirection === "top"
-	const slidePosition = `${isFromStart ? "" : "-"}${isHorizontal ? "W" : "H"}*${slideOffset}`
-	const overlayPosition = isHorizontal ? `x='${slidePosition}':y='0'` : `x='0':y='${slidePosition}'`
+// one shot's picture: its still's file, how far its image may zoom, its move, its frames to the next cut, and the
+// frames it is on screen, which include its crossfade into the next shot
+export type VideoShotPicture = {
+	stillPath: string
+	zoomLimit: number
+	move: VideoShotMove
+	frameCount: number
+	screenFrameCount: number
+}
 
-	// an espresso frame at the film's size and frame rate, and the still over it
-	const backgroundSource = `color=c=${espressoColor}:s=${VIDEO_WIDTH}x${VIDEO_HEIGHT}:r=${VIDEO_FRAMES_PER_SECOND}`
-	return [`${backgroundSource}[background]`, `[background][zoomed]overlay=${overlayPosition}[slid]`]
+// one shot's run: the shot's picture, the picture of the shot before it, or null for a segment's first shot, the lower
+// third png with the seconds from the segment's start to the shot's, or null for a shot the lower third never reaches,
+// whether the shot starts or ends its segment, and the file it writes
+export type VideoShotEncode = VideoShotPicture & {
+	previousShot: VideoShotPicture | null
+	lowerThird: { lowerThirdPath: string; shotStartSeconds: number } | null
+	isSegmentStart: boolean
+	isSegmentEnd: boolean
+	shotPath: string
+}
+
+/**
+ * Encodes one shot, video only: its still with its move, the still before it fading out over the first frames, the
+ * lower third if it reaches the shot, and a fade from or to espresso at its segment's ends. The encode is killed at
+ * its timeout or once the signal aborts.
+ */
+export async function encodeVideoShot(videoShotEncode: VideoShotEncode, signal?: AbortSignal): Promise<void> {
+	await runFfmpeg({
+		ffmpegArguments: toVideoShotArguments(videoShotEncode),
+		timeoutMs: toEncodeTimeoutMs(videoShotEncode.frameCount),
+		signal,
+	})
+}
+
+/**
+ * Returns ffmpeg's arguments for one shot. The still zooms or pans for its frames. The still before it keeps its own
+ * move for the crossfade's frames and fades out over them. The lower third keeps the fades of its segment's first 8
+ * seconds, whichever shot they fall in. A segment's first shot fades in from espresso, and its last fades out to it.
+ */
+export function toVideoShotArguments(videoShotEncode: VideoShotEncode): string[] {
+	// the shot's own still, with its move from its first frame
+	const { previousShot, lowerThird, frameCount, isSegmentStart, isSegmentEnd } = videoShotEncode
+	const inputArguments = ["-i", videoShotEncode.stillPath]
+	const filters = [`[0:v]${toShotMoveFilter({ shotPicture: videoShotEncode, frameOffset: 0, frameCount })}[shot]`]
+	let shownLabel = "shot"
+
+	// the still before it keeps moving where its own run stopped, and fades out over the shot
+	if (previousShot) {
+		const crossfadeSeconds = toSegmentSeconds(SHOT_CROSSFADE_FRAMES)
+		const tailMoveFilter = toShotMoveFilter({
+			shotPicture: previousShot,
+			frameOffset: previousShot.frameCount,
+			frameCount: SHOT_CROSSFADE_FRAMES,
+		})
+		inputArguments.push("-i", previousShot.stillPath)
+		filters.push(`[1:v]${tailMoveFilter},format=yuva420p,fade=t=out:st=0:d=${crossfadeSeconds}:alpha=1[tail]`)
+		filters.push("[shot][tail]overlay=0:0:eof_action=pass[crossfaded]")
+		shownLabel = "crossfaded"
+	}
+
+	// the lower third over the shot, with its fades timed from the segment's start
+	if (lowerThird) {
+		const lowerThirdInputIndex = previousShot ? 2 : 1
+		inputArguments.push(...toLowerThirdInput(lowerThird.lowerThirdPath))
+		filters.push(`[${lowerThirdInputIndex}:v]format=rgba,${toLowerThirdFades(lowerThird.shotStartSeconds)}[lowerThird]`)
+		filters.push(`[${shownLabel}][lowerThird]overlay=0:0[titled]`)
+		shownLabel = "titled"
+	}
+
+	// the fades at the segment's ends, then the film's pixel format
+	const segmentFades = toSegmentFades({ frameCount, isSegmentStart, isSegmentEnd })
+	filters.push(`[${shownLabel}]${[...segmentFades, "format=yuv420p"].join(",")}[segment]`)
+	return [
+		...["-y", ...inputArguments],
+		...["-filter_complex", filters.join(";"), "-map", "[segment]", "-frames:v", String(frameCount)],
+		...H264_ARGUMENTS,
+		...["-an", videoShotEncode.shotPath],
+	]
+}
+
+// a shot's picture, how many of its frames were drawn before this run, and how many frames this run draws
+type ToShotMoveFilterOptions = { shotPicture: VideoShotPicture; frameOffset: number; frameCount: number }
+
+// the zoompan filter that draws a still's move over some of its frames. a zoom grows by the same share each second, so
+// it looks as fast at its end as at its start, and a pan holds its zoom and crosses the room that leaves evenly
+function toShotMoveFilter({ shotPicture, frameOffset, frameCount }: ToShotMoveFilterOptions): string {
+	// the frame of the shot that each drawn frame is, and the shot's zoom rate
+	const { move, zoomLimit, screenFrameCount } = shotPicture
+	const shotFrame = `(on+${frameOffset})`
+	const zoomRate = Number(toShotZoomRatePerSecond(zoomLimit, screenFrameCount).toFixed(6))
+	const zoomMoves = {
+		"zoom-in": `z='pow(${zoomRate},${shotFrame}/${VIDEO_FRAMES_PER_SECOND})':${ZOOM_CENTER}`,
+		"zoom-out": `z='pow(${zoomRate},(${screenFrameCount}-${shotFrame})/${VIDEO_FRAMES_PER_SECOND})':${ZOOM_CENTER}`,
+	}
+
+	// a pan's zoom, and how far across its room the frame has traveled
+	const panZoom = Number(toShotPanZoom(zoomLimit, screenFrameCount).toFixed(6))
+	const panProgress = `${shotFrame}/${screenFrameCount}`
+	const panMoves = {
+		"pan-left": `z='${panZoom}':x='(iw-iw/zoom)*(1-${panProgress})':y='ih/2-(ih/zoom/2)'`,
+		"pan-right": `z='${panZoom}':x='(iw-iw/zoom)*${panProgress}':y='ih/2-(ih/zoom/2)'`,
+	}
+	return `zoompan=${{ ...zoomMoves, ...panMoves }[move]}:d=${frameCount}:${ZOOM_OUTPUT}`
+}
+
+// the lower third's fades for a shot that starts some seconds into its segment: in after 0.6 seconds of the segment
+// and out by its eighth second. the lower third's times are moved to the segment's, faded, and moved back
+function toLowerThirdFades(shotStartSeconds: number): string {
+	const fadeOutStartSeconds = LOWER_THIRD_OUT_SECONDS - LOWER_THIRD_FADE_SECONDS
+	const fadeIn = `fade=t=in:st=${LOWER_THIRD_IN_SECONDS}:d=${LOWER_THIRD_FADE_SECONDS}:alpha=1`
+	const fadeOut = `fade=t=out:st=${fadeOutStartSeconds}:d=${LOWER_THIRD_FADE_SECONDS}:alpha=1`
+	return `setpts=PTS+${shotStartSeconds}/TB,${fadeIn},${fadeOut},setpts=PTS-${shotStartSeconds}/TB`
+}
+
+// a run's frames, and whether the run starts or ends its segment
+type ToSegmentFadesOptions = { frameCount: number; isSegmentStart: boolean; isSegmentEnd: boolean }
+
+// the fades of a run at its segment's ends: in from espresso at the segment's start, and out to it at the segment's
+// end. a run shorter than both fades splits its length between them
+function toSegmentFades({ frameCount, isSegmentStart, isSegmentEnd }: ToSegmentFadesOptions): string[] {
+	const runSeconds = toSegmentSeconds(frameCount)
+	const fadeSeconds = Math.min(SEGMENT_FADE_SECONDS, runSeconds / 2)
+	const fadeIn = `fade=t=in:st=0:d=${fadeSeconds}:color=${ESPRESSO_COLOR}`
+	const fadeOut = `fade=t=out:st=${runSeconds - fadeSeconds}:d=${fadeSeconds}:color=${ESPRESSO_COLOR}`
+	return [...(isSegmentStart ? [fadeIn] : []), ...(isSegmentEnd ? [fadeOut] : [])]
+}
+
+// the lower third png as an input that loops at the film's frame rate
+function toLowerThirdInput(lowerThirdPath: string): string[] {
+	return ["-framerate", String(VIDEO_FRAMES_PER_SECOND), "-loop", "1", "-i", lowerThirdPath]
+}
+
+// how long a run of some frames may encode before it is killed
+function toEncodeTimeoutMs(frameCount: number): number {
+	return ENCODE_START_TIMEOUT_MS + toSegmentSeconds(frameCount) * ENCODE_TIMEOUT_MS_PER_SECOND
 }
 
 /**
@@ -211,7 +303,7 @@ export async function writeConcatList(filePaths: string[], listPath: string): Pr
 type JoinVideoOptions = { listPath: string; outputPath: string }
 
 /**
- * Joins video-only segments or parts by stream copy, with no re-encode. The join is killed after five minutes or once
+ * Joins video-only shots or parts by stream copy, with no re-encode. The join is killed after five minutes or once
  * the signal aborts.
  */
 export async function joinVideo({ listPath, outputPath }: JoinVideoOptions, signal?: AbortSignal): Promise<void> {

@@ -252,7 +252,7 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   moderation, and the editor's regeneration quota. `podcast/podcastEpisodeImagesRoute.ts` serves a podcast episode's
   own image files, gated by its topic's visibility, and its editor's Regenerate and upload.
   `podcast/topicPodcastEpisodeVideoImagesRoute.ts` does the same for a film's own image: the poster at
-  `/api/topic-podcast-episode-video-images/:podcastEpisodeId/:hash/poster.jpg`, a chapter's imagined image at
+  `/api/topic-podcast-episode-video-images/:podcastEpisodeId/:hash/poster.jpg`, a chapter's generated image at
   `/api/topic-podcast-episode-video-images/:podcastEpisodeId/chapters/:position/image.jpg`, behind the same gate and
   not found for a chapter with none or a podcast episode with no ready film, and
   `POST /api/episodes/:id/video/image/regenerate` and `POST /api/episodes/:id/video/image` for an editor of a podcast

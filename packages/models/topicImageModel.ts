@@ -1,7 +1,7 @@
 // a topic image render from a Gemini image model through LiteLLM's Gemini pass-through route, on the key that bills
 // it
 
-import { TOPIC_IMAGE_COST_DOLLARS } from "./budget"
+import { TOPIC_IMAGE_2K_COST_DOLLARS, TOPIC_IMAGE_COST_DOLLARS } from "./budget"
 import { type ModelCallFailure, toModelCallFailure, toRetryableModelCallFailure } from "./modelCallFailure"
 
 // the model that draws a topic's image on creation, on the backfill, and on an admin's regenerate, and the better one
@@ -17,15 +17,19 @@ const RENDER_TIMEOUT_MS = 60 * 1000
 export type TopicImageAspectRatio = "3:2" | "16:9"
 const DEFAULT_TOPIC_IMAGE_ASPECT_RATIO: TopicImageAspectRatio = "3:2"
 
+// the size an image is drawn at if it is larger than a model's own 1K
+export type TopicImageDrawSize = "2K"
+
 // the result of one render: the image's bytes with its content type and token count, or how the call failed
 export type TopicImageRenderResult = { outcome: "rendered"; imageBytes: Uint8Array } | ModelCallFailure
 
-// one render's prompt, the model, the aspect ratio, which is 3:2 if none is given, and the virtual key that it bills,
-// or the master key if no key is given
+// one render's prompt, the model, the aspect ratio, which is 3:2 if none is given, the size to draw at, which is the
+// model's own 1K if none is given, and the virtual key that it bills, or the master key if no key is given
 export type RenderTopicImageOptions = {
 	prompt: string
 	model: string
 	aspectRatio?: TopicImageAspectRatio
+	drawSize?: TopicImageDrawSize
 	litellmApiKey?: string
 }
 
@@ -50,20 +54,24 @@ export function topicImageRegenerateModel(): string {
 }
 
 /**
- * Returns what one render on the model costs in dollars, from the fixed per-image rates.
+ * Returns what one render on the model costs in dollars, from the fixed per-image rates: the 2K rate for a render at
+ * that size, or else the 1K rate.
  */
-export function topicImageCostDollars(model: string): number {
-	return TOPIC_IMAGE_COST_DOLLARS[model] ?? TOPIC_IMAGE_COST_DOLLARS[DEFAULT_TOPIC_IMAGE_REGENERATE_MODEL] ?? 0
+export function topicImageCostDollars(model: string, drawSize?: TopicImageDrawSize): number {
+	const costDollars =
+		TOPIC_IMAGE_COST_DOLLARS[model] ?? TOPIC_IMAGE_COST_DOLLARS[DEFAULT_TOPIC_IMAGE_REGENERATE_MODEL] ?? 0
+	return drawSize === "2K" ? (TOPIC_IMAGE_2K_COST_DOLLARS[model] ?? costDollars) : costDollars
 }
 
 /**
- * Renders one image at the aspect ratio from the prompt on the model, through the pass-through route on the key, and
- * returns its bytes or why the call failed.
+ * Renders one image at the aspect ratio and the size from the prompt on the model, through the pass-through route on
+ * the key, and returns its bytes or why the call failed.
  */
 export async function renderTopicImage({
 	prompt,
 	model,
 	aspectRatio = DEFAULT_TOPIC_IMAGE_ASPECT_RATIO,
+	drawSize,
 	litellmApiKey,
 }: RenderTopicImageOptions): Promise<TopicImageRenderResult> {
 	// reject the call if the proxy or a key is not configured
@@ -80,7 +88,10 @@ export async function renderTopicImage({
 			headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
 			body: JSON.stringify({
 				contents: [{ parts: [{ text: prompt }] }],
-				generationConfig: { responseModalities: ["IMAGE"], imageConfig: { aspectRatio } },
+				generationConfig: {
+					responseModalities: ["IMAGE"],
+					imageConfig: { aspectRatio, imageSize: drawSize },
+				},
 			}),
 			signal: AbortSignal.timeout(RENDER_TIMEOUT_MS),
 		})

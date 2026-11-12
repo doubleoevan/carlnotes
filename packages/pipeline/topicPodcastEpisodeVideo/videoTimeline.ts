@@ -7,10 +7,8 @@ export const VIDEO_FRAMES_PER_SECOND = 24
 export const LOWER_THIRD_IN_SECONDS = 0.6
 export const LOWER_THIRD_OUT_SECONDS = 8
 
-// how long each segment fades in from espresso and out to espresso, how long a chapter's link preview image takes to
-// slide in instead of fading in, and how long the lower third fades
-export const SEGMENT_FADE_SECONDS = 1.2
-export const SEGMENT_SLIDE_SECONDS = 0.9
+// how long each segment fades in from espresso and out to espresso, and how long the lower third fades
+export const SEGMENT_FADE_SECONDS = 0.3
 export const LOWER_THIRD_FADE_SECONDS = 0.4
 
 // the shortest that a chapter's Finding and its hot takes may each show. a chapter that would cut either one shorter

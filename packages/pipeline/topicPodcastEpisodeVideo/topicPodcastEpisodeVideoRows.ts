@@ -1,5 +1,6 @@
-// a podcast episode film's row and its stored files: the status writes a render and a rebuild make, the upload that
-// records its pending deletion first, what a render's minutes cost, and the failure a last attempt records
+// a podcast episode film's row and its stored files: the render version, the status writes a render and a rebuild
+// make, the swap that replaces a film rendered again, the upload that records its pending deletion first, what a
+// render's minutes cost, and the failure a last attempt records
 
 import { db } from "@carlnotes/db"
 import { topicPodcastEpisodeVideos } from "@carlnotes/db/schema/podcast"
@@ -11,8 +12,20 @@ import {
 import { TOPIC_PODCAST_EPISODE_VIDEO_DOLLARS_PER_MINUTE } from "@carlnotes/models/budget"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { reportError } from "@carlnotes/server/monitoring"
-import { eq, sql } from "drizzle-orm"
+import { and, eq, lt, ne, sql } from "drizzle-orm"
+import type { PgUpdateSetSource } from "drizzle-orm/pg-core"
+import { recordReplacedImageDeletions } from "../topicImages/topicImageRenders"
 import { loadTopicPodcastEpisodeVideoEpisode } from "./topicPodcastEpisodeVideoInputs"
+
+// the render version a film is rendered at now. a ready film below it is rendered again, and a film from before render
+// versions is at version 1. version 2 cuts each chapter into a montage
+export const TOPIC_PODCAST_EPISODE_VIDEO_RENDER_VERSION = 2
+
+// a ready film below the current render version
+export const isTopicPodcastEpisodeVideoBelowRenderVersion = and(
+	eq(topicPodcastEpisodeVideos.status, "ready"),
+	lt(topicPodcastEpisodeVideos.renderVersion, TOPIC_PODCAST_EPISODE_VIDEO_RENDER_VERSION),
+)
 
 // the stored keys of a film's files, null for a part the timeline had no frames for
 export type FilmObjectKeys = {
@@ -42,15 +55,20 @@ export async function saveTopicPodcastEpisodeVideoSkipped(
 		.onConflictDoUpdate({ target: topicPodcastEpisodeVideos.podcastEpisodeId, set: failedRow })
 }
 
+// a film row as a render reads it before it starts: its status, and the render version its stored film was rendered at
+export type TopicPodcastEpisodeVideoRenderState = { status: "rendering" | "ready" | "failed"; renderVersion: number }
+
 /**
- * Returns whether a podcast episode's film is already ready, which a retried workflow finds.
+ * Returns a podcast episode's film row as a render reads it, or null for a podcast episode with no film row.
  */
-export async function isTopicPodcastEpisodeVideoReady(podcastEpisodeId: string): Promise<boolean> {
+export async function loadTopicPodcastEpisodeVideoRenderState(
+	podcastEpisodeId: string,
+): Promise<TopicPodcastEpisodeVideoRenderState | null> {
 	const [topicPodcastEpisodeVideo] = await db
-		.select({ status: topicPodcastEpisodeVideos.status })
+		.select({ status: topicPodcastEpisodeVideos.status, renderVersion: topicPodcastEpisodeVideos.renderVersion })
 		.from(topicPodcastEpisodeVideos)
 		.where(eq(topicPodcastEpisodeVideos.podcastEpisodeId, podcastEpisodeId))
-	return topicPodcastEpisodeVideo?.status === "ready"
+	return topicPodcastEpisodeVideo ?? null
 }
 
 /**
@@ -78,30 +96,19 @@ type SaveTopicPodcastEpisodeVideoReadyOptions = {
 }
 
 /**
- * Marks a film row ready with its keys, size, and length, adds the render's cost to the image's, and clears the
- * uploads' pending deletions with it. A film removed meanwhile keeps its files pending deletion.
+ * Marks a film row ready at the current render version with its keys, size, and length, adds the render's cost to the
+ * image's, and clears the uploads' pending deletions with it. A film removed meanwhile keeps its files pending
+ * deletion.
  */
 export async function saveTopicPodcastEpisodeVideoReady({
 	podcastEpisodeId,
-	objectKeys,
-	byteSize,
-	durationSeconds,
-	imageHash,
-	costDollars,
+	...renderedFilm
 }: SaveTopicPodcastEpisodeVideoReadyOptions): Promise<void> {
 	await db.transaction(async (transaction) => {
 		// mark the row ready, if it still exists
 		const readyRows = await transaction
 			.update(topicPodcastEpisodeVideos)
-			.set({
-				status: "ready",
-				error: null,
-				...objectKeys,
-				byteSize,
-				durationSeconds: Math.round(durationSeconds),
-				renderedImageHash: imageHash,
-				cost: sql`${topicPodcastEpisodeVideos.cost} + ${costDollars.toFixed(6)}`,
-			})
+			.set({ status: "ready", ...toRenderedFilmColumns(renderedFilm) })
 			.where(eq(topicPodcastEpisodeVideos.podcastEpisodeId, podcastEpisodeId))
 			.returning({ id: topicPodcastEpisodeVideos.id })
 		if (readyRows.length === 0) {
@@ -109,23 +116,122 @@ export async function saveTopicPodcastEpisodeVideoReady({
 		}
 
 		// the stored keys now belong to the row
-		const storedKeys = Object.values(objectKeys).filter((objectKey): objectKey is string => Boolean(objectKey))
-		for (const storedKey of storedKeys) {
+		for (const storedKey of toFilmStoredKeys(renderedFilm.objectKeys)) {
 			await clearPendingObjectDeletion(storedKey, transaction)
 		}
 	})
 }
 
 /**
- * Marks a film failed after its last attempt, reports the error, and records the failure for analytics.
+ * Swaps a ready film's keys, size, and length for the ones of the film rendered again at the current render version,
+ * in one update, and schedules the replaced files for deletion after the grace. Only a film still ready below that
+ * version is swapped. A film removed or already swapped meanwhile keeps the new files pending deletion.
+ */
+export async function saveTopicPodcastEpisodeVideoRerendered({
+	podcastEpisodeId,
+	...renderedFilm
+}: SaveTopicPodcastEpisodeVideoReadyOptions): Promise<void> {
+	await db.transaction(async (transaction) => {
+		// read the files the row plays now and lock the row, if it is still ready below the current render version
+		const isRerenderable = and(
+			eq(topicPodcastEpisodeVideos.podcastEpisodeId, podcastEpisodeId),
+			isTopicPodcastEpisodeVideoBelowRenderVersion,
+		)
+		const [replacedFilm] = await transaction
+			.select({
+				introKey: topicPodcastEpisodeVideos.introKey,
+				chaptersKey: topicPodcastEpisodeVideos.chaptersKey,
+				signOffKey: topicPodcastEpisodeVideos.signOffKey,
+				filmKey: topicPodcastEpisodeVideos.filmKey,
+				captionsKey: topicPodcastEpisodeVideos.captionsKey,
+			})
+			.from(topicPodcastEpisodeVideos)
+			.where(isRerenderable)
+			.for("no key update")
+
+		// a film removed or already swapped meanwhile is left as it is
+		if (!replacedFilm) {
+			return
+		}
+
+		// swap the row's files, and the new keys belong to the row
+		await transaction.update(topicPodcastEpisodeVideos).set(toRenderedFilmColumns(renderedFilm)).where(isRerenderable)
+		const storedKeys = toFilmStoredKeys(renderedFilm.objectKeys)
+		for (const storedKey of storedKeys) {
+			await clearPendingObjectDeletion(storedKey, transaction)
+		}
+
+		// the files the row played until now go after the grace
+		const replacedKeys = toFilmStoredKeys(replacedFilm).filter((replacedKey) => !storedKeys.includes(replacedKey))
+		await recordReplacedImageDeletions(transaction, replacedKeys)
+	})
+}
+
+// the columns a finished render writes: the keys, the size and length, the image the intro and sign-off were drawn
+// from, the current render version with no failed one, and the render's cost added to what the film cost so far
+function toRenderedFilmColumns({
+	objectKeys,
+	byteSize,
+	durationSeconds,
+	imageHash,
+	costDollars,
+}: Omit<SaveTopicPodcastEpisodeVideoReadyOptions, "podcastEpisodeId">): PgUpdateSetSource<
+	typeof topicPodcastEpisodeVideos
+> {
+	return {
+		error: null,
+		...objectKeys,
+		byteSize,
+		durationSeconds: Math.round(durationSeconds),
+		renderedImageHash: imageHash,
+		renderVersion: TOPIC_PODCAST_EPISODE_VIDEO_RENDER_VERSION,
+		failedRenderVersion: null,
+		cost: sql`${topicPodcastEpisodeVideos.cost} + ${costDollars.toFixed(6)}`,
+	}
+}
+
+// a film's stored keys, without the parts the timeline had no frames for
+function toFilmStoredKeys(objectKeys: Record<keyof FilmObjectKeys, string | null>): string[] {
+	return Object.values(objectKeys).filter((objectKey): objectKey is string => Boolean(objectKey))
+}
+
+/**
+ * Records that a ready film's render at the current render version failed for good, and leaves the film that plays as
+ * it is. Returns whether the podcast episode had a ready film.
+ */
+export async function saveTopicPodcastEpisodeVideoRerenderFailed(podcastEpisodeId: string): Promise<boolean> {
+	const isReadyFilm = and(
+		eq(topicPodcastEpisodeVideos.podcastEpisodeId, podcastEpisodeId),
+		eq(topicPodcastEpisodeVideos.status, "ready"),
+	)
+	const failedRows = await db
+		.update(topicPodcastEpisodeVideos)
+		.set({ failedRenderVersion: TOPIC_PODCAST_EPISODE_VIDEO_RENDER_VERSION })
+		.where(isReadyFilm)
+		.returning({ id: topicPodcastEpisodeVideos.id })
+	return failedRows.length > 0
+}
+
+/**
+ * Marks a film failed after its last attempt, reports the error, and records the failure for analytics. A ready film
+ * whose render at the current render version failed stays ready, with that version recorded as failed.
  */
 export async function markTopicPodcastEpisodeVideoFailed(podcastEpisodeId: string, error: string): Promise<void> {
-	// mark the row failed, and read the podcast episode's topic and owner for the report
+	// read the podcast episode's topic and owner for the report. a ready film keeps playing
 	const topicPodcastEpisodeVideoEpisode = await loadTopicPodcastEpisodeVideoEpisode(podcastEpisodeId)
-	await db
-		.update(topicPodcastEpisodeVideos)
-		.set({ status: "failed", error: error.slice(0, 500) })
-		.where(eq(topicPodcastEpisodeVideos.podcastEpisodeId, podcastEpisodeId))
+	const isReadyFilmKept = await saveTopicPodcastEpisodeVideoRerenderFailed(podcastEpisodeId)
+
+	// any other row is marked failed, unless another render saved it ready meanwhile, and the failure is reported
+	if (!isReadyFilmKept) {
+		const isUnfinished = and(
+			eq(topicPodcastEpisodeVideos.podcastEpisodeId, podcastEpisodeId),
+			ne(topicPodcastEpisodeVideos.status, "ready"),
+		)
+		await db
+			.update(topicPodcastEpisodeVideos)
+			.set({ status: "failed", error: error.slice(0, 500) })
+			.where(isUnfinished)
+	}
 	reportError(new Error("a podcast episode film failed to render"), "topic-podcast-episode-video", {
 		podcastEpisodeId,
 		error: error.slice(0, 200),

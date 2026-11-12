@@ -1,6 +1,6 @@
 // film image route tests: the editor gate, the month's limit that every image regeneration counts against, a render
 // that names the film, an upload cropped to the film's frame, the poster at the film's current image alone, and a
-// chapter's imagined image behind the topic's visibility
+// chapter's generated image behind the topic's visibility
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { toTopicPodcastEpisodeVideoChapterImageUrl } from "@carlnotes/contracts/topicImages"
 import { restoreConnectionPool, stubConnectionPool, toSelectionRow } from "@carlnotes/db/connectionPoolStub"
@@ -177,7 +177,7 @@ test("the poster serves the film's current image as a jpeg, and no other hash or
 	)
 })
 
-test("a chapter's imagined image serves as a jpeg, and a chapter or a film with none is not found", async () => {
+test("a chapter's generated image serves as a jpeg, and a chapter or a film with none is not found", async () => {
 	stubTopicPodcastEpisodeVideoReads()
 	const existsSpy = spyOn(storage, "attachmentExists").mockResolvedValue(true)
 	const streamSpy = spyOn(storage, "attachmentStream").mockReturnValue(new Response("jpeg").body as ReadableStream)
@@ -196,7 +196,7 @@ test("a chapter's imagined image serves as a jpeg, and a chapter or a film with 
 	const chaptersPath = "/topic-podcast-episode-video-images/episode-1/chapters"
 	expect((await topicPodcastEpisodeVideoImagesRoute.request(`${chaptersPath}/first/image.jpg`)).status).toBe(404)
 
-	// a chapter with no imagined image, and a podcast episode with no ready film
+	// a chapter with no generated image, and a podcast episode with no ready film
 	existsSpy.mockResolvedValue(false)
 	expect((await topicPodcastEpisodeVideoImagesRoute.request(chapterImagePath)).status).toBe(404)
 	existsSpy.mockResolvedValue(true)

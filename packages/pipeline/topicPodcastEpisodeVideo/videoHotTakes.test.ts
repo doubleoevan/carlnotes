@@ -45,6 +45,7 @@ const VIDEO_CHAPTER_ROWS = [0, 1].map((position) => ({
 	sourceUrl: "https://example.com/page",
 	startSeconds: position * 40,
 	endSeconds: (position + 1) * 40,
+	resourceId: `resource-${position}`,
 	isUnsafe: false,
 }))
 

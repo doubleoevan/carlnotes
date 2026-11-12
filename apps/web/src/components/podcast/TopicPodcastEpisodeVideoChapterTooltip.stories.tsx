@@ -45,7 +45,7 @@ export const LinkPreviewImage: Story = {
 	},
 }
 
-// a chapter with no link preview image and no imagined image, which falls back to the podcast card's band
+// a chapter with no link preview image and no generated image, which falls back to the podcast card's band
 export const PodcastCard: Story = {
 	play: async () => {
 		await waitFor(() =>

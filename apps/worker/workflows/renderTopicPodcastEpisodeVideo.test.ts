@@ -58,7 +58,12 @@ test("a render that succeeds marks nothing failed", async () => {
 	// a render that draws the film on its first attempt, and the failure marks it sends
 	const failureMarks: unknown[] = []
 	const workflowResult = await runFilmWorkflow("renderTopicPodcastEpisodeVideoWorkflow", {
-		renderTopicPodcastEpisodeVideoActivity: async () => ({ outcome: "rendered", renderSeconds: 12, byteSize: 1024 }),
+		renderTopicPodcastEpisodeVideoActivity: async () => ({
+			outcome: "rendered",
+			renderSeconds: 12,
+			byteSize: 1024,
+			generatedChapterImageCount: 0,
+		}),
 		markTopicPodcastEpisodeVideoFailedActivity: async (failureMark) => {
 			failureMarks.push(failureMark)
 		},

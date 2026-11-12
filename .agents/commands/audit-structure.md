@@ -936,6 +936,32 @@ Check for:
      `packages/models/modelCallFailure.ts`), `REPORT_MAX_RETRIES` in `packages/pipeline/review/summarize.ts` (now
      `runModelCall` in `packages/models/modelCallRetry.ts`), and the positional `litellmApiKey` of `embedVector`,
      `embedVectors`, and `embedPrivateVectors` (now an options object with `litellmApiKey` and `maxRetries`)
+   - a film chapter's one still and its slide, in `packages/pipeline/topicPodcastEpisodeVideo/`: `encodeVideoSegment`,
+     `toVideoSegmentArguments`, `VideoSegmentEncode`, `VideoSlideDirection`, and `toSlideDirection` in
+     `videoEncode.ts` (now `encodeVideoShot`, `toVideoShotArguments`, and `VideoShotEncode` there, with the shot plan
+     in `videoShots.ts`), `SEGMENT_SLIDE_SECONDS` in `videoTimeline.ts` (removed), `videoChapterStills.ts` with
+     `prepareChapterFrames` and `loadImaginedChapterStillPngs` (now `videoChapterImages.ts` with `prepareChapterImages`,
+     and `loadGeneratedChapterImages` in `generatedChapterImages.ts`), `VideoChapterFrame` in `videoParts.ts` (now
+     `VideoChapterImages` there), `loadChapterLinkPreviewStillPng` in
+     `topicPodcastEpisodeVideoInputs.ts` (now `loadOrFetchResourceImages` in
+     `packages/pipeline/resourceImages/fetchResourceImages.ts`), `loadShownImageStillPng` there (now
+     `loadShownImageStill`), and `isTopicPodcastEpisodeVideoReady` in `topicPodcastEpisodeVideoRows.ts` (now
+     `loadTopicPodcastEpisodeVideoRenderState`)
+   - `imaginedChapterImageMinimumSeconds` in `packages/server/podcastEpisodeSettings.ts` and its
+     `TOPIC_PODCAST_EPISODE_VIDEO_IMAGINED_CHAPTER_IMAGE_MINIMUM_SECONDS` setting (removed), and the film backfill
+     workflow's `afterTopic` input in `apps/worker/workflows/backfillTopicPodcastEpisodeVideos.ts` (now `afterCursor`)
+   - the film's object keys in `packages/db/store.ts`: `toTopicPodcastEpisodeVideoKeys`,
+     `toTopicPodcastEpisodeVideoImageKey`, `toTopicPodcastEpisodeVideoImagePartKey`,
+     `toTopicPodcastEpisodeVideoChaptersKey`, `toTopicPodcastEpisodeVideoCaptionsKey`, and
+     `toTopicPodcastEpisodeVideoChapterImageKey`, with their tests in `store.test.ts` (now
+     `packages/db/topicPodcastEpisodeVideoKeys.ts` and `topicPodcastEpisodeVideoKeys.test.ts`), and
+     `BackfillTopicCursor` in `apps/worker/workflows/backfillTopicImagesActivities.ts` (now
+     `apps/worker/workflows/backfillTopicCursor.ts`)
+   - `imagined` for a film chapter's model-drawn image (now `generated`, in identifiers, comments, and specs):
+     `imaginedChapterImageLimit` in `packages/server/podcastEpisodeSettings.ts` and its
+     `TOPIC_PODCAST_EPISODE_VIDEO_IMAGINED_CHAPTER_IMAGE_LIMIT` setting (now `generatedChapterImageLimit` and
+     `TOPIC_PODCAST_EPISODE_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT`), and the `"imagined"` chapter image kind in
+     `apps/web/src/components/podcast/topicPodcastEpisodeVideoChapterImages.ts` (now `"generated"`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

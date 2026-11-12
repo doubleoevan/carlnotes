@@ -6,7 +6,13 @@ import { topicImageRenders, topicImages } from "@carlnotes/db/schema/topicImages
 import { topics } from "@carlnotes/db/schema/topics"
 import { topicImageModel } from "@carlnotes/models/topicImageModel"
 import type { TopicImageBackfillMode } from "@carlnotes/pipeline/temporalClient"
-import { and, asc, eq, isNull, sql } from "drizzle-orm"
+import { and, eq, isNull, sql } from "drizzle-orm"
+import {
+	BACKFILL_TOPIC_ORDER,
+	type BackfillTopicCursor,
+	toAfterTopicFilter,
+	toBackfillTopicCursor,
+} from "./backfillTopicCursor"
 import type { RenderTopicImageWorkflowInput } from "./renderTopicImage"
 import { rederiveTopicImageFiles } from "./renderTopicImageActivities"
 
@@ -16,10 +22,6 @@ export type ListBackfillTopicIdsOptions = {
 	afterTopic?: BackfillTopicCursor
 	limit: number
 }
-
-// where a page of the listing ends: the last topic's place in the public-first, oldest-first order, with its time as
-// the database wrote it
-export type BackfillTopicCursor = { publicRank: 0 | 1; createdAt: string; id: string }
 
 // one page of the topics to backfill, and the cursor of the next page, or null on the last page
 export type BackfillTopicPage = { topicIds: string[]; nextCursor: BackfillTopicCursor | null }
@@ -41,19 +43,13 @@ export async function listBackfillTopicIds({
 				? eq(topicImages.origin, "generated")
 				: sql`${topicImages.topicId} is not null`
 
-	// public topics first, oldest first within each, then by id, which the cursor compares as one row
-	const publicRank = sql`case when ${topics.visibility} = 'public' then 0 else 1 end`
-	const cursorFilter = afterTopic
-		? sql`(${publicRank}, ${topics.createdAt}, ${topics.id}) > (${afterTopic.publicRank}, ${afterTopic.createdAt}::timestamptz, ${afterTopic.id})`
-		: undefined
-
-	// one page of the listing, with each row's time as text
+	// one page of the listing after the cursor, with each row's time as text
 	const topicRows = await db
 		.select({ id: topics.id, createdAt: sql<string>`${topics.createdAt}::text`, visibility: topics.visibility })
 		.from(topics)
 		.leftJoin(topicImages, eq(topicImages.topicId, topics.id))
-		.where(and(modeFilter, cursorFilter))
-		.orderBy(asc(publicRank), asc(topics.createdAt), asc(topics.id))
+		.where(and(modeFilter, toAfterTopicFilter(afterTopic)))
+		.orderBy(...BACKFILL_TOPIC_ORDER)
 		.limit(limit)
 
 	// a full page may have more after it
@@ -62,13 +58,7 @@ export async function listBackfillTopicIds({
 	// the page's ids, and the cursor the next page starts after
 	return {
 		topicIds: topicRows.map((topicRow) => topicRow.id),
-		nextCursor: lastTopic
-			? {
-					publicRank: lastTopic.visibility === "public" ? 0 : 1,
-					createdAt: lastTopic.createdAt,
-					id: lastTopic.id,
-				}
-			: null,
+		nextCursor: lastTopic ? toBackfillTopicCursor(lastTopic) : null,
 	}
 }
 

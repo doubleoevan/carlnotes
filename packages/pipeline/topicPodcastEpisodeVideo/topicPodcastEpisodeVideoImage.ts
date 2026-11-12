@@ -1,13 +1,18 @@
-// a film's own image: a wide scene drawn in the film house style at the film's size and stored beside the film's
-// parts. the intro, the sign-off, and the poster show it in place of the podcast episode's image
+// a film's own image: a wide scene drawn in the film house style and stored beside the film's parts, at the film's
+// size for the poster and as a larger original that the intro and the sign-off zoom into. they show it in place of the
+// podcast episode's image
 
 import type { TopicImageOrigin } from "@carlnotes/contracts/enums"
 import { db } from "@carlnotes/db"
 import { podcastEpisodes, topicPodcastEpisodeVideos } from "@carlnotes/db/schema/podcast"
 import { topics } from "@carlnotes/db/schema/topics"
-import { deleteStoredObjects, toTopicPodcastEpisodeVideoImageKey, uploadAttachment } from "@carlnotes/db/store"
+import { deleteStoredObjects, uploadAttachment } from "@carlnotes/db/store"
+import {
+	toTopicPodcastEpisodeVideoImageKey,
+	toTopicPodcastEpisodeVideoImageLargeOriginalKey,
+} from "@carlnotes/db/topicPodcastEpisodeVideoKeys"
 import { loadOrProvisionUserLiteLLMKey } from "@carlnotes/models/litellm"
-import { topicImageCostDollars, topicImageModel } from "@carlnotes/models/topicImageModel"
+import { topicImageCostDollars, topicImageRegenerateModel } from "@carlnotes/models/topicImageModel"
 import { reportError } from "@carlnotes/server/monitoring"
 import { runWithRetries } from "@carlnotes/server/retry"
 import { and, eq, isNull, sql } from "drizzle-orm"
@@ -19,16 +24,25 @@ import { recordReplacedImageDeletions, succeedTopicImageRender } from "../topicI
 import { type TopicImageSceneInput, writeTopicImageScene } from "../topicImages/writeTopicImageScene"
 import { VIDEO_HEIGHT, VIDEO_WIDTH } from "./videoFrames"
 
-// the format of a film's own image: the film house style, drawn wide, at the film's frame size
-export const TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_FORMAT: TopicImageFormat = {
+// the format of a chapter's generated image: the film house style, drawn wide, at the film's frame size
+export const GENERATED_CHAPTER_IMAGE_FORMAT: TopicImageFormat = {
 	stylePromptName: "topic-podcast-episode-video-image-style",
 	aspectRatio: "16:9",
 	width: VIDEO_WIDTH,
 	height: VIDEO_HEIGHT,
 }
 
-// the framing every film image's scene takes, which keeps the lower third clear for the title
-const TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_FRAMING =
+// the format of a film's own image: the same, drawn at the 2K size, with the larger original kept for the zoom of the
+// intro and the sign-off
+export const TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_FORMAT: TopicImageFormat = {
+	...GENERATED_CHAPTER_IMAGE_FORMAT,
+	drawSize: "2K",
+	largeOriginalWidth: 2752,
+	largeOriginalHeight: 1536,
+}
+
+// the framing a film image's scene takes, which keeps the lower third clear for the title
+export const TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_FRAMING =
 	"a wide establishing shot, with the focal subject in the upper two thirds and open ground, water, or shadow along the bottom"
 
 // a draw gets two attempts, ten seconds apart
@@ -62,16 +76,17 @@ export async function drawTopicPodcastEpisodeVideoImage({
 	}
 
 	// the original from a scene of the podcast episode's own words, on the owner's key or the master key for the
-	// platform
+	// platform, on the model that draws at the film image's size
 	const litellmApiKey = isPlatformBilled
 		? undefined
 		: await loadOrProvisionUserLiteLLMKey(topicPodcastEpisodeVideo.ownerId)
-	const model = topicImageModel()
+	const model = topicImageRegenerateModel()
 	const original = await drawTopicPodcastEpisodeVideoImageOriginal({ sceneInput, model, litellmApiKey })
 
-	// the file, then its hash on the film row with the cost. a film that got its image meanwhile keeps it
+	// the files, then the image's hash on the film row with the cost. a film that got its image meanwhile keeps it
 	const imageHash = await storeTopicPodcastEpisodeVideoImage(podcastEpisodeId, original)
-	const imageCostDollars = isPlatformBilled ? 0 : topicImageCostDollars(model)
+	const { drawSize } = TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_FORMAT
+	const imageCostDollars = isPlatformBilled ? 0 : topicImageCostDollars(model, drawSize)
 	const updatedRows = await db
 		.update(topicPodcastEpisodeVideos)
 		.set({
@@ -87,20 +102,28 @@ export async function drawTopicPodcastEpisodeVideoImage({
 		)
 		.returning({ id: topicPodcastEpisodeVideos.id })
 
-	// no row changed, so this draw's file goes
+	// no row changed, so this draw's files go
 	if (updatedRows.length === 0) {
-		await deleteStoredObjects([toTopicPodcastEpisodeVideoImageKey(podcastEpisodeId, imageHash)])
+		await deleteStoredObjects(toImageObjectKeys(podcastEpisodeId, imageHash))
 		return null
 	}
 	return imageHash
 }
 
-// what one draw reads: the scene's words, the model, and the key it bills, or the master key if no key is given
-type DrawImageOriginalOptions = { sceneInput: TopicImageSceneInput; model: string; litellmApiKey?: string }
+// what one draw reads: the scene's words, the framing its scene takes, which is the film image's if none is given, the
+// format, which is the film image's if none is given, the model, and the key it bills, or the master key if no key is
+// given
+type DrawImageOriginalOptions = {
+	sceneInput: TopicImageSceneInput
+	framing?: string
+	format?: TopicImageFormat
+	model: string
+	litellmApiKey?: string
+}
 
 /**
- * Draws an image in the film house style at the film's size, from a scene written in the film's framing over the
- * given words. A spent budget and a rejection are final, and anything else gets a second attempt before it throws.
+ * Draws an image in the film house style in a format, from a scene written in a framing over the given words. A spent
+ * budget and a rejection are final, and anything else gets a second attempt before it throws.
  */
 export function drawTopicPodcastEpisodeVideoImageOriginal(
 	drawImageOriginalOptions: DrawImageOriginalOptions,
@@ -113,24 +136,16 @@ export function drawTopicPodcastEpisodeVideoImageOriginal(
 	})
 }
 
-// write the scene in the film's framing, and draw it in the film house style at the film's size
+// write the scene in the framing, and draw it in the film house style in the format
 async function drawImageOriginal({
 	sceneInput,
+	framing = TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_FRAMING,
+	format = TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_FORMAT,
 	model,
 	litellmApiKey,
 }: DrawImageOriginalOptions): Promise<TopicImageOriginal> {
-	const scene = await writeTopicImageScene({
-		...sceneInput,
-		framing: TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_FRAMING,
-		litellmApiKey,
-	})
-	return renderTopicImageOriginal({
-		scene,
-		isHouseStyle: true,
-		model,
-		format: TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_FORMAT,
-		litellmApiKey,
-	})
+	const scene = await writeTopicImageScene({ ...sceneInput, framing, litellmApiKey })
+	return renderTopicImageOriginal({ scene, isHouseStyle: true, model, format, litellmApiKey })
 }
 
 /**
@@ -195,11 +210,8 @@ export async function replaceTopicPodcastEpisodeVideoImage({
 
 		// the replaced image goes after the grace, unless the same bytes came back under the same hash
 		if (topicPodcastEpisodeVideo?.previousHash && topicPodcastEpisodeVideo.previousHash !== imageHash) {
-			const replacedImageKey = toTopicPodcastEpisodeVideoImageKey(
-				podcastEpisodeId,
-				topicPodcastEpisodeVideo.previousHash,
-			)
-			await recordReplacedImageDeletions(transaction, [replacedImageKey])
+			const replacedImageKeys = toImageObjectKeys(podcastEpisodeId, topicPodcastEpisodeVideo.previousHash)
+			await recordReplacedImageDeletions(transaction, replacedImageKeys)
 		}
 
 		// the render that drew it is done
@@ -220,18 +232,30 @@ export async function replaceTopicPodcastEpisodeVideoImage({
 	return imageHash
 }
 
-// store a film image's original as a jpeg under its content hash, and return the hash
+// store a film image's jpeg at the film's size under its content hash, with its larger original beside it if it has
+// one, and return the hash
 async function storeTopicPodcastEpisodeVideoImage(
 	podcastEpisodeId: string,
 	original: TopicImageOriginal,
 ): Promise<string> {
+	// the jpeg the poster shows, which names the image
 	const imageHash = toTopicImageHash(original.jpegBytes)
-	await uploadAttachment(
-		toTopicPodcastEpisodeVideoImageKey(podcastEpisodeId, imageHash),
-		original.jpegBytes,
-		"image/jpeg",
-	)
+	const [imageKey, imageOriginalKey] = toImageObjectKeys(podcastEpisodeId, imageHash)
+	await uploadAttachment(imageKey, original.jpegBytes, "image/jpeg")
+
+	// the larger original that the intro and the sign-off zoom into
+	if (original.largeOriginalJpegBytes) {
+		await uploadAttachment(imageOriginalKey, original.largeOriginalJpegBytes, "image/jpeg")
+	}
 	return imageHash
+}
+
+// the keys of a film image's two files: the jpeg at the film's size, then its larger original
+function toImageObjectKeys(podcastEpisodeId: string, imageHash: string): [string, string] {
+	return [
+		toTopicPodcastEpisodeVideoImageKey(podcastEpisodeId, imageHash),
+		toTopicPodcastEpisodeVideoImageLargeOriginalKey(podcastEpisodeId, imageHash),
+	]
 }
 
 // the podcast episode of a film row, or null for a film that is gone

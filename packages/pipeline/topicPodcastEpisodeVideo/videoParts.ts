@@ -1,24 +1,31 @@
 // a podcast episode film's three parts on local files: the intro, the chapters, and the sign-off, and the film joined
-// from them. the render and the rebuild both draw through here. a segment's still and lower third are deleted once the
-// segment is encoded, and every ffmpeg run stops once the signal aborts
+// from them. the render and the rebuild both draw through here. a chapter is a montage, one run for each of its shots,
+// and a segment's stills and lower third are deleted once its shots are encoded. every ffmpeg run stops once the
+// signal aborts
 
 import { join } from "node:path"
+import { reportError } from "@carlnotes/server/monitoring"
 import {
-	encodeVideoSegment,
+	encodeVideoImagePart,
+	encodeVideoShot,
 	joinVideo,
 	muxFilm,
 	remuxFilm,
-	toSlideDirection,
-	type VideoSegmentEncode,
+	type VideoShotEncode,
+	type VideoShotPicture,
 	writeConcatList,
 } from "./videoEncode"
-import { type LowerThirdText, loadPodcastCardStillPng, toLowerThirdPng } from "./videoFrames"
+import { type LowerThirdText, loadPodcastCardStillPng, PODCAST_CARD_ZOOM_LIMIT, toLowerThirdPng } from "./videoFrames"
 import { HOT_TAKES_LOWER_THIRD_TEXT } from "./videoHotTakes"
-import type { VideoSegment } from "./videoTimeline"
+import { toCaptionBreakFrames, toShotScreenFrameCount, toVideoShots, type VideoShot } from "./videoShots"
+import { LOWER_THIRD_OUT_SECONDS, toSegmentSeconds, VIDEO_FRAMES_PER_SECOND, type VideoSegment } from "./videoTimeline"
 
-// one chapter's still png, at four times the film's size, whether the still is its Finding's link preview image, and
-// its lower third
-export type VideoChapterFrame = { stillPng: Uint8Array; isLinkPreviewImage: boolean; lowerThirdText: LowerThirdText }
+// one image a segment's shots show: the load of its still, composed at four times the film's size, and how far the
+// image may zoom
+export type VideoSegmentImage = { loadStillPng: () => Promise<Uint8Array>; zoomLimit: number }
+
+// one chapter's images in the order its shots show them, and its lower third
+export type VideoChapterImages = { images: VideoSegmentImage[]; lowerThirdText: LowerThirdText }
 
 // the folder that the render works in, the film's timeline, the still of the image the film shows with the intro's
 // and the sign-off's lower thirds, and the signal that stops the encodes
@@ -52,8 +59,8 @@ export async function renderVideoImageParts({
 
 	// render both parts from the same still, then delete it
 	const imagePart = { workDirectory, segments, stillPath, signal }
-	const introPath = await renderVideoImagePart({ ...imagePart, kind: "intro", lowerThirdText: introText })
-	const signOffPath = await renderVideoImagePart({ ...imagePart, kind: "sign-off", lowerThirdText: signOffText })
+	const introPath = await renderVideoImagePart({ ...imagePart, part: "intro", lowerThirdText: introText })
+	const signOffPath = await renderVideoImagePart({ ...imagePart, part: "sign-off", lowerThirdText: signOffText })
 	await Bun.file(stillPath).delete()
 	return { introPath, signOffPath }
 }
@@ -64,160 +71,270 @@ type RenderVideoImagePartOptions = {
 	workDirectory: string
 	segments: VideoSegment[]
 	stillPath: string
-	kind: "intro" | "sign-off"
+	part: "intro" | "sign-off"
 	lowerThirdText: LowerThirdText
 	signal?: AbortSignal
 }
 
-// render one part that shows the film's image: one segment with its lower third held throughout. a part the
-// timeline has no frames for returns null
+// render one part that shows the film's image: one run with its lower third shown throughout. a part the timeline has
+// no frames for returns null
 async function renderVideoImagePart({
 	workDirectory,
 	segments,
 	stillPath,
-	kind,
+	part,
 	lowerThirdText,
 	signal,
 }: RenderVideoImagePartOptions): Promise<string | null> {
 	// find the part's segment
-	const segment = segments.find((timelineSegment) => timelineSegment.kind === kind)
+	const segment = segments.find((timelineSegment) => timelineSegment.kind === part)
 	if (!segment) {
 		return null
 	}
 
-	// draw the lower third, then encode the segment
-	const lowerThirdPath = join(workDirectory, `${kind}-lower-third.png`)
+	// draw the lower third, then encode the part
+	const lowerThirdPath = join(workDirectory, `${part}-lower-third.png`)
 	await Bun.write(lowerThirdPath, await toLowerThirdPng(lowerThirdText))
-	const segmentPath = join(workDirectory, `${kind}.mp4`)
-	const segmentEncode: VideoSegmentEncode = {
-		stillPath,
-		lowerThirdPath,
-		frameCount: segment.frameCount,
-		segmentKind: kind,
-		slideDirection: null,
-		segmentPath,
-	}
-	await encodeVideoSegment(segmentEncode, signal)
+	const partPath = join(workDirectory, `${part}.mp4`)
+	await encodeVideoImagePart({ stillPath, lowerThirdPath, frameCount: segment.frameCount, part, partPath }, signal)
 
-	// delete the lower third once the segment is encoded
+	// delete the lower third once the part is encoded
 	await Bun.file(lowerThirdPath).delete()
-	return segmentPath
+	return partPath
 }
 
-// the film's podcast episode, the folder that the render works in, the film's timeline, the load of a chapter's frame
-// by its position, and the signal that stops the encodes and the join
+// the film's podcast episode, the folder that the render works in, the film's timeline, each chapter's images by its
+// position, the images that the segments where the hosts answer Comments cut between, when each caption starts in the
+// audio, and the signal that stops the encodes and the join
 type RenderVideoChaptersPartOptions = {
 	podcastEpisodeId: string
 	workDirectory: string
 	segments: VideoSegment[]
-	loadChapterFrame: (position: number) => Promise<VideoChapterFrame>
+	// what each segment shows, and where its shots may cut
+	chapterImages: Map<number, VideoChapterImages>
+	podcastCardImages: VideoSegmentImage[]
+	captionStartSeconds: number[]
 	signal?: AbortSignal
 }
 
 /**
- * Renders every chapter's segment and its hot takes' segment, and joins them into the chapters part by stream copy.
- * Each segment's still and lower third are deleted once the segment is encoded, and each segment's file once the part
- * is joined. Returns the part's file, or null if the timeline has no chapters.
+ * Renders every chapter's shots and the shots of every segment where the hosts answer Comments, and joins them into
+ * the chapters part by stream copy. Each segment's stills and lower third are deleted once its shots are encoded, and
+ * each shot's file once the part is joined. Returns the part's file, or null if the timeline has no chapters.
  */
 export async function renderVideoChaptersPart({
 	podcastEpisodeId,
 	workDirectory,
 	segments,
-	loadChapterFrame,
+	chapterImages,
+	podcastCardImages,
+	captionStartSeconds,
 	signal,
 }: RenderVideoChaptersPartOptions): Promise<string | null> {
-	// encode the chapters one at a time, so the render holds one chapter's still in memory
-	const segmentPaths: string[] = []
+	// encode the segments one at a time, so the render holds one segment's stills on disk
+	const shotPaths: string[] = []
 	for (const segment of segments) {
 		if (segment.kind !== "chapter" && segment.kind !== "hot-takes") {
 			continue
 		}
 
-		// write the chapter's frame, or its hot takes' frame, and encode the segment
-		const segmentEncode =
-			segment.kind === "chapter"
-				? await writeChapterFrame({
-						podcastEpisodeId,
-						workDirectory,
-						segment,
-						chapterFrame: await loadChapterFrame(segment.position),
-					})
-				: await writeHotTakesFrame(workDirectory, segment)
-		await encodeVideoSegment(segmentEncode, signal)
-		segmentPaths.push(segmentEncode.segmentPath)
-
-		// delete the still and the lower third once the segment is encoded
-		await Bun.file(segmentEncode.stillPath).delete()
-		await Bun.file(segmentEncode.lowerThirdPath).delete()
+		// a chapter shows its own images under its own lower third, and the hosts' answers show the podcast card's
+		const chapter = segment.kind === "chapter" ? chapterImages.get(segment.position) : undefined
+		if (segment.kind === "chapter" && !chapter) {
+			throw new Error(`the film has no chapter at position ${segment.position}`)
+		}
+		const segmentShotPaths = await renderSegmentShots({
+			podcastEpisodeId,
+			workDirectory,
+			segment,
+			images: chapter?.images ?? podcastCardImages,
+			lowerThirdText: chapter?.lowerThirdText ?? HOT_TAKES_LOWER_THIRD_TEXT,
+			captionStartSeconds,
+			signal,
+		})
+		shotPaths.push(...segmentShotPaths)
 	}
 
 	// a timeline with no chapters has no chapters part
-	if (segmentPaths.length === 0) {
+	if (shotPaths.length === 0) {
 		return null
 	}
 
-	// join the segments by stream copy
+	// join the shots by stream copy
 	const chaptersPath = join(workDirectory, "chapters.mp4")
-	const listPath = join(workDirectory, "chapter-segments.txt")
-	await writeConcatList(segmentPaths, listPath)
+	const listPath = join(workDirectory, "chapter-shots.txt")
+	await writeConcatList(shotPaths, listPath)
 	await joinVideo({ listPath, outputPath: chaptersPath }, signal)
 
-	// the segments are no longer needed once the part is joined
-	await Promise.all(segmentPaths.map((segmentPath) => Bun.file(segmentPath).delete()))
+	// delete the shots' files once the part is joined
+	await Promise.all(shotPaths.map((shotPath) => Bun.file(shotPath).delete()))
 	return chaptersPath
 }
 
-// the film's podcast episode, the folder that the render works in, the chapter's segment, and its frame
-type WriteChapterFrameOptions = {
+// the film's podcast episode, the folder that the render works in, the segment, its images in the order its shots show
+// them, its lower third, when each caption starts in the audio, and the signal that stops the encodes
+type RenderSegmentShotsOptions = {
 	podcastEpisodeId: string
 	workDirectory: string
-	segment: Extract<VideoSegment, { kind: "chapter" }>
-	chapterFrame: VideoChapterFrame
+	segment: Extract<VideoSegment, { kind: "chapter" | "hot-takes" }>
+	// what the segment shows, and where its shots may cut
+	images: VideoSegmentImage[]
+	lowerThirdText: LowerThirdText
+	captionStartSeconds: number[]
+	signal?: AbortSignal
 }
 
-// write one chapter's still and lower third to files, and return the segment's encode
-async function writeChapterFrame({
+// one of a segment's stills on disk, and how far its image may zoom
+type SegmentStill = { stillPath: string; zoomLimit: number }
+
+// render one segment as its shots, one run each, and return the shots' files in order
+async function renderSegmentShots({
 	podcastEpisodeId,
 	workDirectory,
 	segment,
-	chapterFrame,
-}: WriteChapterFrameOptions): Promise<VideoSegmentEncode> {
-	// write the still and draw the lower third
-	const stillPath = join(workDirectory, `chapter-${segment.position}-still.png`)
-	const lowerThirdPath = join(workDirectory, `chapter-${segment.position}-lower-third.png`)
-	await Bun.write(stillPath, chapterFrame.stillPng)
-	await Bun.write(lowerThirdPath, await toLowerThirdPng(chapterFrame.lowerThirdText))
+	images,
+	lowerThirdText,
+	captionStartSeconds,
+	signal,
+}: RenderSegmentShotsOptions): Promise<string[]> {
+	// plan the cuts first to learn how many stills the segment's shots can show
+	const { frameCount, startSeconds: segmentStartSeconds } = segment
+	const shotPlan = {
+		frameCount,
+		captionBreakFrames: toCaptionBreakFrames({ captionStartSeconds, segmentStartSeconds, frameCount }),
+		seed: `${podcastEpisodeId}:${segment.kind}:${segment.position}`,
+	}
+	const shotCount = toVideoShots({ ...shotPlan, imageCount: images.length }).length
 
-	// the segment's encode. a chapter's lower third fades out, and a link preview image slides in from an edge
-	const { position } = segment
+	// write the stills and the lower third, then plan the shots over the stills that loaded
+	const filePrefix = join(workDirectory, `${segment.kind}-${segment.position}`)
+	const segmentStills = await writeSegmentStills({
+		podcastEpisodeId,
+		filePrefix,
+		images,
+		stillCount: shotCount,
+		signal,
+	})
+	const lowerThirdPath = `${filePrefix}-lower-third.png`
+	await Bun.write(lowerThirdPath, await toLowerThirdPng(lowerThirdText))
+	const shots = toVideoShots({ ...shotPlan, imageCount: segmentStills.length })
+
+	// encode each shot, with the shot before it for its crossfade
+	const shotPictures = shots.map((shot, i) =>
+		toShotPicture({ shot, segmentStills, isLastShot: i === shots.length - 1 }),
+	)
+	const shotPaths: string[] = []
+	for (const [i, shot] of shots.entries()) {
+		const shotPath = `${filePrefix}-shot-${i}.mp4`
+		const shotEncode = toShotEncode({ shot, shotPictures, shotIndex: i, lowerThirdPath, shotPath })
+		await encodeVideoShot(shotEncode, signal)
+		shotPaths.push(shotPath)
+	}
+
+	// delete the stills and the lower third once the segment's shots are encoded
+	const stillPaths = segmentStills.map((segmentStill) => segmentStill.stillPath)
+	await Promise.all([...stillPaths, lowerThirdPath].map((filePath) => Bun.file(filePath).delete()))
+	return shotPaths
+}
+
+// the film's podcast episode, the start of the segment's file names, its images, and how many stills its shots can show
+type WriteSegmentStillsOptions = {
+	podcastEpisodeId: string
+	filePrefix: string
+	images: VideoSegmentImage[]
+	stillCount: number
+	signal?: AbortSignal
+}
+
+// write a segment's stills to files, in its images' order, until its shots have enough. an image whose still cannot be
+// loaded is reported and left out, and a segment left with none shows the podcast card
+async function writeSegmentStills({
+	podcastEpisodeId,
+	filePrefix,
+	images,
+	stillCount,
+	signal,
+}: WriteSegmentStillsOptions): Promise<SegmentStill[]> {
+	const segmentStills: SegmentStill[] = []
+	for (const image of images) {
+		signal?.throwIfAborted()
+		if (segmentStills.length >= stillCount) {
+			break
+		}
+
+		// load the image's still, and leave the image out if it cannot be read
+		const stillPng = await image.loadStillPng().catch((error: unknown) => {
+			reportError(error, "topic-podcast-episode-video", { podcastEpisodeId, step: "chapter-still" })
+			return null
+		})
+
+		// write the still that loaded under the next still number
+		if (stillPng) {
+			const stillPath = `${filePrefix}-still-${segmentStills.length}.png`
+			await Bun.write(stillPath, stillPng)
+			segmentStills.push({ stillPath, zoomLimit: image.zoomLimit })
+		}
+	}
+
+	// a segment with no still that loaded shows the podcast card
+	if (segmentStills.length === 0) {
+		const stillPath = `${filePrefix}-still-0.png`
+		await Bun.write(stillPath, await loadPodcastCardStillPng())
+		segmentStills.push({ stillPath, zoomLimit: PODCAST_CARD_ZOOM_LIMIT })
+	}
+	return segmentStills
+}
+
+// a shot, its segment's stills, and whether the shot is its segment's last
+type ToShotPictureOptions = { shot: VideoShot; segmentStills: SegmentStill[]; isLastShot: boolean }
+
+// a shot's picture: its still, its move, its frames, and the frames it is on screen
+function toShotPicture({ shot, segmentStills, isLastShot }: ToShotPictureOptions): VideoShotPicture {
+	const segmentStill = segmentStills[shot.imageIndex]
+	if (!segmentStill) {
+		throw new Error(`a shot shows image ${shot.imageIndex}, and its segment has ${segmentStills.length} stills`)
+	}
 	return {
-		stillPath,
-		lowerThirdPath,
-		frameCount: segment.frameCount,
-		segmentKind: "chapter",
-		slideDirection: chapterFrame.isLinkPreviewImage ? toSlideDirection({ podcastEpisodeId, position }) : null,
-		segmentPath: join(workDirectory, `chapter-${segment.position}.mp4`),
+		...segmentStill,
+		move: shot.move,
+		frameCount: shot.frameCount,
+		screenFrameCount: toShotScreenFrameCount(shot, isLastShot),
 	}
 }
 
-// write the podcast card and the hot takes' lower third to files, and return the segment's encode. the segment fades
-// in and out
-async function writeHotTakesFrame(
-	workDirectory: string,
-	segment: Extract<VideoSegment, { kind: "hot-takes" }>,
-): Promise<VideoSegmentEncode> {
-	// write the still and draw the lower third
-	const stillPath = join(workDirectory, `hot-takes-${segment.position}-still.png`)
-	const lowerThirdPath = join(workDirectory, `hot-takes-${segment.position}-lower-third.png`)
-	await Bun.write(stillPath, await loadPodcastCardStillPng())
-	await Bun.write(lowerThirdPath, await toLowerThirdPng(HOT_TAKES_LOWER_THIRD_TEXT))
+// a shot, every picture of its segment, the shot's index, the segment's lower third png, and the file the shot writes
+type ToShotEncodeOptions = {
+	shot: VideoShot
+	shotPictures: VideoShotPicture[]
+	shotIndex: number
+	lowerThirdPath: string
+	shotPath: string
+}
+
+// a shot's run: its picture, the picture before it, the lower third if the shot starts while the lower third still
+// shows, and whether the shot starts or ends its segment
+function toShotEncode({
+	shot,
+	shotPictures,
+	shotIndex,
+	lowerThirdPath,
+	shotPath,
+}: ToShotEncodeOptions): VideoShotEncode {
+	const shotPicture = shotPictures[shotIndex]
+	if (!shotPicture) {
+		throw new Error(`the segment has no shot at index ${shotIndex}`)
+	}
+
+	// the lower third is gone by the segment's eighth second, so a shot that starts later has none
+	const shotStartSeconds = toSegmentSeconds(shot.startFrame)
+	const hasLowerThird = shot.startFrame < LOWER_THIRD_OUT_SECONDS * VIDEO_FRAMES_PER_SECOND
 	return {
-		stillPath,
-		lowerThirdPath,
-		frameCount: segment.frameCount,
-		segmentKind: "hot-takes",
-		slideDirection: null,
-		segmentPath: join(workDirectory, `hot-takes-${segment.position}.mp4`),
+		...shotPicture,
+		previousShot: shotPictures[shotIndex - 1] ?? null,
+		lowerThird: hasLowerThird ? { lowerThirdPath, shotStartSeconds } : null,
+		isSegmentStart: shotIndex === 0,
+		isSegmentEnd: shotIndex === shotPictures.length - 1,
+		shotPath,
 	}
 }
 

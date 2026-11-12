@@ -208,6 +208,13 @@ export function toResourceContentKey(resourceId: string): string {
 	return `resources/${resourceId}/content.md`
 }
 
+/**
+ * Returns the object key of one of a Resource's images, a jpeg, by its position among them.
+ */
+export function toResourceImageKey(resourceId: string, position: number): string {
+	return `resources/${resourceId}/images/${position}.jpg`
+}
+
 // upload a Resource's fetched Markdown to object storage, returning its key and byte size for the resource row
 export async function uploadResourceContent(
 	resourceId: string,
@@ -273,96 +280,6 @@ export async function downloadPodcastEpisodeFile({ key, filePath }: DownloadPodc
 // a presigned url that reads a Podcast Episode's audio, film, or captions from object storage, with range requests
 export function toPodcastEpisodeFileUrl(objectKey: string): string {
 	return bucket().file(objectKey).presign({ expiresIn: PODCAST_EPISODE_FILE_URL_LIFETIME_SECONDS, method: "GET" })
-}
-
-// a podcast episode film's parts that are drawn from its image, so each image gets its own key
-export type TopicPodcastEpisodeVideoImagePart = "intro" | "sign-off" | "film"
-
-// the podcast episode, the part, and the content hash of the image that the part was drawn from
-type ToTopicPodcastEpisodeVideoImagePartKeyOptions = {
-	podcastEpisodeId: string
-	part: TopicPodcastEpisodeVideoImagePart
-	imageHash: string
-}
-
-/**
- * Returns the object key of a film part drawn from one image. A new image gives the part a new key.
- */
-export function toTopicPodcastEpisodeVideoImagePartKey({
-	podcastEpisodeId,
-	part,
-	imageHash,
-}: ToTopicPodcastEpisodeVideoImagePartKeyOptions): string {
-	return `episodes/${podcastEpisodeId}/video/${part}-${imageHash}.mp4`
-}
-
-/**
- * Returns the object key of a film's chapters part, which a rebuild keeps.
- */
-export function toTopicPodcastEpisodeVideoChaptersKey(podcastEpisodeId: string): string {
-	return `episodes/${podcastEpisodeId}/video/chapters.mp4`
-}
-
-/**
- * Returns the object key of a film's WebVTT captions.
- */
-export function toTopicPodcastEpisodeVideoCaptionsKey(podcastEpisodeId: string): string {
-	return `episodes/${podcastEpisodeId}/video/captions.vtt`
-}
-
-/**
- * Returns the object key of a film's own image, a jpeg at the film's size. A new image gets a new key.
- */
-export function toTopicPodcastEpisodeVideoImageKey(podcastEpisodeId: string, imageHash: string): string {
-	return `episodes/${podcastEpisodeId}/video/image-${imageHash}.jpg`
-}
-
-/**
- * Returns the object key of the imagined image of one chapter of a film, a jpeg at the film's size.
- */
-export function toTopicPodcastEpisodeVideoChapterImageKey(podcastEpisodeId: string, position: number): string {
-	return `episodes/${podcastEpisodeId}/video/chapter-${position}-image.jpg`
-}
-
-// a film row's object keys, any of them null until it is uploaded
-type TopicPodcastEpisodeVideoKeyColumns = {
-	introKey: string | null
-	chaptersKey: string | null
-	signOffKey: string | null
-	filmKey: string | null
-	captionsKey: string | null
-	// the film's podcast episode and the hash of the film's own image, which name the image's key. the hash is null
-	// for a film with no image of its own
-	podcastEpisodeId: string | null
-	imageHash: string | null
-	// how many chapters the film's podcast episode has. any of them may have an imagined image
-	chapterCount: number
-}
-
-/**
- * Returns every stored object key of a film row, its own image among them, without the keys not yet uploaded, and the
- * key of an imagined image for each chapter, whether or not the chapter has one.
- */
-export function toTopicPodcastEpisodeVideoKeys(topicPodcastEpisodeVideo: TopicPodcastEpisodeVideoKeyColumns): string[] {
-	// the key of the film's own image, if it has one
-	const { podcastEpisodeId, imageHash, chapterCount } = topicPodcastEpisodeVideo
-	const imageKey =
-		podcastEpisodeId && imageHash ? toTopicPodcastEpisodeVideoImageKey(podcastEpisodeId, imageHash) : null
-
-	// the parts, the film, the captions, and the image
-	const { introKey, chaptersKey, signOffKey, filmKey, captionsKey } = topicPodcastEpisodeVideo
-	const storedKeys = toStoredObjectKeys(
-		[introKey, chaptersKey, signOffKey, filmKey, captionsKey, imageKey].map((objectKey) => ({ objectKey })),
-	)
-
-	// a podcast episode with no film row has no chapter images
-	if (!podcastEpisodeId) {
-		return storedKeys
-	}
-	const chapterImageKeys = Array.from({ length: chapterCount }, (_, position) =>
-		toTopicPodcastEpisodeVideoChapterImageKey(podcastEpisodeId, position),
-	)
-	return [...storedKeys, ...chapterImageKeys]
 }
 
 // build the S3 client from env, throwing if any value is unset

@@ -119,8 +119,8 @@ export function toTopicPodcastEpisodeVideoPosterUrl(podcastEpisodeId: string, ha
 }
 
 /**
- * Returns the path of the imagined image of one chapter of a film, from its podcast episode's id and the chapter's
- * position. The path is not found for a chapter with no imagined image.
+ * Returns the path of the generated image of one chapter of a film, from its podcast episode's id and the chapter's
+ * position. The path is not found for a chapter with no generated image.
  */
 export function toTopicPodcastEpisodeVideoChapterImageUrl(podcastEpisodeId: string, position: number): string {
 	return `/api/topic-podcast-episode-video-images/${podcastEpisodeId}/chapters/${position}/image.jpg`

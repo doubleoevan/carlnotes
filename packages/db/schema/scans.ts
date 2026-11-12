@@ -123,6 +123,8 @@ export const resources = pgTable(
 		// whether the last score judged the content sexually explicit, hateful, harassing, or violent. an unsafe Resource
 		// never becomes a Finding and its link preview gets no image
 		isUnsafe: boolean("is_unsafe").notNull().default(false),
+		// when the Resource's images were fetched for its films, with or without an image. null until a film narrates it
+		imagesFetchedAt: timestamp("images_fetched_at", { withTimezone: true }),
 		// created and updated timestamps
 		...timestamps(),
 	},
@@ -137,6 +139,29 @@ export const resources = pgTable(
 			sql`lower(coalesce(${table.title}, ${table.url})) gin_trgm_ops`,
 		),
 	],
+)
+
+// a resource image is one image of a Resource's own page, stored for the films that narrate the Resource
+export const resourceImages = pgTable(
+	"resource_images",
+	{
+		id: primaryId(),
+		// the Resource whose page showed the image, and the image's place among the Resource's images, from zero
+		resourceId: text("resource_id")
+			.notNull()
+			.references(() => resources.id, { onDelete: "cascade" }),
+		position: integer("position").notNull(),
+		// where the stored jpeg lives in object storage, and its pixel size as stored
+		objectKey: text("object_key").notNull(),
+		width: integer("width").notNull(),
+		height: integer("height").notNull(),
+		// the url the image was fetched from, and whether it is the page's link preview image
+		sourceUrl: text("source_url").notNull(),
+		isLinkPreviewImage: boolean("is_link_preview_image").notNull().default(false),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	// one image per position of a Resource
+	(table) => [unique("resource_images_resource_position_unique").on(table.resourceId, table.position)],
 )
 
 // a finding is a topic-scoped record holding a relevance review about a discovered resource

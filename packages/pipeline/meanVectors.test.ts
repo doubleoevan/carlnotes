@@ -156,8 +156,8 @@ test("marking podcast episodes removed deletes their films and returns the films
 	expect(filmKeys).toEqual(["intro.mp4", "chapters.mp4", "film.mp4", "captions.vtt"])
 })
 
-// a removal returns the key of an imagined image for each chapter of a removed film's podcast episode
-test("marking podcast episodes removed returns a chapter image key for each chapter of a film", async () => {
+// a removal returns the key of every generated image a chapter of a removed film's podcast episode may have
+test("marking podcast episodes removed returns the chapter image keys for each chapter of a film", async () => {
 	// a film with a joined film alone, whose podcast episode's script has two chapters
 	const filmRow = [null, null, null, "film.mp4", null, "episode-1", null]
 	const script = { coldOpen: [], segments: [{ transition: [], chapters: [{ turns: [] }, { turns: [] }] }], signOff: [] }
@@ -177,10 +177,15 @@ test("marking podcast episodes removed returns a chapter image key for each chap
 	const scriptClearIndex = queryTexts.findIndex((text) => text.startsWith('update "episodes"'))
 	expect(scriptReadIndex).toBeGreaterThan(-1)
 	expect(scriptReadIndex).toBeLessThan(scriptClearIndex)
+
+	// the film, then each chapter's first image and its eleven numbered images
+	const imageNumbers = Array.from({ length: 11 }, (_, i) => i + 1)
 	expect(filmKeys).toEqual([
 		"film.mp4",
 		"episodes/episode-1/video/chapter-0-image.jpg",
+		...imageNumbers.map((imageNumber) => `episodes/episode-1/video/chapter-0-image-${imageNumber}.jpg`),
 		"episodes/episode-1/video/chapter-1-image.jpg",
+		...imageNumbers.map((imageNumber) => `episodes/episode-1/video/chapter-1-image-${imageNumber}.jpg`),
 	])
 })
 
