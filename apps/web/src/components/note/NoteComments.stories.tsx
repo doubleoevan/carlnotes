@@ -1,6 +1,6 @@
 // the comment thread beside a note: the comments with their authors, the author's delete, and the composer
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
-import { expect, fn, userEvent, within } from "storybook/test"
+import { expect, fn, userEvent, waitFor, within } from "storybook/test"
 import { STORY_NOTE_COMMENTS } from "../../../.storybook/fixtures/notes"
 import { NoteComments } from "./NoteComments"
 
@@ -46,7 +46,7 @@ export const ReportAnotherPersonsComment: Story = {
 	play: async ({ canvas, canvasElement }) => {
 		await userEvent.click(canvas.getAllByRole("button", { name: "Report comment" })[0] as HTMLElement)
 		const page = within(canvasElement.ownerDocument.body)
-		await expect(await page.findByRole("dialog")).toBeVisible()
+		await waitFor(() => expect(page.getByRole("dialog")).toBeVisible())
 		await expect(page.getByRole("switch", { name: "Block @carlos" })).toBeInTheDocument()
 	},
 }

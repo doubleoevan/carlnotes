@@ -1,6 +1,6 @@
 import { PODCAST_NAME } from "@carlnotes/contracts/podcastEpisodes"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
-import { expect, userEvent, within } from "storybook/test"
+import { expect, userEvent, waitFor, within } from "storybook/test"
 import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
 import { PodcastThemeSongNote } from "./PodcastThemeSongNote"
 
@@ -31,7 +31,7 @@ export const BesideSectionTitle: Story = {
 		const page = within(canvasElement.ownerDocument.body)
 		const sectionToggle = canvas.getByRole("button", { name: PODCAST_NAME })
 		await userEvent.click(canvas.getByRole("button", { name: "Theme song credits" }))
-		await expect(await page.findByRole("dialog")).toBeVisible()
+		await waitFor(() => expect(page.getByRole("dialog")).toBeVisible())
 		await expect(sectionToggle).toHaveAttribute("aria-expanded", "true")
 
 		// close the credits, then close the section from its title
