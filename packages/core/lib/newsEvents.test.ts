@@ -3,7 +3,7 @@ import { expect, test } from "bun:test"
 import { type NewsEvent, toEmptyNewsText } from "@carlnotes/contracts/news"
 import { toCommentFirstLine } from "@carlnotes/contracts/socialText"
 import {
-	toNewsEventDetailsText,
+	toNewsEventDetailsTexts,
 	toNewsEventPodcastEpisode,
 	toNewsEventText,
 	toNewsEventVideoButton,
@@ -32,11 +32,13 @@ test("each kind of row reads as its own line", () => {
 
 test("a Podcast Episode's line is its search result's, and every other row names its Topic", () => {
 	const podcastEpisodeRow = toStoryRow("podcastEpisode")
-	expect(toNewsEventDetailsText(podcastEpisodeRow, "2 hours ago")).toBe("Podcast · 2 hours ago · 14 listeners")
-	expect(toNewsEventDetailsText({ ...podcastEpisodeRow, listenerCount: 1 }, "just now")).toBe(
-		"Podcast · just now · 1 listener",
-	)
-	expect(toNewsEventDetailsText(toStoryRow("finding"), "2 hours ago")).toBe("Home espresso · 2 hours ago")
+	expect(toNewsEventDetailsTexts(podcastEpisodeRow, "2 hours ago")).toEqual(["Podcast", "2 hours ago", "14 listeners"])
+	expect(toNewsEventDetailsTexts({ ...podcastEpisodeRow, listenerCount: 1 }, "just now")).toEqual([
+		"Podcast",
+		"just now",
+		"1 listener",
+	])
+	expect(toNewsEventDetailsTexts(toStoryRow("finding"), "2 hours ago")).toEqual(["Home espresso", "2 hours ago"])
 })
 
 test("a Comment with no user is Carl's", () => {

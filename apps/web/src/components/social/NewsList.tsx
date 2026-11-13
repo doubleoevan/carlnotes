@@ -130,7 +130,7 @@ export function NewsEventRow({
 	newsEvent,
 	rank,
 	text,
-	detailsText,
+	detailsTexts,
 	podcastEpisode,
 	videoButton,
 	isTopicNoteOffered = true,
@@ -161,18 +161,24 @@ export function NewsEventRow({
 			details={
 				<>
 					<NewsEventImage newsEvent={newsEvent} />
-					{/* the server and the browser render a minute apart at most, so the time may differ on hydration */}
-					<span suppressHydrationWarning>{detailsText}</span>
+					{/* each text wraps on its own, the dot staying with the text after it. the server and the browser render a
+					    minute apart at most, so the time may differ on hydration */}
+					{detailsTexts.map((detailText, i) => (
+						<span key={detailText} suppressHydrationWarning className={cn(i > 0 && "-ml-0.5 whitespace-nowrap")}>
+							{i > 0 && "· "}
+							{detailText}
+						</span>
+					))}
 					{/* a Podcast Episode's Topic, linked as its search result links it */}
 					{newsEvent.kind === "podcastEpisode" && (
 						<SearchRowTopicDetail topic={{ id: newsEvent.topicId, name: newsEvent.topicName }} />
 					)}
-					{/* a Podcast Episode's play pill, with the Video pill before it if it has a film. the two wrap together */}
+					{/* a Podcast Episode's Video pill if it has a film, then its play pill, which wraps first */}
+					{newsEvent.kind === "podcastEpisode" && podcastEpisode && videoButton && (
+						<PodcastEpisodeVideoButton {...videoButton} />
+					)}
 					{newsEvent.kind === "podcastEpisode" && podcastEpisode && (
-						<span className="inline-flex items-center gap-1.5">
-							{videoButton && <PodcastEpisodeVideoButton {...videoButton} />}
-							<PodcastEpisodeNumberPill podcastEpisode={podcastEpisode} />
-						</span>
+						<PodcastEpisodeNumberPill podcastEpisode={podcastEpisode} />
 					)}
 					{/* the pill of the chapter that narrates a Finding */}
 					{newsEvent.findingId && newsEvent.kind === "finding" && (

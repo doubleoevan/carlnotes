@@ -130,7 +130,7 @@ function NewsEventRow({
 	newsEvent,
 	rank,
 	text,
-	detailsText,
+	detailsTexts,
 	timeLabel,
 	isFirst,
 	podcastEpisode,
@@ -161,17 +161,23 @@ function NewsEventRow({
 			details={
 				<>
 					<NewsEventImage newsEvent={newsEvent} />
-					<Text className="shrink text-xs text-muted-foreground">{detailsText}</Text>
+					{/* each text wraps on its own, the dot staying with the text after it */}
+					{detailsTexts.map((detailText, i) => (
+						<Text key={detailText} className={cn("text-xs text-muted-foreground", i === 0 ? "shrink" : "-ml-0.5")}>
+							{i > 0 && "· "}
+							{detailText}
+						</Text>
+					))}
 					{/* a Podcast Episode's Topic, linked as its search result links it */}
 					{newsEvent.kind === "podcastEpisode" && (
 						<SearchRowTopicLink topic={{ id: newsEvent.topicId, name: newsEvent.topicName }} />
 					)}
-					{/* a Podcast Episode's play pill, with the Video pill before it if it has a film. the two wrap together */}
+					{/* a Podcast Episode's Video pill if it has a film, then its play pill, which wraps first */}
+					{newsEvent.kind === "podcastEpisode" && podcastEpisode && videoButton && (
+						<PodcastEpisodeVideoButton {...videoButton} />
+					)}
 					{newsEvent.kind === "podcastEpisode" && podcastEpisode && (
-						<View className="flex-row items-center gap-1.5">
-							{videoButton && <PodcastEpisodeVideoButton {...videoButton} />}
-							<PodcastEpisodeNumberPill podcastEpisode={podcastEpisode} />
-						</View>
+						<PodcastEpisodeNumberPill podcastEpisode={podcastEpisode} />
 					)}
 					{/* the pill of the chapter that narrates a Finding */}
 					{newsEvent.findingId && newsEvent.kind === "finding" && (

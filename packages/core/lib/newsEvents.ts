@@ -2,7 +2,7 @@
 // Podcast Episode has a film
 import type { NewsEvent, NewsPlace } from "@carlnotes/contracts/news"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
-import { toCountLabel, toDotSeparatedText } from "@carlnotes/contracts/text"
+import { toCountLabel } from "@carlnotes/contracts/text"
 import type { TopicPodcastEpisodeVideoDialogSurface } from "@carlnotes/contracts/visitAnalytics"
 import type { PodcastEpisodeVideoButtonProps } from "../components/PodcastEpisodeVideoButton"
 import { toTimeAgoLabel } from "./chatMessages"
@@ -45,13 +45,14 @@ function toCommentReactionsText(newsEvent: NewsEvent, reactionCount: number, rea
 }
 
 /**
- * Returns the line under a News Event's title. A Podcast Episode's is its search result's, which its Topic's link
- * follows: its kind, its age, and its listeners. Every other row names its Topic and its age.
+ * Returns the texts of the line under a News Event's title, which the line separates with dots. A Podcast Episode's are
+ * its search result's, which its Topic's link follows: its kind, its age, and its listeners. Every other row names its
+ * Topic and its age.
  */
-export function toNewsEventDetailsText(newsEvent: NewsEvent, timeLabel: string): string {
+export function toNewsEventDetailsTexts(newsEvent: NewsEvent, timeLabel: string): string[] {
 	return newsEvent.kind === "podcastEpisode"
-		? toDotSeparatedText(["Podcast", timeLabel, toCountLabel(newsEvent.listenerCount ?? 0, "listener")])
-		: toDotSeparatedText([newsEvent.topicName, timeLabel])
+		? ["Podcast", timeLabel, toCountLabel(newsEvent.listenerCount ?? 0, "listener")]
+		: [newsEvent.topicName, timeLabel]
 }
 
 /**

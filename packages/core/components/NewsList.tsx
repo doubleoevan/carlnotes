@@ -16,7 +16,7 @@ import type { ComponentType, ReactNode } from "react"
 import type { NewsPageLoader } from "../hooks/useNews"
 import { useNewsList } from "../hooks/useNewsList"
 import {
-	toNewsEventDetailsText,
+	toNewsEventDetailsTexts,
 	toNewsEventPodcastEpisode,
 	toNewsEventText,
 	toNewsEventTimeLabel,
@@ -31,7 +31,7 @@ export type NewsListRowProps = {
 	newsEvent: NewsEvent
 	rank: number
 	text: string
-	detailsText: string
+	detailsTexts: string[]
 	timeLabel: string
 	isFirst: boolean
 	podcastEpisode: PodcastEpisode | null
@@ -183,7 +183,7 @@ function NewsRows({
 						newsEvent={newsEvent}
 						rank={firstRank + index}
 						text={toNewsEventText(newsEvent, readerUserId)}
-						detailsText={toNewsEventDetailsText(newsEvent, timeLabel)}
+						detailsTexts={toNewsEventDetailsTexts(newsEvent, timeLabel)}
 						timeLabel={timeLabel}
 						isFirst={index === 0}
 						podcastEpisode={podcastEpisode}
