@@ -1,6 +1,6 @@
 // the Activity page's payload, the user's own or, for an admin, any user's
 
-import type { ActivityResponse, SubscriptionRow } from "@carlnotes/contracts/activity"
+import type { ActivityResponse, MonthlySpend, SubscriptionRow } from "@carlnotes/contracts/activity"
 import { toAvatarKeyVersion, toAvatarVersion } from "@carlnotes/contracts/avatars"
 import { toCentsFromDollars } from "@carlnotes/contracts/plans"
 import type { PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
@@ -30,25 +30,14 @@ export type SubscriptionRowFields = Omit<SubscriptionRow, "subscribedAt" | "late
 /**
  * Assembles the user's Activity payload for the signed-in user: the user, or an admin viewing the user's activity.
  */
-async function loadActivity(userId: string, signedInUserId: string): Promise<ActivityResponse> {
-	// select the user's identity, budget inputs, and litellm key
-	const [userRow] = await db
-		.select({
-			litellmVirtualKey: users.litellmVirtualKey,
-			role: users.role,
-			plan: users.plan,
-			budgetOverrideCents: users.budgetOverrideCents,
-			username: users.username,
-			avatarSource: users.avatarSource,
-			avatarKey: users.avatarKey,
-		})
-		.from(users)
-		.where(eq(users.id, userId))
-
-	// this month's spend divided into what produced it, and the user's monthly budget cutoffs
-	const [monthlySpend, monthlyBudgetCutoffs] = await Promise.all([
-		monthlySpendDollars(userId),
-		loadMonthlyBudgetCutoffs(userId),
+export async function loadActivity(userId: string, signedInUserId: string): Promise<ActivityResponse> {
+	// the user's identity, and this month's spend against the budget
+	const [[userRow], spendMeter] = await Promise.all([
+		db
+			.select({ username: users.username, avatarSource: users.avatarSource, avatarKey: users.avatarKey })
+			.from(users)
+			.where(eq(users.id, userId)),
+		loadMonthlySpend(userId),
 	])
 
 	// the user's subscriptions on topics they do not own, both active and inactive alike
@@ -159,15 +148,7 @@ async function loadActivity(userId: string, signedInUserId: string): Promise<Act
 			avatarSource: userRow?.avatarSource ?? null,
 			avatarVersion: toAvatarVersion(userRow ?? {}),
 		},
-		scanSpendCents: toCentsFromDollars(monthlySpend.scanDollars),
-		chatSpendCents: toCentsFromDollars(monthlySpend.chatDollars),
-		podcastEpisodeSpendCents: toCentsFromDollars(monthlySpend.podcastEpisodeDollars),
-		budgetCents: userBudgetCents({
-			isAdmin: isAdminRole(userRow?.role),
-			plan: userRow?.plan ?? "free",
-			budgetOverrideCents: userRow?.budgetOverrideCents ?? null,
-		}),
-		monthlyBudgetCutoffs,
+		...spendMeter,
 		topics: await loadOwnedTopics({ userId, signedInUserId }),
 		subscriptions: toSubscriptionRows(subscriptionRowFields, subscriptionPodcastEpisodeByTopic),
 		invites: inviteRows.map((inviteRow) => ({
@@ -180,6 +161,32 @@ async function loadActivity(userId: string, signedInUserId: string): Promise<Act
 			invitedAt: inviteRow.invitedAt.toISOString(),
 			subscribedAt: inviteRow.subscribedAt?.toISOString() ?? null,
 		})),
+	}
+}
+
+/**
+ * Loads this month's spend divided into what produced it, the user's monthly budget, and its cutoffs.
+ */
+export async function loadMonthlySpend(userId: string): Promise<MonthlySpend> {
+	// the budget inputs, the month's spend, and the cutoffs
+	const [[userRow], monthlySpend, monthlyBudgetCutoffs] = await Promise.all([
+		db
+			.select({ role: users.role, plan: users.plan, budgetOverrideCents: users.budgetOverrideCents })
+			.from(users)
+			.where(eq(users.id, userId)),
+		monthlySpendDollars(userId),
+		loadMonthlyBudgetCutoffs(userId),
+	])
+	return {
+		scanSpendCents: toCentsFromDollars(monthlySpend.scanDollars),
+		chatSpendCents: toCentsFromDollars(monthlySpend.chatDollars),
+		podcastEpisodeSpendCents: toCentsFromDollars(monthlySpend.podcastEpisodeDollars),
+		budgetCents: userBudgetCents({
+			isAdmin: isAdminRole(userRow?.role),
+			plan: userRow?.plan ?? "free",
+			budgetOverrideCents: userRow?.budgetOverrideCents ?? null,
+		}),
+		monthlyBudgetCutoffs,
 	}
 }
 

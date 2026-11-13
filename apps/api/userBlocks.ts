@@ -14,13 +14,27 @@ import { loadUsername } from "./usernames"
 
 /**
  * Saves the blocker's user block of a user and drops the blocker's cached mention count, which the blocked user's mentions
- * no longer count toward. A repeat user block writes nothing.
+ * no longer count toward. A repeat user block writes nothing. Blocking oneself and blocking an unknown user write
+ * nothing either.
  */
-export async function saveUserBlock(blockerUserId: string, blockedUserId: string): Promise<void> {
+export async function saveUserBlock(
+	blockerUserId: string,
+	blockedUserId: string,
+): Promise<"saved" | "selfBlock" | "notFound"> {
+	// never oneself, and only a user who exists
+	if (blockedUserId === blockerUserId) {
+		return "selfBlock"
+	}
+	if (!(await loadUsername(blockedUserId))) {
+		return "notFound"
+	}
+
+	// the user block, and the cached count it changes
 	await db.insert(userBlocks).values({ blockerUserId, blockedUserId }).onConflictDoNothing()
 	await deleteRedisKeys(toUnseenChatMentionCountKey(blockerUserId))
 	// a user block hides each one's comments from the other, so both read their comment mentions again
 	await clearUnseenCommentMentions([blockerUserId, blockedUserId])
+	return "saved"
 }
 
 /**
@@ -88,23 +102,18 @@ export async function loadUserBlockedIds(blockerUserId: string): Promise<Set<str
 // the user block routes: block a user, unblock them, and list the blocker's blocked users
 export const userBlocksRoute = new Hono<AppEnv>()
 	.post("/users/:id/block", async (context) => {
-		// reject a signed-out visitor, a self user block, and an unknown user
+		// reject a signed-out visitor
 		const userId = currentUser(context)
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
-		const blockedUserId = context.req.param("id")
-		if (blockedUserId === userId) {
+
+		// write the user block, which is never of oneself or of an unknown user
+		const saveUserBlockResult = await saveUserBlock(userId, context.req.param("id"))
+		if (saveUserBlockResult === "selfBlock") {
 			return context.json({ error: "you cannot block yourself" }, 400)
 		}
-		// the user must exist
-		if (!(await loadUsername(blockedUserId))) {
-			return context.json({ error: "not found" }, 404)
-		}
-
-		// write the user block
-		await saveUserBlock(userId, blockedUserId)
-		return context.json({ ok: true })
+		return saveUserBlockResult === "saved" ? context.json({ ok: true }) : context.json({ error: "not found" }, 404)
 	})
 	.delete("/users/:id/block", async (context) => {
 		// reject a signed-out visitor

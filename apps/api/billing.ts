@@ -17,6 +17,7 @@ import type Stripe from "stripe"
 import { applyBillingProjection, type BillingProjection } from "./billingProjection"
 import { syncStoreSubscription } from "./storeBilling"
 import { stripe } from "./stripeClient"
+import { loadEditorImageRegenerationQuota } from "./topic/imageEdits"
 import { scansToday } from "./topic/quotas"
 
 // the error for a webhook with no signature, or a signature Stripe's library rejected
@@ -131,6 +132,7 @@ export async function loadBillingState(userId: string): Promise<BillingState> {
 		dailyScanLimit: PLANS[plan].dailyScanLimit[billingAccess.billingInterval],
 		isOverageBillable: isOverageBillable(billingAccess),
 		revenueCatAppUserId: user?.revenueCatAppUserId ?? null,
+		imageRegenerationQuota: await loadEditorImageRegenerationQuota(userId),
 	}
 }
 

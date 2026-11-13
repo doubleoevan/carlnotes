@@ -12,7 +12,7 @@ import { TopicByline } from "./TopicByline"
 
 // the browser elements over the shared card: the name as the link stretched over the whole card, the byline, and a
 // badge for a tag
-const ELEMENTS: TopicCardElements = {
+export const TOPIC_CARD_ELEMENTS: TopicCardElements = {
 	...CARD_ELEMENTS,
 	Name: ({ path, label, onOpen, children }) => (
 		<AnchorLink href={path} aria-label={label} onClick={onOpen} className={STRETCHED_CARD_LINK_CLASS}>
@@ -28,5 +28,5 @@ const ELEMENTS: TopicCardElements = {
  * Renders the shared topic card with browser links and badges.
  */
 export function TopicCard(props: TopicCardProps) {
-	return <SharedTopicCard {...props} elements={ELEMENTS} />
+	return <SharedTopicCard {...props} elements={TOPIC_CARD_ELEMENTS} />
 }

@@ -1,12 +1,11 @@
-// the note payloads: a page's note list, one visible note shaped for the api, and a note created on a page
-import type { Note, NotesResponse } from "@carlnotes/contracts/notes"
+// the note payloads: a page's note list, one visible note shaped for the api, one opened note with its body and
+// version, and a note created on a page
+import type { Note, NoteResponse, NotesResponse } from "@carlnotes/contracts/notes"
 import { db } from "@carlnotes/db"
 import { toUnreportedFilter } from "@carlnotes/db/contentFilters"
 import { notes } from "@carlnotes/db/schema/notes"
 import { users } from "@carlnotes/db/schema/users"
 import { and, eq, ne, or } from "drizzle-orm"
-import type { Context } from "hono"
-import { currentUser } from "../currentUser"
 import { loadUsername } from "../usernames"
 import {
 	canDeleteNote,
@@ -33,15 +32,14 @@ const noteListColumns = {
 }
 type NoteListRow = Pick<NoteRow, keyof typeof noteListColumns>
 
+// a note the user may see, with its page and the user's access to that page
+export type VisibleNote = { note: NoteRow; page: NotePage; access: PageAccess; userId: string | null }
+
 /**
  * Loads the visible note with its page, or null if the user may not see the note.
  */
-export async function loadVisibleNote(
-	context: Context,
-	noteId: string,
-): Promise<{ note: NoteRow; access: PageAccess; userId: string | null } | null> {
+export async function loadVisibleNote(userId: string | null, noteId: string): Promise<VisibleNote | null> {
 	// the row and its page. a note the user reported reads as missing to them
-	const userId = currentUser(context)
 	const noteWithPage = await loadNoteWithPage(noteId, userId)
 	if (!noteWithPage) {
 		return null
@@ -52,7 +50,19 @@ export async function loadVisibleNote(
 	if (!canSeeNote(userId, noteWithPage.note, access)) {
 		return null
 	}
-	return { note: noteWithPage.note, access, userId }
+	return { note: noteWithPage.note, page: noteWithPage.page, access, userId }
+}
+
+/**
+ * Returns a visible note opened with its stored body and the version the next save names.
+ */
+export async function toNoteResponse(visibleNote: VisibleNote): Promise<NoteResponse> {
+	const ownerUsername = await loadUsername(visibleNote.note.ownerUserId)
+	return {
+		...toNote(visibleNote.note, visibleNote.userId, visibleNote.access, ownerUsername),
+		html: visibleNote.note.html,
+		version: visibleNote.note.version,
+	}
 }
 
 /**

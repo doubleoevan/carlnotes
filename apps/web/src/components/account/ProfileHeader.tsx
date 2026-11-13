@@ -36,7 +36,7 @@ function OwnProfileAvatar({ userId, username }: { userId: string; username: stri
 }
 
 // the web's elements, with the avatar at the height of a topic's image on the Topics page
-const PROFILE_HEADER_ELEMENTS: ProfileHeaderElements = {
+export const PROFILE_HEADER_ELEMENTS: ProfileHeaderElements = {
 	Row: ({ children }) => <div className={PAGE_HEADER_FLOW_CLASS}>{children}</div>,
 	OwnAvatar: (ownAvatarProps) => (
 		<div className={PAGE_HEADER_AVATAR_FLOAT_CLASS}>

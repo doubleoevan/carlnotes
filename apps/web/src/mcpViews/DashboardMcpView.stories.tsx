@@ -1,5 +1,5 @@
 // the dashboard MCP view: the Dashboard page's header, the links to the caller's three Dashboard pages, and the shared
-// Dashboard with the outline map, from the read the tool returned. a story has no host
+// Dashboard, from the read the tool returned. a story has no host
 import { MCP_VIEW_META_KEY } from "@carlnotes/contracts/mcpViews"
 import {
 	STORY_DASHBOARD_USER,
@@ -10,6 +10,13 @@ import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { expect } from "storybook/test"
 import { DashboardMcpView } from "./DashboardMcpView"
 import { setMcpViewData } from "./mcpViewHost"
+
+// how the MCP view differs from the Dashboard page, which a frame cannot match
+const DIFFERENCES_FROM_THE_PAGE = [
+	"The MCP view differs from the Dashboard page where a frame cannot do what the page does.",
+	"The places chart draws the outline map, since Google Maps cannot load in the host's sandboxed frame.",
+	"A bar, a slice, a pinned day's line, a place, or a link opens its page on the site through the host.",
+].join(" ")
 
 const meta = {
 	title: "MCP Apps/MCP views/DashboardMcpView",
@@ -23,7 +30,7 @@ const meta = {
 		},
 	},
 	beforeEach: () => setMcpViewData({ [MCP_VIEW_META_KEY]: { session: STORY_DASHBOARD_USER, podcastEpisodes: [] } }),
-	parameters: { session: "user", surface: "page" },
+	parameters: { session: "user", surface: "page", docs: { description: { component: DIFFERENCES_FROM_THE_PAGE } } },
 } satisfies Meta<typeof DashboardMcpView>
 
 export default meta

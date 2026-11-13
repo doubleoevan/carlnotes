@@ -68,10 +68,11 @@ export function InviteUserToTeamButton({
 
 	// remove the profile user from the team. the api keeps a team's last leader
 	const handleRemoveTeamMember = async (profileTeamStatus: ProfileTeamStatus): Promise<void> => {
-		if (await sendRemoveTeamMember(profileTeamStatus.teamId, profileUserId)) {
+		try {
+			await sendRemoveTeamMember(profileTeamStatus.teamId, profileUserId)
 			toast(`Removed @${profileUsername} from ${profileTeamStatus.name}.`)
-		} else {
-			toast.error("A team must have at least one leader.")
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : "That change didn't save. Try again.")
 		}
 		onReloadProfileTeamStatuses()
 	}

@@ -39,6 +39,12 @@ doppler run --config prd -- bun run mcp-views:freeze
 The api reads a stored bundle once and keeps it in memory. If the read fails, the api reports the failure, serves the
 current bundle for that request, and tries again on the next read.
 
+`MCP_VIEW_FILM_PLAYBACK` decides where an MCP view's film plays. It is off unless set to `true`. While it is off, a
+podcast episode's film links to the film player on its page. While it is on, the MCP view's data includes the film's
+video and captions urls under the caller's play token, and the film plays in the host's frame with no
+picture-in-picture or fullscreen. Turn it on in a Doppler config once a host is known to play video in its frame, and
+update the film sentence on the docs page `account/add-to-ai.md` in the same change.
+
 ## Container image
 
 The app service is the Hono api plus the built web app it serves. It builds from the repo-root

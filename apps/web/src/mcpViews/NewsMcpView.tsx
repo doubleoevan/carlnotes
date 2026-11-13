@@ -11,6 +11,7 @@ import { COMMENT_MENTION_LIST_ELEMENTS } from "@/components/social/CommentMentio
 import { NEWS_LIST_ELEMENTS, NewsEventRow } from "@/components/social/NewsList"
 import { RESOURCE_LIST_CARD_CLASS } from "@/lib/styleClasses"
 import { captureVisitEvent } from "@/lib/visitAnalytics"
+import { MCP_VIEW_TOPIC_POST_INFO_ELEMENTS } from "./mcpViewElements"
 import {
 	addMcpViewPodcastEpisodes,
 	callMcpViewTool,
@@ -18,7 +19,6 @@ import {
 	toToolResultText,
 	useMcpViewData,
 } from "./mcpViewHost"
-import { MCP_VIEW_TOPIC_POST_INFO_ELEMENTS } from "./mcpViewTopicPostInfoElements"
 
 /**
  * The news MCP view: the caller's unseen Comment Mentions, then the news the tool read, as the site's own list with its
@@ -88,7 +88,7 @@ function McpViewNewsEventRow(props: NewsListRowProps) {
 }
 
 // the web's elements of the list, with the MCP view's row
-const MCP_VIEW_NEWS_LIST_ELEMENTS: NewsListElements = { ...NEWS_LIST_ELEMENTS, Row: McpViewNewsEventRow }
+export const MCP_VIEW_NEWS_LIST_ELEMENTS: NewsListElements = { ...NEWS_LIST_ELEMENTS, Row: McpViewNewsEventRow }
 
 // the web's elements of the mentions list, with no action that marks a mention seen and no line for an empty list
 const MCP_VIEW_COMMENT_MENTION_LIST_ELEMENTS: CommentMentionListElements = {

@@ -10,7 +10,7 @@ import * as emails from "@carlnotes/emails/email"
 import * as analytics from "@carlnotes/server/analytics"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import { toJsonRequest, toSignedInApp } from "../testSession"
-import { canReport, flagContentRoute, refundReport } from "./flagContent"
+import { canReport, flagContent, flagContentRoute, refundReport } from "./flagContent"
 import * as reportSubjects from "./reportSubjects"
 import * as reports from "./reports"
 
@@ -200,4 +200,38 @@ test("a comment's flag sends the hot take flag event with its id and no text", a
 	expect(socialFlagCall?.[1]).toBe("user-1")
 	expect(socialFlagCall?.[2]).toMatchObject({ objectId: "comment-1" })
 	expect(JSON.stringify(trackEventSpy.mock.calls)).not.toMatch(/rude words|insults|vienna/)
+})
+
+// a report sent through the module, as the MCP tool sends one, records the same event the route does
+test("flagContent records the report's event itself", async () => {
+	Bun.env.SUPPORT_EMAIL = "support@carlnotes.test"
+	spyOn(redisRateLimits, "incrementRateLimitWindow").mockResolvedValue({ count: 1, resetAt: 0 })
+	spyOn(emails, "sendEmail").mockResolvedValue(true)
+	spyOn(reportSubjects, "toReportedSubject").mockResolvedValue({
+		kind: "topic",
+		id: "topic-1",
+		label: "A Good Page",
+		path: "/topics/topic-1/a-good-page",
+		text: "A Good Page",
+		authorUserId: "user-2",
+	})
+
+	// the events the module sends, the stored report's id, and the username the email reads
+	const trackEventSpy = spyOn(analytics, "trackEvent").mockImplementation(() => {})
+	stubConnectionPool(({ text }) => {
+		if (text.startsWith('insert into "reports"')) {
+			return [["report-1"]]
+		}
+		return text.includes('from "users"') ? [["vienna"]] : []
+	})
+	const flagContentResult = await flagContent({
+		userId: "user-1",
+		payload: { subjectKind: "topic", subjectId: "topic-1", reason: "spam", shouldBlockAuthor: false },
+		analyticsProperties: { platform: "mcp" } as never,
+	})
+
+	// the report was sent, and its event names the kind with the caller's properties
+	expect(flagContentResult).toBe("sent")
+	expect(trackEventSpy.mock.calls[0]?.[0]).toBe("content_flagged")
+	expect(trackEventSpy.mock.calls[0]?.[2]).toMatchObject({ kind: "topic", platform: "mcp" })
 })

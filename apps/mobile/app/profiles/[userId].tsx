@@ -2,12 +2,8 @@ import { fetchActivity } from "@carlnotes/client/activityClient"
 import { showClientError } from "@carlnotes/client/apiClient"
 import { authClient } from "@carlnotes/client/authClient"
 import { fetchProfile } from "@carlnotes/client/profileClient"
-import type { ProfileResponse } from "@carlnotes/contracts/profilePage"
-import { useUpdatesOpener } from "@carlnotes/core/hooks/useUpdatesOpener"
-import { toSectionCountLabel } from "@carlnotes/core/lib/labels"
 import { sendProfileViewOnce } from "@carlnotes/core/lib/pageViews"
 import {
-	PROFILE_SECTIONS,
 	sendProfileOrderMoves,
 	toProfileRankDialogItems,
 	toProfileRankedNouns,
@@ -24,32 +20,22 @@ import { toggleUserBlock, toUserBlockLabel } from "@carlnotes/core/lib/userBlock
 import { useQuery } from "@tanstack/react-query"
 import { useFocusEffect, useLocalSearchParams, usePathname } from "expo-router"
 import { Ban, Clapperboard, ListOrdered, type LucideIcon, NotebookPen, Pencil, Plus } from "lucide-react-native"
-import { type ReactNode, useCallback, useState } from "react"
-import { View } from "react-native"
+import { useCallback, useState } from "react"
 import { ProfileFields } from "@/components/account/AccountSettings"
 import { ProfileHeader } from "@/components/account/ProfileHeader"
-import { AccordionSection } from "@/components/common/AccordionSection"
-import { PagedCardsSection } from "@/components/common/CardsSection"
+import { ProfileSections } from "@/components/account/ProfileSections"
 import { LoadFailedNotice } from "@/components/common/LoadFailedNotice"
 import { RankDialog } from "@/components/common/RankDialog"
 import { Sheet } from "@/components/common/Sheet"
 import { ViewerCountLine } from "@/components/common/ViewerCountLine"
 import { PageScreen } from "@/components/layout/PageScreen"
-import { PageSkeleton, TableSkeleton } from "@/components/layout/PageSkeleton"
-import { PodcastEpisodeCard } from "@/components/podcast/PodcastEpisodeCard"
+import { PageSkeleton } from "@/components/layout/PageSkeleton"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
-import { NewsList } from "@/components/social/NewsList"
-import { OwnerTopicsTable } from "@/components/table/OwnerTopicsTable"
-import { EmptyListCard } from "@/components/table/TableCard"
-import { TeamsMembershipTable } from "@/components/table/TeamsMembershipTable"
-import { TopicsTable } from "@/components/table/TopicsTable"
 import { EditTeamModal } from "@/components/team/EditTeamModal"
 import { InviteUserToTeamButton } from "@/components/team/InviteUserToTeamButton"
-import { TopicCard } from "@/components/topic/TopicCard"
 import { NewTopicButton } from "@/components/topic/TopicHomeActions"
-import { TopicPostCard } from "@/components/topicPost/TopicPostCard"
 import {
 	PLAIN_PAGE_BUTTON_CLASS,
 	PLAIN_PAGE_BUTTON_ICON_CLASS,
@@ -211,65 +197,6 @@ export default function ProfileScreen() {
 	)
 }
 
-// one of the profile's two tables under its title, with its count at the far right, open at first
-function ProfileTableSection({
-	title,
-	countLabel,
-	children,
-}: {
-	title: string
-	countLabel?: string
-	children: ReactNode
-}) {
-	const [isExpanded, setIsExpanded] = useState(true)
-	return (
-		<AccordionSection
-			title={title}
-			countLabel={countLabel}
-			isExpanded={isExpanded}
-			onToggle={() => setIsExpanded(!isExpanded)}
-		>
-			<View className="mx-4 pt-2 pb-2">{children}</View>
-		</AccordionSection>
-	)
-}
-
-// show each load state without nesting it inside the page's visibility branches
-function ProfileTopics({
-	profile,
-	isOwnProfile,
-	activity,
-	onReload,
-}: {
-	profile: ProfileResponse
-	isOwnProfile: boolean
-	activity: ReturnType<typeof useQuery<Awaited<ReturnType<typeof fetchActivity>>>>
-	onReload: () => void
-}) {
-	if (!isOwnProfile) {
-		return profile.topics.length ? (
-			<TopicsTable topics={profile.topics} includesNonPublicTopics={profile.includesNonPublicTopics} />
-		) : (
-			<EmptyListCard text="No public topics." />
-		)
-	}
-	if (activity.isPending) {
-		return <TableSkeleton />
-	}
-	if (activity.error) {
-		return <LoadFailedNotice message="Topics didn't load." retryLabel="Retry loading topics" onRetry={onReload} />
-	}
-	if (activity.data?.topics.length) {
-		return <OwnerTopicsTable topics={activity.data.topics} onReloadPage={onReload} />
-	}
-	return (
-		<View className="gap-3 rounded-lg border border-separator bg-card p-4">
-			<Text className="font-display text-lg">Give Carl a topic. You know the one.</Text>
-			<NewTopicButton />
-		</View>
-	)
-}
-
 // show the two profile tables only after the profile request has resolved
 function ProfileContent({
 	query,
@@ -284,11 +211,6 @@ function ProfileContent({
 }) {
 	const profile = query.data
 	const pathname = usePathname()
-	const { data: session } = authClient().useSession()
-	// carl's line for the day is written from the reader's own unread Findings, so it shows on their own profile alone
-	const opener = useUpdatesOpener(isOwnProfile ? (session?.user.id ?? null) : null)
-	// how many topics the table lists: the person's own once they load, or the ones the profile shows a visitor
-	const topicCount = profile ? toProfileTopicCount({ profile, isOwnProfile, ownTopics: activity.data?.topics }) : null
 	if (query.isPending) {
 		return <PageSkeleton kind="profile" />
 	}
@@ -301,47 +223,13 @@ function ProfileContent({
 	}
 	return (
 		<>
-			{/* the person's news, which they read whole and anyone else reads as its public rows */}
-			<NewsList profileUserId={profile.userId} userId={session?.user.id ?? null} opener={opener} />
-			{/* the person's topics, films, podcast episodes, and Topic Posts as cards, the pinned ones first, each hidden
-			    while it has none. the films come right before the podcast episodes, and the Topic Posts section lists
-			    every published one. the sections bring their own side insets, so they give the page's back */}
-			<View className="-mx-4">
-				<PagedCardsSection
-					section={PROFILE_SECTIONS.profileTopics}
-					rows={profile.profileTopics}
-					renderCard={(topic) => <TopicCard topic={topic} />}
-				/>
-				<PagedCardsSection
-					section={PROFILE_SECTIONS.profileTopicPodcastEpisodeVideos}
-					rows={profile.profileTopicPodcastEpisodeVideos}
-					renderCard={(podcastEpisodeCard) => (
-						<PodcastEpisodeCard podcastEpisodeCard={podcastEpisodeCard} variant="video" videoSurface="profile-videos" />
-					)}
-				/>
-				<PagedCardsSection
-					section={PROFILE_SECTIONS.profilePodcastEpisodes}
-					rows={profile.profilePodcastEpisodes}
-					renderCard={(podcastEpisodeCard) => <PodcastEpisodeCard podcastEpisodeCard={podcastEpisodeCard} />}
-				/>
-				<PagedCardsSection
-					section={PROFILE_SECTIONS.profileTopicPosts}
-					rows={profile.profileTopicPosts}
-					renderCard={(topicPost) => <TopicPostCard topicPost={topicPost} />}
-				/>
-				{/* the two tables, each under its title with its count at the far right, as the card sections are. the
-				    person's own topics count once they load */}
-				<ProfileTableSection title="All Topics" countLabel={toSectionCountLabel(topicCount, "topic")}>
-					<ProfileTopics profile={profile} isOwnProfile={isOwnProfile} activity={activity} onReload={onReload} />
-				</ProfileTableSection>
-				<ProfileTableSection title="All Teams" countLabel={toSectionCountLabel(profile.teams.length, "team")}>
-					{profile.teams.length ? (
-						<TeamsMembershipTable teams={profile.teams} isReadOnly={!isOwnProfile} onChanged={onReload} />
-					) : (
-						<EmptyListCard text={isOwnProfile ? "You are on no teams yet." : "No public teams."} />
-					)}
-				</ProfileTableSection>
-			</View>
+			<ProfileSections
+				profile={profile}
+				isOwnProfile={isOwnProfile}
+				ownTopics={activity.data?.topics ?? null}
+				isOwnTopicsLoadFailed={Boolean(activity.error)}
+				onReload={onReload}
+			/>
 			{/* the profile's visitors, read while this profile is the active route */}
 			<ViewerCountLine
 				viewerCountPage={{ kind: "profile", id: profile.userId }}

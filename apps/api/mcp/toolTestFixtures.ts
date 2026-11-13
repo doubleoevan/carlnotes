@@ -53,3 +53,18 @@ export function toRegisteredTools(
 	})
 	return registeredTools
 }
+
+/**
+ * Returns one registered tool's handler as the caller gets it, on the plain route or a bound one.
+ */
+export function toToolHandler(
+	toolName: string,
+	toolCaller: ToolCaller = USER,
+	routeTopicId: string | null = null,
+): RegisteredToolHandler {
+	const handler = toRegisteredTools(toolCaller, routeTopicId).get(toolName)?.handler
+	if (!handler) {
+		throw new Error(`${toolName} is not registered`)
+	}
+	return handler
+}

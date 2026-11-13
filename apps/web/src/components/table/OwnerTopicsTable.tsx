@@ -1,20 +1,22 @@
 import { sendSubscriptionEmail } from "@carlnotes/client/topicClient"
 import type { OwnerTopic } from "@carlnotes/contracts/activity"
-import { DataTable } from "@carlnotes/core/components/DataTable"
+import type { DataTableElements } from "@carlnotes/core/components/DataTable"
+import {
+	type OwnerTopicsTableElements,
+	OwnerTopicsTable as SharedOwnerTopicsTable,
+} from "@carlnotes/core/components/OwnerTopicsTable"
 import { toCentsLabel } from "@carlnotes/core/lib/labels"
-import { ownerTopicSortValues, toOwnerTopicsTableColumns } from "@carlnotes/core/lib/ownerTopicsTableColumns"
+import { ownerTopicSortValues } from "@carlnotes/core/lib/ownerTopicsTableColumns"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { ChevronDown, Globe, Lock, Mail } from "lucide-react"
-import { useState } from "react"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { Switch } from "@/components/primitives/switch"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
 import { SUBTABLE_CARD_CLASS, TABLE_CLASS, TABLE_SCROLL_CLASS } from "@/lib/tableClasses"
-import { DATA_TABLE_ELEMENTS } from "./DataTable"
+import { DATA_TABLE_ELEMENTS, DataTable } from "./DataTable"
 import { SubtableCountButton } from "./SubtableCountButton"
-import { EmptyListCard, TableCard } from "./TableCard"
-import { TablePagination, usePaginatedRowSort } from "./TablePagination"
+import { EmptyListCard } from "./TableCard"
 import { TopicNameLink } from "./TopicNameLink"
 import { TopicScansTable } from "./TopicScansTable"
 import { TopicSubscribersTable } from "./TopicSubscribersTable"
@@ -25,9 +27,6 @@ const VISIBILITY_METADATA = {
 	public: { icon: Globe, label: "public" },
 	invite: { icon: Mail, label: "invite" },
 }
-
-// the subtable a topic row can open under itself, its scans or, in the admin console, its subscribers
-type TopicSubtable = "scans" | "subscribers"
 
 /**
  * Renders the shared owner topic table with web scan and subscriber subtables.
@@ -43,99 +42,91 @@ export function OwnerTopicsTable({
 	canListSubscribers?: boolean
 	className?: string
 }) {
-	// keep each topic's expanded subtable through sorting and paging
-	const [openSubtableByTopicId, setOpenSubtableByTopicId] = useState<Record<string, TopicSubtable | undefined>>({})
-	const { pageRows, sort, pagination } = usePaginatedRowSort({ rows: topics, valueByKey: ownerTopicSortValues })
-	function handleSubtableClick(topicId: string, topicSubtable: TopicSubtable): void {
-		setOpenSubtableByTopicId((previous) => ({
-			...previous,
-			[topicId]: previous[topicId] === topicSubtable ? undefined : topicSubtable,
-		}))
-	}
+	// an email change saves, then the page reloads
 	async function handleEmailChange(topic: OwnerTopic, isEmailEnabled: boolean): Promise<void> {
 		await sendSubscriptionEmail(topic.id, isEmailEnabled, topic.ownerUserId)
 		onReloadPage()
 	}
-	const columns = toOwnerTopicsTableColumns({
-		topics,
-		renderText: (text) => <span>{text}</span>,
-		renderName: (topic) => <TopicNameLink topic={topic} />,
-		renderSubscribers: (topic) =>
-			canListSubscribers ? (
-				<SubtableCountButton
-					count={topic.subscriberCount}
-					isOpen={openSubtableByTopicId[topic.id] === "subscribers"}
-					ariaLabel={`Show ${topic.name}'s followers`}
-					onClick={() => handleSubtableClick(topic.id, "subscribers")}
-				/>
-			) : (
-				topic.subscriberCount
-			),
-		renderVisibility: (topic) => <TopicVisibility visibility={topic.visibility} />,
-		renderEmail: (topic) => (
-			<Switch
-				checked={topic.isEmailEnabled}
-				onCheckedChange={(isOn) => void handleEmailChange(topic, isOn)}
-				aria-label={`${topic.name} emails`}
-			/>
-		),
-		renderCost: (topic) => (
-			<Tooltip>
-				<TooltipTrigger asChild>
-					<button
-						type="button"
-						onClick={() => handleSubtableClick(topic.id, "scans")}
-						className={cn(STANDALONE_LINK_CLASS, "inline-flex items-center gap-0.5")}
-						aria-expanded={openSubtableByTopicId[topic.id] === "scans"}
-					>
-						{toCentsLabel(topic.monthCostCents)}
-						<ChevronDown
-							aria-hidden="true"
-							className={cn(
-								"size-3.5 shrink-0 transition-transform",
-								openSubtableByTopicId[topic.id] === "scans" && "rotate-180",
-							)}
-						/>
-					</button>
-				</TooltipTrigger>
-				<TooltipContent>Brew costs</TooltipContent>
-			</Tooltip>
-		),
-	})
-	if (!topics.length) {
-		return <EmptyListCard className={className}>No topics yet.</EmptyListCard>
-	}
 	return (
-		<TableCard className={cn("mb-4", className)}>
-			<DataTable
-				columns={columns}
-				renderedRows={pageRows.map((row) => ({ row }))}
-				getRowId={(topic) => topic.id}
-				sort={sort}
-				elements={OWNER_TABLE_ELEMENTS}
-				renderDetails={(topic) =>
-					openSubtableByTopicId[topic.id] ? (
-						openSubtableByTopicId[topic.id] === "scans" ? (
-							<TopicScansTable scans={topic.scans} topic={topic} />
-						) : (
-							<TopicSubscribersTable topicId={topic.id} />
-						)
-					) : null
-				}
-			/>
-			<TablePagination {...pagination} />
-		</TableCard>
+		<SharedOwnerTopicsTable
+			topics={topics}
+			canListSubscribers={canListSubscribers}
+			className={className}
+			onEmailChange={(topic, isEnabled) => void handleEmailChange(topic, isEnabled)}
+			elements={OWNER_TOPICS_TABLE_ELEMENTS}
+		/>
 	)
 }
 
 // preserve the admin subtable's independent sizing
-const OWNER_TABLE_ELEMENTS = {
+const OWNER_TABLE_ELEMENTS: DataTableElements = {
 	...DATA_TABLE_ELEMENTS,
-	Table: ({ children }: { children: React.ReactNode }) => (
+	Table: ({ children }) => (
 		<div className={cn(TABLE_SCROLL_CLASS, "contain-inline-size")}>
 			<table className={cn(TABLE_CLASS, "min-w-2xl! table-auto!")}>{children}</table>
 		</div>
 	),
+}
+
+// the web cells: links, the email switch, and the count and cost buttons that open a subtable under the row
+const OWNER_TOPICS_TABLE_ELEMENTS: OwnerTopicsTableElements = {
+	Text: ({ children }) => <span>{children}</span>,
+	Name: ({ topic }) => <TopicNameLink topic={topic} />,
+	Visibility: ({ visibility }) => <TopicVisibility visibility={visibility} />,
+	EmailSwitch: ({ topic, isDisabled, onChange }) => (
+		<Switch
+			checked={topic.isEmailEnabled}
+			disabled={isDisabled}
+			onCheckedChange={onChange}
+			aria-label={`${topic.name} emails`}
+		/>
+	),
+	SubscribersToggle: ({ topic, isOpen, onToggle }) => (
+		<SubtableCountButton
+			count={topic.subscriberCount}
+			isOpen={isOpen}
+			ariaLabel={`Show ${topic.name}'s followers`}
+			onClick={onToggle}
+		/>
+	),
+	CostToggle: ({ topic, isOpen, onToggle }) => (
+		<Tooltip>
+			<TooltipTrigger asChild>
+				<button
+					type="button"
+					onClick={onToggle}
+					className={cn(STANDALONE_LINK_CLASS, "inline-flex items-center gap-0.5")}
+					aria-expanded={isOpen}
+				>
+					{toCentsLabel(topic.monthCostCents)}
+					<ChevronDown
+						aria-hidden="true"
+						className={cn("size-3.5 shrink-0 transition-transform", isOpen && "rotate-180")}
+					/>
+				</button>
+			</TooltipTrigger>
+			<TooltipContent>Brew costs</TooltipContent>
+		</Tooltip>
+	),
+	Detail: ({ topic, detail }) =>
+		detail === "scans" ? (
+			<TopicScansTable scans={topic.scans} topic={topic} />
+		) : (
+			<TopicSubscribersTable topicId={topic.id} />
+		),
+	// the card with the sorted, paged rows and each row's open subtable under it
+	Table: ({ className, topics, columns, renderDetail }) => (
+		<DataTable
+			rows={topics}
+			columns={columns}
+			valueByKey={ownerTopicSortValues}
+			getRowId={(topic) => topic.id}
+			className={cn("mb-4", className)}
+			elements={OWNER_TABLE_ELEMENTS}
+			renderDetails={renderDetail}
+		/>
+	),
+	EmptyCard: ({ text, className }) => <EmptyListCard className={className}>{text}</EmptyListCard>,
 }
 
 // the topic's visibility with its icon

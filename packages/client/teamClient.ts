@@ -154,19 +154,29 @@ export async function sendRemoveTopicFromTeam(teamId: string, topicId: string): 
 	return response.ok
 }
 
-// set a team member's role, returning false if the last-leader rule held it
-export async function sendTeamMemberRole(teamId: string, userId: string, role: "leader" | "member"): Promise<boolean> {
+// set a team member's role, throwing an error if the last-leader rule held it
+export async function sendTeamMemberRole(teamId: string, userId: string, role: "leader" | "member"): Promise<void> {
 	const response = await apiClient().api.teams[":id"].members[":userId"].role.$post({
 		param: { id: teamId, userId },
 		json: { role },
 	})
-	return response.ok
+	throwTeamMemberChangeError(response)
 }
 
-// remove a team member or leave, returning false if the last-leader rule held it
-export async function sendRemoveTeamMember(teamId: string, userId: string): Promise<boolean> {
+// remove a team member or leave, throwing an error if the last-leader rule held it
+export async function sendRemoveTeamMember(teamId: string, userId: string): Promise<void> {
 	const response = await apiClient().api.teams[":id"].members[":userId"].$delete({ param: { id: teamId, userId } })
-	return response.ok
+	throwTeamMemberChangeError(response)
+}
+
+// a role change or a removal that failed. a 409 is the last-leader rule
+function throwTeamMemberChangeError(response: { status: number; ok: boolean }): void {
+	if (response.status === 409) {
+		throw new Error("Promote another leader first. A team can't lose its last one.")
+	}
+	if (!response.ok) {
+		throw new Error("That change didn't save. Try again.")
+	}
 }
 
 // the team member's own visibility opt-out on one team

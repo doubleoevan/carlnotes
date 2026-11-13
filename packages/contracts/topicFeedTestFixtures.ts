@@ -134,3 +134,19 @@ export function toTestTopicResponse(overrides: Partial<TopicResponse> = {}): Top
 		...overrides,
 	}
 }
+
+// the names the related topics fixture cycles through
+const RELATED_TOPIC_NAME_STEMS = [
+	"LLM tooling",
+	"Battery chemistry",
+	"Open source licensing",
+	"Urban cycling",
+	"Sleep research",
+]
+
+// twenty-three related topics, five pages at the smallest page size
+export const TEST_RELATED_TOPICS: TopicResponse["relatedTopics"] = Array.from({ length: 23 }, (_, i) => ({
+	id: `topic-related-${i + 1}`,
+	name: `${RELATED_TOPIC_NAME_STEMS[i % RELATED_TOPIC_NAME_STEMS.length]} ${Math.floor(i / RELATED_TOPIC_NAME_STEMS.length) + 1}`,
+	latestPodcastEpisode: null,
+}))

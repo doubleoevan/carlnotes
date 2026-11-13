@@ -1,9 +1,9 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { fetchTopicPage } from "@carlnotes/client/topicClient"
 import type { Topic } from "@carlnotes/contracts/profiles"
-import { useTopicEmails } from "@carlnotes/core/hooks/useTopicEmails"
+import { TopicsTable as SharedTopicsTable, type TopicsTableElements } from "@carlnotes/core/components/TopicsTable"
 import { toRemoveTopicConfirmation } from "@carlnotes/core/lib/confirmationCopy"
-import { topicSortValues, toTopicsTableColumns } from "@carlnotes/core/lib/topicsTableColumns"
+import { toKeptOverSeenLabel, topicSortValues } from "@carlnotes/core/lib/topicsTableColumns"
 import { useQuery } from "@tanstack/react-query"
 import { X } from "lucide-react-native"
 import { useState } from "react"
@@ -21,7 +21,7 @@ import { DataTable } from "./DataTable"
 import { TopicNameLink } from "./TopicNameLink"
 
 /**
- * Uses the web's shared topic columns on native profile and team screens.
+ * Renders the web's topics table on native profile and team screens. A team leader's remove asks first.
  */
 export function TopicsTable({
 	topics,
@@ -32,61 +32,24 @@ export function TopicsTable({
 	includesNonPublicTopics: boolean
 	onRemoveTopic?: (topic: Topic) => void
 }) {
-	const emails = useTopicEmails()
-
 	// taking a topic off the team asks first
-	function handleRemoveTopicPress(topic: Topic): void {
+	function handleRemoveTopic(topic: Topic): void {
 		showConfirmAlert({
 			...toRemoveTopicConfirmation({ topicName: topic.name }),
 			onConfirm: () => onRemoveTopic?.(topic),
 		})
 	}
-	const columns = toTopicsTableColumns({
-		topics,
-		includesNonPublicTopics,
-		renderText: (text) => <Text className="text-sm text-muted-foreground">{text}</Text>,
-		renderName: (topic) => <TopicNameLink topic={topic} />,
-		renderVisibility: (topic) => <TopicVisibility visibility={topic.visibility} />,
-		renderInfo: (topic) => <TopicPopover topic={topic} />,
-		renderEmail: (topic) => (
-			<PreferenceSwitch
-				label={`Email me ${topic.name}`}
-				isChecked={emails.choices[topic.id] ?? topic.isEmailEnabled ?? false}
-				isDisabled={emails.pending[topic.id]}
-				onChange={(isEnabled) => void emails.setEmail(topic.id, isEnabled)}
-			/>
-		),
-		renderActive: onRemoveTopic
-			? (topic) => (
-					<PreferenceSwitch
-						label={`Deactivate ${topic.name}`}
-						isChecked
-						onChange={() => handleRemoveTopicPress(topic)}
-					/>
-				)
-			: undefined,
-		renderRemove: onRemoveTopic
-			? (topic) => (
-					<Button
-						variant="ghost"
-						size="icon-sm"
-						accessibilityLabel={`Remove ${topic.name} from the team`}
-						onPress={() => handleRemoveTopicPress(topic)}
-					>
-						<Icon as={X} className="size-4 text-foreground" />
-					</Button>
-				)
-			: undefined,
-	})
 	return (
-		<View className="gap-2">
-			<DataTable rows={topics} columns={columns} valueByKey={topicSortValues} getRowId={(topic) => topic.id} />
-			{emails.error && <Text className="text-sm text-destructive">{emails.error}</Text>}
-		</View>
+		<SharedTopicsTable
+			topics={topics}
+			includesNonPublicTopics={includesNonPublicTopics}
+			onRemoveTopic={onRemoveTopic && handleRemoveTopic}
+			elements={TOPICS_TABLE_ELEMENTS}
+		/>
 	)
 }
 
-// load details only when the user opens the same kept/reviewed control as the web
+// load details only when the user opens the same kept-over-seen control as the web
 function TopicPopover({ topic }: { topic: Topic }) {
 	const { data: session } = authClient().useSession()
 	const [isOpen, setIsOpen] = useState(false)
@@ -95,7 +58,7 @@ function TopicPopover({ topic }: { topic: Topic }) {
 		enabled: isOpen,
 		queryFn: () => fetchTopicPage(topic.id),
 	})
-	const label = `${topic.keptCount.toLocaleString()} / ${topic.seenCount.toLocaleString()}`
+	const label = toKeptOverSeenLabel(topic)
 	return (
 		<>
 			<Button
@@ -120,4 +83,25 @@ function TopicPopover({ topic }: { topic: Topic }) {
 			)}
 		</>
 	)
+}
+
+// the native table with the error line under it, and the native cells
+const TOPICS_TABLE_ELEMENTS: TopicsTableElements = {
+	Table: ({ topics, columns, children }) => (
+		<View className="gap-2">
+			<DataTable rows={topics} columns={columns} valueByKey={topicSortValues} getRowId={(topic) => topic.id} />
+			{children}
+		</View>
+	),
+	Text: ({ children }) => <Text className="text-sm text-muted-foreground">{children}</Text>,
+	ErrorText: ({ children }) => <Text className="text-sm text-destructive">{children}</Text>,
+	NameLink: TopicNameLink,
+	Visibility: TopicVisibility,
+	TopicInfo: TopicPopover,
+	Switch: PreferenceSwitch,
+	RemoveButton: ({ label, onPress }) => (
+		<Button variant="ghost" size="icon-sm" accessibilityLabel={label} onPress={onPress}>
+			<Icon as={X} className="size-4 text-foreground" />
+		</Button>
+	),
 }

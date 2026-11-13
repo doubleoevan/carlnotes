@@ -222,9 +222,9 @@ export function PageUpdateCountBadge({
 	}
 	return (
 		<Popover open={isMentionListOpen} onOpenChange={setIsMentionListOpen}>
-			{/* the badge at the name's top-right corner, which the list opens from */}
+			{/* the badge at the name's top-right corner, which the list opens from. flex sizes the box to the badge alone */}
 			<PopoverAnchor asChild>
-				<span className={cn("absolute -top-2 -right-3.5 z-10", className)}>
+				<span className={cn("absolute -top-2 -right-3.5 z-10 flex", className)}>
 					<UpdateCountBadge
 						chatMentions={chatMentions}
 						commentMentions={commentMentions}

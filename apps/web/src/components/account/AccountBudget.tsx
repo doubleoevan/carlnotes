@@ -7,6 +7,7 @@ import {
 } from "@carlnotes/core/components/AccountBudget"
 import { toPlanManagement } from "@carlnotes/core/lib/storefrontPurchaseRules"
 import { cn } from "@carlnotes/nightshift/classNames"
+import type { ReactNode } from "react"
 import { MeterRing } from "@/components/common/MeterRing"
 import { Button } from "@/components/primitives/button"
 import { openPlanManagement } from "@/lib/billingRedirects"
@@ -37,8 +38,8 @@ export function AccountBudget({
 	)
 }
 
-// keep the existing card and text styling around shared account content
-const ACCOUNT_BUDGET_ELEMENTS: AccountBudgetElements = {
+// the account page's card and text styling around the shared budget, with no payment notice
+export const ACCOUNT_BUDGET_LAYOUT_ELEMENTS: Omit<AccountBudgetElements, "PaymentNotice"> = {
 	Card: ({ children }) => <section className={cn(CARD_CLASS, "space-y-4")}>{children}</section>,
 	Text: ({ children, className }) => <span className={className}>{children}</span>,
 	Heading: ({ children }) => <h2 className="font-semibold">{children}</h2>,
@@ -51,18 +52,34 @@ const ACCOUNT_BUDGET_ELEMENTS: AccountBudgetElements = {
 	Meters: ({ children }) => <div className="flex flex-wrap justify-center gap-8">{children}</div>,
 	Meter: ({ children }) => <div className="flex flex-col items-center gap-1.5">{children}</div>,
 	MeterRing,
-	PaymentNotice,
+	CardLine: ({ children }) => <p className="text-sm">{children}</p>,
 }
+
+// the page's layout with its notice, whose Update opens where the plan is billed
+const ACCOUNT_BUDGET_ELEMENTS: AccountBudgetElements = { ...ACCOUNT_BUDGET_LAYOUT_ELEMENTS, PaymentNotice }
 
 // a failed-payment notice whose Update opens where the plan is billed: the portal, or the store's subscription page
 function PaymentNotice({ provider }: { provider: BillingProvider | null }) {
 	return (
+		<PaymentNoticeCard
+			updateControl={
+				<Button className="mt-1" onClick={() => void openPlanManagement(toPlanManagement("web", provider))}>
+					Update
+				</Button>
+			}
+		/>
+	)
+}
+
+/**
+ * The failed-payment notice around its Update control.
+ */
+export function PaymentNoticeCard({ updateControl }: { updateControl: ReactNode }) {
+	return (
 		<div className="border-destructive bg-card rounded-md border p-3 text-sm">
 			<p className="text-destructive font-semibold">Your last payment didn't go through.</p>
 			<p className="text-muted-foreground">
-				<Button className="mt-1 mr-2" onClick={() => void openPlanManagement(toPlanManagement("web", provider))}>
-					Update
-				</Button>
+				<span className="mr-2">{updateControl}</span>
 				your payment method to keep Carl brewing.
 			</p>
 		</div>

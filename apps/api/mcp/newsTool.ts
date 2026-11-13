@@ -11,7 +11,7 @@ import { parseJsonCursor, toJsonCursor } from "../cursors"
 import { readNews } from "../news/readNews"
 import { loadUnseenCommentMentions } from "../social/commentMentions"
 import { loadNewsMcpViewData, toMcpViewMeta } from "./mcpViewData"
-import { CONNECT_ACCOUNT_TEXT } from "./results"
+import { CONNECT_ACCOUNT_TEXT, toFencedNullable, toFencedUsername } from "./results"
 import { type RegisterToolsOptions, toTextResult } from "./toolShapes"
 import { toMcpViewToolMeta } from "./uiResources"
 
@@ -83,7 +83,7 @@ export function registerNewsTool({ mcpServer, toolCaller }: RegisterToolsOptions
 				mentions: commentMentions.map((commentMention) => ({
 					commentId: commentMention.commentId,
 					createdAt: commentMention.createdAt,
-					authorUsername: commentMention.author ? toFencedText(commentMention.author.username) : null,
+					authorUsername: toFencedUsername(toFencedText, commentMention.author),
 					text: toFencedText(commentMention.text),
 					pageName: toFencedText(commentMention.page.name),
 					url: `${SITE_URL}${commentMention.path}`,
@@ -104,8 +104,14 @@ export function registerNewsTool({ mcpServer, toolCaller }: RegisterToolsOptions
 	)
 }
 
-// one News Event as the model reads it, with each name, title, and line a person or a page wrote inside the fence
-function toFencedNewsEvent(newsEvent: NewsEvent, toFencedText: (text: string) => string): Record<string, unknown> {
+/**
+ * Returns one News Event as the model reads it, with each name, title, and line a person or a page wrote inside the
+ * fence.
+ */
+export function toFencedNewsEvent(
+	newsEvent: NewsEvent,
+	toFencedText: (text: string) => string,
+): Record<string, unknown> {
 	return {
 		kind: newsEvent.kind,
 		occurredAt: newsEvent.occurredAt,
@@ -113,12 +119,12 @@ function toFencedNewsEvent(newsEvent: NewsEvent, toFencedText: (text: string) =>
 		topicName: toFencedText(newsEvent.topicName),
 		url: `${SITE_URL}${newsEvent.path}`,
 		// who did it, the title of what the row is about, and a Comment's first line
-		actorUsername: newsEvent.actor ? toFencedText(newsEvent.actor.username) : null,
-		title: newsEvent.title ? toFencedText(newsEvent.title) : null,
-		text: newsEvent.text ? toFencedText(newsEvent.text) : null,
+		actorUsername: toFencedUsername(toFencedText, newsEvent.actor),
+		title: toFencedNullable(toFencedText, newsEvent.title),
+		text: toFencedNullable(toFencedText, newsEvent.text),
 		// a single reaction's type, or the count of the reactions on one Comment with that Comment's author
 		reactionType: newsEvent.reactionType,
 		reactionCount: newsEvent.reactionCount,
-		commentAuthorUsername: newsEvent.commentAuthor ? toFencedText(newsEvent.commentAuthor.username) : null,
+		commentAuthorUsername: toFencedUsername(toFencedText, newsEvent.commentAuthor),
 	}
 }

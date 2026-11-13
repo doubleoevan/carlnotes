@@ -9,7 +9,7 @@ import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
 import { HIGHLIGHTED_PAGE_BUTTON_CLASS } from "@/pageButtonClasses"
-import { useTopicFeed } from "@/providers/TopicFeedProvider"
+import { useOptionalTopicFeed } from "@/providers/TopicFeedProvider"
 import { openSessionScreen } from "@/sessionReturnPath"
 import { NewTopicDialog } from "./TopicEditorChoiceSheet"
 
@@ -100,7 +100,7 @@ export function NewTopicButton() {
  */
 export function useNewTopicDialog(): { openNewTopicDialog: () => void; newTopicDialog: React.ReactNode } {
 	const [isOpen, setIsOpen] = useState(false)
-	const state = useTopicFeed()
+	const topicFeed = useOptionalTopicFeed()
 	// a visitor is sent to sign-up with the web's new-topic prompt, and returns to this screen
 	const pathname = usePathname()
 	return {
@@ -115,7 +115,7 @@ export function useNewTopicDialog(): { openNewTopicDialog: () => void; newTopicD
 			<NewTopicDialog
 				onClose={() => setIsOpen(false)}
 				onTopicSaved={async (topicId) => {
-					await state.reheat()
+					await topicFeed?.reheat()
 					router.push(`/topics/${topicId}`)
 				}}
 			/>

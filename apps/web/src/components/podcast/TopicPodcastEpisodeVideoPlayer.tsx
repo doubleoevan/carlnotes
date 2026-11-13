@@ -70,7 +70,8 @@ const playButtonElements: PodcastEpisodePlayButtonElements = {
 	Tooltip: ({ children }) => children,
 }
 
-const elements: TopicPodcastEpisodeVideoPlayerElements = {
+// the browser's film player elements
+export const TOPIC_PODCAST_EPISODE_VIDEO_PLAYER_ELEMENTS: TopicPodcastEpisodeVideoPlayerElements = {
 	Group: ({ children, className }) => <div className={className}>{children}</div>,
 	Card: ({ children }) => <div className={FILM_CARD_CLASS}>{children}</div>,
 	Surface: TopicPodcastEpisodeVideoSurface,
@@ -119,7 +120,7 @@ const elements: TopicPodcastEpisodeVideoPlayerElements = {
  * picture-in-picture.
  */
 export function TopicPodcastEpisodeVideoPlayer(props: TopicPodcastEpisodeVideoPlayerProps) {
-	return <SharedTopicPodcastEpisodeVideoPlayer {...props} elements={elements} />
+	return <SharedTopicPodcastEpisodeVideoPlayer {...props} elements={TOPIC_PODCAST_EPISODE_VIDEO_PLAYER_ELEMENTS} />
 }
 
 // the film's frame: the poster, with the browser's one film element over it while this podcast episode's film is

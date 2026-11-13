@@ -29,10 +29,43 @@ const REPORT_RATE_LIMIT_WINDOW_MS = DAY_MS
 export type ReportContentResult = "sent" | "unknownSubject" | "limitReached" | "notConfigured" | "failed"
 
 /**
- * Stores a report and emails it to the support address, or rejects the report if its subject is missing or hidden
- * from the sender. A report the sender already made is accepted again without a second row or email.
+ * Stores a report, emails it to the support address, and records what kind of thing was reported, or rejects the
+ * report if its subject is missing or hidden from the sender. A report the sender already made is accepted again
+ * without a second row or email.
  */
-async function flagContent(userId: string, payload: FlagContentPayload): Promise<ReportContentResult> {
+export async function flagContent({
+	userId,
+	payload,
+	analyticsProperties,
+}: {
+	userId: string
+	payload: FlagContentPayload
+	analyticsProperties: AnalyticsProperties
+}): Promise<ReportContentResult> {
+	// store and mail the report
+	const saveAndSendReportResult = await saveAndSendReport(userId, payload)
+	if (saveAndSendReportResult !== "sent") {
+		return saveAndSendReportResult
+	}
+
+	// record what kind of thing was reported
+	const { subjectKind, subjectId } = payload
+	trackEvent("content_flagged", userId, { ...analyticsProperties, kind: subjectKind })
+
+	// a flag of a social target or a profile also sends the social event, named by the subject and holding its id
+	const socialEventFlagSubject = toSocialEventFlagSubject(subjectKind)
+	if (socialEventFlagSubject) {
+		trackEvent(
+			`social_${socialEventFlagSubject}_flag`,
+			userId,
+			await toFlagEventProperties({ subjectKind, subjectId, userId, analyticsProperties }),
+		)
+	}
+	return saveAndSendReportResult
+}
+
+// store a report and email it, or say why it was rejected
+async function saveAndSendReport(userId: string, payload: FlagContentPayload): Promise<ReportContentResult> {
 	const supportEmail = Bun.env.SUPPORT_EMAIL
 	if (!supportEmail) {
 		console.error("SUPPORT_EMAIL must be set to receive reports")
@@ -204,36 +237,23 @@ export const flagContentRoute = new Hono<AppEnv>()
 		}
 
 		// store and mail the report, and record what kind of thing was reported
-		const flagResult = await flagContent(userId, context.req.valid("json"))
-		if (flagResult === "sent") {
-			const { subjectKind, subjectId } = context.req.valid("json")
-			trackEvent("content_flagged", userId, { ...toAnalyticsProperties(context), kind: subjectKind })
-
-			// a flag of a social target or a profile also sends the social event, named by the subject and holding its id
-			const socialEventFlagSubject = toSocialEventFlagSubject(subjectKind)
-			if (socialEventFlagSubject) {
-				trackEvent(
-					`social_${socialEventFlagSubject}_flag`,
-					userId,
-					await toFlagEventProperties({
-						subjectKind,
-						subjectId,
-						userId,
-						analyticsProperties: toAnalyticsProperties(context),
-					}),
-				)
-			}
+		const flagContentResult = await flagContent({
+			userId,
+			payload: context.req.valid("json"),
+			analyticsProperties: toAnalyticsProperties(context),
+		})
+		if (flagContentResult === "sent") {
 			return context.json({ ok: true })
 		}
 		// each rejection reports in its own terms, so the dialog can show what actually went wrong
-		if (flagResult === "limitReached") {
+		if (flagContentResult === "limitReached") {
 			return context.json({ error: "you have sent enough reports for one day" }, 429)
 		}
-		if (flagResult === "failed") {
+		if (flagContentResult === "failed") {
 			return context.json({ error: "the report did not send. try again" }, 502)
 		}
 		// a subject that is missing or hidden from the user is a 404, and an unset SUPPORT_EMAIL is a 503
-		return flagResult === "unknownSubject"
+		return flagContentResult === "unknownSubject"
 			? context.json({ error: "not found" }, 404)
 			: context.json({ error: "reports are not configured" }, 503)
 	})

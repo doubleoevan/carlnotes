@@ -1,54 +1,33 @@
 import { authClient } from "@carlnotes/client/authClient"
-import {
-	fetchTeamPage,
-	sendDeleteTeam,
-	sendRemoveTopicFromTeam,
-	sendTeamAvatarBody,
-} from "@carlnotes/client/teamClient"
-import { toTeamAvatarImagePath } from "@carlnotes/contracts/avatars"
+import { fetchTeamPage, sendDeleteTeam } from "@carlnotes/client/teamClient"
 import { isLeaderRole } from "@carlnotes/contracts/enums"
 import { toTeamPath } from "@carlnotes/contracts/seo"
-import { type TeamPageResponse, toTeamPageTitle } from "@carlnotes/contracts/teams"
-import { TEAM_SECTIONS } from "@carlnotes/core/lib/cardSections"
-import { TEAM_AVATAR_UPLOAD_FAILED_TEXT, toAvatarRejectionText } from "@carlnotes/core/lib/imageUpload"
-import { toSectionCountLabel } from "@carlnotes/core/lib/labels"
+import type { TeamPageResponse } from "@carlnotes/contracts/teams"
 import { sendTeamViewOnce } from "@carlnotes/core/lib/pageViews"
-import { ADD_TEAM_MEMBER_LABEL, toTeamDetails } from "@carlnotes/core/lib/teamFields"
+import { ADD_TEAM_MEMBER_LABEL } from "@carlnotes/core/lib/teamFields"
 import { useQuery } from "@tanstack/react-query"
 import { router, useFocusEffect, useLocalSearchParams, usePathname } from "expo-router"
 import { Pencil, Plus, Share as ShareIcon, Trash2 } from "lucide-react-native"
 import { useCallback, useState } from "react"
 import { Alert, View } from "react-native"
-import { useAvatarPicker } from "@/components/avatar/avatarUpload"
-import { Avatar, PAGE_AVATAR_SIZE } from "@/components/branding/Avatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
-import { PagedCardsSection } from "@/components/common/CardsSection"
-import { DetailsLine } from "@/components/common/DetailsLine"
 import { LoadFailedNotice } from "@/components/common/LoadFailedNotice"
-import { PageHeaderIdentity } from "@/components/common/PageHeaderIdentity"
-import { PageHeaderRow } from "@/components/common/PageHeaderRow"
-import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { ViewerCountLine } from "@/components/common/ViewerCountLine"
 import { InviteMembersModal } from "@/components/invite/InviteMembersModal"
 import { PageScreen } from "@/components/layout/PageScreen"
 import { PageSkeleton } from "@/components/layout/PageSkeleton"
 import { NotesSection } from "@/components/note/NotesSection"
-import { PodcastEpisodeCard } from "@/components/podcast/PodcastEpisodeCard"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
 import { ShareTeam } from "@/components/share/ShareTeam"
-import { EmptyListCard } from "@/components/table/TableCard"
-import { TeamMembersTable } from "@/components/table/TeamMembersTable"
-import { TopicsTable } from "@/components/table/TopicsTable"
 import { AddTopicButton } from "@/components/team/AddTopicButton"
 import { EditTeamModal } from "@/components/team/EditTeamModal"
 import { JoinTeamButton } from "@/components/team/JoinTeamButton"
-import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
-import { TopicCard } from "@/components/topic/TopicCard"
+import { TeamHeader } from "@/components/team/TeamHeader"
+import { TeamSections } from "@/components/team/TeamSections"
 import { NewTopicDialog } from "@/components/topic/TopicEditorChoiceSheet"
 import { NewTopicButton } from "@/components/topic/TopicHomeActions"
-import { TopicPostCard } from "@/components/topicPost/TopicPostCard"
 import { usePageMutation } from "@/hooks/usePageMutation"
 import {
 	PLAIN_PAGE_BUTTON_CLASS,
@@ -130,7 +109,7 @@ export default function TeamScreen() {
 					: []
 			}
 			header={
-				query.isPending ? false : team && <TeamHeader team={team} noteCount={noteCount} onReload={handleReload} />
+				query.isPending ? false : team && <TeamHeader teamPage={team} noteCount={noteCount} onReload={handleReload} />
 			}
 			// a member adds a member and anyone else joins, in the plain style
 			leftButton={
@@ -163,71 +142,6 @@ export default function TeamScreen() {
 			{mutation.error && <Text className="text-destructive">{mutation.error}</Text>}
 			{team && <TeamDialogs team={team} dialog={dialog} onClose={() => setDialog(null)} onReload={handleReload} />}
 		</PageScreen>
-	)
-}
-
-// the team, how many notes its notes section lists, null until the notes load, and the reload after a change
-type TeamHeaderProps = { team: TeamPageResponse; noteCount: number | null; onReload: () => void }
-
-// keep avatar editing separate from the team's tables and dialogs
-function TeamHeader({ team, noteCount, onReload }: TeamHeaderProps) {
-	const { teamId } = team
-	const isTeamLeader = isLeaderRole(team.role)
-	const mutation = usePageMutation(onReload)
-	// a leader's avatar press opens the picker menu, and the picked image uploads at once
-	const teamAvatarPicker = useAvatarPicker({
-		onPicked: (body) =>
-			mutation.run(async () => {
-				const rejection = await sendTeamAvatarBody(teamId, body)
-				if (rejection) {
-					throw new Error(toAvatarRejectionText(rejection, TEAM_AVATAR_UPLOAD_FAILED_TEXT))
-				}
-			}),
-	})
-	return (
-		<View className="gap-2">
-			<PageHeaderRow>
-				{isTeamLeader ? (
-					<Button
-						ref={teamAvatarPicker.triggerRef}
-						variant="ghost"
-						accessibilityLabel="Change team avatar"
-						className="h-auto p-0"
-						disabled={mutation.isPending || teamAvatarPicker.isPicking}
-						onPress={teamAvatarPicker.openFilePicker}
-					>
-						<Avatar
-							ownerId={teamId}
-							name={team.name}
-							imageUrl={team.avatarVersion ? toTeamAvatarImagePath(teamId, team.avatarVersion) : null}
-							size={PAGE_AVATAR_SIZE}
-						/>
-					</Button>
-				) : (
-					<Avatar
-						ownerId={teamId}
-						name={team.name}
-						imageUrl={team.avatarVersion ? toTeamAvatarImagePath(teamId, team.avatarVersion) : null}
-						size={PAGE_AVATAR_SIZE}
-					/>
-				)}
-				{teamAvatarPicker.filePickerMenu}
-				{/* beside the avatar: the page's title and the details line of the team's counts */}
-				<PageHeaderIdentity>
-					<View className="flex-row items-center gap-2">
-						<Text accessibilityRole="header" className="shrink font-display text-2xl">
-							{toTeamPageTitle(team.name)}
-						</Text>
-						{/* the team chat room's unseen mentions and the team's note changes. the press opens the chat room */}
-						<PageUpdateCountBadge topicId={null} teamId={teamId} />
-					</View>
-					<DetailsLine details={toTeamDetails({ teamPage: team, noteCount })} />
-				</PageHeaderIdentity>
-			</PageHeaderRow>
-			{/* the description under the avatar */}
-			{team.description && <Text className="text-sm">{team.description}</Text>}
-			{mutation.error && <Text className="text-sm text-destructive">{mutation.error}</Text>}
-		</View>
 	)
 }
 
@@ -288,8 +202,6 @@ function TeamContent({
 	onNoteCountChange: (noteCount: number | null) => void
 }) {
 	const team = query.data?.status === "visible" ? query.data.team : null
-	const isTeamLeader = isLeaderRole(team?.role)
-	const mutation = usePageMutation(onReload)
 	const pathname = usePathname()
 	if (query.isPending) {
 		return <PageSkeleton kind="team" />
@@ -318,68 +230,13 @@ function TeamContent({
 			<Text>Carl couldn't find this team. He checked twice.</Text>
 		)
 	}
-	// the active members, shown or not, as the header counts them
-	const memberCount = team.members.filter((member) => member.isActive).length + team.hiddenMemberCount
 	return (
 		<>
-			{/* the team's topics and their films, podcast episodes, and Topic Posts as cards, the films right before the
-			    podcast episodes, each hidden while it has none. the sections bring their own side insets, so they give
-			    the page's back */}
-			<View className="-mx-4">
-				<PagedCardsSection
-					section={TEAM_SECTIONS.topicCards}
-					rows={team.topicCards}
-					renderCard={(topic) => <TopicCard topic={topic} />}
-				/>
-				<PagedCardsSection
-					section={TEAM_SECTIONS.topicPodcastEpisodeVideoCards}
-					rows={team.topicPodcastEpisodeVideoCards ?? []}
-					renderCard={(podcastEpisodeCard) => (
-						<PodcastEpisodeCard podcastEpisodeCard={podcastEpisodeCard} variant="video" videoSurface="team-videos" />
-					)}
-				/>
-				<PagedCardsSection
-					section={TEAM_SECTIONS.podcastEpisodeCards}
-					rows={team.podcastEpisodeCards}
-					renderCard={(podcastEpisodeCard) => <PodcastEpisodeCard podcastEpisodeCard={podcastEpisodeCard} />}
-				/>
-				<PagedCardsSection
-					section={TEAM_SECTIONS.topicPostCards}
-					rows={team.topicPostCards}
-					renderCard={(topicPost) => <TopicPostCard topicPost={topicPost} />}
-				/>
-			</View>
-			<CollapsibleSection title="Team members" countLabel={toSectionCountLabel(memberCount, "member")}>
-				<TeamMembersTable
-					teamId={teamId}
-					members={team.members}
-					hiddenMemberCount={team.hiddenMemberCount}
-					isTeamLeader={isTeamLeader}
-					onChanged={onReload}
-				/>
-			</CollapsibleSection>
-			<CollapsibleSection title="All Topics" countLabel={toSectionCountLabel(team.topics.length, "topic")}>
-				{team.topics.length ? (
-					<TopicsTable
-						topics={team.topics}
-						includesNonPublicTopics={Boolean(team.role)}
-						onRemoveTopic={
-							isTeamLeader
-								? (topic) =>
-										void mutation.run(async () => {
-											if (!(await sendRemoveTopicFromTeam(teamId, topic.id))) {
-												throw new Error("That topic didn't get removed.")
-											}
-										})
-								: undefined
-						}
-					/>
-				) : (
-					<EmptyListCard text="No topics on this team yet." />
-				)}
-			</CollapsibleSection>
-			<NotesSection pageType="team" pageId={teamId} onNoteCountChange={onNoteCountChange} />
-			{mutation.error && <Text className="text-destructive">{mutation.error}</Text>}
+			<TeamSections
+				teamPage={team}
+				onReload={onReload}
+				notesSection={<NotesSection pageType="team" pageId={teamId} onNoteCountChange={onNoteCountChange} />}
+			/>
 			{/* the team's visitors, read while this team is the active route */}
 			<ViewerCountLine
 				viewerCountPage={{ kind: "team", id: teamId, isPublic: team.isPublic }}

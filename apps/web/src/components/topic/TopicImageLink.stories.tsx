@@ -2,10 +2,8 @@
 // where the image is the only one, and the plain image on its own page
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { expect } from "storybook/test"
+import { SAMPLE_TOPIC_IMAGE } from "../../../.storybook/fixtures/topics"
 import { TopicImageLink } from "./TopicImageLink"
-
-// the podcast cover placeholder shows in place of a topic's image, which the app serves from its public files
-const SAMPLE_FILES = { url: "/podcast-cover-placeholder.jpg", url2x: "/podcast-cover-placeholder.jpg" }
 
 // the page the image opens
 const TOPIC_PATH = "/topics/topic-home-espresso/home-espresso"
@@ -14,7 +12,7 @@ const meta = {
 	title: "Topic/TopicImageLink",
 	component: TopicImageLink,
 	args: {
-		image: { page: SAMPLE_FILES, list: SAMPLE_FILES, thumbnail: SAMPLE_FILES },
+		image: SAMPLE_TOPIC_IMAGE,
 		size: "list",
 		name: "Home espresso",
 		path: TOPIC_PATH,

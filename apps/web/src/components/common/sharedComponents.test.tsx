@@ -159,7 +159,7 @@ test("notes share all columns and totals while sorting and changing page size", 
 		"Visibility",
 		"Updated",
 	])
-	expect(harness.container.querySelector("tfoot")?.textContent).toContain("12 notes4 private · 4 team · 4 public")
+	expect(harness.container.querySelector("tfoot")?.textContent).toContain("Total4 private · 4 team · 4 public")
 	const firstNote = getElement<HTMLButtonElement>(harness.container, "tbody tr button")
 	await act(async () => firstNote.click())
 	expect(openedNotes).toEqual([TEST_NOTES[0]?.id ?? ""])

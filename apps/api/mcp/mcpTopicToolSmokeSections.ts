@@ -1,11 +1,11 @@
-// live gates for read_updates, read_topic_context, and the Scan tools on both routes
+// live gates for read_updates, read_topic_context, the Scan tools, and a visitor's topic image and attachment writes on both routes
 
 import type { McpScanStatus, McpScanStop } from "@carlnotes/contracts/mcpScanStatus"
 import type { Updates } from "@carlnotes/contracts/updates"
 import { stopFirstScan } from "../topic/firstScanSmoke"
 import { largeTopicId } from "./mcpDirectorySmokeFixtures"
 import { checkPageBounds, type SmokeClient } from "./mcpResultSmokeSections"
-import { check, toClient, topicId, toResultJson } from "./mcpSmokeFixtures"
+import { check, routePaths, toClient, topicId, toResultJson } from "./mcpSmokeFixtures"
 import { CONNECT_ACCOUNT_TEXT } from "./results"
 import { toResultText } from "./toolTestFixtures"
 import type { McpTopicContext } from "./topicContextResults"
@@ -20,13 +20,27 @@ const ACCOUNT_TOOL_CALLS = [
 	{ name: "read_topic_context", arguments: { topic_id: topicId, question: TOPIC_CONTEXT_QUESTION } },
 	{ name: "start_scan", arguments: { topic_id: topicId } },
 	{ name: "stop_scan", arguments: { topic_id: topicId } },
+	{ name: "set_topic_image", arguments: { topic_id: topicId, image_url: "https://example.com/" } },
+	{ name: "add_topic_attachment", arguments: { topic_id: topicId, url: "https://example.com/" } },
+	{ name: "save_note", arguments: { topic_id: topicId, name: "Visitor note", visibility: "public" } },
+	{ name: "delete_note", arguments: { note_id: "note-1" } },
+	{ name: "list_teams", arguments: {} },
+	{ name: "request_to_join_team", arguments: { team_id: "team-1", is_requesting: true } },
+	{ name: "send_invite", arguments: { team_id: "team-1", username: "someone" } },
+	{ name: "respond_to_invite", arguments: { invite_id: "invite-1", is_accepted: true } },
+	{ name: "post_to_team_room", arguments: { team_id: "team-1", message: "hello" } },
+	{ name: "read_activity", arguments: {} },
+	{ name: "read_account", arguments: {} },
+	{ name: "report_content", arguments: { subject_kind: "finding", subject_id: "finding-1" } },
+	{ name: "block_user", arguments: { user_id: "user-2", is_blocked: true } },
+	{ name: "delete_hot_take", arguments: { comment_id: "comment-1" } },
 ]
 
 /**
  * Checks what a visitor reads from read_updates, read_topic_context, and the Scan tools on both routes.
  */
 export async function checkVisitorTopicTools(): Promise<void> {
-	for (const path of ["/mcp", `/mcp/t/${topicId}`]) {
+	for (const path of routePaths) {
 		const { client, transport } = toClient(path)
 		try {
 			await client.connect(transport)
@@ -74,7 +88,7 @@ export async function checkTopicToolResults(accessToken: string): Promise<void> 
 
 /** Starts, reads, and stops a Scan on both routes. */
 export async function checkScanTools(accessToken: string): Promise<void> {
-	for (const path of ["/mcp", `/mcp/t/${topicId}`]) {
+	for (const path of routePaths) {
 		const { client, transport } = toClient(path, accessToken)
 		try {
 			await client.connect(transport)

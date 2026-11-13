@@ -1,23 +1,19 @@
 // the chat room routes: the page, the stream, posting, the shared files, and the deletes
 
-import { CHAT_ROOM_ATTACHMENT_ERRORS, type ChatRoomMessagePage } from "@carlnotes/contracts/chat"
-import type { ModerationCategory } from "@carlnotes/contracts/moderation"
-import { type ChatAttachment, chatRoomMessagePayload } from "@carlnotes/contracts/payloads"
+import { chatRoomMessagePayload } from "@carlnotes/contracts/payloads"
 import { attachmentStream } from "@carlnotes/db/store"
-import { isVoiceChatConfigured } from "@carlnotes/server/voiceChat"
 import { zValidator } from "@hono/zod-validator"
 import { type Context, Hono } from "hono"
 import type { z } from "zod"
 import { toSignedOutRejection } from "../bodyLimit"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
-import { toObjectionableCategory, toObjectionableContentResponse, toObjectionableImageCategory } from "../moderation"
+import { toObjectionableContentResponse } from "../moderation"
 import { toolCallerRateLimiter } from "../rateLimit"
-import { toTermsOutdatedResponse } from "../termsAcceptance"
+import { isSessionTermsCurrent, toTermsOutdatedRejection } from "../termsAcceptance"
 import { toStoredFileHeaders } from "../topic/attachments"
 import { loadLinkPreviewImage } from "./linkPreviews"
 import { saveSeenChatMentions } from "./mentions"
 import { chatBodyLimit } from "./privateChat"
-import { postChatRoomMessage } from "./room"
 import { loadChatRoom } from "./roomAccess"
 import {
 	clearChatRoom,
@@ -27,14 +23,10 @@ import {
 	loadChatRoomAttachment,
 	loadChatRoomMessage,
 } from "./roomDeletes"
-import { streamChatRoomEvents, toChatMessageIdParam } from "./roomEvents"
-import {
-	CHAT_ROOM_LOAD_LIMIT,
-	loadChatRoomMessageLinkPreviews,
-	loadChatRoomMessages,
-	toChatMessageIds,
-} from "./roomMessages"
-import { toVisibleChatRoomMessages } from "./roomVisibility"
+import { streamChatRoomEvents } from "./roomEvents"
+import { loadChatRoomMessageLinkPreviews, toChatMessageIds } from "./roomMessages"
+import { postCheckedChatRoomMessage } from "./roomPosts"
+import { loadChatRoomMessagePage, toBeforeChatMessageId } from "./roomReads"
 
 // how long a cache may keep a link preview image. the bytes for one link preview id never change,
 // and one stored image is the same for everyone who loads it
@@ -47,49 +39,10 @@ export const TEAM_ROOM_PATH = "/teams/:id/room"
 // a visitor's chat room post responds like a missing chat room, before its body is read
 const chatRoomSignedOutRejection = toSignedOutRejection("not found", 404)
 
-/** The chat message id a backward page starts reading below, or undefined for the latest page. */
-export function toBeforeChatMessageId(beforeParam: string | undefined): number | undefined {
-	return toChatMessageIdParam(beforeParam) || undefined
-}
-
-/**
- * One page of chat messages, saying whether another sits above it so the list knows when to stop, and whether voice
- * chat is on.
- */
-export function toChatMessagePage(
-	chatMessages: ChatRoomMessagePage["chatMessages"],
-	// how many rows the page loaded before the user's own filter, which decides whether earlier rows exist
-	loadedCount = chatMessages.length,
-): ChatRoomMessagePage {
-	return {
-		chatMessages,
-		hasEarlierChatMessages: loadedCount === CHAT_ROOM_LOAD_LIMIT,
-		isVoiceChatConfigured: isVoiceChatConfigured(),
-	}
-}
-
 // the context of a chat room post, with its validated chat message
 type ChatRoomPostContext = Context<AppEnv, string, { out: { json: z.infer<typeof chatRoomMessagePayload> } }>
 
-// the category of the first shared image that reads as a violation, unreadable if the moderation could not read one, or
-// null if every image may post. the images are checked in parallel
-async function toObjectionableRoomImageCategory(
-	attachments: ChatAttachment[],
-	subjectId: string,
-): Promise<ModerationCategory | "unreadable" | null> {
-	const imageCategories = await Promise.all(
-		attachments.flatMap((attachment) =>
-			attachment.kind === "image"
-				? [toObjectionableImageCategory({ dataUrl: attachment.dataUrl, subjectKind: "chatRoomImage", subjectId })]
-				: [],
-		),
-	)
-	const objectionableCategory = imageCategories.find(
-		(imageCategory) => imageCategory !== null && imageCategory !== "unreadable",
-	)
-	return objectionableCategory ?? (imageCategories.includes("unreadable") ? "unreadable" : null)
-}
-
+// a chat room post from the route's validated payload, as the response the route returns
 async function postChatRoomMessageRoute(
 	context: ChatRoomPostContext,
 	topicId: string | null,
@@ -100,57 +53,35 @@ async function postChatRoomMessageRoute(
 	if (!userId) {
 		return context.json({ error: "not found" }, 404)
 	}
+
+	// the post, after the Terms, the chat room's access, and the moderation
 	const { content, replyToChatMessageId, attachments, isSpoken } = context.req.valid("json")
-
-	// a member who has not accepted the current Terms is asked to first
-	const termsOutdatedResponse = toTermsOutdatedResponse(context)
-	if (termsOutdatedResponse) {
-		return termsOutdatedResponse
-	}
-
-	// a chat room this user may not post to reads as missing, before any moderation call is spent on the post
-	if (!(await loadChatRoom(userId, topicId, teamId))) {
-		return context.json({ error: "not found" }, 404)
-	}
-
-	// a message that reads as a violation is rejected in Carl's words before anything posts. the room's topic and team
-	// ids name the check in a failure report
-	const moderationSubjectId = `${topicId ?? "team"}:${teamId}`
-	const objectionableCategory = await toObjectionableCategory({
-		text: content,
-		textKind: "a chat room message",
-		subjectKind: "chatMessage",
-		subjectId: moderationSubjectId,
-	})
-	if (objectionableCategory) {
-		return toObjectionableContentResponse(context, objectionableCategory)
-	}
-
-	// a shared image that reads as a violation rejects the whole post the same way, before anything stores
-	// an image the moderation could not read is rejected like any other file that cannot be read
-	const objectionableImageCategory = await toObjectionableRoomImageCategory(attachments, moderationSubjectId)
-	if (objectionableImageCategory === "unreadable") {
-		return context.json({ error: CHAT_ROOM_ATTACHMENT_ERRORS.attachmentRejected }, 400)
-	}
-	if (objectionableImageCategory) {
-		return toObjectionableContentResponse(context, objectionableImageCategory)
-	}
-
-	// one rejected file returns a 400 for the whole chat message, while a missing chat room returns a 404
-	const postChatMessageResult = await postChatRoomMessage(
+	const postResult = await postCheckedChatRoomMessage({
 		userId,
+		isTermsCurrent: isSessionTermsCurrent(context),
 		topicId,
 		teamId,
 		content,
-		replyToChatMessageId ?? null,
+		replyToChatMessageId: replyToChatMessageId ?? null,
 		attachments,
-		{ analyticsProperties: toAnalyticsProperties(context), isSpoken },
-	)
-	if (typeof postChatMessageResult === "string") {
-		return context.json({ error: CHAT_ROOM_ATTACHMENT_ERRORS[postChatMessageResult] }, 400)
+		analyticsProperties: toAnalyticsProperties(context),
+		isSpoken,
+	})
+
+	// the posted chat message, or the response for why nothing posted
+	switch (postResult.status) {
+		case "posted":
+			return context.json({ chatMessageId: postResult.chatMessageId, rejectionReason: postResult.rejectionReason })
+		case "notFound":
+			return context.json({ error: "not found" }, 404)
+		// the Terms and the moderation say what the poster can do, and a rejected file returns a 400 for the whole post
+		case "termsOutdated":
+			return toTermsOutdatedRejection(context)
+		case "objectionable":
+			return toObjectionableContentResponse(context, postResult.category)
+		case "attachmentRejected":
+			return context.json({ error: postResult.error }, 400)
 	}
-	// the posted chat message, or 404 for a chat room this user may not use
-	return postChatMessageResult ? context.json(postChatMessageResult) : context.json({ error: "not found" }, 404)
 }
 
 // the chat room routes. every access rejection is a 404, so a chat room's existence follows the team's
@@ -171,32 +102,24 @@ export const chatRoomRoute = new Hono<AppEnv>()
 		})
 	})
 	.get(TOPIC_ROOM_PATH, async (context) => {
-		// the chat room's latest chat messages, members only
-		const userId = currentUser(context)
-		const chatRoom = await loadChatRoom(userId, context.req.param("id"), context.req.param("teamId"))
-		if (!userId || !chatRoom) {
-			return context.json({ error: "not found" }, 404)
-		}
-
-		// no cursor returns the latest chat messages, a cursor returns the page above that chat message, less the ones
-		// this member reported or blocked
-		const beforeChatMessageId = toBeforeChatMessageId(context.req.query("before"))
-		const chatMessages = await loadChatRoomMessages(context.req.param("id"), chatRoom.teamId, 0, beforeChatMessageId)
-		return context.json(toChatMessagePage(await toVisibleChatRoomMessages(userId, chatMessages), chatMessages.length))
+		// the chat room's latest chat messages, or the page above the cursor, members only
+		const chatMessagePage = await loadChatRoomMessagePage({
+			userId: currentUser(context),
+			topicId: context.req.param("id"),
+			teamId: context.req.param("teamId"),
+			beforeChatMessageId: toBeforeChatMessageId(context.req.query("before")),
+		})
+		return chatMessagePage ? context.json(chatMessagePage) : context.json({ error: "not found" }, 404)
 	})
 	.get(TEAM_ROOM_PATH, async (context) => {
-		// the team's own chat room's latest chat messages, members only
-		const userId = currentUser(context)
-		const chatRoom = await loadChatRoom(userId, null, context.req.param("id"))
-		if (!userId || !chatRoom) {
-			return context.json({ error: "not found" }, 404)
-		}
-
-		// no cursor returns the latest chat messages, a cursor returns the page above that chat message, less the ones
-		// this member reported or blocked
-		const beforeChatMessageId = toBeforeChatMessageId(context.req.query("before"))
-		const chatMessages = await loadChatRoomMessages(null, chatRoom.teamId, 0, beforeChatMessageId)
-		return context.json(toChatMessagePage(await toVisibleChatRoomMessages(userId, chatMessages), chatMessages.length))
+		// the team's own chat room's latest chat messages, or the page above the cursor, members only
+		const chatMessagePage = await loadChatRoomMessagePage({
+			userId: currentUser(context),
+			topicId: null,
+			teamId: context.req.param("id"),
+			beforeChatMessageId: toBeforeChatMessageId(context.req.query("before")),
+		})
+		return chatMessagePage ? context.json(chatMessagePage) : context.json({ error: "not found" }, 404)
 	})
 	.get("/topics/:id/rooms/:teamId/link-previews", async (context) => {
 		// the cards for a few loading chat messages, members only, so the poll never reloads the chat room

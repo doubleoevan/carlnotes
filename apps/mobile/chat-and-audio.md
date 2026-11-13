@@ -20,9 +20,10 @@ uses `ChoiceSelect`'s full-width sheet presentation, with Carl's private chat fi
 and a checked selection. Its shared `Sheet` opts into `ScrollIndicator` for orange overflow. Compact form and reply
 choices retain anchored dropdowns; the Select primitive bounds long menus to the safe viewport. Close
 returns to the prior screen. Account identity is activated in `_layout`.
-`PrivateChatPanel` and `ChatRoomPanel` wire core state to native lists and composers. The latter exports
-`ChatRoomContent` so stories exercise the connected room's presentation with local fixtures. `ChatMessageList` uses FlatList,
-preserves older messages, and retries quoted-message jumps after native row measurement. `ScrollDownButton`
+`PrivateChatPanel` and `ChatRoomPanel` wire core state to native lists and composers, and `ChatRoomPanel`'s rows read
+core's `useChatRoomListBubbleProps`. `ChatRoomPanel` exports `ChatRoomContent` so stories exercise the connected room's
+presentation with local fixtures. `ChatMessageList` uses FlatList, preserves older messages, and retries quoted-message
+jumps after native row measurement. `ScrollDownButton`
 shares the web's centered position, arrow, label, and Nightshift styling through core composition, with native touch
 targets. `ChatComposer` bounds its draft and scrollable header to the remaining keyboard-safe space.
 `ChatRoomComposer` adapts native caret selection to shared mention/reply helpers. Its reply controls occupy
@@ -57,7 +58,7 @@ accepted tool results clear it and reread the Topic. Replies confirm edits throu
 
 Reporting and blocking share core's rules. `common/ReportIssueDialog.tsx` takes the subject and, for a chat message, a
 note, or a comment, its author, and offers the author's block in the same sheet, as the web's switch does.
-`chat/ChatRoomMessageBubble.tsx`, `note/NoteComments.tsx`, `note/NoteManagement.tsx`, and the profile screen's action
+`chat/ChatRoomMessageBubble.tsx`, `note/NoteComments.tsx`, `note/NoteFooter.tsx`, and the profile screen's action
 menu open it. A reply to a message the member cannot see shows core's hidden quote. `account/AccountFields.tsx`
 supplies the Blocked people rows under core's `UserBlocksSection`. `session/TermsAcceptanceSheet.tsx` renders core's
 `TermsAcceptanceNotice` in a sheet at the root for a stale account, and `session/TermsAgreementText.tsx` is the

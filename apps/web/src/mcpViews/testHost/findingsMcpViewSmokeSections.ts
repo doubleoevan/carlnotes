@@ -1,14 +1,17 @@
-// the findings MCP view through the test host: its rows, their controls, paging, and a visitor's table
+// the findings MCP view through the test host: its rows, their controls, paging, a visitor's table, and the podcast
+// player's film
 
 import { expect, test } from "bun:test"
 import { toTestReactionSummary } from "@carlnotes/contracts/socialTestFixtures"
 import { toTestTopicFinding } from "@carlnotes/contracts/topicFeedTestFixtures"
 import { EMPTY_FILTERED_FINDINGS } from "@carlnotes/core/lib/topicFeedLabels"
 import {
+	FILM_PODCAST_EPISODE,
 	FINDINGS_MCP_VIEW_DATA,
 	FINDINGS_TOPIC,
 	LONG_FINDINGS_MCP_VIEW_DATA,
 	PERSONAL_ANNOTATION,
+	PODCAST_EPISODE_SUMMARY,
 	TOPIC_FINDINGS,
 	toMcpViewToolResult,
 	USER_MCP_VIEW_DATA,
@@ -305,3 +308,49 @@ test("the findings MCP view shows a visitor the rows with no Follow", async () =
 		expect(await frame.getByRole("button", { name: "Follow" }).count()).toBe(0)
 	})
 })
+
+test.each([
+	{ setting: "in the frame", isFilmInFrame: true },
+	{ setting: "outside the frame", isFilmInFrame: false },
+])(
+	"while films play $setting, a played podcast episode's audio plays and its film shows to match",
+	async ({ isFilmInFrame }) => {
+		// the podcast episode as the MCP view's data reads it, with its film's files only while films play in the frame
+		const { video, ...podcastEpisodeWithNoFilm } = FILM_PODCAST_EPISODE
+		const podcastEpisode = isFilmInFrame ? FILM_PODCAST_EPISODE : podcastEpisodeWithNoFilm
+		const mcpViewData = {
+			...FINDINGS_MCP_VIEW_DATA,
+			topic: { ...FINDINGS_TOPIC, latestPodcastEpisode: PODCAST_EPISODE_SUMMARY },
+			podcastEpisodes: [podcastEpisode],
+		}
+
+		// the findings MCP view with the podcast episode's play button in its header
+		await withMcpView({ mcpView: "findings" }, async ({ frame, sendToolResult }) => {
+			await sendToolResult(toMcpViewToolResult({ mcpViewData }))
+
+			// play the podcast episode's audio, which plays in both
+			const recordingName = `episode ${podcastEpisode.episodeNumber}`
+			await frame
+				.getByRole("button", { name: `Play ${recordingName}` })
+				.first()
+				.click()
+			// the play button turns to pause once the audio plays
+			await frame
+				.getByRole("button", { name: `Pause ${recordingName}` })
+				.first()
+				.waitFor()
+
+			// the film player in the frame, with no picture-in-picture, fullscreen, or link to the page
+			if (isFilmInFrame) {
+				await frame.getByRole("button", { name: "Hide captions" }).waitFor()
+				expect(await frame.getByRole("button", { name: "Picture in picture" }).count()).toBe(0)
+				expect(await frame.getByRole("button", { name: "Fullscreen" }).count()).toBe(0)
+				expect(await frame.getByRole("link", { name: "Watch on CarlNotes" }).count()).toBe(0)
+			} else {
+				// the link to the film player on the podcast episode's page, and no film player in the frame
+				await frame.getByRole("link", { name: "Watch on CarlNotes" }).waitFor()
+				expect(await frame.getByRole("button", { name: "Hide captions" }).count()).toBe(0)
+			}
+		})
+	},
+)

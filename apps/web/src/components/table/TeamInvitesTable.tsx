@@ -38,6 +38,10 @@ export function SentTeamInvitesTable({
 	}
 
 	return (
-		<SentInvitesTable {...TEAM_INVITES_TABLE_LABELS} inviteRows={inviteRows} onDeleteInvite={handleDeleteTeamInvite} />
+		<SentInvitesTable
+			labels={TEAM_INVITES_TABLE_LABELS}
+			inviteRows={inviteRows}
+			onDeleteInvite={handleDeleteTeamInvite}
+		/>
 	)
 }

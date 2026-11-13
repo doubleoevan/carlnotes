@@ -140,7 +140,10 @@ export async function checkLastLeaderRule(): Promise<void> {
 export async function checkJoinRequests(): Promise<void> {
 	console.log("\n=== 10. join requests ===")
 	// the ask writes the inactive row, and the requester still holds no topic role
-	check(await requestToJoinTeam(toId("non-member"), toId("team-hold")), "requestToJoinTeam answers true")
+	check(
+		await requestToJoinTeam({ userId: toId("non-member"), teamId: toId("team-hold") }),
+		"requestToJoinTeam answers true",
+	)
 	const requestRow = await loadMembership(toId("non-member"), toId("team-hold"))
 	check(requestRow?.isActive === false, "the request row is a member that is not active")
 	check(
@@ -151,7 +154,10 @@ export async function checkJoinRequests(): Promise<void> {
 	// taking it back deletes the row, and a fresh ask writes it again
 	await deleteJoinTeamRequest(toId("non-member"), toId("team-hold"))
 	check((await loadMembership(toId("non-member"), toId("team-hold"))) === undefined, "the withdrawn request is gone")
-	check(await requestToJoinTeam(toId("non-member"), toId("team-hold")), "a fresh ask writes the row again")
+	check(
+		await requestToJoinTeam({ userId: toId("non-member"), teamId: toId("team-hold") }),
+		"a fresh ask writes the row again",
+	)
 
 	// only a leader admits, and never someone who did not ask
 	check(

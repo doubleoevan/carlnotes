@@ -2,18 +2,17 @@ import { sendAcceptInvite, sendDeclineInvite } from "@carlnotes/client/activityC
 import { authClient } from "@carlnotes/client/authClient"
 import { fetchTeamPage, sendDeleteTeam, sendRemoveTeamMember } from "@carlnotes/client/teamClient"
 import { isLeaderRole } from "@carlnotes/contracts/enums"
-import { toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
 import type { TeamSummary, TeamsPageResponse } from "@carlnotes/contracts/teams"
-import { toDeleteReceivedInviteConfirmation, toLeaveTeamConfirmation } from "@carlnotes/core/lib/confirmationCopy"
 import {
-	type TeamsPageRow,
-	teamSortValues,
-	toTeamRowFields,
-	toTeamsMembershipTableColumns,
-} from "@carlnotes/core/lib/teamsMembershipTableColumns"
+	TeamsMembershipTable as SharedTeamsMembershipTable,
+	type TeamsMembershipDetail,
+	type TeamsMembershipTableElements,
+} from "@carlnotes/core/components/TeamsMembershipTable"
+import { toDeleteReceivedInviteConfirmation, toLeaveTeamConfirmation } from "@carlnotes/core/lib/confirmationCopy"
+import { teamSortValues, toTeamRowFields, toTeamsPageRowId } from "@carlnotes/core/lib/teamsMembershipTableColumns"
 import { useQuery } from "@tanstack/react-query"
 import { ChevronDown, X } from "lucide-react-native"
-import { useState } from "react"
+import { Fragment } from "react"
 import { Alert, View } from "react-native"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { showConfirmAlert } from "@/components/common/ConfirmDialog"
@@ -30,7 +29,7 @@ import { TeamMembersTable } from "./TeamMembersTable"
 import { TopicsTable } from "./TopicsTable"
 
 /**
- * Shows memberships and invitations with the web's controls and native detail sheets.
+ * Renders the shared teams table with native confirmations and each team's detail in a sheet.
  */
 export function TeamsMembershipTable({
 	teams,
@@ -43,29 +42,24 @@ export function TeamsMembershipTable({
 	isReadOnly?: boolean
 	onChanged: () => void
 }) {
-	// retain the selected subtable while changing sort or membership settings
+	// every membership change runs one at a time and reloads the page
 	const { data: session } = authClient().useSession()
-	const [details, setDetails] = useState<{ teamId: string; kind: "members" | "topics" } | null>(null)
 	const mutation = usePageMutation(onChanged)
-	const rows: TeamsPageRow[] = [
-		...teams.map((membership) => ({ membership })),
-		...receivedInvites.map((invite) => ({ invite })),
-	]
+
+	// leaving confirms first
 	function handleLeave(team: TeamSummary): void {
-		if (team.isOnlyLeader) {
-			setDetails({ teamId: team.teamId, kind: "members" })
-			return
-		}
 		showConfirmAlert({
 			...toLeaveTeamConfirmation(team.name),
 			onConfirm: () =>
 				void mutation.run(async () => {
-					if (!session || !(await sendRemoveTeamMember(team.teamId, session.user.id))) {
-						throw new Error("Promote another leader first. A team can't lose its last one.")
+					if (session) {
+						await sendRemoveTeamMember(team.teamId, session.user.id)
 					}
 				}),
 		})
 	}
+
+	// deleting the team confirms first, and says who leads it if the team passed to another leader
 	function handleDelete(team: TeamSummary): void {
 		Alert.alert("Delete this team?", "Its topics return to whoever made them, and the room closes with it.", [
 			{ text: "Keep it", style: "cancel" },
@@ -85,95 +79,95 @@ export function TeamsMembershipTable({
 			},
 		])
 	}
+
+	// accepting joins the team or requests to, and declining confirms first
 	async function handleAccept(inviteId: string): Promise<void> {
 		const acceptedInvite = await sendAcceptInvite(inviteId)
 		if (acceptedInvite.status !== "joinedTeam" && acceptedInvite.status !== "requestedTeam") {
 			throw new Error("That invite couldn't be accepted. The team may be full or the invite expired.")
 		}
 	}
-	function renderCount(row: TeamsPageRow, kind: "members" | "topics") {
-		const team = toTeamRowFields(row)
-		return (
-			<Button
-				variant="link"
-				className="px-0"
-				accessibilityLabel={`Show ${team.name}'s ${kind}`}
-				onPress={() => setDetails({ teamId: team.teamId, kind })}
-			>
-				<Text>{kind === "members" ? team.memberCount : team.topicCount}</Text>
-				<Icon as={ChevronDown} className="size-4 text-link" />
-			</Button>
-		)
-	}
-	const columns = toTeamsMembershipTableColumns({
-		teams,
-		receivedInvites,
-		isReadOnly,
-		renderText: (text) => <Text className="text-sm text-muted-foreground">{text}</Text>,
-		renderTeam: (row) => <TeamLink team={toTeamRowFields(row)} />,
-		renderDescription: (row) => (
-			<Text className="text-sm text-muted-foreground">{toTeamRowFields(row).description || "None"}</Text>
-		),
-		renderInvitedBy: (row) => {
-			const invitedBy =
-				"membership" in row
-					? (row.membership.invitedBy ?? (session ? toSessionProfileIdentity(session.user) : null))
-					: row.invite.sender
-			return invitedBy ? <UserProfileLink user={invitedBy} /> : <Text className="text-sm">—</Text>
-		},
-		renderMembers: (row) => renderCount(row, "members"),
-		renderTopics: (row) => renderCount(row, "topics"),
-		renderActive: (row) => (
-			<PreferenceSwitch
-				label={
-					"membership" in row
-						? row.membership.isOnlyLeader
-							? "Assign a new leader to leave"
-							: `Leave ${row.membership.name}`
-						: `Join ${row.invite.name}`
-				}
-				isChecked={"membership" in row}
-				isDisabled={mutation.isPending}
-				onChange={() =>
-					"membership" in row ? handleLeave(row.membership) : void mutation.run(() => handleAccept(row.invite.inviteId))
-				}
-			/>
-		),
-		renderRemove: (row) =>
-			("invite" in row || isLeaderRole(row.membership.role)) && (
-				<Button
-					variant="ghost"
-					size="icon-sm"
-					accessibilityLabel={`Delete ${"invite" in row ? "invite to " : ""}${toTeamRowFields(row).name}`}
-					disabled={mutation.isPending}
-					onPress={() =>
-						"membership" in row
-							? handleDelete(row.membership)
-							: showConfirmAlert({
-									...toDeleteReceivedInviteConfirmation(row.invite.name),
-									onConfirm: () => void mutation.run(() => sendDeclineInvite(row.invite.inviteId)),
-								})
-					}
-				>
-					<Icon as={X} className="size-4" />
-				</Button>
-			),
-	})
 	return (
 		<View className="gap-2">
+			<SharedTeamsMembershipTable
+				teams={teams}
+				receivedInvites={receivedInvites}
+				isReadOnly={isReadOnly}
+				isPending={mutation.isPending}
+				onLeave={handleLeave}
+				onDelete={handleDelete}
+				onAccept={(invite) => void mutation.run(() => handleAccept(invite.inviteId))}
+				onDecline={(invite) =>
+					showConfirmAlert({
+						...toDeleteReceivedInviteConfirmation(invite.name),
+						onConfirm: () => void mutation.run(() => sendDeclineInvite(invite.inviteId)),
+					})
+				}
+				onChanged={onChanged}
+				elements={TEAMS_MEMBERSHIP_TABLE_ELEMENTS}
+			/>
+			{mutation.error && <Text className="text-destructive">{mutation.error}</Text>}
+		</View>
+	)
+}
+
+// the native cells: the team link, muted text, the native switch, and the count buttons that open a sheet
+const TEAMS_MEMBERSHIP_TABLE_ELEMENTS: TeamsMembershipTableElements = {
+	Text: ({ children }) => <Text className="text-sm text-muted-foreground">{children}</Text>,
+	TeamLink: ({ row }) => <TeamLink team={toTeamRowFields(row)} />,
+	Description: ({ description }) => <Text className="text-sm text-muted-foreground">{description || "None"}</Text>,
+	InvitedBy: ({ invitedBy }) => (invitedBy ? <UserProfileLink user={invitedBy} /> : <Text className="text-sm">—</Text>),
+	DetailToggle: ({ count, label, onToggle }) => (
+		<Button variant="link" className="px-0" accessibilityLabel={label} onPress={onToggle}>
+			<Text>{count}</Text>
+			<Icon as={ChevronDown} className="size-4 text-link" />
+		</Button>
+	),
+	ActiveSwitch: ({ action, teamName, isDisabled, isChecked, isFaded, onChange }) => (
+		<View className={isFaded ? "opacity-50" : undefined}>
+			<PreferenceSwitch
+				label={teamName ? `${action} ${teamName}` : action}
+				isChecked={isChecked}
+				isDisabled={isDisabled}
+				onChange={onChange}
+			/>
+		</View>
+	),
+	RemoveButton: ({ action, teamName, isDisabled, onPress }) => (
+		<Button
+			variant="ghost"
+			size="icon-sm"
+			accessibilityLabel={`${action} ${teamName}`}
+			disabled={isDisabled}
+			onPress={onPress}
+		>
+			<Icon as={X} className="size-4" />
+		</Button>
+	),
+	Detail: ({ row, detail, isReadOnly, onChanged, onClose }) => (
+		<TeamDetailsSheet
+			teamId={toTeamRowFields(row).teamId}
+			kind={detail}
+			isReadOnly={isReadOnly}
+			onChanged={onChanged}
+			onClose={onClose}
+		/>
+	),
+	// the native table, then each row's open detail sheet
+	Table: ({ rows, columns, renderDetail }) => (
+		<>
 			<DataTable
 				rows={rows}
 				columns={columns}
 				valueByKey={teamSortValues}
 				initialSort={{ key: "team" }}
-				getRowId={(row) => ("membership" in row ? row.membership.teamId : row.invite.inviteId)}
+				getRowId={toTeamsPageRowId}
 			/>
-			{mutation.error && <Text className="text-destructive">{mutation.error}</Text>}
-			{details && (
-				<TeamDetailsSheet {...details} isReadOnly={isReadOnly} onChanged={onChanged} onClose={() => setDetails(null)} />
-			)}
-		</View>
-	)
+			{rows.map((row) => (
+				<Fragment key={toTeamsPageRowId(row)}>{renderDetail(row)}</Fragment>
+			))}
+		</>
+	),
 }
 
 // nested tables use a sheet so each horizontal scroll remains independently reachable
@@ -185,7 +179,7 @@ function TeamDetailsSheet({
 	onClose,
 }: {
 	teamId: string
-	kind: "members" | "topics"
+	kind: TeamsMembershipDetail
 	isReadOnly: boolean
 	onChanged: () => void
 	onClose: () => void

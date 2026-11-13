@@ -11,6 +11,7 @@ import {
 } from "@carlnotes/client/teamClient"
 import { fetchTopicPage, sendSubscriptionEmail } from "@carlnotes/client/topicClient"
 import type { TeamSummary } from "@carlnotes/contracts/teams"
+import type { ReceivedInvite } from "@carlnotes/core/lib/teamsMembershipTableColumns"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { fn, mocked } from "storybook/test"
 import { FIXTURE_DATE, STORY_PEOPLE, toStoryProfile } from "../../../.storybook/fixtures"
@@ -23,7 +24,6 @@ import {
 import { toStoryTopic } from "../../../.storybook/fixtures/topics"
 import { seedBadgeStores } from "../../../.storybook/fixtures/waitingUpdates"
 import { toOwnFrameDocs } from "../../../.storybook/parameters"
-import type { ReceivedInvite } from "./TeamMembershipRows"
 import { TeamsMembershipTable } from "./TeamsMembershipTable"
 
 // the invented people on the teams: Vienna, the signed-in user, then Carlos and Evan
@@ -170,8 +170,8 @@ const meta = {
 		})
 		mocked(sendDeclineInvite).mockResolvedValue(undefined)
 		mocked(sendRemoveTopicFromTeam).mockResolvedValue(true)
-		mocked(sendTeamMemberRole).mockResolvedValue(true)
-		mocked(sendRemoveTeamMember).mockResolvedValue(true)
+		mocked(sendTeamMemberRole).mockResolvedValue(undefined)
+		mocked(sendRemoveTeamMember).mockResolvedValue(undefined)
 		mocked(sendApproveJoinRequest).mockResolvedValue("joined")
 		mocked(setTeamMemberVisibility).mockResolvedValue(undefined)
 		mocked(sendSubscriptionEmail).mockResolvedValue(undefined)
@@ -214,12 +214,31 @@ export const WithChatMention: Story = {
 		}),
 }
 
+// a team Vienna leads with another leader, whose switch leaves it and whose X deletes it
+export const Leader: Story = {
+	args: { teams: [{ ...designGuildMembership, isOnlyLeader: false }, readingCircleMembership] },
+}
+
+// an invite to a private team with no description, from a sender whose account has closed
+export const PrivateInvite: Story = {
+	args: { receivedInvites: [{ ...espressoClubInvite, isPublic: false, description: null, sender: null }] },
+}
+
 // the Design Guild row with its members subtable open under it
 export const MembersOpen: Story = {
 	// open the subtable and wait for the leader's role selects
 	play: async ({ canvas, userEvent }) => {
 		await userEvent.click(canvas.getByRole("button", { name: /^Show Design Guild's members, \d+$/ }))
 		await canvas.findByLabelText("carlos role")
+	},
+}
+
+// the Design Guild row with its topics subtable open under it
+export const TopicsOpen: Story = {
+	// open the subtable and wait for the team's topics
+	play: async ({ canvas, userEvent }) => {
+		await userEvent.click(canvas.getByRole("button", { name: /^Show Design Guild's topics, \d+$/ }))
+		await canvas.findByText("LLM tooling")
 	},
 }
 

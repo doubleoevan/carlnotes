@@ -22,5 +22,5 @@ test("in the admin console, a subscriber count is a button that opens the subscr
 test("on the owner's profile, a subscriber count is plain text", async () => {
 	const tableHtml = await renderWithRouter(<OwnerTopicsTable topics={[SUBSCRIBED_TOPIC]} onReloadPage={() => {}} />)
 	expect(tableHtml).not.toContain("followers, 12")
-	expect(tableHtml).toContain(">12</td>")
+	expect(tableHtml).toContain("<span>12</span></td>")
 })

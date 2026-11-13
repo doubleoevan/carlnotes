@@ -1,13 +1,9 @@
 import { CommentThread } from "@carlnotes/core/components/CommentThread"
 import type { CommentThreadAdapterProps } from "@carlnotes/core/components/SocialSection"
-import type { SocialElements } from "@carlnotes/core/lib/socialElements"
 import { COMMENT_THREAD_HEADING } from "@carlnotes/core/lib/socialLabels"
 import { useState } from "react"
-import { SOCIAL_ELEMENTS } from "@/components/social/socialElements"
+import { MCP_VIEW_SOCIAL_ELEMENTS } from "./mcpViewElements"
 import { openMcpViewLink, toMcpViewSiteUrl } from "./mcpViewHost"
-
-// the web's elements of the thread, with no edit, delete, or report control, which have no tool
-const MCP_VIEW_SOCIAL_ELEMENTS: SocialElements = { ...SOCIAL_ELEMENTS, RowControl: () => null, Report: () => null }
 
 /**
  * The shared comment thread in an MCP view, with the web's elements. Its reads, its posts, and its reactions go

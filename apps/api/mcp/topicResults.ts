@@ -1,6 +1,7 @@
 // what list_topics returns: the topics a tool caller may read, each with a prompt preview and its ready sources
 
 import { type TopicImageUrls, toAbsoluteTopicImageUrls, toTopicImageUrlsOrNull } from "@carlnotes/contracts/topicImages"
+import type { TopicResponse, TopicSectionKey } from "@carlnotes/contracts/topics"
 import { db, isPublicAndShown } from "@carlnotes/db"
 import { isReadySharedSource } from "@carlnotes/db/contentFilters"
 import { teamMembers } from "@carlnotes/db/schema/teams"
@@ -9,9 +10,11 @@ import { sources, subscriptions, topics } from "@carlnotes/db/schema/topics"
 import { appUrl } from "@carlnotes/server/appUrl"
 import { and, desc, eq, inArray, or } from "drizzle-orm"
 import { toTopicSourceLabel } from "../tool/topicSourceTools"
+import { loadTopicSectionIds } from "../topic/feeds"
 import { toTopicAccessFilter } from "../topic/permissions"
-import { fromCursor, loadVisibleTopic, MCP_PAGE_MAX_CHARS, MCP_PAGE_SIZE, type McpPage, packPage } from "./results"
-import type { ToolCaller } from "./toolCaller"
+import { loadRelatedTopics } from "../topic/relatedTopics"
+import { fromCursor, loadVisibleTopic, MCP_PAGE_SIZE, type McpPage, packPageFromWindow } from "./results"
+import { type ToolCaller, toToolCallerUserId } from "./toolCaller"
 
 // the most topics a list returns, and how many characters of each prompt it shows
 const MCP_TOPIC_LIST_LIMIT = 50
@@ -30,6 +33,15 @@ export type McpTopic = {
 	// the topic's ready sources
 	sources: { sourceId: string; label: string }[]
 }
+
+// the sections of the topics page that list_topics takes, by the names the page shows, and the section each one reads
+export const TOPIC_SECTION_ARGUMENTS = {
+	yours: "yours",
+	followed: "subscribed",
+	featured: "home",
+	popular: "popular",
+} as const satisfies Record<string, TopicSectionKey>
+export type TopicSectionArgument = keyof typeof TOPIC_SECTION_ARGUMENTS
 
 // the topic columns a list reads
 const topicColumns = {
@@ -73,10 +85,76 @@ export async function listTopics(
 	const ownRows = toolCaller.kind === "user" ? await loadUserTopicRows(toolCaller.userId) : []
 	const topicRows = [...new Map([...ownRows, ...publicRows].map((topicRow) => [topicRow.id, topicRow])).values()]
 
-	// add each topic's ready sources and pack the page
-	const sourcesByTopic = await loadReadyTopicSourcesByTopic(topicRows.map((topicRow) => topicRow.id))
-	const mcpTopics = topicRows.map((topicRow) => toMcpTopic(topicRow, sourcesByTopic.get(topicRow.id) ?? []))
-	return packPage(mcpTopics, fromCursor(cursor), MCP_PAGE_MAX_CHARS, MCP_PAGE_SIZE)
+	return toMcpTopicPage(topicRows, cursor)
+}
+
+/**
+ * Lists one section of the topics page as the caller reads it: yours, followed, featured, or popular. A visitor reads
+ * the public featured and popular sections.
+ */
+export async function listTopicSectionTopics(
+	toolCaller: ToolCaller,
+	topicSectionArgument: TopicSectionArgument,
+	cursor: string | null,
+): Promise<McpPage<McpTopic>> {
+	const topicIds = await loadTopicSectionIds(
+		toToolCallerUserId(toolCaller),
+		TOPIC_SECTION_ARGUMENTS[topicSectionArgument],
+	)
+	// the rows of the window past the cursor alone, one topic more than a page holds
+	const offset = fromCursor(cursor)
+	const windowRows = await loadTopicRowsInOrder(topicIds.slice(offset, offset + MCP_PAGE_SIZE + 1))
+	return toMcpTopicWindowPage(windowRows, offset)
+}
+
+// a topic's similar topics: the topic's name, the related topics its page shows, and the page of them list_topics returns
+type SimilarTopics = {
+	topicName: string
+	relatedTopics: TopicResponse["relatedTopics"]
+	mcpPage: McpPage<McpTopic>
+}
+
+/**
+ * Lists the similar topics a topic's page shows the caller, or returns null if the caller may not open the topic.
+ */
+export async function listSimilarTopics(
+	toolCaller: ToolCaller,
+	topicId: string,
+	cursor: string | null,
+): Promise<SimilarTopics | null> {
+	const topic = await loadVisibleTopic(toolCaller, topicId)
+	if (!topic) {
+		return null
+	}
+
+	// the related topics the topic's page shows, then the same topics as list_topics returns them
+	const relatedTopics = await loadRelatedTopics(topic, toToolCallerUserId(toolCaller))
+	const topicRows = await loadTopicRowsInOrder(relatedTopics.map((relatedTopic) => relatedTopic.id))
+	return { topicName: topic.name, relatedTopics, mcpPage: await toMcpTopicPage(topicRows, cursor) }
+}
+
+// the topics with these ids, in the order of the ids
+async function loadTopicRowsInOrder(topicIds: string[]): Promise<McpTopicRow[]> {
+	if (topicIds.length === 0) {
+		return []
+	}
+	const topicRows = await db.select(topicColumns).from(topics).where(inArray(topics.id, topicIds))
+	const topicRowsById = new Map(topicRows.map((topicRow) => [topicRow.id, topicRow]))
+	return topicIds.flatMap((topicId) => topicRowsById.get(topicId) ?? [])
+}
+
+// the topics, each with its ready sources, packed into one page
+async function toMcpTopicPage(topicRows: McpTopicRow[], cursor: string | null): Promise<McpPage<McpTopic>> {
+	// the window past the cursor alone, one topic more than a page holds
+	const offset = fromCursor(cursor)
+	return toMcpTopicWindowPage(topicRows.slice(offset, offset + MCP_PAGE_SIZE + 1), offset)
+}
+
+// a window of topics, each with its ready sources, packed into one page
+async function toMcpTopicWindowPage(windowRows: McpTopicRow[], offset: number): Promise<McpPage<McpTopic>> {
+	const sourcesByTopic = await loadReadyTopicSourcesByTopic(windowRows.map((topicRow) => topicRow.id))
+	const mcpTopics = windowRows.map((topicRow) => toMcpTopic(topicRow, sourcesByTopic.get(topicRow.id) ?? []))
+	return packPageFromWindow(mcpTopics, { offset })
 }
 
 // load the topics a user owns, subscribes to, or holds through a team, all at once

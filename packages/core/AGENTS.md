@@ -161,7 +161,10 @@ Core tests cover interrupted and rejected turns, alongside the unchanged web reg
 
 `components/ChatAuthor`, `ChatTurnBlock`, `ChatRoomMessageBubble`, `ChatRejectionNotice`, and `TopicDraftCard` own
 shared author, message, rejection, and draft field composition. Apps supply stable element adapters, Markdown, links,
-and action controls. `lib/chatStoryFixtures.ts` supplies fictional conversations to both component browsers.
+and action controls. `components/ChatRoomMessageList` lists a team room's messages oldest first with the empty room's
+line and Carl's thinking bubble, and its `useChatRoomListBubbleProps` returns each bubble's quote, ownership, delete
+permission, and clock, which the mobile room's list reads row by row. `lib/chatStoryFixtures.ts` supplies fictional
+conversations to both component browsers.
 
 `hooks/useChatConversationLoad` owns history/access gates and proposal restoration; `useTopicChat` owns send, stop,
 retry, clear, and tool outcomes. The attachment state, the topic draft state, and the notice remain injected app
@@ -262,20 +265,31 @@ Podcasts and Featured Posts last with every post of the person, the rows of its 
 podcasts, and posts, whose pins have no limit, the send of their moves, and which of them the action menu offers.
 `lib/rankDialog.ts` holds a rank dialog's rows, a Topic Post as a row, the moves, and the words for the home's pins and
 a profile's, and `components/RankDialog` is the list that orders, adds, and removes pins through each app's frame, rows,
-and picker. `lib/sourceResults.ts` shares Source footnote ordering, totals, detail labels, and the earlier-findings row.
-`lib/topicSources.ts` shares default/custom Source ordering, off states, screening messages, and staged Source summaries
-between both apps. `components/TopicSource` exports the shared `TopicSource` row and `TopicDefaultSource` enabled/add
-composition. Web supplies its existing DOM badges and tooltips; mobile supplies native Nightshift badges and buttons.
-`lib/topicScanRecap.ts` shares the diary fields, missing-entry copy, and copied note Markdown. Shared React components
-compose the recap and chart from these rules; platform adapters draw the elements. Web supplies its browser origin when
-building Markdown links. Pure tests live beside these modules. Live hook tests use web's React DOM harness in
+and picker. `components/ProfileSections` lays out a profile's news, its four card sections, and its topics and teams
+tables with their empty and loading states, and `components/TeamSections` a team page's four card sections, its members,
+its topics, and its notes. Both take the `PageSectionsElements` of `components/pageSectionsElements.tsx`: the group
+around the sections, the card sections and their cards, a collapsible section, and an empty section's card.
+`components/TeamHeader` is a team page's avatar, title, mention badge, counts, and description.
+`components/NewTopicEmptyCard` is a topic list with no topics, the home's or a profile's: the standard empty card,
+whose one body-text line starts a new topic. `NotesTable` hands its columns, totals, and starting sort to each app's
+standard `DataTable`.
+`components/RelatedTopicsSection` is a topic page's similar topics. `lib/sourceResults.ts` shares Source footnote
+ordering, totals, detail labels, and the earlier-findings row. `lib/topicSources.ts` shares default/custom Source
+ordering, off states, screening messages, and staged Source summaries between both apps. `components/TopicSource`
+exports the shared `TopicSource` row and `TopicDefaultSource` enabled/add composition. Web supplies its existing DOM
+badges and tooltips; mobile supplies native Nightshift badges and buttons. `lib/topicScanRecap.ts` shares the diary
+fields, missing-entry copy, and copied note Markdown. Shared React components compose the recap and chart from these
+rules; platform adapters draw the elements. Web supplies its browser origin when building Markdown links. Pure tests
+live beside these modules. Live hook tests use web's React DOM harness in
 `apps/web/src/hooks/useTopicFeedState.test.tsx`. Core imports no router, DOM, React Native, native storage, or device
 API.
 
 ## Tasting Notes
 
 `components/NoteEditor`, `NoteViewer`, `NoteToolbar`, `CreateNote`, `NoteConflictNotice`, `NoteComments`, and
-`NoteUnreadBadge` own the composition used by both clients. Their typed platform elements stay at module scope.
+`NoteUnreadBadge` own the composition used by both clients. `NotesList` is a page's notes table, or the create-note
+card, or the empty card, and `NoteDetails` is an open note's header row, title, and byline. `lib/reportCopy.ts`'s
+`toNoteReportProps` is a note's report subject. Their typed platform elements stay at module scope.
 The apps supply the enriched HTML library, routing, keyboard layout, native sharing, and their Nightshift controls.
 `lib/noteFormats.ts` owns format order, labels, commands, selection ranges, and safe link operations.
 `lib/noteLabels.ts` owns visibility descriptions and save/recovery messages. `lib/noteBadges.ts` owns count labels.
@@ -312,7 +326,11 @@ Finding explanations remain plain text. Tasting Note editor headings retain the 
 `components/DataTable` owns table headings, rows, and totals. Pure domain columns live in
 `lib/ownerTopicsTableColumns.ts`, `topicsTableColumns.ts`, `topicScansTableColumns.ts`,
 `topicSubscriptionsTableColumns.ts`, `sentInvitesTableColumns.ts`, `teamMembersTableColumns.ts`, and
-`teamsMembershipTableColumns.ts`. Each app supplies its link, switch, action, and table elements. Native horizontal
+`teamsMembershipTableColumns.ts`, which also holds `toTeamsPageRowId`. `components/TopicsTable`, `OwnerTopicsTable`,
+`TeamMembersTable`, `TeamsMembershipTable`, `TopicSubscriptionsTable`, `TopicInvitesTable`, and `SentInvitesTable`
+compose those columns over each app's elements, and `lib/tableElements.ts` holds the sorted table's props and a delete
+confirmation's parts that the tables share. `components/ActivitySections` is the Activity page's two sections. Each app
+supplies its link, switch, action, and table elements. Native horizontal
 scrolling and a fixed first column belong to the mobile adapter. Web retains its expandable subtables and
 server-rendered rows.
 
@@ -328,10 +346,11 @@ and input elements, and the `Switch` element.
 `NotificationsSection` is the account's Notifications section over those elements: `NotificationsCard` over
 `toNotificationSwitchStates`, with `NotificationsSection` reading the session's push preferences. Only the app renders
 it. `useAvatar` owns upload acknowledgement and session refresh for both File and FormData uploads. `Footer` owns all
-footer copy, destinations, and row order for both apps. `lib/spendMeter`, `monthlyBudgetCutoffs`, and
-`monthlyBudgetCutoffCopy` own budget labels and checkpoint calculations. `lib/spendMeterStoryFixtures` supplies the same
-spend and cutoff examples to both component browsers. `lib/storyFixtures` holds `FIXTURE_DATE`, the date that the web
-component browser's fixtures share.
+footer copy, destinations, and row order for both apps. `components/SpendMeter` is the monthly budget's bar with its
+markers, legend, status line, and cutoff list. `lib/spendMeter`, `monthlyBudgetCutoffs`, and `monthlyBudgetCutoffCopy`
+own budget labels and checkpoint calculations. `lib/spendMeterStoryFixtures` supplies the same spend and cutoff examples
+to both component browsers. `lib/storyFixtures` holds `FIXTURE_DATE`, the date that the web component browser's fixtures
+share.
 
 `hooks/useTopicFields`, `useTopicSourceEditor`, `useTopicTeamChoice`, `useTeamFields`, and `useTopicEmails` own the
 portable form state. `lib/saveTopic`, `saveTeam`, `teamFields`, `teamInvites`, `topicSourceEditor`, and
@@ -508,7 +527,8 @@ home's sections in the order both homes show them, each week's new cards right a
 steps, and the empty payload. `lib/sectionOrder.test.ts` fails if a film section leaves its place right before the
 podcast section it pairs with, on the home or either app's profile, team, or topic page, if `HOME_SECTIONS` or either
 app's home leaves the home's order, if a profile page writes a second Topic Post section, or if a team page's card
-sections leave a profile's titles and order.
+sections leave a profile's titles and order. It reads the profile's and the team's sections in
+`components/ProfileSections` and `components/TeamSections`, which both apps render.
 `lib/podcastEpisodeHomeOrder` decides who sees the podcast episode page's Featured podcasts and Featured films.
 
 Topic Posts: `components/TopicPostCard`, `TopicPostInfo`, `TopicPostsSection`, `TopicPostEditor`, and

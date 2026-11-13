@@ -12,6 +12,7 @@ import { clearUnseenCommentMentions } from "@carlnotes/db/unseenCommentMentions"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { and, count, eq, inArray, not, notInArray } from "drizzle-orm"
 import { isAdminRole, isLeaderRole } from "../authorization"
+import type { AnalyticsProperties } from "../currentUser"
 import { deletePodcastFeedToken } from "../podcast/podcastFeedTokens"
 import { updateTopicSubscriberCount } from "../topic/subscriberCounts"
 
@@ -73,13 +74,24 @@ export async function joinTeam(userId: string, teamId: string, invitedByUserId: 
  * Ask to join the team, writes a team member row that isn't active for a team leader to toggle on.
  * False if there is no such team or the user already belongs, and a repeat ask is the same single row.
  */
-export async function requestToJoinTeam(userId: string, teamId: string): Promise<boolean> {
+export async function requestToJoinTeam({
+	userId,
+	teamId,
+	analyticsProperties,
+}: {
+	userId: string
+	teamId: string
+	analyticsProperties?: AnalyticsProperties
+}): Promise<boolean> {
 	// the team must exist, and the user must not already be an active team member
 	const [team] = await db.select({ id: teams.id }).from(teams).where(eq(teams.id, teamId))
 	if (!team || (await toTeamRole(userId, teamId)) !== null) {
 		return false
 	}
+
+	// the waiting row, and the ask reported
 	await db.insert(teamMembers).values({ teamId, userId, isActive: false }).onConflictDoNothing()
+	trackEvent("team_join_requested", userId, { ...analyticsProperties, teamId })
 	return true
 }
 

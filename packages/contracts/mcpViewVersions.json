@@ -1,1 +1,17 @@
-[]
+[
+	{
+		"version": 11,
+		"mcpViews": [
+			"search",
+			"topic",
+			"findings",
+			"suggest-topics",
+			"updates",
+			"scan",
+			"news",
+			"topic-posts",
+			"topic-post",
+			"dashboard"
+		]
+	}
+]

@@ -186,6 +186,16 @@ export function toTeamPath(teamId: string): string {
 	return `/teams/${teamId}`
 }
 
+// the page a tasting note lives on, by its kind, id, and name
+export type NotePageLink = { kind: "topic" | "team"; id: string; name: string }
+
+/**
+ * Returns the path of the page a tasting note lives on: its topic's page or its team's page.
+ */
+export function toNotePagePath(notePageLink: NotePageLink): string {
+	return notePageLink.kind === "topic" ? toTopicPath(notePageLink) : toTeamPath(notePageLink.id)
+}
+
 /**
  * Returns a topic's feed path, which names the topic by id alone so a renamed topic keeps its feed url.
  */

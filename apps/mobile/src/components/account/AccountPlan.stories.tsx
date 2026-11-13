@@ -1,21 +1,8 @@
-import type { BillingState } from "@carlnotes/contracts/profiles"
+import { ACCOUNT_BUDGET_STORY_BILLING } from "@carlnotes/core/lib/accountBudgetStoryFixtures"
 import { setStoreOffering } from "@carlnotes/core/stores/purchaseOffersStore"
 import type { Meta, StoryObj } from "@storybook/react-native"
 import { View } from "react-native"
 import { PlanButton } from "./AccountPlan"
-
-// a free user's billing state, which each story changes
-const FREE_BILLING: BillingState = {
-	plan: "free",
-	billingInterval: "monthly",
-	status: null,
-	hasPaymentMethod: false,
-	dailyScansUsed: 0,
-	dailyScanLimit: 1,
-	provider: null,
-	isOverageBillable: false,
-	revenueCatAppUserId: null,
-}
 
 // the App Store selling every plan on the US storefront
 const FULL_STORE_OFFERING = { storeProvider: "app_store", storefrontCountryCode: "USA", hasFullOffering: true } as const
@@ -25,7 +12,7 @@ const FULL_STORE_OFFERING = { storeProvider: "app_store", storefrontCountryCode:
 const meta: Meta<typeof PlanButton> = {
 	title: "Account/PlanButton",
 	component: PlanButton,
-	args: { billing: FREE_BILLING },
+	args: { billing: ACCOUNT_BUDGET_STORY_BILLING },
 	parameters: { webReference: "apps/web/src/components/account/AccountPlan.tsx PlanButton at 375px" },
 	beforeEach: () => {
 		setStoreOffering(FULL_STORE_OFFERING)
@@ -47,12 +34,20 @@ export const FreeUserReadOnly: Story = {
 	},
 }
 export const StoreSubscriberManagePlan: Story = {
-	args: { billing: { ...FREE_BILLING, plan: "plus", status: "active", hasPaymentMethod: true, provider: "app_store" } },
+	args: {
+		billing: {
+			...ACCOUNT_BUDGET_STORY_BILLING,
+			plan: "plus",
+			status: "active",
+			hasPaymentMethod: true,
+			provider: "app_store",
+		},
+	},
 }
 export const StripeSubscriberBilledOnWeb: Story = {
 	args: {
 		billing: {
-			...FREE_BILLING,
+			...ACCOUNT_BUDGET_STORY_BILLING,
 			plan: "premium",
 			status: "active",
 			hasPaymentMethod: true,

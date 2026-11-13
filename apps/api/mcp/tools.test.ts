@@ -25,7 +25,7 @@ test.each([
 	{ title: "" },
 	{ title: undefined },
 	{ annotations: { readOnlyHint: true, destructiveHint: true } },
-	{ annotations: { readOnlyHint: false, destructiveHint: false } },
+	{ annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false } },
 	{ annotations: { readOnlyHint: false, destructiveHint: "true" } },
 ])("the directory check rejects a broken write annotation %j", (brokenConfig) => {
 	// corrupt an actual registration while retaining the other tools
@@ -35,6 +35,21 @@ test.each([
 		...(name === "edit_topic" ? brokenConfig : {}),
 	}))
 	expect(toMcpToolContractIssues(tools).some((issue) => issue.startsWith("edit_topic:"))).toBe(true)
+})
+
+// an additive write the host would confirm, and an irreversible one it would not, each fail the check
+test.each([
+	["an additive write marked destructive", "follow_topic", true],
+	["an irreversible write not marked destructive", "delete_note", false],
+])("the directory check rejects %s", (_label, toolName, destructiveHint) => {
+	// the registered tools, with the named one's hint set wrong, added if it is not registered
+	const tools = [...toRegisteredTools(USER)]
+		.map(([name, { config }]) => ({ name, ...config }))
+		.filter(({ name }) => name !== toolName)
+	tools.push({ name: toolName, title: "Broken", annotations: { readOnlyHint: false, destructiveHint } })
+	expect(toMcpToolContractIssues(tools).join("\n")).toContain(
+		`${toolName}: destructiveHint must be ${!destructiveHint}`,
+	)
 })
 
 // the phrases edit_topic's description lists, which each broken description below keeps or drops on purpose
@@ -154,7 +169,7 @@ test("each MCP view tool returns its structured result and text, with or without
 	expect(loadSearchMcpViewDataSpy).toHaveBeenCalledTimes(1)
 })
 
-test("fourteen tools name an MCP view, each one of the ten", () => {
+test("each tool that names an MCP view names its view", () => {
 	const mcpViewToolNames = [...toRegisteredTools(VISITOR)]
 		.filter(([, { config }]) => (config as { _meta?: { ui?: { resourceUri?: string } } })._meta?.ui?.resourceUri)
 		.map(([toolName, { config }]) => [
@@ -162,19 +177,27 @@ test("fourteen tools name an MCP view, each one of the ten", () => {
 			(config as { _meta: { ui: { resourceUri: string } } })._meta.ui.resourceUri,
 		])
 	expect(mcpViewToolNames).toEqual([
-		["read_topic_feed", "ui://carlnotes/findings.html?v=11"],
-		["search_topic_findings", "ui://carlnotes/findings.html?v=11"],
-		["search", "ui://carlnotes/search.html?v=11"],
-		["edit_topic", "ui://carlnotes/topic.html?v=11"],
-		["create_topic", "ui://carlnotes/topic.html?v=11"],
-		["send_to_topic", "ui://carlnotes/topic.html?v=11"],
-		["suggest_topics", "ui://carlnotes/suggest-topics.html?v=11"],
-		["read_updates", "ui://carlnotes/updates.html?v=11"],
-		["start_scan", "ui://carlnotes/scan.html?v=11"],
-		["read_scan_status", "ui://carlnotes/scan.html?v=11"],
-		["read_news", "ui://carlnotes/news.html?v=11"],
-		["read_topic_posts", "ui://carlnotes/topic-posts.html?v=11"],
-		["read_topic_post", "ui://carlnotes/topic-post.html?v=11"],
-		["read_dashboard", "ui://carlnotes/dashboard.html?v=11"],
+		["list_topics", "ui://carlnotes/topics.html?v=12"],
+		["read_topic_feed", "ui://carlnotes/findings.html?v=12"],
+		["search_topic_findings", "ui://carlnotes/findings.html?v=12"],
+		["search", "ui://carlnotes/search.html?v=12"],
+		["edit_topic", "ui://carlnotes/topic.html?v=12"],
+		["create_topic", "ui://carlnotes/topic.html?v=12"],
+		["set_topic_image", "ui://carlnotes/topic.html?v=12"],
+		["read_notes", "ui://carlnotes/note.html?v=12"],
+		["save_note", "ui://carlnotes/note.html?v=12"],
+		["read_team", "ui://carlnotes/team.html?v=12"],
+		["read_profile", "ui://carlnotes/profile.html?v=12"],
+		["read_activity", "ui://carlnotes/activity.html?v=12"],
+		["read_account", "ui://carlnotes/account.html?v=12"],
+		["send_to_topic", "ui://carlnotes/topic.html?v=12"],
+		["suggest_topics", "ui://carlnotes/suggest-topics.html?v=12"],
+		["read_updates", "ui://carlnotes/updates.html?v=12"],
+		["start_scan", "ui://carlnotes/scan.html?v=12"],
+		["read_scan_status", "ui://carlnotes/scan.html?v=12"],
+		["read_news", "ui://carlnotes/news.html?v=12"],
+		["read_topic_posts", "ui://carlnotes/topic-posts.html?v=12"],
+		["read_topic_post", "ui://carlnotes/topic-post.html?v=12"],
+		["read_dashboard", "ui://carlnotes/dashboard.html?v=12"],
 	])
 })

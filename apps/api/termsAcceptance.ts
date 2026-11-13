@@ -19,11 +19,16 @@ import { refreshSessionUser } from "./sessions"
  * existed has no version, and is gated like an account that never accepted.
  */
 export function toTermsOutdatedResponse(context: Context<AppEnv>): Response | null {
+	return isSessionTermsCurrent(context) ? null : toTermsOutdatedRejection(context)
+}
+
+/**
+ * Returns whether the session's account accepted the published version. A visitor has no account behind on the Terms,
+ * so a visitor's session is current.
+ */
+export function isSessionTermsCurrent(context: Context<AppEnv>): boolean {
 	const sessionUser = context.get("user")
-	if (!sessionUser || isTermsVersionCurrent(sessionUser.termsAcceptedVersion ?? null)) {
-		return null
-	}
-	return toTermsOutdatedRejection(context)
+	return !sessionUser || isTermsVersionCurrent(sessionUser.termsAcceptedVersion ?? null)
 }
 
 /**

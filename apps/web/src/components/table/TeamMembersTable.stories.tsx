@@ -78,8 +78,8 @@ const meta = {
 	),
 	// every change succeeds without a request
 	beforeEach: () => {
-		mocked(sendTeamMemberRole).mockResolvedValue(true)
-		mocked(sendRemoveTeamMember).mockResolvedValue(true)
+		mocked(sendTeamMemberRole).mockResolvedValue(undefined)
+		mocked(sendRemoveTeamMember).mockResolvedValue(undefined)
 		mocked(sendApproveJoinRequest).mockResolvedValue("joined")
 		mocked(setTeamMemberVisibility).mockResolvedValue(undefined)
 	},

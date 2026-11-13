@@ -2,12 +2,12 @@ import { fetchTopicPage } from "@carlnotes/client/topicClient"
 import type { Topic } from "@carlnotes/contracts/profiles"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { DataTable } from "@carlnotes/core/components/DataTable"
-import { useTopicEmails } from "@carlnotes/core/hooks/useTopicEmails"
+import { TopicsTable as SharedTopicsTable, type TopicsTableElements } from "@carlnotes/core/components/TopicsTable"
 import { toRemoveTopicConfirmation } from "@carlnotes/core/lib/confirmationCopy"
-import { topicSortValues, toTopicsTableColumns } from "@carlnotes/core/lib/topicsTableColumns"
+import { toKeptOverSeenLabel, topicSortValues } from "@carlnotes/core/lib/topicsTableColumns"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { X } from "lucide-react"
-import { useState } from "react"
+import { type ComponentProps, useState } from "react"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { NoteIcon } from "@/components/branding/NoteIcon"
 import { Button } from "@/components/primitives/button"
@@ -23,7 +23,9 @@ import { TableCard } from "./TableCard"
 import { SMALLEST_PAGE_SIZE, TablePagination, usePaginatedRowSort } from "./TablePagination"
 import { TopicNameLink } from "./TopicNameLink"
 
-// share column content and email state; keep DOM popovers and routing local
+/**
+ * A profile's or a team's topics in the web's table card. A team leader's remove asks first.
+ */
 export function TopicsTable({
 	topics,
 	includesNonPublicTopics,
@@ -37,55 +39,29 @@ export function TopicsTable({
 	onRemoveTopic?: (topic: Topic) => void
 	className?: string
 }) {
-	const { renderedRows, sort, pagination } = usePaginatedRowSort({ rows: topics, valueByKey: topicSortValues })
-	const emails = useTopicEmails()
-	const { confirm, confirmDialog } = useConfirmDialog()
-
 	// taking a topic off the team asks first
-	const handleRemoveTopicPress = (topic: Topic): void => {
+	const { confirm, confirmDialog } = useConfirmDialog()
+	const handleRemoveTopic = (topic: Topic): void => {
 		confirm(toRemoveTopicConfirmation({ topicName: topic.name }), () => onRemoveTopic?.(topic))
 	}
-	const columns = toTopicsTableColumns({
-		topics,
-		includesNonPublicTopics,
-		topicTooltip,
-		renderText: (text) => <span className="text-muted-foreground">{text}</span>,
-		renderName: (topic) => <TopicNameLink topic={topic} />,
-		renderVisibility: (topic) => <TopicVisibility visibility={topic.visibility} />,
-		renderInfo: (topic) => <TopicPopover topic={topic} />,
-		renderEmail: (topic) => (
-			<Switch
-				aria-label={`Email me ${topic.name}`}
-				checked={emails.choices[topic.id] ?? topic.isEmailEnabled ?? false}
-				disabled={emails.pending[topic.id]}
-				onCheckedChange={(isEnabled) => void emails.setEmail(topic.id, isEnabled)}
+	return (
+		<>
+			<SharedTopicsTable
+				topics={topics}
+				includesNonPublicTopics={includesNonPublicTopics}
+				topicTooltip={topicTooltip}
+				onRemoveTopic={onRemoveTopic && handleRemoveTopic}
+				className={className}
+				elements={TOPICS_TABLE_ELEMENTS}
 			/>
-		),
-		renderActive: onRemoveTopic
-			? (topic) => (
-					<Switch
-						checked
-						aria-label={`Deactivate ${topic.name}`}
-						onCheckedChange={() => handleRemoveTopicPress(topic)}
-					/>
-				)
-			: undefined,
-		renderRemove: onRemoveTopic
-			? (topic) => (
-					<Button
-						size="icon-sm"
-						variant="ghost"
-						aria-label={`Remove ${topic.name} from the team`}
-						onClick={() => handleRemoveTopicPress(topic)}
-					>
-						<X className="size-4" />
-					</Button>
-				)
-			: undefined,
-	})
-	if (topics.length === 0) {
-		return null
-	}
+			{confirmDialog}
+		</>
+	)
+}
+
+// the table card with the sorted page of rows and the pagination under it
+function TopicsTableCard({ topics, columns, className, children }: ComponentProps<TopicsTableElements["Table"]>) {
+	const { renderedRows, sort, pagination } = usePaginatedRowSort({ rows: topics, valueByKey: topicSortValues })
 	return (
 		<TableCard className={cn("mb-4", className)}>
 			<DataTable
@@ -96,8 +72,7 @@ export function TopicsTable({
 				elements={DATA_TABLE_ELEMENTS}
 			/>
 			{topics.length > SMALLEST_PAGE_SIZE && <TablePagination {...pagination} />}
-			{emails.error && <p className="text-destructive text-sm">{emails.error}</p>}
-			{confirmDialog}
+			{children}
 		</TableCard>
 	)
 }
@@ -120,7 +95,7 @@ function TopicPopover({ topic }: { topic: Topic }) {
 	}
 
 	// the kept and seen counts the cell shows, which start its accessible name
-	const keptOverSeenLabel = `${topic.keptCount.toLocaleString()} / ${topic.seenCount.toLocaleString()}`
+	const keptOverSeenLabel = toKeptOverSeenLabel(topic)
 	return (
 		<Popover onOpenChange={handleOpenChange}>
 			<Tooltip>
@@ -145,4 +120,22 @@ function TopicPopover({ topic }: { topic: Topic }) {
 			</PopoverContent>
 		</Popover>
 	)
+}
+
+// the web's DOM cells: muted text, the name link, switches, and the ghost remove button
+export const TOPICS_TABLE_ELEMENTS: TopicsTableElements = {
+	Table: TopicsTableCard,
+	Text: ({ children }) => <span className="text-muted-foreground">{children}</span>,
+	ErrorText: ({ children }) => <p className="text-destructive text-sm">{children}</p>,
+	NameLink: TopicNameLink,
+	Visibility: TopicVisibility,
+	TopicInfo: TopicPopover,
+	Switch: ({ label, isChecked, isDisabled, onChange }) => (
+		<Switch aria-label={label} checked={isChecked} disabled={isDisabled} onCheckedChange={onChange} />
+	),
+	RemoveButton: ({ label, onPress }) => (
+		<Button size="icon-sm" variant="ghost" aria-label={label} onClick={onPress}>
+			<X className="size-4" />
+		</Button>
+	),
 }

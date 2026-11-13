@@ -1,5 +1,5 @@
 // the podcast episode settings that read the environment: the speech model that records episodes, how many films
-// render at once, and how many generated images a film draws
+// render at once, how many generated images a film draws, and whether an MCP view plays a film
 
 import { toPositiveInteger, toWholeNumber } from "./envSettings"
 
@@ -55,4 +55,11 @@ export function generatedChapterImageLimit(): number {
 		Bun.env.TOPIC_PODCAST_EPISODE_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT,
 		DEFAULT_GENERATED_CHAPTER_IMAGE_LIMIT,
 	)
+}
+
+/**
+ * Returns whether an MCP view plays a podcast episode's film in its frame, from MCP_VIEW_FILM_PLAYBACK.
+ */
+export function isMcpViewFilmPlaybackEnabled(): boolean {
+	return Bun.env.MCP_VIEW_FILM_PLAYBACK === "true"
 }

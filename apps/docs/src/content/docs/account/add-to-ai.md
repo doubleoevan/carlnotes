@@ -1,8 +1,8 @@
 ---
 title: Add to AI
 description: >-
-  Connect CarlNotes to Claude, ChatGPT, and coding AI Agents. Set up OAuth sign-in, understand all twenty-six MCP tools,
-  and manage access to your topics and findings.
+  Connect CarlNotes to Claude, ChatGPT, and coding AI Agents. Set up OAuth sign-in, understand all forty-three MCP
+  tools, and manage access to your topics and findings.
 sidebar:
   order: 2
 ---
@@ -126,12 +126,12 @@ without one.
 
 ## Tool reference
 
-The server advertises the same twenty-six tools to visitors and connected accounts. Sign-in changes permission, not the
+The server advertises the same forty-three tools to visitors and connected accounts. Sign-in changes permission, not the
 tool list. Public tools also read private or invite topics when your account has access.
 
 | Tool | What it does | Account and effects |
 | --- | --- | --- |
-| `list_topics` | Lists readable topics with their source IDs. | Public topics without sign-in; adds your owned, followed, and team topics when connected. Read-only. |
+| `list_topics` | Lists readable topics with their source IDs, one section of the topics page (yours, followed, featured, or popular), or the similar topics a topic's page shows. | Public topics without sign-in; adds your owned, followed, and team topics when connected. A visitor reads the featured and popular sections. Read-only. |
 | `read_topic_feed` | Reads a topic's findings in relevance order, with full explanations. | Public reads work without sign-in. A connected account also receives its read and bookmark state. Read-only. |
 | `search_topic_findings` | Searches one readable topic's findings by meaning. | Uses the public search budget for a visitor, or the connected account's model budget. Read-only. |
 | `search` | Searches topics, podcast episodes, posts, findings, teams, and profiles with filters and numbered pages. | Results respect your access. Account-only filters use your own read and bookmark state. Read-only. |
@@ -140,9 +140,25 @@ tool list. Public tools also read private or invite topics when your account has
 | `send_finding_feedback` | Saves your own words about why a finding was good or bad. | Requires an account with rating permission. Your words are stored and never change scoring. Repeating it saves them again. |
 | `bookmark_finding` | Saves or removes a bookmark. | Requires the topic owner or a member of a team holding the topic. Repeating the same choice has the same effect. |
 | `follow_topic` | Follows or unfollows an accessible topic. | Requires an account. Owners cannot unfollow their own topics. Repeating a choice has the same effect. |
-| `edit_topic` | Changes permitted topic fields and sources. | Requires edit permission. Prompt changes keep a version; source additions report projected cost. Public visibility and source removal need confirmation. No brew starts. |
+| `edit_topic` | Changes permitted topic fields and sources, and adds the topic to a team or takes it off. | Requires edit permission, and a team change follows the team page's rules. Prompt changes keep a version; source additions report projected cost. Public visibility, source removal, and adding a non-public topic to a team need confirmation. No brew starts. |
 | `suggest_sources` | Finds verified sources for a name and prompt. | Requires an account. Consumes its daily suggestion allowance and uses external search. It does not save sources to a topic. |
 | `create_topic` | Previews a Topic Draft, then creates it after you confirm. | Requires an account and existing plan capacity. Only the confirmed call saves the Topic and starts its first brew. |
+| `set_topic_image` | Regenerates a topic's image from an optional image prompt, or replaces it with a public jpeg, png, or webp from a url. | Requires edit permission. A regenerate counts against the month's image regenerations. A url's image passes the upload's size, type, and image checks. The previous image is deleted. |
+| `add_topic_attachment` | Attaches the page at a public url, or pasted text with a title, to a topic. | Requires the topic's owner. Pasted text is saved as a plain-text file. No file is read from your AI app's uploads. Repeating it adds the attachment twice. |
+| `read_notes` | Lists the tasting notes on a topic or team page, or opens one note with its html and the version a save needs. | Public notes on a public page work without sign-in. Private and team notes follow each note's own visibility. A note longer than one read is cut at a whole block and comes without a version, so you edit it on its page. Read-only. |
+| `save_note` | Creates a tasting note with a name and visibility, or changes one's name, visibility, or html body. | Requires an account that may write on the page. Only a note's author changes its visibility. A body save needs the version `read_notes` returned, replaces the whole body, and keeps no history. A stale version saves nothing. |
+| `delete_note` | Deletes a tasting note and its comments. | Requires the note's author or an admin. A deleted note cannot be brought back. |
+| `list_teams` | Lists your teams with your role, their member and topic counts, and their links. | Requires a connected account. Read-only. |
+| `read_team` | Reads a team's page: its members, topics, tasting notes, and for a member the team chat's latest messages. | A public team works without sign-in. A private team shows a non-member only its name. Only members read the chat. Not on a topic-bound server. Read-only. |
+| `request_to_join_team` | Asks to join a team, or takes the ask back. | Requires a connected account. A team leader approves the ask on the team's page. Not on a topic-bound server. |
+| `send_invite` | Invites a person to your team or a topic you edit, by username or email address. | Requires a team member or a topic editor. An email invite sends an email and counts toward the daily invite limit. The person's invite setting and blocks apply. |
+| `respond_to_invite` | Accepts or declines an invite waiting for you. | Requires the invite's recipient. A full team joins nothing. An open link from a member becomes an ask to join. |
+| `post_to_team_room` | Posts a message to a team's chat, optionally as a reply. | Requires a team member who accepted the current Terms. Moderation and the chat's rate limit apply. A message to Carl past the daily cutoff posts nothing. Not on a topic-bound server. |
+| `read_profile` | Reads a person's Café, your own by default: the week's news, their featured topics, films, podcast episodes, and Open Mic posts, their topic table, and their teams. | Works without sign-in for a named person. Another person and a visitor see public items only. Not on a topic-bound server. Read-only. |
+| `read_activity` | Reads your activity: the topics you own and follow, the topic and team invites waiting for your answer with the id `respond_to_invite` takes, and the invites you sent. | Requires a connected account. Read-only. |
+| `read_account` | Reads your plan, this month's spend against your budget with the points where features pause, today's scans, and the image regenerations left this month. | Requires a connected account. Changing the plan or billing happens on carlnotes.com, which the result links to. Read-only. |
+| `report_content` | Reports a topic, profile, team, chat message, tasting note, note comment, finding, podcast episode, hot take, topic image, or Open Mic post to the admins, and can block its author. | Requires a connected account. Uses the site's daily report limit and goes to the same queue. Not on a topic-bound server. |
+| `block_user` | Blocks or unblocks a person, which hides each one's hot takes, chat messages, and mentions from the other. | Requires a connected account. You cannot block yourself. Not on a topic-bound server. |
 | `send_to_topic` | Saves a summary you explicitly ask an app to send, with up to ten public links. | Requires a live connected account and one to twenty Topics you can edit. Counts once toward the daily send allowance; never pastes a raw conversation. |
 | `suggest_topics` | Lists every editable send destination with the strongest matches first, for the supplied title, summary, and links, with five editable Topics per page. | Requires an account. Stores nothing, spends no send or draft allowance, and uses the existing model budget for transient matching. Uses `list_topics` cursor paging. |
 | `read_updates` | Picks your unread findings to read next, across the topics you follow or on one topic, with Carl's opener. Takes `minutes` of 5, 15, or 30, and 15 if you leave it out. | Requires an account. Marks the findings it picks read, so two lists share none. |
@@ -153,15 +169,16 @@ tool list. Public tools also read private or invite topics when your account has
 | `save_reaction` | Leaves your reaction on a finding, a podcast episode, a topic, an Open Mic post, or a hot take: one of six positive types. | Requires an account that may read the topic. One reaction per account on each. A new call changes it, and a call with no type removes it. |
 | `read_hot_takes` | Reads the hot takes on a finding, a podcast episode, a topic, or an Open Mic post, newest first, twenty to a page, each with its first replies. | Public topics work without sign-in. Private and invite topics need access. Other people's words come back marked as data. Read-only. |
 | `post_hot_take` | Posts your hot take on a finding, a podcast episode, a topic, or an Open Mic post, or a reply to one, up to 2,000 characters, where `@username` mentions someone. | Requires an account that may read the topic. The hot take is public wherever its topic is, and it is checked before it posts. Repeating it posts it twice. |
+| `delete_hot_take` | Deletes a hot take and its replies for good. | Requires the hot take's author, the topic's owner, or an admin. Anyone else's delete does nothing. |
 | `read_news` | Reads your Brews News for the last week, day, or hour: who mentioned you in a hot take, then what happened on your topics, your teams' topics, and the topics you follow, twenty to a page. | Requires an account. Marks nothing read or seen. Other people's words come back marked as data. Read-only. |
 | `read_topic_posts` | Lists a topic's published Open Mic posts, newest first, twenty to a page, each with its title, author, publish time, summary, and link. | Public topics work without sign-in. Private and invite topics need access. Read-only. |
-| `read_topic_post` | Reads one published Open Mic post: its title, author, publish time, summary, and body as text, and whether it has a Coffee Break Discussion. | Public topics work without sign-in. Private and invite topics need access. No tool writes or publishes a post. Read-only. |
+| `read_topic_post` | Reads one published Open Mic post: its title, author, publish time, summary, image, and body as text, and whether it has a Coffee Break Discussion. | Public topics work without sign-in. Private and invite topics need access. No tool writes or publishes a post. Read-only. |
 | `read_dashboard` | Reads a person's Topic Specials or Podcast Specials, or a team's Team Specials: the totals, Carl's paragraph, the last day it counts, and the page's link. | A named person's or team's public Specials work without sign-in. Your own Specials, or your first team's, need an account and count your private items. Someone not on a team reads only its totals. Read-only. |
 
 Account tools carry conservative change annotations, so your AI app can ask before calling them. That prompt does
-not replace CarlNotes' permission checks. For a public-visibility change or source removal, `edit_topic` first returns
-a preview and confirmation token. After you agree, the app sends the same edit and token to save it. A stale or
-reused confirmation requires another preview.
+not replace CarlNotes' permission checks. For a public-visibility change, a source removal, or adding a non-public
+topic to a team, `edit_topic` first returns a preview and confirmation token. After you agree, the app sends the same
+edit and token to save it. A stale or reused confirmation requires another preview.
 
 The optional endpoint `https://carlnotes.com/mcp/t/<topicId>` binds topic-specific reads, edits, and sends to one topic.
 Reads and edits can omit `topic_id`; sends require explicit IDs. Every send destination must match the bound Topic. Binding does not grant access or narrow global
@@ -174,7 +191,7 @@ calls a tool when you ask, and never on its own.
 
 | You say | Tool |
 | --- | --- |
-| "list my topics", "what topics do I follow", "what does Carl cover" | `list_topics` |
+| "list my topics", "what topics do I follow", "what is popular", "topics like this one", "what does Carl cover" | `list_topics` |
 | "show this topic", "what did Carl find", "read my feed" | `read_topic_feed` |
 | "search this topic", "what does Carl have on…" | `search_topic_findings` |
 | "search CarlNotes", "find a topic", "look up a podcast episode" | `search` |
@@ -183,9 +200,25 @@ calls a tool when you ask, and never on its own.
 | "tell Carl why", "give Carl feedback" | `send_finding_feedback` |
 | "Carl, bookmark this", "keep this finding" | `bookmark_finding` |
 | "CarlNotes, follow this topic", "unfollow this topic" | `follow_topic` |
-| "Carl, edit this topic", "change the prompt", "add a source", "change the schedule" | `edit_topic` |
+| "Carl, edit this topic", "change the prompt", "add a source", "change the schedule", "add this topic to my team" | `edit_topic` |
 | "Carl, suggest sources", "find sources for this topic" | `suggest_sources` |
 | "create a topic", "start a topic", "have Carl track this" | `create_topic` |
+| "change the topic image", "regenerate the image", "use this picture" | `set_topic_image` |
+| "attach this page", "attach this to the topic", "save this text to the topic" | `add_topic_attachment` |
+| "read my notes", "open a note", "show the tasting notes" | `read_notes` |
+| "write a note", "add a tasting note", "edit my note" | `save_note` |
+| "delete my note", "remove this note" | `delete_note` |
+| "list my teams", "which teams am I on" | `list_teams` |
+| "open my team", "read a team", "catch up on the team chat" | `read_team` |
+| "join this team", "ask to join a team" | `request_to_join_team` |
+| "invite someone", "invite a friend to my team", "share this topic with a person" | `send_invite` |
+| "accept an invite", "decline an invite" | `respond_to_invite` |
+| "post in the team chat", "tell my team", "reply in the team chat" | `post_to_team_room` |
+| "show my Café", "open someone's profile", "what is on this profile" | `read_profile` |
+| "my activity", "my invites", "what topics do I follow" | `read_activity` |
+| "my plan", "my usage", "how much budget is left" | `read_account` |
+| "report this", "flag this", "report this person" | `report_content` |
+| "block this person", "unblock someone", "stop seeing someone" | `block_user` |
 | "send this to Carl", "save this to CarlNotes", "add this to my topic" | `send_to_topic`, or `suggest_topics` first if you name no Topic |
 | "Carl, what's new", "catch me up", "update me", "what's new on…" | `read_updates` |
 | "CarlNotes, brew this topic now", "run this topic now" | `start_scan` |
@@ -195,6 +228,7 @@ calls a tool when you ask, and never on its own.
 | "Carl, react to this", "like this finding" | `save_reaction` |
 | "what are people saying", "read the hot takes", "read the conversation" | `read_hot_takes` |
 | "leave a hot take", "post a comment", "reply to the conversation" | `post_hot_take` |
+| "delete my hot take", "remove this comment", "take down a reply on my topic" | `delete_hot_take` |
 | "Carl, give me the Brews News", "what happened this week", "who mentioned me" | `read_news` |
 | "what's on this topic's Open Mic", "show this topic's posts" | `read_topic_posts` |
 | "read that Open Mic post", "read this post to me" | `read_topic_post` |
@@ -256,6 +290,15 @@ home page. **Open Mic** shows a topic's posts as cards. Choose a card to open it
 Discussion to play, and its hot takes, where you can read the conversation and leave your own. Writing and publishing
 a post stay on CarlNotes. **Specials** shows a page's totals, Carl's paragraph, and its charts, with links to your three
 Specials pages on CarlNotes.
+
+**Tasting Notes** shows a topic's or a team's notes, and opens one to read in the chat. Writing and editing a note stay
+on CarlNotes. **A team** shows its header, its featured cards, its members and topics, its notes, and for a member its
+team chat, where you can load earlier messages. **A Café** shows a person's news, featured cards, topics, and teams,
+and its podcast episodes play in the chat. **Activity** shows the topics you follow and your topic invites. Turn a
+topic's Active switch, or accept or decline an invite, right in the chat. **Account** shows your plan, the coffee fund
+with its spend meter, and the day's scans. Changing a plan or a payment method opens CarlNotes. **Topic lists** show a
+section of topics as cards, or a topic's similar topics. A podcast episode's film plays on CarlNotes, and the player
+links to it.
 
 The Topic picker asks **Where should this go?** It shows five editable Topics per page with best matches checked. Search offers matching Topic names as you type. Choose a suggestion to add it, or press Enter/Search to filter the list. **Topics to share this chat with** shows every checked destination as a removable tag pill. Checking or unchecking a box updates the pills immediately, and removing a pill unchecks its Topic across pages.
 

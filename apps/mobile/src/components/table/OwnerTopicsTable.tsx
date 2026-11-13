@@ -1,9 +1,13 @@
 import { sendSubscriptionEmail } from "@carlnotes/client/topicClient"
 import type { OwnerTopic } from "@carlnotes/contracts/activity"
+import {
+	type OwnerTopicsTableElements,
+	OwnerTopicsTable as SharedOwnerTopicsTable,
+} from "@carlnotes/core/components/OwnerTopicsTable"
 import { toCentsLabel } from "@carlnotes/core/lib/labels"
-import { ownerTopicSortValues, toOwnerTopicsTableColumns } from "@carlnotes/core/lib/ownerTopicsTableColumns"
+import { ownerTopicSortValues } from "@carlnotes/core/lib/ownerTopicsTableColumns"
 import { ChevronDown } from "lucide-react-native"
-import { useState } from "react"
+import { Fragment } from "react"
 import { View } from "react-native"
 import { PreferenceSwitch } from "@/components/common/PreferenceSwitch"
 import { Sheet } from "@/components/common/Sheet"
@@ -13,52 +17,63 @@ import { Text } from "@/components/primitives/text"
 import { TopicVisibility } from "@/components/topic/TopicInfo"
 import { usePageMutation } from "@/hooks/usePageMutation"
 import { DataTable } from "./DataTable"
+import { EmptyListCard } from "./TableCard"
 import { TopicNameLink } from "./TopicNameLink"
 import { TopicScansTable } from "./TopicScansTable"
 
 /**
- * Shows owner topic columns with scan details in a native sheet.
+ * Renders the web's owner topic table, with a topic's scans in a native sheet.
  */
 export function OwnerTopicsTable({ topics, onReloadPage }: { topics: OwnerTopic[]; onReloadPage: () => void }) {
-	// keep the selected topic separate from paging and server refreshes
-	const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null)
-	const selectedTopic = topics.find((topic) => topic.id === selectedTopicId)
+	// an email change saves, then the page reloads, and a failed one stays under the table
 	const mutation = usePageMutation(onReloadPage)
-	const columns = toOwnerTopicsTableColumns({
-		topics,
-		renderText: (text) => <Text className="text-sm text-muted-foreground">{text}</Text>,
-		renderName: (topic) => <TopicNameLink topic={topic} />,
-		renderSubscribers: (topic) => <Text className="text-sm">{topic.subscriberCount}</Text>,
-		renderVisibility: (topic) => <TopicVisibility visibility={topic.visibility} />,
-		renderEmail: (topic) => (
-			<PreferenceSwitch
-				label={`${topic.name} emails`}
-				isChecked={topic.isEmailEnabled}
-				isDisabled={mutation.isPending}
-				onChange={(isEnabled) => void mutation.run(() => sendSubscriptionEmail(topic.id, isEnabled, topic.ownerUserId))}
-			/>
-		),
-		renderCost: (topic) => (
-			<Button
-				variant="link"
-				className="px-0"
-				accessibilityLabel={`Brew costs for ${topic.name}`}
-				onPress={() => setSelectedTopicId(topic.id)}
-			>
-				<Text>{toCentsLabel(topic.monthCostCents)}</Text>
-				<Icon as={ChevronDown} className="size-4 text-link" />
-			</Button>
-		),
-	})
 	return (
 		<View className="gap-2">
-			<DataTable rows={topics} columns={columns} valueByKey={ownerTopicSortValues} getRowId={(topic) => topic.id} />
-			{mutation.error && <Text className="text-destructive">{mutation.error}</Text>}
-			{selectedTopic && (
-				<Sheet title="Brew costs" onClose={() => setSelectedTopicId(null)}>
-					<TopicScansTable topic={selectedTopic} scans={selectedTopic.scans} />
-				</Sheet>
-			)}
+			<SharedOwnerTopicsTable
+				topics={topics}
+				isPending={mutation.isPending}
+				onEmailChange={(topic, isEnabled) =>
+					void mutation.run(() => sendSubscriptionEmail(topic.id, isEnabled, topic.ownerUserId))
+				}
+				elements={OWNER_TOPICS_TABLE_ELEMENTS}
+			/>
+			{mutation.error && <Text className="text-sm text-destructive">{mutation.error}</Text>}
 		</View>
 	)
+}
+
+// the native cells, the fixed-column table, and a row's scans in a sheet over the screen
+const OWNER_TOPICS_TABLE_ELEMENTS: OwnerTopicsTableElements = {
+	Text: ({ children }) => <Text className="text-sm text-muted-foreground">{children}</Text>,
+	Name: ({ topic }) => <TopicNameLink topic={topic} />,
+	Visibility: ({ visibility }) => <TopicVisibility visibility={visibility} />,
+	EmailSwitch: ({ topic, isDisabled, onChange }) => (
+		<PreferenceSwitch
+			label={`${topic.name} emails`}
+			isChecked={topic.isEmailEnabled}
+			isDisabled={isDisabled}
+			onChange={onChange}
+		/>
+	),
+	SubscribersToggle: ({ topic }) => <Text className="text-sm text-muted-foreground">{topic.subscriberCount}</Text>,
+	CostToggle: ({ topic, onToggle }) => (
+		<Button variant="link" className="px-0" accessibilityLabel={`Brew costs for ${topic.name}`} onPress={onToggle}>
+			<Text>{toCentsLabel(topic.monthCostCents)}</Text>
+			<Icon as={ChevronDown} className="size-4 text-link" />
+		</Button>
+	),
+	Detail: ({ topic, onClose }) => (
+		<Sheet title="Brew costs" onClose={onClose}>
+			<TopicScansTable topic={topic} scans={topic.scans} />
+		</Sheet>
+	),
+	Table: ({ topics, columns, renderDetail }) => (
+		<>
+			<DataTable rows={topics} columns={columns} valueByKey={ownerTopicSortValues} getRowId={(topic) => topic.id} />
+			{topics.map((topic) => (
+				<Fragment key={topic.id}>{renderDetail(topic)}</Fragment>
+			))}
+		</>
+	),
+	EmptyCard: ({ text }) => <EmptyListCard text={text} />,
 }

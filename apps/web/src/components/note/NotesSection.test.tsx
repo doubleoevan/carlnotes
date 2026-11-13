@@ -56,17 +56,17 @@ test("the read-only body renders through the viewer component", async () => {
 	expect(viewerSource).not.toContain("dangerouslySetInnerHTML")
 })
 
-// the footer counts the notes and splits them by visibility, skipping empty visibilities
-test("the footer counts notes by visibility", () => {
+// the footer opens with Total, as every standard table's does, and splits the notes by visibility, skipping empty
+// visibilities
+test("the footer totals notes by visibility", () => {
 	const html = renderToStaticMarkup(
 		<NotesTable
 			notes={[note("private", "Mine"), note("private", "Also mine"), note("public", "Ours")]}
 			onOpenNote={() => {}}
 		/>,
 	)
-	expect(html).toContain("3 notes")
+	expect(html).toContain("Total")
 	expect(html).toContain("2 private · 1 public")
-	expect(html).toContain("latest")
 	// the label itself skips empty visibilities and keeps visibility order
 	expect(toVisibilityCountsLabel([{ visibility: "team" }, { visibility: "team" }])).toBe("2 team")
 })

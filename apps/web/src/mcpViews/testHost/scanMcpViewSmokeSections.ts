@@ -34,6 +34,9 @@ const SLOW_SCAN_POLL_MS = 31_000
 // the most slow polls a test walks through before its next step reports a missing link
 const MAX_SLOW_SCAN_POLLS = 100
 
+// how long the test that walks the half-hour watch has, since each of its 58 polls is a tool call through the host
+const PODCAST_EPISODE_WATCH_TEST_TIMEOUT_MS = 90_000
+
 /**
  * Shows or hides a frame's page as a host does, for code that reads its visibility.
  */
@@ -321,29 +324,33 @@ test("a played Podcast Episode with a film links to the film player on its page 
 	})
 })
 
-test("a Podcast Episode still recording after 30 minutes ends the poll and links to the Topic's page", async () => {
-	const recordingRecap = toRecapWithPodcastEpisode({ state: "recording" })
-	const options: OpenMcpViewOptions = {
-		mcpView: "scan",
-		respondToToolCall: toScanStatusResponder([recordingRecap]),
-	}
-	await withMcpView(options, async ({ frame, page, toolCalls, links, sendToolResult }) => {
-		await page.clock.install()
-		await sendToolResult(toScanToolResult(recordingRecap))
-		await frame.getByText("Carl and Vienna are recording").waitFor()
-
-		// the slow poll rate walks the watch past its limit
-		const watchOverLink = frame.getByRole("link", { name: "Listen on CarlNotes once it's ready" })
-		for (let pollCount = 0; pollCount < MAX_SLOW_SCAN_POLLS && !(await watchOverLink.isVisible()); pollCount += 1) {
-			await page.clock.fastForward(SLOW_SCAN_POLL_MS)
+test(
+	"a Podcast Episode still recording after 30 minutes ends the poll and links to the Topic's page",
+	async () => {
+		const recordingRecap = toRecapWithPodcastEpisode({ state: "recording" })
+		const options: OpenMcpViewOptions = {
+			mcpView: "scan",
+			respondToToolCall: toScanStatusResponder([recordingRecap]),
 		}
-		await watchOverLink.click()
-		await waitForRecord(links)
-		expect(links).toEqual([`${TEST_SITE_URL}${FINISHED_SCAN_STATUS.topicPath}`])
+		await withMcpView(options, async ({ frame, page, toolCalls, links, sendToolResult }) => {
+			await page.clock.install()
+			await sendToolResult(toScanToolResult(recordingRecap))
+			await frame.getByText("Carl and Vienna are recording").waitFor()
 
-		// nothing polls after the limit
-		const pollCount = toolCalls.length
-		await page.clock.fastForward(SLOW_SCAN_POLL_MS)
-		expect(toolCalls).toHaveLength(pollCount)
-	})
-})
+			// the slow poll rate walks the watch past its limit
+			const watchOverLink = frame.getByRole("link", { name: "Listen on CarlNotes once it's ready" })
+			for (let pollCount = 0; pollCount < MAX_SLOW_SCAN_POLLS && !(await watchOverLink.isVisible()); pollCount += 1) {
+				await page.clock.fastForward(SLOW_SCAN_POLL_MS)
+			}
+			await watchOverLink.click()
+			await waitForRecord(links)
+			expect(links).toEqual([`${TEST_SITE_URL}${FINISHED_SCAN_STATUS.topicPath}`])
+
+			// nothing polls after the limit
+			const pollCount = toolCalls.length
+			await page.clock.fastForward(SLOW_SCAN_POLL_MS)
+			expect(toolCalls).toHaveLength(pollCount)
+		})
+	},
+	PODCAST_EPISODE_WATCH_TEST_TIMEOUT_MS,
+)

@@ -2,16 +2,14 @@
 import { EDIT_IMAGE_DIALOG_TITLES } from "@carlnotes/core/lib/topicImageEditor"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { expect, fn } from "storybook/test"
+import { SAMPLE_TOPIC_IMAGE } from "../../../.storybook/fixtures/topics"
 import { TopicHeaderImage } from "./TopicImageButton"
-
-// the podcast cover placeholder shows in place of a topic's image, which the app serves from its public files
-const SAMPLE_FILES = { url: "/podcast-cover-placeholder.jpg", url2x: "/podcast-cover-placeholder.jpg" }
 
 const meta = {
 	title: "Topic/TopicHeaderImage",
 	component: TopicHeaderImage,
 	args: {
-		image: { page: SAMPLE_FILES, list: SAMPLE_FILES, thumbnail: SAMPLE_FILES },
+		image: SAMPLE_TOPIC_IMAGE,
 		name: "Home espresso",
 		editLabel: EDIT_IMAGE_DIALOG_TITLES.topic,
 	},

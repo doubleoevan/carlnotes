@@ -4,17 +4,15 @@ import { sendTopicPodcastEpisodeVideoImageRegeneration } from "@carlnotes/client
 import { fetchTopicImageRender, sendTopicImageRegeneration } from "@carlnotes/client/topicImageClient"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { expect, fn, mocked, userEvent } from "storybook/test"
+import { SAMPLE_TOPIC_IMAGE } from "../../../.storybook/fixtures/topics"
 import { type EditableImage, TopicImageEditor } from "./TopicImageEditor"
-
-// the podcast cover placeholder stands in for a topic's image, which the app serves from its public files
-const SAMPLE_FILES = { url: "/podcast-cover-placeholder.jpg", url2x: "/podcast-cover-placeholder.jpg" }
 
 // a topic with a generated image and most of the month's regenerations left
 const TOPIC: EditableImage = {
 	kind: "topic",
 	id: "topic-1",
 	name: "Home espresso",
-	image: { page: SAMPLE_FILES, list: SAMPLE_FILES, thumbnail: SAMPLE_FILES },
+	image: SAMPLE_TOPIC_IMAGE,
 	imageOrigin: "generated",
 	imagePrompt: "a lighthouse in a storm, oil painting",
 	imageRegenerationQuota: { used: 3, limit: 15 },

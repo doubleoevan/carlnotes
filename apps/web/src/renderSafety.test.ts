@@ -92,7 +92,7 @@ test("no ui file injects raw html", () => {
 test("the note html is sanitized server-side", () => {
 	const sanitizerSource = readFileSync(join(import.meta.dir, "../../api/noteHtml.ts"), "utf8")
 	expect(sanitizerSource).toContain('allowedSchemes: ["http", "https", "mailto"]')
-	const routeSource = readFileSync(join(import.meta.dir, "../../api/note/notes.ts"), "utf8")
-	expect(routeSource).toContain("const sanitizedHtml = sanitizeNoteHtml(html)")
-	expect(routeSource).toContain("html: sanitizedHtml")
+	const noteWritesSource = readFileSync(join(import.meta.dir, "../../api/note/noteWrites.ts"), "utf8")
+	expect(noteWritesSource).toContain("const sanitizedHtml = sanitizeNoteHtml(html)")
+	expect(noteWritesSource).toContain("html: sanitizedHtml")
 })

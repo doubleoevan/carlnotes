@@ -3,6 +3,7 @@
 import type { ActivityScan, OwnerTopic } from "@carlnotes/contracts/activity"
 import type { Topic } from "@carlnotes/contracts/profiles"
 import { DAY_MS, MINUTE_MS } from "@carlnotes/contracts/time"
+import type { TopicImageUrls } from "@carlnotes/contracts/topicImages"
 import type { ScanNote, ScanSourceResults, SourceResult, TopicScan } from "@carlnotes/contracts/topics"
 import { FIXTURE_DATE, LLM_TOOLING_TOPIC_FIXTURE, STORY_USER } from "../fixtures"
 import { LATEST_PODCAST_EPISODE_FIXTURE } from "./podcastEpisodes"
@@ -12,6 +13,16 @@ type ToActivityScanOptions = Pick<ActivityScan, "id" | "foundCount" | "keptCount
 
 // a topic page scan's id and counts, and how many days from the fixture date it started, negative for the days before
 type ToTopicScanOptions = Pick<TopicScan, "id" | "foundCount" | "keptCount"> & { dayOffset: number }
+
+// the podcast cover placeholder shows in place of a topic's image, which the app serves from its public files
+const SAMPLE_TOPIC_IMAGE_FILES = { url: "/podcast-cover-placeholder.jpg", url2x: "/podcast-cover-placeholder.jpg" }
+
+/** A topic's image at every size, which the stories show with the podcast cover placeholder. */
+export const SAMPLE_TOPIC_IMAGE: TopicImageUrls = {
+	page: SAMPLE_TOPIC_IMAGE_FILES,
+	list: SAMPLE_TOPIC_IMAGE_FILES,
+	thumbnail: SAMPLE_TOPIC_IMAGE_FILES,
+}
 
 /** The owned topics the stories render: public, invite, and private. */
 export const OWNER_TOPIC_FIXTURES: OwnerTopic[] = [

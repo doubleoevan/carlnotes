@@ -14,7 +14,7 @@ import { PodcastEpisodeVideoButton } from "./PodcastEpisodeVideoButton"
 
 // the browser elements over the shared card: the title as the link stretched over the whole card, the text, and the
 // play button and a film card's play button above the link
-const ELEMENTS: PodcastEpisodeCardElements = {
+export const PODCAST_EPISODE_CARD_ELEMENTS: PodcastEpisodeCardElements = {
 	...CARD_ELEMENTS,
 	Title: ({ path, label, onOpen, children }) => (
 		<AnchorLink href={path} aria-label={label} onClick={onOpen} className={STRETCHED_CARD_LINK_CLASS}>
@@ -35,5 +35,5 @@ const ELEMENTS: PodcastEpisodeCardElements = {
  * Renders the shared podcast episode card with browser links and the player's play button.
  */
 export function PodcastEpisodeCard(props: PodcastEpisodeCardProps) {
-	return <SharedPodcastEpisodeCard {...props} elements={ELEMENTS} />
+	return <SharedPodcastEpisodeCard {...props} elements={PODCAST_EPISODE_CARD_ELEMENTS} />
 }

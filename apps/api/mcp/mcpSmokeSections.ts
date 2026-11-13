@@ -11,6 +11,7 @@ import type { AppEnv } from "../currentUser"
 import { CALLER_RATE_LIMIT, toolCallerRateLimiter, toolCallerRateLimitStore, toRateLimitKey } from "../rateLimit"
 import { stopFirstScan } from "../topic/firstScanSmoke"
 import { toMcpToolContractIssues } from "./mcpContractTestFixtures"
+import { checkPageBounds, type SmokeClient } from "./mcpResultSmokeSections"
 import { check, type FeedPage, runId, type TopicPage, toClient, topicId, toResultJson } from "./mcpSmokeFixtures"
 import { checkLastDraftSlot } from "./mcpTopicDraftSmoke"
 import { CONNECT_ACCOUNT_TEXT } from "./results"
@@ -37,6 +38,7 @@ export async function checkVisitor(): Promise<void> {
 	// list the topics and read the feed. a visitor sees every explanation and no consumed flag
 	const listTopicsResult = await client.callTool({ name: "list_topics", arguments: {} })
 	check("list_topics includes the seeded public topic", toResultText(listTopicsResult).includes(topicId))
+	await checkVisitorTopicSections(client)
 	const feedText = toResultText(await client.callTool({ name: "read_topic_feed", arguments: { topic_id: topicId } }))
 	check(
 		"read_topic_feed returns the findings with their explanations",
@@ -180,6 +182,12 @@ export async function checkUser(accessToken: string): Promise<void> {
 	check("list_topics shows the source with its id", Boolean(listedTopicSource?.sourceId), listedTopic)
 	check("list_topics carries the topic's image field", listedTopic !== undefined && "image" in listedTopic, listedTopic)
 
+	// the owner's topic in the yours section of the topics page
+	const yoursResult = await client.callTool({ name: "list_topics", arguments: { section: "yours" } })
+	const yoursTopicIds = toResultJson<TopicPage>(yoursResult).items.map((yoursTopic) => yoursTopic.topicId)
+	check("list_topics lists the owner's topic in yours", yoursTopicIds.includes(topicId), yoursTopicIds)
+	checkPageBounds("list_topics yours", yoursResult)
+
 	// removing the source previews first, then saves with the preview's confirmation, which never saves twice
 	const removeArguments = { topic_id: topicId, removeSourceIds: [listedTopicSource?.sourceId ?? ""] }
 	const removePreview = (await client.callTool({
@@ -319,4 +327,20 @@ export async function checkRateLimit(): Promise<void> {
 		statuses.slice(0, CALLER_RATE_LIMIT).every((status) => status === 200) && statuses.at(-1) === 429,
 		statuses,
 	)
+}
+
+// a visitor reads the popular section and a topic's similar topics within the result bounds, and has no section of
+// their own
+async function checkVisitorTopicSections(client: SmokeClient): Promise<void> {
+	// the popular section, and the seeded topic's similar topics
+	for (const [label, toolArguments] of [
+		["list_topics popular", { section: "popular" }],
+		["list_topics similar", { similar_to_topic_id: topicId }],
+	] as const) {
+		checkPageBounds(label, await client.callTool({ name: "list_topics", arguments: toolArguments }))
+	}
+
+	// a visitor's yours section asks them to connect
+	const yoursText = toResultText(await client.callTool({ name: "list_topics", arguments: { section: "yours" } }))
+	check("a visitor's list_topics yours asks them to connect", yoursText === CONNECT_ACCOUNT_TEXT, yoursText)
 }

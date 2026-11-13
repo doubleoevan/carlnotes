@@ -1,6 +1,7 @@
-// the confirmation an mcp topic edit needs before it makes a topic public or removes a source: a keyed signature over
-// the edit, the topic as it stood when previewed, and an expiry. a save changes the topic, so a confirmation never
-// matches twice, and an edit made elsewhere since the preview voids it
+// the confirmation an mcp topic edit needs before it makes a topic public, removes a source, or shares a private topic
+// with a team: a keyed signature over the edit and its team change, the topic as it stood when previewed, and an
+// expiry. a save changes the topic, so a confirmation never matches twice, and an edit made elsewhere since the preview
+// voids it
 import { MINUTE_MS } from "@carlnotes/contracts/time"
 import type { EditableTopicFields } from "@carlnotes/contracts/topicEdits"
 import type { ProposeTopicEditPayload } from "@carlnotes/contracts/topicPayloads"
@@ -10,29 +11,42 @@ import { toCanonicalJson } from "../canonicalJson"
 // how long a confirmation stays good after its preview
 export const TOPIC_EDIT_CONFIRMATION_LIFETIME_MS = 15 * MINUTE_MS
 
-// why an edit needs the user's agreement: it makes the topic public, or it removes a source
-export type TopicEditConfirmationReason = "goesPublic" | "removesSources"
+// why an edit needs the user's agreement: it makes the topic public, removes a source, or shares a private topic with a
+// team
+export type TopicEditConfirmationReason = "goesPublic" | "removesSources" | "sharesWithTeam"
 
-// who saves the edit, the topic it edits, the edit, and the topic's fields as they stand
+// a team the edit adds the topic to, or takes it off
+export type TopicTeamChange = { teamId: string; isOnTeam: boolean }
+
+// who saves the edit, the topic it edits, the edit with its team change, and the topic's fields as they stand
 type TopicEditConfirmationOptions = {
 	userId: string
 	topicId: string
 	topicEdit: ProposeTopicEditPayload
+	topicTeamChange: TopicTeamChange | null
 	editableTopicFields: EditableTopicFields
 }
 
 /**
  * Returns why an edit needs the user's agreement before it saves, empty for an edit that saves at once.
  */
-export function toTopicEditConfirmationReasons(
-	editableTopicFields: EditableTopicFields,
-	topicEdit: ProposeTopicEditPayload,
-): TopicEditConfirmationReason[] {
+export function toTopicEditConfirmationReasons({
+	editableTopicFields,
+	topicEdit,
+	topicTeamChange,
+}: Pick<
+	TopicEditConfirmationOptions,
+	"editableTopicFields" | "topicEdit" | "topicTeamChange"
+>): TopicEditConfirmationReason[] {
+	// what the edit widens or takes away
 	const isGoingPublic = topicEdit.visibility === "public" && editableTopicFields.visibility !== "public"
 	const isRemovingSources = (topicEdit.removeSourceIds ?? []).length > 0
+	const isPublicAfterEdit = (topicEdit.visibility ?? editableTopicFields.visibility) === "public"
+	const isSharingWithTeam = topicTeamChange?.isOnTeam === true && !isPublicAfterEdit
 	return [
 		...(isGoingPublic ? (["goesPublic"] as const) : []),
 		...(isRemovingSources ? (["removesSources"] as const) : []),
+		...(isSharingWithTeam ? (["sharesWithTeam"] as const) : []),
 	]
 }
 
@@ -70,7 +84,7 @@ export function isTopicEditConfirmed(
 // the keyed signature over the edit, the topic's fields, and the expiry. the sources and invites sort by their own keys,
 // so the same topic read twice signs the same
 function toTopicEditSignature(
-	{ userId, topicId, topicEdit, editableTopicFields }: TopicEditConfirmationOptions,
+	{ userId, topicId, topicEdit, topicTeamChange, editableTopicFields }: TopicEditConfirmationOptions,
 	expiresAt: number,
 ): string {
 	// the fields the edit is previewed over, in a fixed order
@@ -89,6 +103,7 @@ function toTopicEditSignature(
 			userId,
 			topicId,
 			topicEdit,
+			topicTeamChange,
 			editableTopicFields: sortedTopicFields,
 			expiresAt,
 		}),

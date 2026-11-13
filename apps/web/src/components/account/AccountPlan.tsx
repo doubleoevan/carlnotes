@@ -36,7 +36,7 @@ export function AccountPlan({
 }
 
 // the plan line, which wraps at the right of the header row on a phone, and the plan button's placeholder
-const ACCOUNT_PLAN_ELEMENTS: AccountPlanElements = {
+export const ACCOUNT_PLAN_ELEMENTS: AccountPlanElements = {
 	PlanRow: ({ children }) => <div className="flex flex-wrap items-center justify-end gap-3">{children}</div>,
 	Text: ({ children, className }) => <span className={className}>{children}</span>,
 	PlanPlaceholder: () => <div className={cn(SKELETON_SHAPE_CLASS, "h-9 w-32 rounded-md")} />,

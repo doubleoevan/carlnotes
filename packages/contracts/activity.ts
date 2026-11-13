@@ -95,3 +95,9 @@ export const activityResponse = z.object({
 })
 
 export type ActivityResponse = z.infer<typeof activityResponse>
+
+// this month's spend against the budget, with its cutoffs, as the spend meter reads it
+export type MonthlySpend = Pick<
+	ActivityResponse,
+	"scanSpendCents" | "chatSpendCents" | "podcastEpisodeSpendCents" | "budgetCents" | "monthlyBudgetCutoffs"
+>

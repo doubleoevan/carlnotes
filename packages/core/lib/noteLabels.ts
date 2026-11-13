@@ -71,3 +71,10 @@ export const REPORT_COMMENT_LABEL = "Report comment"
 export function toReportedNoteCommentLabel(authorUsername: string): string {
 	return `a comment from ${authorUsername}`
 }
+
+/**
+ * Returns the comments toggle's label, which says what a press does.
+ */
+export function toCommentsToggleLabel(isOpen: boolean): string {
+	return isOpen ? "Hide comments" : "Show comments"
+}

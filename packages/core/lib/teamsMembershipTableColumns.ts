@@ -30,6 +30,13 @@ export function toTeamRowFields(row: TeamsPageRow): TeamSummary | ReceivedInvite
 }
 
 /**
+ * Returns a row's id: the team's for a membership, the invite's for an invite.
+ */
+export function toTeamsPageRowId(row: TeamsPageRow): string {
+	return "membership" in row ? row.membership.teamId : row.invite.inviteId
+}
+
+/**
  * Builds the shared membership columns with the viewer's permitted controls and totals.
  */
 export function toTeamsMembershipTableColumns({

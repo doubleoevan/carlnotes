@@ -7,11 +7,17 @@ import { searchRequestPayload } from "@carlnotes/contracts/search"
 import type { CallToolResult } from "@modelcontextprotocol/server"
 import { z } from "zod"
 import { setTopicSubscription } from "../topic/subscriptions"
+import { registerAccountTool } from "./accountTool"
+import { registerActivityTool } from "./activityTool"
 import { registerDashboardTool } from "./dashboardTool"
 import { loadFindingsMcpViewData, loadSearchMcpViewData, toMcpViewMeta } from "./mcpViewData"
 import { registerNewsTool } from "./newsTool"
+import { registerNoteTools } from "./noteTools"
 import { registerPersonalSourcesTools } from "./personalSourcesTools"
+import { registerProfileTool } from "./profileTool"
+import { registerReportTools } from "./reportTools"
 import {
+	BOUND_SERVER_TEXT,
 	bookmarkFinding,
 	CONNECT_ACCOUNT_TEXT,
 	type McpFinding,
@@ -26,12 +32,24 @@ import {
 import { registerScanTools } from "./scanTools"
 import { searchForTool, toSearchText } from "./searchResults"
 import { registerSocialTools } from "./socialTools"
+import { registerTeamTools } from "./teamTools"
+import { registerTeamWriteTools } from "./teamWriteTools"
 import { type ToolCaller, toMcpAnalyticsProperties } from "./toolCaller"
-import { type RegisterToolsOptions, toPageResult, topicIdArgument, toTextResult } from "./toolShapes"
+import { type RegisterToolsOptions, toPageResult, topicIdArgument, toStatusResult, toTextResult } from "./toolShapes"
+import { registerTopicAttachmentTool } from "./topicAttachmentTool"
 import { registerTopicContextTool } from "./topicContextTool"
 import { registerTopicEditTools } from "./topicEditTools"
+import { registerTopicImageTool } from "./topicImageTool"
 import { registerTopicPostTools } from "./topicPostTools"
-import { listTopics } from "./topicResults"
+import {
+	listSimilarTopics,
+	listTopicSectionTopics,
+	listTopics,
+	type McpTopic,
+	TOPIC_SECTION_ARGUMENTS,
+	type TopicSectionArgument,
+} from "./topicResults"
+import { loadTopicsMcpViewData, type TopicsRead } from "./topicsMcpViewData"
 import { registerMcpUiResources, toMcpViewToolMeta } from "./uiResources"
 import { registerUpdatesTool } from "./updatesTool"
 
@@ -46,6 +64,16 @@ export function registerTools(registerToolsOptions: RegisterToolsOptions): void 
 	registerReadTools(registerToolsOptions)
 	registerFeedbackTools(registerToolsOptions)
 	registerTopicEditTools(registerToolsOptions)
+	registerTopicImageTool(registerToolsOptions)
+	registerTopicAttachmentTool(registerToolsOptions)
+	// register the note, team, profile, activity, account, report, and Personal sources tools
+	registerNoteTools(registerToolsOptions)
+	registerTeamTools(registerToolsOptions)
+	registerTeamWriteTools(registerToolsOptions)
+	registerProfileTool(registerToolsOptions)
+	registerActivityTool(registerToolsOptions)
+	registerAccountTool(registerToolsOptions)
+	registerReportTools(registerToolsOptions)
 	registerPersonalSourcesTools(registerToolsOptions)
 	// register the updates, Scan, Topic context, finding feedback, and social tools
 	registerUpdatesTool(registerToolsOptions)
@@ -66,11 +94,38 @@ function registerReadTools({ mcpServer, toolCaller, routeTopicId, clientAddress 
 		{
 			title: "List topics",
 			description:
-				"The topics you may read on CarlNotes, Carl's app: the public ones for everyone, plus what a connected account owns, follows, and holds through a team. Use it when the user asks Carl or CarlNotes for topics, with phrases like list my topics, what topics do I follow, or what does Carl cover.",
-			inputSchema: z.object({ cursor: cursorArgument }),
+				"The topics you may read on CarlNotes, Carl's app: the public ones for everyone, plus what a connected account owns, follows, and holds through a team. A section lists one section of the topics page: yours, followed, featured, or popular. similar_to_topic_id lists the similar topics a topic's page shows. Use it when the user asks Carl or CarlNotes for topics, with phrases like list my topics, what topics do I follow, what is popular, topics like this one, or what does Carl cover.",
+			inputSchema: z.object({
+				section: z
+					.enum(Object.keys(TOPIC_SECTION_ARGUMENTS) as [TopicSectionArgument, ...TopicSectionArgument[]])
+					.optional()
+					.describe("One section of the topics page. A visitor reads featured and popular."),
+				similar_to_topic_id: z.string().min(1).optional().describe("A topic whose similar topics to list."),
+				cursor: cursorArgument,
+			}),
 			annotations: { readOnlyHint: true },
+			_meta: toMcpViewToolMeta("topics"),
 		},
-		async ({ cursor }) => toPageResult(await listTopics(toolCaller, routeTopicId, cursor ?? null)),
+		async ({ section, similar_to_topic_id, cursor }) => {
+			// a topic's similar topics, never on a bound server
+			if (similar_to_topic_id) {
+				return routeTopicId
+					? toTextResult(BOUND_SERVER_TEXT, true)
+					: toSimilarTopicsMcpViewResult(toolCaller, similar_to_topic_id, cursor ?? null)
+			}
+
+			// the whole list, the bound topic alone on a bound server
+			if (!section) {
+				const mcpPage = await listTopics(toolCaller, routeTopicId, cursor ?? null)
+				return toTopicsMcpViewResult(toolCaller, mcpPage, { kind: "section", sectionKey: null })
+			}
+			if (routeTopicId) {
+				return toTextResult(BOUND_SERVER_TEXT, true)
+			}
+
+			// one section of the topics page
+			return toTopicSectionMcpViewResult(toolCaller, section, cursor ?? null)
+		},
 	)
 	mcpServer.registerTool(
 		"read_topic_feed",
@@ -144,7 +199,7 @@ function registerReadTools({ mcpServer, toolCaller, routeTopicId, clientAddress 
 			description:
 				"Mark a CarlNotes finding read for the connected account, the way opening it on the page does. Use it when the user tells Carl or CarlNotes they read a finding, with phrases like mark this read or I read this.",
 			inputSchema: z.object({ finding_id: z.string() }),
-			annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+			annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
 		},
 		async ({ finding_id }) => {
 			if (toolCaller.kind !== "user") {
@@ -189,7 +244,7 @@ function registerFeedbackTools({ mcpServer, toolCaller, routeTopicId }: Register
 			description:
 				"Thumb a CarlNotes finding up or down for the connected account, or clear the rating with null. Ratings tell Carl what to keep. Use it when the user rates a finding, with phrases like thumbs up, thumbs down, or more like this.",
 			inputSchema: z.object({ finding_id: z.string(), rating: z.enum(ratings).nullable() }),
-			annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+			annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
 		},
 		async ({ finding_id, rating }) => {
 			if (toolCaller.kind !== "user") {
@@ -206,7 +261,7 @@ function registerFeedbackTools({ mcpServer, toolCaller, routeTopicId }: Register
 			description:
 				"Keep a CarlNotes finding for the connected account so no later brew filters it out, or drop the bookmark. Bookmarking takes the topic's owner or a team that holds it. Use it when the user asks Carl or CarlNotes to keep a finding, with phrases like bookmark this or keep this finding.",
 			inputSchema: z.object({ finding_id: z.string(), is_bookmarked: z.boolean() }),
-			annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+			annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
 		},
 		async ({ finding_id, is_bookmarked }) => {
 			if (toolCaller.kind !== "user") {
@@ -226,7 +281,7 @@ function registerFeedbackTools({ mcpServer, toolCaller, routeTopicId }: Register
 			description:
 				"Follow a CarlNotes topic for the connected account, or unfollow it. Following puts the topic in the account's feed and its list. An owner always follows their own topic. Use it when the user asks Carl or CarlNotes to follow a topic, with phrases like follow this topic or unfollow this topic.",
 			inputSchema: z.object({ topic_id: topicIdArgument, is_following: z.boolean() }),
-			annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+			annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
 		},
 		async ({ topic_id, is_following }) => {
 			const toolTopic = toToolTopicId(routeTopicId, topic_id ?? null)
@@ -248,10 +303,10 @@ function registerFeedbackTools({ mcpServer, toolCaller, routeTopicId }: Register
 			if (!isTopicSubscriptionSet) {
 				return toTextResult(toSubscriptionRejectionText(is_following), true)
 			}
-			return {
-				content: [{ type: "text", text: is_following ? "Following." : "Unfollowed." }],
-				structuredContent: { topicId: toolTopic.topicId, isFollowing: is_following },
-			}
+			return toStatusResult(is_following ? "Following." : "Unfollowed.", {
+				topicId: toolTopic.topicId,
+				isFollowing: is_following,
+			})
 		},
 	)
 }
@@ -261,6 +316,50 @@ function toSubscriptionRejectionText(isSubscribing: boolean): string {
 	return isSubscribing
 		? "No topic this account may follow has that id. A private topic is followed by its owner alone."
 		: "This account can't unfollow that topic. An owner always follows their own topic."
+}
+
+// a page of topics as a tool result, with the topics MCP view's data in its _meta
+async function toTopicsMcpViewResult(
+	toolCaller: ToolCaller,
+	mcpPage: McpPage<McpTopic>,
+	topicsRead: TopicsRead,
+): Promise<CallToolResult> {
+	const topicsMcpViewData = await loadTopicsMcpViewData(toolCaller, mcpPage, topicsRead)
+	return { ...toPageResult(mcpPage), _meta: toMcpViewMeta(topicsMcpViewData) }
+}
+
+// a topic's similar topics as a tool result with the topics MCP view's data, or none for a topic the caller may not
+// open
+async function toSimilarTopicsMcpViewResult(
+	toolCaller: ToolCaller,
+	topicId: string,
+	cursor: string | null,
+): Promise<CallToolResult> {
+	const similarTopics = await listSimilarTopics(toolCaller, topicId, cursor)
+	if (!similarTopics) {
+		return toPageResult(null)
+	}
+	const { topicName, relatedTopics, mcpPage } = similarTopics
+	return toTopicsMcpViewResult(toolCaller, mcpPage, { kind: "similarTopics", topicName, relatedTopics })
+}
+
+// one section of the topics page as a tool result with the topics MCP view's data. a visitor connects an account
+// to read their own topics
+async function toTopicSectionMcpViewResult(
+	toolCaller: ToolCaller,
+	section: TopicSectionArgument,
+	cursor: string | null,
+): Promise<CallToolResult> {
+	if (toolCaller.kind !== "user" && (section === "yours" || section === "followed")) {
+		return toTextResult(CONNECT_ACCOUNT_TEXT)
+	}
+
+	// the section's page of topics
+	const mcpPage = await listTopicSectionTopics(toolCaller, section, cursor)
+	return toTopicsMcpViewResult(toolCaller, mcpPage, {
+		kind: "section",
+		sectionKey: TOPIC_SECTION_ARGUMENTS[section],
+	})
 }
 
 // who read the findings, their topic, and the page of them

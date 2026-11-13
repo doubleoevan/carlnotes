@@ -2,6 +2,8 @@
 
 - `topic/saveTopicGate.ts` — the Terms and moderation check a topic other people read passes before a save, skipped
   for a private topic and, on an edit that changed neither the name nor the prompt, not classified again.
+  `toTopicEditRejection` runs the same check on the topic as an agreed chat edit or `edit_topic` leaves it, before
+  `applyTopicEdit` saves anything.
 - `topic/helpers.ts` — the topic page's reads; `topic/subscriptionStartDates.ts` — the subscription start dates that
   gate an invite topic's findings; `topic/saveHelpers.ts` — the daily slot a frequency takes, a topic's new source rows,
   and its first scan; `topic/firstScanSmoke.ts` — the smoke helper that waits for a created topic's first scan to reach
@@ -51,6 +53,9 @@
   user or a visitor who may see the topic but not edit it, and 409 naming `webSearch` or `lastSource` if a rule keeps
   the Source; `topic/deleteTopic.ts` — the delete, one transaction over every row a topic owns with its object keys
   recorded.
+- `topic/attachments.ts` — a topic attachment's routes: the url add, the context edit, the delete, the download, and
+  the file upload; `topic/attachmentWrites.ts` — `addTopicAttachment`, the owner's add of a url's page or pasted text
+  as a plain-text file, which the url route and `add_topic_attachment` share.
 - `topic/scans.ts` — starting and stopping a manual Scan, and `GET /api/scans/:id`, one Scan's recap and source
   results behind `topic:view`. `toSourceResultsView` parses the stored results, returns null for a missing or
   malformed value, keeps only the `ok`, `fallback`, and `failed` results, and copies each wire field by name. For
@@ -61,13 +66,17 @@
   edit and delete and a Source added or removed call to drop its page copy, and the visitors' feed copies if the listing
   changed; `clearVisitorTopicPages`, which a team attach or detach calls; and `clearSharedTopicFeedCaches`, which drops
   the feed copies with the home and popular topic id lists; `topic/feedData.ts` — the batched reads behind every
-  topic in a feed, each table read once for the whole batch.
+  topic in a feed, each table read once for the whole batch; `topic/topicFeedResponse.ts` — `loadTopicFeedResponse`,
+  the feed's sections with the user's topic quotas merged in, which `GET /api/topic-feed` returns.
 - `chat/room.ts` — posting to a chat room and its stream. A chat message that addresses Carl from a free user past the
   chat cutoff is rejected privately before anything posts. Otherwise it reserves his turn's largest cost before it
   posts, priced from the room's stored question by `loadModelRoomQuestionChars` in `chat/roomQuestion.ts`, which sums
   stored lengths in the database through `toDecryptedLengthSql` in `chat/encryption.ts`, and a budget that the spend and
   open reservations have reached is rejected privately. Both post routes are under the tool callers' rate limit;
-  `chat/roomRoute.ts` — the chat room routes; `chat/roomAccess.ts` — one chat room, the member's access to it, and the
+  `chat/roomRoute.ts` — the chat room routes; `chat/roomReads.ts` — `loadChatRoomMessagePage`, one page of a room's
+  messages for a member less the ones they reported or blocked, which the routes and `read_team` return;
+  `chat/roomPosts.ts` — `postCheckedChatRoomMessage`, the post after the Terms, the room's access, and the text and
+  image moderation, which the routes and `post_to_team_room` call; `chat/roomAccess.ts` — one chat room, the member's access to it, and the
   topic side of a chat room filter; `chat/roomDeletes.ts` — clearing a room and deleting one message or shared file.
 - `chat/privateChat.ts` — the private chat routes, each post rejecting a signed-out visitor through
   `toSignedOutRejection` in `bodyLimit.ts` before the body is read; `chat/chatTurnAnswer.ts` — answering an allowed
@@ -108,7 +117,7 @@
 -  `chat/chatAttachmentParts.ts` — `resolveChatAttachments`, which resolves a chat turn's attachments into what the
   model reads, and the data url helpers; `chat/attachments.ts` — storing the rest and deleting them, with the routes.
   `chat/roomAttachments.ts` prepares a shared file before a post stores and fills an image's description after it, and
-  `chat/roomRoute.ts` moderates a shared image before the post through `toObjectionableImageCategory` in
+  `chat/roomPosts.ts` moderates a shared image before the post through `toObjectionableImageCategory` in
   `moderation.ts`; `chat/chatAttachmentReads.ts` — reading them: the kept ones with their context, a chat turn's own, a
   download, and the object keys behind a user's or a topic's. A chat turn and a chat room post read a PDF's, Word
   file's, or workbook's text through `readChatAttachmentText` in `chat/chatAttachmentParts.ts`, once per file: a kept

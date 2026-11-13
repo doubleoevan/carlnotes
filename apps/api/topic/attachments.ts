@@ -7,7 +7,7 @@ import { attachmentContextPayload, attachmentUrlPayload } from "@carlnotes/contr
 import { db } from "@carlnotes/db"
 import { attachments, topics } from "@carlnotes/db/schema/topics"
 import { attachmentStream, deleteStoredObject, recordPendingObjectDeletions } from "@carlnotes/db/store"
-import { ingestAttachment, ingestUrlAttachment } from "@carlnotes/pipeline/attach"
+import { ingestAttachment } from "@carlnotes/pipeline/attach"
 import { AttachmentValidationError, toCanonicalContentType } from "@carlnotes/pipeline/attachContentType"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { zValidator } from "@hono/zod-validator"
@@ -17,6 +17,7 @@ import { Hono } from "hono"
 import { isAllowed } from "../authorization"
 import { MULTIPART_ENVELOPE_BYTES, toBodyLimit, uploadSignedOutRejection } from "../bodyLimit"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
+import { addTopicAttachment } from "./attachmentWrites"
 import { loadOwnedTopic } from "./permissions"
 
 /**
@@ -156,28 +157,23 @@ export const topicAttachmentsRoute = new Hono<AppEnv>()
 			return context.json({ error: "unauthorized" }, 401)
 		}
 
-		// check the owner first, so a stranger's url is never fetched
-		if (!(await loadOwnedTopic(userId, context.req.param("id")))) {
-			return context.json({ error: "forbidden" }, 403)
-		}
-
-		// fetch the page and hand its markdown to the same ingestion path a file upload takes
-		try {
-			const { url } = context.req.valid("json")
-			const attachment = await ingestUrlAttachment(context.req.param("id"), url)
-			trackEvent("attachment_added", userId, {
-				...toAnalyticsProperties(context),
-				topicId: context.req.param("id"),
-				kind: "url",
-			})
-			return context.json({ id: attachment.id, filename: attachment.filename })
-		} catch (error) {
-			// a validation error names the user's own url, so it shows as written. anything else is internal
-			if (error instanceof AttachmentValidationError) {
-				return context.json({ error: error.message }, 400)
-			}
-			console.error(`url attachment ingestion failed for topic ${context.req.param("id")}`, error)
-			return context.json({ error: "Carl couldn't process that link. Try again in a moment." }, 502)
+		// fetch the page and add it through the ingest a file upload takes, after the owner check
+		const addTopicAttachmentResult = await addTopicAttachment({
+			userId,
+			topicId: context.req.param("id"),
+			topicAttachmentAdd: { kind: "url", url: context.req.valid("json").url },
+			analyticsProperties: toAnalyticsProperties(context),
+		})
+		switch (addTopicAttachmentResult.status) {
+			case "added":
+				return context.json({ id: addTopicAttachmentResult.attachmentId, filename: addTopicAttachmentResult.filename })
+			case "forbidden":
+				return context.json({ error: "forbidden" }, 403)
+			// the ingest's own reason names the url, and anything else is internal
+			case "invalid":
+				return context.json({ error: addTopicAttachmentResult.reason }, 400)
+			case "failed":
+				return context.json({ error: "Carl couldn't process that link. Try again in a moment." }, 502)
 		}
 	})
 	.patch("/attachments/:id/context", zValidator("json", attachmentContextPayload), async (context) => {

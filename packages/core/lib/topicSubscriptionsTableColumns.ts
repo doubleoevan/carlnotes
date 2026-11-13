@@ -29,12 +29,27 @@ export function toTopicSubscriptionsTableColumns({
 	renderName: (row: SubscriptionRow) => ReactNode
 	renderOwner: (row: SubscriptionRow) => ReactNode
 	renderActive: (row: SubscriptionRow) => ReactNode
-	renderEmails: (row: SubscriptionRow) => ReactNode
+	// the Emails column's switch, or undefined for a table without the column
+	renderEmails?: (row: SubscriptionRow) => ReactNode
 	renderRemove: (row: SubscriptionRow) => ReactNode
 }): TableColumn<SubscriptionRow>[] {
 	// count confirmed preferences across the complete set
 	const activeCount = subscriptions.filter((row) => row.isActive).length
 	const emailCount = subscriptions.filter((row) => row.isEmailEnabled).length
+
+	// the Emails column, only for a table that renders its switch
+	const emailsColumns: TableColumn<SubscriptionRow>[] = renderEmails
+		? [
+				{
+					key: "emails",
+					label: "Emails",
+					width: 112,
+					tooltip: "Receive emails",
+					render: renderEmails,
+					footer: renderText(`${emailCount}/${subscriptions.length} on`),
+				},
+			]
+		: []
 	return [
 		{ key: "name", label: "Topic", width: 192, render: renderName, footer: renderText("Total") },
 		{ key: "owner", label: "Owner", width: 176, render: renderOwner },
@@ -51,14 +66,7 @@ export function toTopicSubscriptionsTableColumns({
 			render: renderActive,
 			footer: renderText(`${activeCount}/${subscriptions.length} active`),
 		},
-		{
-			key: "emails",
-			label: "Emails",
-			width: 112,
-			tooltip: "Receive emails",
-			render: renderEmails,
-			footer: renderText(`${emailCount}/${subscriptions.length} on`),
-		},
+		...emailsColumns,
 		{ key: "remove", label: "", width: 56, isSortable: false, render: renderRemove },
 	]
 }

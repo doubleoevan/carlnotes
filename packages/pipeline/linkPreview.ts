@@ -2,7 +2,7 @@
 import { toBaseContentType } from "@carlnotes/contracts/attachmentTypes"
 import { toDecodedHtmlEntities, toOneLineText } from "@carlnotes/contracts/text"
 import { toYoutubeWatchUrl } from "@carlnotes/contracts/youtube"
-import { fetchPublicUrl, toFetchableUrl } from "@carlnotes/server/publicFetch"
+import { fetchPublicUrl, OversizedBodyError, toFetchableUrl } from "@carlnotes/server/publicFetch"
 import { toYoutubeVideoId } from "./transcripts"
 
 // how long one link preview fetch may run. a member is waiting on their chat message
@@ -219,7 +219,7 @@ export async function fetchLinkPreviewImage(
 	// one byte past the limit is enough to know the image is too large to store
 	const bytes = await readStart(response, maxBytes + 1)
 	if (bytes.byteLength > maxBytes) {
-		throw new Error(`link preview image ${imageUrl} exceeds ${maxBytes} bytes`)
+		throw new OversizedBodyError(imageUrl, maxBytes)
 	}
 	return { bytes, contentType }
 }

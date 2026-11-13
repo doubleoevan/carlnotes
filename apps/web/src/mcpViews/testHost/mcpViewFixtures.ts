@@ -75,6 +75,13 @@ const SILENT_AUDIO_URL = `data:audio/wav;base64,${Buffer.from([
 export const PODCAST_EPISODE_SUMMARY = toPodcastEpisodeSummaryFixture()
 export const PODCAST_EPISODE = toPodcastEpisodeFixture({ audioUrl: SILENT_AUDIO_URL })
 
+// that podcast episode with a film, as the MCP view's data reads it while films play in the frame
+export const FILM_PODCAST_EPISODE = toPodcastEpisodeFixture({
+	audioUrl: SILENT_AUDIO_URL,
+	hasVideo: true,
+	video: { videoUrl: SILENT_AUDIO_URL, captionsUrl: "data:text/vtt,WEBVTT", posterUrl: null },
+})
+
 // a topic the findings MCP view heads its rows with
 export const FINDINGS_TOPIC: McpViewTopic = {
 	id: "topic-1",

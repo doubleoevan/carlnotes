@@ -2,7 +2,10 @@
 // prompt checked for a violation
 
 import type { ModerationCategory } from "@carlnotes/contracts/moderation"
-import type { UpdateTopicPayload } from "@carlnotes/contracts/topicPayloads"
+import type { ProposeTopicEditPayload, UpdateTopicPayload } from "@carlnotes/contracts/topicPayloads"
+import { db } from "@carlnotes/db"
+import { topics } from "@carlnotes/db/schema/topics"
+import { eq } from "drizzle-orm"
 import { toObjectionableCategory } from "../moderation"
 import { hasAcceptedCurrentTerms } from "../termsAcceptance"
 
@@ -57,4 +60,45 @@ export async function toTopicSaveRejection({
 		subjectId,
 	})
 	return objectionableCategory ? { status: "objectionable", category: objectionableCategory } : null
+}
+
+/**
+ * Returns the rejection the editor's check gives a topic edit, on the topic's name, prompt, tags, and visibility as
+ * the edit leaves them, or null. An unchanged text is not classified again, and a missing topic is left to the saves.
+ */
+export async function toTopicEditRejection({
+	userId,
+	topicId,
+	topicEdit,
+}: {
+	userId: string
+	topicId: string
+	topicEdit: ProposeTopicEditPayload
+}): Promise<ObjectionableRejection | TermsOutdatedRejection | null> {
+	// the topic as it stands
+	const [topic] = await db
+		.select({ name: topics.name, prompt: topics.prompt, tags: topics.tags, visibility: topics.visibility })
+		.from(topics)
+		.where(eq(topics.id, topicId))
+	if (!topic) {
+		return null
+	}
+
+	// the topic as the edit leaves it
+	const name = topicEdit.name ?? topic.name
+	const prompt = topicEdit.prompt ?? topic.prompt
+	const tags = topicEdit.tags ?? topic.tags
+	return toTopicSaveRejection({
+		name,
+		prompt,
+		tags,
+		visibility: topicEdit.visibility ?? topic.visibility,
+		subjectId: topicId,
+		userId,
+		isTextChanged:
+			topic.visibility === "private" ||
+			name !== topic.name ||
+			prompt !== topic.prompt ||
+			tags.join("\n") !== topic.tags.join("\n"),
+	})
 }

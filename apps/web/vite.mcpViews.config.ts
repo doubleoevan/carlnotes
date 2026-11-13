@@ -11,7 +11,8 @@ const DASHBOARD_MCP_VIEW_MODE = "dashboard"
  * script in the dashboard mode, and one stylesheet, with every asset inlined, which the api writes into each MCP view's
  * html. The auth client is the MCP view's own, whose session is the caller the tool result names, the visit analytics
  * report nothing, the voice detector never starts, the Topic Post editor draws nothing, a url outside the app opens
- * through the host, and outside the dashboard mode the dashboard MCP view draws nothing.
+ * through the host, chat Markdown renders through the safe note renderer, a HEIC file the browser cannot decode is
+ * rejected, and outside the dashboard mode the dashboard MCP view draws nothing.
  */
 export default defineConfig(({ mode }) => {
 	const isDashboardMcpView = mode === DASHBOARD_MCP_VIEW_MODE
@@ -19,7 +20,8 @@ export default defineConfig(({ mode }) => {
 		plugins: [react(), tailwindcss()],
 		resolve: {
 			// the MCP view's auth client, its visit analytics, voice detector, and Topic Post editor, which do nothing, its
-			// way out to a url, the empty dashboard MCP view outside the dashboard mode, then the alias for the app's src
+			// way out to a url, its chat Markdown and HEIC decoder, the empty dashboard MCP view outside the dashboard mode,
+			// then the alias for the app's src
 			alias: [
 				{
 					find: "@carlnotes/client/authClient",
@@ -41,6 +43,11 @@ export default defineConfig(({ mode }) => {
 					find: "@/lib/externalLinks",
 					replacement: path.resolve(__dirname, "./src/mcpViews/mcpViewExternalLinks.ts"),
 				},
+				{
+					find: /^\.\/ChatMarkdown$/,
+					replacement: path.resolve(__dirname, "./src/mcpViews/mcpViewChatMarkdown.tsx"),
+				},
+				{ find: /^heic-to$/, replacement: path.resolve(__dirname, "./src/mcpViews/mcpViewHeicTo.ts") },
 				...(isDashboardMcpView
 					? []
 					: [
@@ -64,9 +71,9 @@ export default defineConfig(({ mode }) => {
 			// one stylesheet, and every font and image inlined, since an MCP view loads nothing it does not hold
 			cssCodeSplit: false,
 			assetsInlineLimit: () => true,
-			// ponytail: the dashboard MCP view's script holds every component an MCP view renders, about 2.3 MB. split it
+			// ponytail: the dashboard MCP view's script holds every component an MCP view renders, about 2.4 MB. split it
 			// into served files if a host rejects a resource that large
-			chunkSizeWarningLimit: 2400,
+			chunkSizeWarningLimit: 2500,
 			rolldownOptions: {
 				input: path.resolve(__dirname, "./src/mcpViews/main.tsx"),
 				output: {

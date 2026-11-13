@@ -2,17 +2,15 @@
 import type { TopicCard as TopicCardFields } from "@carlnotes/contracts/home"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { expect, fn } from "storybook/test"
+import { SAMPLE_TOPIC_IMAGE } from "../../../.storybook/fixtures/topics"
 import { TopicCard } from "./TopicCard"
-
-// the podcast cover placeholder stands in for a topic's image, which the app serves from its public files
-const SAMPLE_FILES = { url: "/podcast-cover-placeholder.jpg", url2x: "/podcast-cover-placeholder.jpg" }
 
 // a public topic with an image, tags, and reactions
 const TOPIC: TopicCardFields = {
 	id: "topic-1",
 	name: "Home espresso",
 	path: "/topics/topic-1/home-espresso",
-	image: { page: SAMPLE_FILES, list: SAMPLE_FILES, thumbnail: SAMPLE_FILES },
+	image: SAMPLE_TOPIC_IMAGE,
 	tags: ["coffee", "gear"],
 	owner: { userId: "user-1", username: "CoffeeReader", avatarSource: "generated", avatarVersion: null },
 	teamLink: null,

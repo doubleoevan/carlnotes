@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test"
-import { type SpendMeterProps, toSpendMeterModel } from "./spendMeter"
+import type { MonthlySpend } from "@carlnotes/contracts/activity"
+import { toSpendMeterModel } from "./spendMeter"
 
 // a metered account with no configured checkpoints
-const ACTIVITY: SpendMeterProps = {
+const ACTIVITY: MonthlySpend = {
 	scanSpendCents: 0,
 	chatSpendCents: 0,
 	podcastEpisodeSpendCents: 0,

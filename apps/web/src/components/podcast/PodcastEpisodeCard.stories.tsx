@@ -6,11 +6,9 @@ import { PODCAST_STORY_FILM_EPISODE } from "@carlnotes/core/lib/podcastEpisodeSt
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { expect, mocked, within } from "storybook/test"
 import { LATEST_PODCAST_EPISODE_FIXTURE } from "../../../.storybook/fixtures/podcastEpisodes"
+import { SAMPLE_TOPIC_IMAGE } from "../../../.storybook/fixtures/topics"
 import { findVisibleByRole } from "../../../.storybook/play"
 import { PodcastEpisodeCard } from "./PodcastEpisodeCard"
-
-// the podcast cover placeholder stands in for a topic's image, which the app serves from its public files
-const SAMPLE_FILES = { url: "/podcast-cover-placeholder.jpg", url2x: "/podcast-cover-placeholder.jpg" }
 
 // a published episode of a topic with an image
 const PODCAST_EPISODE_CARD: PodcastEpisodeCardFields = {
@@ -19,7 +17,7 @@ const PODCAST_EPISODE_CARD: PodcastEpisodeCardFields = {
 		id: "topic-1",
 		name: "Home espresso",
 		path: "/topics/topic-1/home-espresso",
-		image: { page: SAMPLE_FILES, list: SAMPLE_FILES, thumbnail: SAMPLE_FILES },
+		image: SAMPLE_TOPIC_IMAGE,
 	},
 	reactionCount: 7,
 }
@@ -83,7 +81,7 @@ export const FilmCardWithoutOwnImage: Story = {
 		variant: "video",
 	},
 	play: async ({ canvasElement }) => {
-		await expect(canvasElement.querySelector("img")).toHaveAttribute("src", SAMPLE_FILES.url)
+		await expect(canvasElement.querySelector("img")).toHaveAttribute("src", SAMPLE_TOPIC_IMAGE.page.url)
 	},
 }
 

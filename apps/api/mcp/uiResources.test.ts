@@ -44,20 +44,26 @@ function toRegisteredMcpUiResources(storedMcpViewVersions?: StoredMcpViewVersion
 	return registeredMcpUiResources
 }
 
-test("ten versioned MCP view resources retain unversioned aliases with the same security policy", () => {
+test("sixteen versioned MCP view resources retain unversioned aliases with the same security policy", () => {
 	const registeredMcpUiResources = toRegisteredMcpUiResources()
-	const aliasedVersionSuffixes = ["", "?v=2", "?v=3", "?v=4", "?v=5", "?v=6", "?v=7", "?v=8", "?v=9", "?v=10"]
+	const aliasedVersionSuffixes = ["", "?v=2", "?v=3", "?v=4", "?v=5", "?v=6", "?v=7", "?v=8", "?v=9", "?v=10", "?v=11"]
 	const versionSuffixes = [`?v=${MCP_VIEW_VERSION}`, ...aliasedVersionSuffixes]
 	const storedUris = STORED_MCP_VIEW_VERSIONS.flatMap(({ version, mcpViews }) =>
 		mcpViews.map((mcpView) => toMcpUiResourceUri(mcpView, version)),
 	)
-	expect(MCP_VIEWS).toHaveLength(10)
-	expect(registeredMcpUiResources.map((uiResource) => uiResource.uri).sort()).toEqual(
+	expect(MCP_VIEWS).toHaveLength(16)
+
+	// each uri once, and a stored version's uri in place of its alias, since the server rejects a uri registered twice
+	const registeredUris = registeredMcpUiResources.map((uiResource) => uiResource.uri)
+	expect(new Set(registeredUris).size).toBe(registeredUris.length)
+	expect(registeredUris.sort()).toEqual(
 		[
-			...MCP_VIEWS.flatMap((mcpView) =>
-				versionSuffixes.map((versionSuffix) => `ui://carlnotes/${mcpView}.html${versionSuffix}`),
-			),
-			...storedUris,
+			...new Set([
+				...MCP_VIEWS.flatMap((mcpView) =>
+					versionSuffixes.map((versionSuffix) => `ui://carlnotes/${mcpView}.html${versionSuffix}`),
+				),
+				...storedUris,
+			]),
 		].sort(),
 	)
 	for (const { config } of registeredMcpUiResources) {

@@ -1,7 +1,7 @@
 // measured result bounds and complete cursor traversal against controlled, live MCP fixtures
 import { expectedFindings, largeTopicId, searchQuery } from "./mcpDirectorySmokeFixtures"
 import { check, toClient, toResultJson } from "./mcpSmokeFixtures"
-import { MCP_PAGE_MAX_CHARS, MCP_PAGE_SIZE, type McpFinding, type McpPage } from "./results"
+import { BOUND_SERVER_TEXT, MCP_PAGE_MAX_CHARS, MCP_PAGE_SIZE, type McpFinding, type McpPage } from "./results"
 import { toResultText } from "./toolTestFixtures"
 
 // the serialized page envelope may use this many characters beyond its packed item budget
@@ -132,4 +132,16 @@ export function checkPageBounds(label: string, result: Awaited<ReturnType<SmokeC
 	console.log(
 		`      ${label}: text=${textChars}, structured=${structuredChars}, combined=${textChars + structuredChars}, mcpViewMeta=${metaChars}`,
 	)
+}
+
+/** Checks that each call on the bound route returns the bound server's text, named with what it does not do. */
+export async function checkBoundRejections(
+	client: SmokeClient,
+	toolCalls: { name: string; arguments: Record<string, unknown> }[],
+	outcome: string,
+): Promise<void> {
+	for (const toolCall of toolCalls) {
+		const toolResultText = toResultText(await client.callTool(toolCall))
+		check(`bound route: ${toolCall.name} ${outcome}`, toolResultText === BOUND_SERVER_TEXT, toolResultText)
+	}
 }

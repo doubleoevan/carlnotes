@@ -3,7 +3,7 @@
 
 import { db } from "@carlnotes/db"
 import { topicPosts } from "@carlnotes/db/schema/topicPosts"
-import { check, ownerId, runId, toClient, topicId, toResultJson } from "./mcpSmokeFixtures"
+import { check, ownerId, routePaths, runId, toClient, topicId, toResultJson } from "./mcpSmokeFixtures"
 import { CONNECT_ACCOUNT_TEXT } from "./results"
 import { toResultText } from "./toolTestFixtures"
 
@@ -12,9 +12,6 @@ const publishedTopicPostId = `${runId}-topic-post`
 const draftTopicPostId = `${runId}-topic-post-draft`
 const publishedTopicPostTitle = `${runId} published post`
 const publishedTopicPostBody = `The body of the post that ${runId} published.`
-
-// both routes: every topic, and the one bound to the smoke's public topic
-const routePaths = ["/mcp", `/mcp/t/${topicId}`]
 
 // the sdk client of one route
 type SmokeClient = ReturnType<typeof toClient>["client"]

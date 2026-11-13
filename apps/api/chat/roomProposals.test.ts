@@ -6,6 +6,7 @@ import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connect
 import * as agreement from "@carlnotes/pipeline/chat/agreement"
 import { toEmptyChatTurnToolCalls } from "../tool/chatTools"
 import * as topicTools from "../tool/topicTools"
+import * as saveTopicGate from "../topic/saveTopicGate"
 import { decryptChatJson, decryptChatText, encryptChatJson } from "./encryption"
 import { answerChatRoomProposal, recordChatRoomProposal } from "./roomProposals"
 
@@ -37,6 +38,7 @@ test("a chat room turn's standing preview is stored encrypted for the member it 
 test("the member a chat room preview was shown to agrees, and the edit is applied for them", async () => {
 	// the member's stored preview, taken back by the delete
 	const sentQueries = stubConnectionPool(() => [[encryptChatJson({ frequency: "daily" })]])
+	spyOn(saveTopicGate, "toTopicEditRejection").mockResolvedValue(null)
 	const checkAgreementSpy = spyOn(agreement, "checkAgreement").mockResolvedValue({ decision: "agree", totalTokens: 9 })
 	const updateTopicFieldsSpy = spyOn(topicTools, "updateTopicFields").mockResolvedValue({
 		status: "saved",
@@ -96,4 +98,22 @@ test("toWordsWithoutModelMention drops the carl mention and nothing else", () =>
 	expect(toWordsWithoutModelMention("yes @Carl please")).toBe("yes please")
 	expect(toWordsWithoutModelMention("mail me at maya@carl.dev")).toBe("mail me at maya@carl.dev")
 	expect(toWordsWithoutModelMention("@carl-bot yes")).toBe("@carl-bot yes")
+})
+
+// an agreed preview whose name the topic editor rejects saves nothing, and the rejection is listed for the toast
+test("an agreed chat room edit with an objectionable name saves nothing", async () => {
+	stubConnectionPool(() => [[encryptChatJson({ name: "a rude name" })]])
+	spyOn(saveTopicGate, "toTopicEditRejection").mockResolvedValue({ status: "objectionable", category: "harassment" })
+	spyOn(agreement, "checkAgreement").mockResolvedValue({ decision: "agree", totalTokens: 9 })
+	const updateTopicFieldsSpy = spyOn(topicTools, "updateTopicFields")
+	const toolCalls = toEmptyChatTurnToolCalls()
+	await answerChatRoomProposal({
+		userId: "maya",
+		topicId: "topic-1",
+		teamId: "team-1",
+		question: "@carl yes, do it",
+		toolCalls,
+	})
+	expect(updateTopicFieldsSpy).not.toHaveBeenCalled()
+	expect(toolCalls.topicSaveRejections[0]).toContain("name, prompt, and tags")
 })

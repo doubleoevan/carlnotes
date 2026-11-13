@@ -986,6 +986,14 @@ Check for:
    - the shared `AccountBudget`'s `planAction` and `PlanRow` (now `packages/core/components/AccountPlan.tsx` at the
      right of the account page's header row), and `apps/mobile/src/components/account/AccountBudget.stories.tsx` (now
      `AccountPlan.stories.tsx`)
+   - `apps/mobile/src/components/note/NoteManagement.tsx` (now `NoteDetails.tsx`, `NoteNameInput.tsx`, and
+     `NoteFooter.tsx` there, over core's `NoteDetails`), `apps/web/src/components/account/monthlyBudgetCutoffCopy.ts`
+     (now `packages/core/lib/monthlyBudgetCutoffCopy.ts`), `apps/web/src/components/table/TeamMembershipRows.tsx` and
+     its story (now `TeamsMembershipTable.tsx` over core's `TeamsMembershipTable`), and
+     `apps/web/src/mcpViews/mcpViewTableElements.tsx` and `mcpViewTopicPostInfoElements.tsx` (now
+     `apps/web/src/mcpViews/mcpViewElements.tsx`)
+   - `apps/web/src/components/table/TeamSubtablesRow.tsx`, its story, its test, and `TeamSubtablesRow` (now
+     `TeamSubtables.tsx`, its story, and its test, with `TeamSubtables` alone)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

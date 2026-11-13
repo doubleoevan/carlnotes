@@ -10,10 +10,10 @@ import type { ComponentPlatform } from "../componentPlatforms"
 export const platforms: ComponentPlatform[] = ["web", "mobile"]
 
 /**
- * The classes both apps draw on a TopicImage's box: the muted background that shows until the file loads and stays
- * for a topic with no image, and each size's pixels and corner. the page size fills its column at 3:2, so a card and
- * the topic page header size it by their width, and it keeps a card's round corner. the list and thumbnail sizes keep
- * a slight corner, which leaves whole the paper edge an image is drawn with
+ * The classes both apps draw on a TopicImage's box: the muted background that shows until the file loads and pulses
+ * while a topic's first image renders, and each size's pixels and corner. the page size fills its column at 3:2, so a
+ * card and the topic page header size it by their width, and it keeps a card's round corner. the list and thumbnail
+ * sizes keep a slight corner, which leaves whole the paper edge an image is drawn with
  */
 export const topicImageBoxVariants = cva("shrink-0 overflow-hidden bg-muted", {
 	variants: {

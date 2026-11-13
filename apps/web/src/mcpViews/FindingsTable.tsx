@@ -10,7 +10,7 @@ import { ResourceMetadata } from "@/components/topic/TopicFindingSummary"
 import { METADATA_LINE_CLASS } from "@/lib/styleClasses"
 import type { TopicFeedHandlers } from "@/providers/TopicFeedProvider"
 import { McpViewFindingDetails, McpViewFindingExpandButton, McpViewFindingTitle } from "./McpViewFindingCells"
-import { MCP_VIEW_CONTROLS_COLUMN, MCP_VIEW_TABLE_ELEMENTS, UNSORTED_MCP_VIEW_TABLE_SORT } from "./mcpViewTableElements"
+import { MCP_VIEW_CONTROLS_COLUMN, MCP_VIEW_TABLE_ELEMENTS, UNSORTED_MCP_VIEW_TABLE_SORT } from "./mcpViewElements"
 
 // each column's width in pixels, with the title taking what is left
 const SOURCE_COLUMN_WIDTH = 130

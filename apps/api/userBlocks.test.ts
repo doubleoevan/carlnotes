@@ -4,7 +4,7 @@ import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as redis from "@carlnotes/db/redis"
 import { toJsonRequest, toSignedInApp } from "./testSession"
-import { userBlocksRoute } from "./userBlocks"
+import { saveUserBlock, userBlocksRoute } from "./userBlocks"
 
 // put the spied Redis delete and the connection pool back after each test
 afterEach(() => {
@@ -64,4 +64,11 @@ test("an unblock removes the pair, and the list names each blocked person", asyn
 			},
 		],
 	})
+})
+
+// the module itself rejects a self block before any query, as the MCP block_user tool calls it
+test("saveUserBlock rejects blocking oneself and writes nothing", async () => {
+	const sentQueries = stubConnectionPool(() => [])
+	expect(await saveUserBlock("user-1", "user-1")).toBe("selfBlock")
+	expect(sentQueries).toHaveLength(0)
 })

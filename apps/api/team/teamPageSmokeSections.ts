@@ -28,7 +28,7 @@ export async function checkTeamPageGate(): Promise<void> {
 	check(nonMemberResult.status === "gated" && !nonMemberResult.hasRequestedToJoin, "a non-member gets the gate")
 
 	// a non-member who asked to join sees the request on the gate
-	check(await requestToJoinTeam(toId("joiner"), teamId), "the non-member asks to join")
+	check(await requestToJoinTeam({ userId: toId("joiner"), teamId }), "the non-member asks to join")
 	const requesterResult = await loadTeamPage(toId("joiner"), teamId)
 	check(
 		requesterResult.status === "gated" && requesterResult.hasRequestedToJoin,

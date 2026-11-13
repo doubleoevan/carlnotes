@@ -107,11 +107,12 @@ function toStoryHost(isLinkDeclined: boolean): App {
 }
 
 // load a podcast episode paused, with no audio source. the router can mount the audio element after the play function
-// starts, and mounting it clears the player, so the load repeats until the player bar's seek slider shows
+// starts, and mounting it clears the player, so the load repeats until a seek slider shows. a film in the frame adds
+// its own seek slider beside the player bar's
 async function showPodcastPlayer(podcastEpisode: PodcastEpisode = PODCAST_STORY_EPISODE): Promise<void> {
 	await waitFor(() => {
 		restorePodcastEpisode({ podcastEpisode, positionSeconds: 0, playbackRate: 1 })
-		expect(screen.getByRole("slider", { name: "Seek" })).toBeInTheDocument()
+		expect(screen.getAllByRole("slider", { name: "Seek" })[0]).toBeInTheDocument()
 	})
 }
 
@@ -136,7 +137,7 @@ export const Fullscreen: Story = { parameters: { mcpViewRoute: { ...FINDINGS_ROU
 // a loaded podcast episode offers picture in picture
 export const PlayerShown: Story = { play: () => showPodcastPlayer() }
 
-// a loaded podcast episode with a film links to the film player on its page, since the MCP view plays only audio
+// a loaded podcast episode with a film links to the film player on its page while films play outside the frame
 export const PlayerWithFilm: Story = {
 	play: async ({ canvas }) => {
 		const { video: _video, ...podcastEpisode } = PODCAST_STORY_FILM_EPISODE
@@ -146,6 +147,17 @@ export const PlayerWithFilm: Story = {
 			pagePath: "/topics/topic-1/coffee/episodes/2026/7",
 		})
 		await expect(await canvas.findByRole("link", { name: "Watch on CarlNotes" })).toBeVisible()
+	},
+}
+
+// a loaded podcast episode with a film plays it in the frame while films play there, with no picture-in-picture or
+// fullscreen control
+export const PlayerWithFilmInFrame: Story = {
+	play: async ({ canvas }) => {
+		await showPodcastPlayer({ ...PODCAST_STORY_FILM_EPISODE, pagePath: "/topics/topic-1/coffee/episodes/2026/7" })
+		await expect(await canvas.findByRole("button", { name: "Hide captions" })).toBeVisible()
+		await expect(canvas.queryByRole("button", { name: "Fullscreen" })).toBeNull()
+		await expect(canvas.queryByRole("link", { name: "Watch on CarlNotes" })).toBeNull()
 	},
 }
 

@@ -1,87 +1,55 @@
 import type { Note } from "@carlnotes/contracts/notes"
 import { toDotSeparatedText } from "@carlnotes/contracts/text"
 import type { ComponentType, ReactNode } from "react"
-import type { RowSort } from "../hooks/useRowSort"
-import { toAgeLabel } from "../lib/labels"
+import { toMonthYearLabel } from "../lib/labels"
+import type { SortedTableElement } from "../lib/tableElements"
+import type { TableColumn } from "./DataTable"
 
 // the same note columns, ordering, visibility names, and totals on both platforms
-export const noteSortValues = {
+const noteSortValues = {
 	name: (note: Note) => note.name,
 	visibility: (note: Note) => note.visibility,
 	updated: (note: Note) => note.updatedAt,
 }
 export const NOTE_VISIBILITY_LABELS = { private: "Private", team: "Team", public: "Public" }
-type Container = ComponentType<{ children: ReactNode }>
 export type NotesTableElements = {
-	Table: Container
-	Head: Container
-	Body: Container
-	Foot: Container
-	Row: ComponentType<{ children: ReactNode; className?: string; hasSeparator?: boolean }>
-	Cell: ComponentType<{ children: ReactNode; column: "name" | "visibility" | "updated" }>
-	Header: ComponentType<{ sort: RowSort; sortKey: string; label: string }>
-	Text: Container
+	Table: SortedTableElement
+	Text: ComponentType<{ children: ReactNode }>
 	Visibility: ComponentType<{ visibility: Note["visibility"]; label: string }>
 }
 
 /**
- * Renders the note table's columns, update details, and totals through platform table elements.
+ * Renders the notes as a standard sorted table, newest update first, with the totals under it.
  */
 export function NotesTable({
 	notes,
-	renderedRows,
-	sort,
 	renderNoteName,
-	elements: { Table, Head, Body, Foot, Row, Cell, Header, Text, Visibility },
+	elements: { Table, Text, Visibility },
 }: {
 	notes: Note[]
-	renderedRows: { row: Note; className?: string }[]
-	sort: RowSort
 	renderNoteName: (note: Note) => ReactNode
 	elements: NotesTableElements
 }) {
-	const latestUpdatedAt = notes.reduce<string | null>(
-		(latest, note) => (latest === null || note.updatedAt > latest ? note.updatedAt : latest),
-		null,
-	)
+	const columns: TableColumn<Note>[] = [
+		{ key: "name", label: "Note", width: 192, render: renderNoteName, footer: <Text>Total</Text> },
+		{
+			key: "visibility",
+			label: "Visibility",
+			width: 112,
+			tooltip: "Who may see this note",
+			render: (note) => <Visibility visibility={note.visibility} label={NOTE_VISIBILITY_LABELS[note.visibility]} />,
+			footer: <Text>{toVisibilityCountsLabel(notes)}</Text>,
+		},
+		{ key: "updated", label: "Updated", width: 112, render: (note) => <Text>{toMonthYearLabel(note.updatedAt)}</Text> },
+	]
 	return (
-		<Table>
-			{/* the same sortable columns on every platform */}
-			<Head>
-				<Row>
-					<Header sort={sort} sortKey="name" label="Note" />
-					<Header sort={sort} sortKey="visibility" label="Visibility" />
-					<Header sort={sort} sortKey="updated" label="Updated" />
-				</Row>
-			</Head>
-			<Body>
-				{renderedRows.map(({ row: note, className }) => (
-					<Row key={note.id} className={className} hasSeparator>
-						<Cell column="name">{renderNoteName(note)}</Cell>
-						<Cell column="visibility">
-							<Visibility visibility={note.visibility} label={NOTE_VISIBILITY_LABELS[note.visibility]} />
-						</Cell>
-						<Cell column="updated">
-							<Text>{toAgeLabel(note.updatedAt)}</Text>
-						</Cell>
-					</Row>
-				))}
-			</Body>
-			{/* totals describe every note, including rows on other pages */}
-			<Foot>
-				<Row>
-					<Cell column="name">
-						<Text>{notes.length + (notes.length === 1 ? " note" : " notes")}</Text>
-					</Cell>
-					<Cell column="visibility">
-						<Text>{toVisibilityCountsLabel(notes)}</Text>
-					</Cell>
-					<Cell column="updated">
-						<Text>{latestUpdatedAt ? `latest ${toAgeLabel(latestUpdatedAt)}` : ""}</Text>
-					</Cell>
-				</Row>
-			</Foot>
-		</Table>
+		<Table
+			rows={notes}
+			columns={columns}
+			valueByKey={noteSortValues}
+			initialSort={{ key: "updated", isDescending: true }}
+			getRowId={(note) => note.id}
+		/>
 	)
 }
 

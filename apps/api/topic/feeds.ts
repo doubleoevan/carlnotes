@@ -3,12 +3,12 @@
 import type { TopicFinding } from "@carlnotes/contracts/findings"
 import { EMPTY_REACTION_SUMMARY, toSocialTargetKey } from "@carlnotes/contracts/social"
 import { toTopicImageUrlsOrNull } from "@carlnotes/contracts/topicImages"
-import type { TopicFeed, TopicFeedResponse, TopicResponse } from "@carlnotes/contracts/topics"
+import type { TopicFeed, TopicFeedResponse, TopicResponse, TopicSectionKey } from "@carlnotes/contracts/topics"
 import { db, isPublicAndShown } from "@carlnotes/db"
 import { cacheJson } from "@carlnotes/db/redis"
 import { subscriptions, topics } from "@carlnotes/db/schema/topics"
 import { traceRequestStage } from "@carlnotes/server/monitoring"
-import { and, asc, desc, eq, inArray, isNotNull, isNull, ne } from "drizzle-orm"
+import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, type SQL } from "drizzle-orm"
 import { toProfileIdentity } from "../avatars"
 import { attachTopicFindingFaviconPaths } from "../favicons"
 import { loadReactionSummaries } from "../social/reactionRows"
@@ -116,15 +116,42 @@ async function publicSectionTopics(userId: string | null): Promise<{
 }
 
 /**
+ * Returns one section's topic ids in the feed's order, without building the section's feeds. A visitor has no own or
+ * followed topics.
+ */
+export async function loadTopicSectionIds(userId: string | null, sectionKey: TopicSectionKey): Promise<string[]> {
+	// the own and followed sections, newest first
+	if (sectionKey === "yours" || sectionKey === "subscribed") {
+		if (!userId) {
+			return []
+		}
+		// the section's own filter, the same one its feed reads
+		const sectionFilter = sectionKey === "yours" ? eq(topics.ownerId, userId) : toSubscribedSectionFilter(userId)
+		const topicIdRows = await db
+			.select({ id: topics.id })
+			.from(topics)
+			.where(sectionFilter)
+			.orderBy(desc(topics.createdAt))
+		return topicIdRows.map((topicIdRow) => topicIdRow.id)
+	}
+
+	// the public sections, with their visibility checked again
+	const { homeTopics, popularTopics } = await publicSectionTopics(userId)
+	return (sectionKey === "home" ? homeTopics : popularTopics).map((topic) => topic.id)
+}
+
+// the topics a user actively follows, less the ones they own
+function toSubscribedSectionFilter(userId: string): SQL | undefined {
+	return and(ne(topics.ownerId, userId), inArray(topics.id, activeSubscriptionTopicIdQuery(userId)))
+}
+
+/**
  * Build a topic feed's sections: home and popular for everyone, yours and subscribed as well for a logged-in user.
  */
 export async function buildTopicFeeds(
 	userId: string | null,
 	includeConsumedResources: boolean,
 ): Promise<Pick<TopicFeedResponse, "sections">> {
-	// the topic ids this user actively subscribes to
-	const activeSubscriptionTopicIds = userId ? activeSubscriptionTopicIdQuery(userId) : null
-
 	// the user's own topics, and the topics they subscribe to but don't own. both read newest first.
 	// an unordered select leaves the order to the database, which moves a row after any update to it
 	const [ownersTopics, subscribedTopics, { homeTopics, popularTopics }] = await traceRequestStage(
@@ -135,12 +162,8 @@ export async function buildTopicFeeds(
 					? db.select().from(topics).where(eq(topics.ownerId, userId)).orderBy(desc(topics.createdAt))
 					: Promise.resolve([]),
 				// subscribed topics never include one this user owns
-				userId && activeSubscriptionTopicIds
-					? db
-							.select()
-							.from(topics)
-							.where(and(ne(topics.ownerId, userId), inArray(topics.id, activeSubscriptionTopicIds)))
-							.orderBy(desc(topics.createdAt))
+				userId
+					? db.select().from(topics).where(toSubscribedSectionFilter(userId)).orderBy(desc(topics.createdAt))
 					: Promise.resolve([]),
 				publicSectionTopics(userId),
 			]),

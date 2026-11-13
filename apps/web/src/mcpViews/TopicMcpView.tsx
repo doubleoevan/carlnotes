@@ -7,6 +7,7 @@ import { useState } from "react"
 import { TopicDraftCard } from "@/components/chat/TopicDraftCard"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Button } from "@/components/primitives/button"
+import { TOPIC_IMAGE_FRAME_CLASS, TopicImage } from "@/components/primitives/topic-image"
 import { STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
 import { McpViewLink } from "./McpViewLink"
 import { callMcpViewTool, toToolResultText, useMcpViewData } from "./mcpViewHost"
@@ -128,6 +129,17 @@ function TopicEditMcpView({
 		<div
 			className={`${shownTopicMcpViewResult.status === "createConfirmRequired" ? "flex min-h-0 flex-col gap-3" : "bg-card rounded-lg border"} ${shouldFillHeight ? "flex min-h-0 flex-1 flex-col" : ""}`}
 		>
+			{/* the image set_topic_image saved, framed as the topic page frames it */}
+			{"image" in shownTopicMcpViewResult && shownTopicMcpViewResult.image && (
+				<div className="p-3">
+					<TopicImage
+						image={shownTopicMcpViewResult.image}
+						size="page"
+						name={shownTopicMcpViewResult.afterTopicDraft.name}
+						className={`${TOPIC_IMAGE_FRAME_CLASS} w-full`}
+					/>
+				</div>
+			)}
 			{shownTopicMcpViewResult.status === "createConfirmRequired" && editedDraft ? (
 				<TopicDraftEditor
 					topicDraft={editedDraft}

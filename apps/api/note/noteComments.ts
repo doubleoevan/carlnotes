@@ -10,7 +10,7 @@ import { trackEvent } from "@carlnotes/server/analytics"
 import { zValidator } from "@hono/zod-validator"
 import { and, asc, eq } from "drizzle-orm"
 import { Hono } from "hono"
-import { type AppEnv, toAnalyticsProperties } from "../currentUser"
+import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { toObjectionableCategory, toObjectionableContentResponse } from "../moderation"
 import { toolCallerRateLimiter } from "../rateLimit"
 import { toTermsOutdatedResponse } from "../termsAcceptance"
@@ -116,7 +116,7 @@ export async function deleteNoteComment({
 export const noteCommentsRoute = new Hono<AppEnv>()
 	.get("/notes/:id/comments", async (context) => {
 		// the thread, for anyone who may read the note
-		const visibleNote = await loadVisibleNote(context, context.req.param("id"))
+		const visibleNote = await loadVisibleNote(currentUser(context), context.req.param("id"))
 		if (!visibleNote) {
 			return context.json({ error: "not found" }, 404)
 		}
@@ -124,7 +124,7 @@ export const noteCommentsRoute = new Hono<AppEnv>()
 	})
 	.post("/notes/:id/comments", toolCallerRateLimiter, zValidator("json", noteCommentPayload), async (context) => {
 		// a post takes edit access, the same gate as writing the body
-		const visibleNote = await loadVisibleNote(context, context.req.param("id"))
+		const visibleNote = await loadVisibleNote(currentUser(context), context.req.param("id"))
 		const sessionUser = context.get("user")
 
 		// a visitor, an unreadable note, and a user without edit access all see a missing note
@@ -182,7 +182,7 @@ export const noteCommentsRoute = new Hono<AppEnv>()
 	})
 	.delete("/notes/:id/comments/:commentId", async (context) => {
 		// a delete is the author's or an admin's, on a note they may read
-		const visibleNote = await loadVisibleNote(context, context.req.param("id"))
+		const visibleNote = await loadVisibleNote(currentUser(context), context.req.param("id"))
 		if (!visibleNote?.userId) {
 			return context.json({ error: "not found" }, 404)
 		}

@@ -7,7 +7,6 @@ import {
 	type TopicImageRenderResponse,
 	type TopicImageUrls,
 	toPodcastEpisodeImageUrls,
-	toTopicImageUrls,
 	toTopicImageUrlsOrNull,
 	toTopicPodcastEpisodeVideoPosterUrl,
 	toTopicPostImageUrls,
@@ -17,25 +16,25 @@ import { podcastEpisodes, topicPodcastEpisodeVideos } from "@carlnotes/db/schema
 import { topicPosts } from "@carlnotes/db/schema/topicPosts"
 import { topics } from "@carlnotes/db/schema/topics"
 import { loadTopicImage } from "@carlnotes/db/topicImages"
-import { topicImageRegenerateModel } from "@carlnotes/models/topicImageModel"
-import { storeTopicImageFiles, toTopicImageFileKey } from "@carlnotes/pipeline/topicImages/topicImageFiles"
-import {
-	loadTopicImageRender,
-	replaceTopicImage,
-	startTopicImageRender,
-	type TopicImageRenderRow,
-} from "@carlnotes/pipeline/topicImages/topicImageRenders"
-import { trackEvent } from "@carlnotes/server/analytics"
+import { toTopicImageFileKey } from "@carlnotes/pipeline/topicImages/topicImageFiles"
+import { loadTopicImageRender, type TopicImageRenderRow } from "@carlnotes/pipeline/topicImages/topicImageRenders"
 import { zValidator } from "@hono/zod-validator"
 import { eq } from "drizzle-orm"
 import { type Context, Hono } from "hono"
 import { isAllowed } from "../authorization"
 import { uploadSignedOutRejection } from "../bodyLimit"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
+import { toObjectionableContentResponse } from "../moderation"
 import { toolCallerRateLimiter } from "../rateLimit"
-import { imageUploadBodyLimit, readUploadedImageOriginal, toImagePromptRejection } from "./imageEdits"
+import { imageUploadBodyLimit, readUploadedImageOriginal } from "./imageEdits"
 import { namedTopicColumns } from "./permissions"
 import { serveImageFile } from "./serveImageFile"
+import {
+	loadTopicImageEditor,
+	regenerateTopicImage,
+	storeUploadedTopicImage,
+	type TopicImageEditor,
+} from "./topicImageEdits"
 
 // the topic image routes
 export const topicImagesRoute = new Hono<AppEnv>()
@@ -59,35 +58,26 @@ export const topicImagesRoute = new Hono<AppEnv>()
 		toolCallerRateLimiter,
 		zValidator("json", regenerateTopicImagePayload),
 		async (context) => {
-			// an editor of the topic, with regenerations left this month
-			const editor = await loadTopicEditor(context)
-			if ("response" in editor) {
-				return editor.response
-			}
-			if (!(await isAllowed(editor.userId, "topicImage:regenerate"))) {
-				return context.json({ error: "regeneration limit reached" }, 429)
+			// an editor of the topic
+			const topicImageEditor = await loadTopicEditor(context)
+			if ("response" in topicImageEditor) {
+				return topicImageEditor.response
 			}
 
-			// an image prompt goes to the image model alone, so it passes the moderation first
-			const { imagePrompt } = context.req.valid("json")
-			const imagePromptRejection = await toImagePromptRejection(context, {
-				imagePrompt,
-				subjectKind: "topic image prompt",
-				subjectId: editor.topic.id,
+			// the render, within the month's regenerations and after the image prompt's moderation
+			const regenerateTopicImageResult = await regenerateTopicImage({
+				topicImageEditor,
+				imagePrompt: context.req.valid("json").imagePrompt,
 			})
-			if (imagePromptRejection) {
-				return imagePromptRejection
+			switch (regenerateTopicImageResult.status) {
+				case "started":
+					return context.json({ renderId: regenerateTopicImageResult.renderId }, 202)
+				case "limitReached":
+					return context.json({ error: "regeneration limit reached" }, 429)
+				// the moderation names the category
+				case "objectionable":
+					return toObjectionableContentResponse(context, regenerateTopicImageResult.category)
 			}
-
-			// the render row and its workflow
-			const renderId = await startTopicImageRender({
-				topicId: editor.topic.id,
-				userId: editor.userId,
-				kind: "regenerate",
-				model: topicImageRegenerateModel(),
-				imagePrompt,
-			})
-			return context.json({ renderId }, 202)
 		},
 	)
 	// a render as the editor polls it
@@ -112,41 +102,27 @@ export const topicImagesRoute = new Hono<AppEnv>()
 	// the owner's upload: a jpeg, png, or webp, center-cropped and derived in place of the current image
 	.post("/topics/:id/image", toolCallerRateLimiter, uploadSignedOutRejection, imageUploadBodyLimit, async (context) => {
 		// an editor of the topic
-		const editor = await loadTopicEditor(context)
-		if ("response" in editor) {
-			return editor.response
+		const topicImageEditor = await loadTopicEditor(context)
+		if ("response" in topicImageEditor) {
+			return topicImageEditor.response
 		}
 
 		// the file, checked by its size, its type, and the image moderation
 		const uploadedImage = await readUploadedImageOriginal(context, {
 			subjectKind: "topic image",
-			subjectId: editor.topic.id,
+			subjectId: topicImageEditor.topic.id,
 		})
 		if ("response" in uploadedImage) {
 			return uploadedImage.response
 		}
-		const { original } = uploadedImage
 
-		// the files under their hash, then the row that makes the upload current
-		const hash = await storeTopicImageFiles(editor.topic.id, original)
-		await replaceTopicImage({
-			topicId: editor.topic.id,
-			renderId: null,
-			hash,
-			origin: "uploaded",
-			scene: null,
-			model: null,
-			imagePrompt: null,
-			width: original.width,
-			height: original.height,
-			costDollars: 0,
+		// the checked original becomes the current image
+		const image = await storeUploadedTopicImage({
+			topicImageEditor,
+			original: uploadedImage.original,
+			analyticsProperties: toAnalyticsProperties(context),
 		})
-		trackEvent("topic_image_upload", editor.userId, {
-			...toAnalyticsProperties(context),
-			topicId: editor.topic.id,
-			isOwner: editor.topic.ownerId === editor.userId,
-		})
-		return context.json({ image: toTopicImageUrls(editor.topic.id, hash) })
+		return context.json({ image })
 	})
 
 // the poster url of the image a succeeded film render left, or null for any other render
@@ -201,22 +177,13 @@ async function loadRenderedImage(render: TopicImageRenderRow): Promise<TopicImag
 	return toTopicImageUrlsOrNull(render.topicId, (await loadTopicImage(render.topicId))?.hash ?? null)
 }
 
-// the signed-in editor of the route's topic, or the response that turns the request away
-type TopicEditor = { userId: string; topic: { id: string; ownerId: string } } | { response: Response }
-
-// load the route's topic for a signed-in user the edit gate grants. a topic the user may not edit reads as missing
-async function loadTopicEditor(context: Context<AppEnv>): Promise<TopicEditor> {
-	// a signed-out visitor is turned away before the topic is read
+// the signed-in editor of the route's topic, or the response that turns the request away. a signed-out visitor is
+// turned away before the topic is read, and a topic the user may not edit reads as missing
+async function loadTopicEditor(context: Context<AppEnv>): Promise<TopicImageEditor | { response: Response }> {
 	const userId = currentUser(context)
 	if (!userId) {
 		return { response: context.json({ error: "unauthorized" }, 401) }
 	}
-
-	// the topic, which the edit gate decides
-	const topicId = context.req.param("id") ?? ""
-	const [topic] = await db.select(namedTopicColumns).from(topics).where(eq(topics.id, topicId))
-	if (!topic || !(await isAllowed(userId, "topic:edit", topic))) {
-		return { response: context.json({ error: "not found" }, 404) }
-	}
-	return { userId, topic }
+	const topicImageEditor = await loadTopicImageEditor(userId, context.req.param("id") ?? "")
+	return topicImageEditor ?? { response: context.json({ error: "not found" }, 404) }
 }

@@ -11,7 +11,7 @@ import { loadScanMcpViewData, toMcpViewMeta } from "./mcpViewData"
 import { loadVisibleTopic, toToolTopicId } from "./results"
 import { loadMcpScanStatus, toFencedScanStatus, toScanStatusText } from "./scanResults"
 import type { ToolCaller } from "./toolCaller"
-import { type RegisterToolsOptions, toPageResult, topicIdArgument, toTextResult } from "./toolShapes"
+import { type RegisterToolsOptions, toPageResult, topicIdArgument, toStatusResult, toTextResult } from "./toolShapes"
 import { toTopicWriteCall } from "./topicEditTools"
 import { toMcpViewToolMeta } from "./uiResources"
 
@@ -108,7 +108,7 @@ export function registerScanTools({ mcpServer, toolCaller, routeTopicId }: Regis
 			description:
 				"Stop a CarlNotes topic's running brew. What Carl kept stays, what the brew spent stays charged, and its daily brew comes back. Only the topic's owner or an admin may stop it. Use it when the user asks Carl or CarlNotes to stop, with phrases like stop the brew or cancel this brew.",
 			inputSchema: scanToolInput,
-			annotations: { readOnlyHint: false, destructiveHint: true },
+			annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
 		},
 		async ({ topic_id }) => {
 			const topicWriteCall = toTopicWriteCall({ toolCaller, routeTopicId, topicId: topic_id })
@@ -157,5 +157,5 @@ function toScanStopResult(mcpScanStop: McpScanStop): CallToolResult {
 		mcpScanStop.status === "stopped"
 			? `Stopped the brew. It kept ${mcpScanStop.keptCount}, and its daily brew is back.`
 			: "No brew is running on this topic."
-	return { content: [{ type: "text", text }], structuredContent: mcpScanStop }
+	return toStatusResult(text, mcpScanStop)
 }

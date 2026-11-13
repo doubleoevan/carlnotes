@@ -1,4 +1,4 @@
-// the social tools: a save of the connected account's reaction, a read of a comment thread, and a post on one
+// the social tools: a save of the connected account's reaction, a read of a comment thread, a post on one, and a delete
 import { commentTargetKinds, reactionTypes, socialTargetKinds } from "@carlnotes/contracts/enums"
 import { toModerationRejectionMessage } from "@carlnotes/contracts/moderation"
 import { PODCAST_EPISODE_SPEAKER_NAMES } from "@carlnotes/contracts/podcastEpisodes"
@@ -17,12 +17,12 @@ import type { CallToolResult } from "@modelcontextprotocol/server"
 import { z } from "zod"
 import type { AnalyticsProperties } from "../currentUser"
 import { loadCommentPage } from "../social/commentRows"
-import { type CommentPostResult, postComment } from "../social/comments"
+import { type CommentPostResult, deleteComment, postComment } from "../social/comments"
 import { type ReactionWriteResult, saveReaction } from "../social/reactions"
 import { type ResolvedSocialTarget, resolveSocialTarget, toSocialReader } from "../social/socialTargets"
 import { hasAcceptedCurrentTerms } from "../termsAcceptance"
 import { toMcpViewMeta } from "./mcpViewData"
-import { CONNECT_ACCOUNT_TEXT, toToolReactionCounts, UNTRUSTED_TEXT_NOTICE } from "./results"
+import { CONNECT_ACCOUNT_TEXT, TERMS_REJECTION_TEXT, toToolReactionCounts, UNTRUSTED_TEXT_NOTICE } from "./results"
 import { type ToolCaller, toMcpAnalyticsProperties, toToolCallerUserId } from "./toolCaller"
 import { type RegisterToolsOptions, toTextResult } from "./toolShapes"
 
@@ -30,7 +30,6 @@ import { type RegisterToolsOptions, toTextResult } from "./toolShapes"
 const SOCIAL_TARGET_REJECTION_TEXT =
 	"No finding, podcast episode, topic, topic post, or hot take this account may read and post on has that id."
 const DAILY_LIMIT_REJECTION_TEXT = "This account has reached today's limit. Try again tomorrow."
-const TERMS_REJECTION_TEXT = "Accept the updated Terms in CarlNotes before writing here."
 
 // the arguments that name what a comment thread hangs on: its kind and its id
 const commentTargetArguments = {
@@ -61,7 +60,7 @@ export function registerSocialTools({ mcpServer, toolCaller, routeTopicId }: Reg
 				),
 				reaction_type: z.enum(reactionTypes).nullable().optional().describe("The reaction type, or null to remove it."),
 			}),
-			annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+			annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
 		},
 		async ({ target_kind, target_id, reaction_type }) => {
 			const target = { kind: target_kind, id: target_id }
@@ -129,6 +128,39 @@ export function registerSocialTools({ mcpServer, toolCaller, routeTopicId }: Reg
 				payload: { target, body, parentCommentId: parent_id, chapterPosition: chapter_position },
 			})
 			return toCommentPostToolResult(commentPostResult)
+		},
+	)
+	mcpServer.registerTool(
+		"delete_hot_take",
+		{
+			title: "Delete a hot take",
+			description:
+				"Delete a hot take on CarlNotes with its replies, for good. Its author, the topic's owner, and an admin may delete it. Use it when the user asks Carl or CarlNotes to delete my hot take, remove this comment, or take down a reply on my topic.",
+			inputSchema: z.object({ comment_id: socialId.describe("The hot take's id.") }),
+			annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+		},
+		async ({ comment_id }) => {
+			if (toolCaller.kind !== "user") {
+				return toTextResult(CONNECT_ACCOUNT_TEXT)
+			}
+
+			// a bound server deletes only on its own Topic, and the delete is the author's or a moderator's
+			const notDeletedResult = toTextResult("No hot take you may delete has that id. Nothing was deleted.", true)
+			const { userId } = toolCaller
+			if (
+				routeTopicId &&
+				!(await resolveRouteSocialTarget(userId, { kind: "comment", id: comment_id }, routeTopicId))
+			) {
+				return notDeletedResult
+			}
+
+			// delete as the author, the topic's owner, or an admin
+			const deleteCommentResult = await deleteComment({
+				userId,
+				commentId: comment_id,
+				analyticsProperties: toMcpAnalyticsProperties(toolCaller),
+			})
+			return deleteCommentResult.status === "deleted" ? toTextResult("Deleted the hot take.") : notDeletedResult
 		},
 	)
 }

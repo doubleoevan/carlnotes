@@ -5,6 +5,7 @@ import { EMPTY_TOPIC_DRAFT } from "@carlnotes/contracts/topicPayloads"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { useEffect } from "react"
 import { VISITOR_TOOL_RESULT } from "../../.storybook/fixtures/mcpViews"
+import { SAMPLE_TOPIC_IMAGE } from "../../.storybook/fixtures/topics"
 import { McpViewToolText } from "./McpViewToolText"
 import { setMcpViewData } from "./mcpViewHost"
 import { TopicMcpView } from "./TopicMcpView"
@@ -78,6 +79,18 @@ export const Visitor: Story = {
 // a saved edit, which shows the topic as it now stands with no Save button
 export const Saved: Story = {
 	args: { mcpViewTopicResult: { status: "saved", topicId: "topic-home-espresso", afterTopicDraft: TOPIC_DRAFT } },
+}
+
+// a set_topic_image save, which shows the new image above the topic
+export const ImageSaved: Story = {
+	args: {
+		mcpViewTopicResult: {
+			status: "saved",
+			topicId: "topic-home-espresso",
+			afterTopicDraft: TOPIC_DRAFT,
+			image: SAMPLE_TOPIC_IMAGE,
+		},
+	},
 }
 
 // explicit sends show bounded confirmations and choices, with no save or automatic retry action

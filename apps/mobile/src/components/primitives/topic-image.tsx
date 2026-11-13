@@ -9,9 +9,10 @@ import {
 import { topicImageClasses } from "@carlnotes/nightshift/components/topic-image"
 import { Image } from "expo-image"
 import { View } from "react-native"
+import { SkeletonPulse } from "@/components/common/SkeletonPulse"
 
-// the native elements: the box is a view, an image with its name when a file is in it, and the file an expo-image
-// that fills the contract's image box at 2x
+// the native elements: the box is a view, an image with its name when a file is in it and a pulse while the first
+// render is under way, and the file an expo-image that fills the contract's image box at 2x
 const ELEMENTS: TopicImageElements = {
 	Box: ({ className, label, children }) =>
 		label ? (
@@ -19,7 +20,9 @@ const ELEMENTS: TopicImageElements = {
 				{children}
 			</View>
 		) : (
-			<View className={className} />
+			<SkeletonPulse>
+				<View className={className} />
+			</SkeletonPulse>
 		),
 	Image: ({ url2x, alt }) => (
 		<View className={topicImageClasses.image}>
@@ -29,7 +32,7 @@ const ELEMENTS: TopicImageElements = {
 }
 
 /**
- * Shows a topic's image at a size on a phone, or the muted ground for a topic with no image yet.
+ * Shows a topic's image at a size on a phone, or the pulsing muted background while its first image renders.
  */
 export function TopicImage(props: TopicImageProps) {
 	return <SharedTopicImage {...props} elements={ELEMENTS} />

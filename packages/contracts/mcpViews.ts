@@ -1,19 +1,26 @@
 // the MCP views: the MCP view each tool names, and what a tool result gives its MCP view beside the structured result the
 // model reads
 
+import type { ActivityResponse, MonthlySpend } from "./activity"
+import type { ChatRoomMessagePage } from "./chat"
 import type { UnseenCommentMention } from "./commentMentions"
 import type { DashboardKind, DashboardResponse } from "./dashboards"
 import type { TopicFinding } from "./findings"
+import type { TopicCard } from "./home"
 import type { McpScanStatus } from "./mcpScanStatus"
 import type { NewsResponse, NewsWindow } from "./news"
+import type { NoteResponse, NotesResponse } from "./notes"
 import type { PersonalSourcesSendResult } from "./personalSources"
 import type { PodcastEpisode, PodcastEpisodeSummary } from "./podcast"
-import type { ProfileIdentity } from "./profiles"
+import type { ProfileResponse } from "./profilePage"
+import type { BillingState, ProfileIdentity } from "./profiles"
 import type { FindingSearchTopic, SearchRequest, SearchResultsPage, SearchRow } from "./search"
 import type { Comment, CommentThreadResponse, ReactionSummary } from "./social"
+import type { TeamPageResponse } from "./teams"
 import type { TopicImageUrls } from "./topicImages"
 import type { TopicDraft } from "./topicPayloads"
 import type { TopicPostCard, TopicPostResponse } from "./topicPosts"
+import type { RelatedTopicsResponse, TopicSectionKey } from "./topics"
 import type { Updates } from "./updates"
 
 // the MCP views, and each one's ui resource
@@ -28,12 +35,18 @@ export const MCP_VIEWS = [
 	"topic-posts",
 	"topic-post",
 	"dashboard",
+	"note",
+	"team",
+	"profile",
+	"activity",
+	"account",
+	"topics",
 ] as const
 
 export type McpView = (typeof MCP_VIEWS)[number]
 
 // the version of the MCP view bundle a running api builds, always above every stored version
-export const MCP_VIEW_VERSION = 11
+export const MCP_VIEW_VERSION = 12
 
 /**
  * Returns an MCP view's ui resource uri at a version, the current one by default.
@@ -109,7 +122,55 @@ export type McpViewData = {
 	postedComment?: Comment
 	// one Dashboard's read as the read_dashboard tool read it
 	dashboard?: McpViewDashboard
+	notes?: McpViewNotes
+	team?: McpViewTeam
+	profile?: McpViewProfile
+	activity?: McpViewActivity
+	account?: McpViewAccount
+	topics?: McpViewTopics
 }
+
+// what the note MCP view reads of a read_notes or save_note result: the page's notes, and the note it opened with its
+// html and version, or null for the list alone
+export type McpViewNotes = {
+	pageType: "topic" | "team"
+	pageId: string
+	notesResponse: NotesResponse
+	openedNote: NoteResponse | null
+}
+
+// what the team MCP view reads of a read_team result: the team page, its notes, and for a member the room's newest
+// messages with the cursor of the older ones
+export type McpViewTeam = {
+	teamPage: TeamPageResponse
+	notesResponse: NotesResponse | null
+	chatMessagePage: ChatRoomMessagePage | null
+}
+
+// what the profile MCP view reads of a read_profile result: the profile, and the first page of its news
+export type McpViewProfile = {
+	profile: ProfileResponse
+	newsPage: NewsResponse | null
+	// whether the profile is the caller's own, which shows the owner's topics and teams
+	isOwnProfile: boolean
+}
+
+// what the activity MCP view reads of a read_activity result: the caller's activity as the Activity page reads it
+export type McpViewActivity = {
+	activity: ActivityResponse
+}
+
+// what the account MCP view reads of a read_account result: the billing state and the month's spend meter
+export type McpViewAccount = {
+	billing: BillingState
+	spendMeter: MonthlySpend
+}
+
+// what the topics MCP view reads of a list_topics result. a section is a page of topic cards with whether more
+// follow, and its key is null for the whole list. similar topics are the topics like one topic
+export type McpViewTopics =
+	| { kind: "section"; sectionKey: TopicSectionKey | null; topicCards: TopicCard[]; hasMoreTopics: boolean }
+	| { kind: "similarTopics"; topicName: string; relatedTopics: RelatedTopicsResponse["relatedTopics"] }
 
 // the search tool's structured result: the search's page with every row's absolute url, the search that found it, and
 // the search page's absolute url
@@ -125,7 +186,13 @@ export type McpSearchPage = Omit<SearchResultsPage, "rows"> & {
 // previewed with each change that needs the user's agreement and the confirmation that saves the preview
 export type McpViewTopicResult =
 	| PersonalSourcesSendResult
-	| { status: "saved" | "created"; topicId: string; afterTopicDraft: TopicDraft | null }
+	| {
+			status: "saved" | "created"
+			topicId: string
+			afterTopicDraft: TopicDraft | null
+			// the image set_topic_image saved, which a regenerate leaves null while it renders
+			image?: TopicImageUrls | null
+	  }
 	| { status: "createConfirmRequired"; topicId: null; afterTopicDraft: TopicDraft; confirmation: string }
 	| {
 			status: "confirmRequired"

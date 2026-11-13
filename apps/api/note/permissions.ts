@@ -1,5 +1,6 @@
 // the access checks for notes, decided per visibility from the page access loaded once per request
 import type { noteVisibilities } from "@carlnotes/contracts/enums"
+import type { NotePageLink } from "@carlnotes/contracts/seo"
 import { db } from "@carlnotes/db"
 import { toUnreportedFilter } from "@carlnotes/db/contentFilters"
 import { notes } from "@carlnotes/db/schema/notes"
@@ -208,4 +209,13 @@ export async function loadTeamPage(teamId: string): Promise<NotePage | null> {
 		.from(teams)
 		.where(eq(teams.id, teamId))
 	return team ? { kind: "team", team } : null
+}
+
+/**
+ * Returns the link of the page a note lives on.
+ */
+export function toNotePageLink(page: NotePage): NotePageLink {
+	return page.kind === "topic"
+		? { kind: "topic", id: page.topic.id, name: page.topic.name }
+		: { kind: "team", id: page.team.id, name: page.team.name }
 }

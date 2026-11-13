@@ -2,6 +2,7 @@ import type { ProfileIdentity } from "@carlnotes/contracts/profiles"
 import type { ReactNode } from "react"
 import type { TableColumn } from "../components/DataTable"
 import { toMonthYearLabel } from "./labels"
+import type { ConfirmationBody } from "./tableElements"
 
 // topic and team invitations use one row shape and one set of columns
 export type SentInviteRow = {
@@ -16,34 +17,38 @@ export type SentInviteRow = {
 }
 
 // the target labels and confirmation content shared by each invitation table
-export type SentInvitesTableLabels<Body = ReactNode> = {
+export type SentInvitesTableLabels = {
 	targetLabel: string
 	acceptedLabel: string
 	acceptedNoun: string
 	confirmTitle: string
 	confirmLabel: string
-	confirmBody: (row: SentInviteRow) => Body
+	confirmBody: (row: SentInviteRow) => ConfirmationBody
 }
 // the team invites table's labels
-export const TEAM_INVITES_TABLE_LABELS: SentInvitesTableLabels<string> = {
+export const TEAM_INVITES_TABLE_LABELS: SentInvitesTableLabels = {
 	targetLabel: "Team",
 	acceptedLabel: "Joined",
 	acceptedNoun: "joined",
 	confirmTitle: "Withdraw this invite?",
 	confirmLabel: "Withdraw it",
-	confirmBody: (row) => `The invite to ${toInviteeLabel(row)} goes away. Anyone who already joined stays.`,
+	confirmBody: (row) => ({
+		beforeTarget: "The invite to ",
+		target: toInviteeLabel(row),
+		afterTarget: " goes away. Anyone who already joined stays.",
+	}),
 }
-export const TOPIC_INVITES_TABLE_LABELS: SentInvitesTableLabels<string> = {
+export const TOPIC_INVITES_TABLE_LABELS: SentInvitesTableLabels = {
 	targetLabel: "Topic",
 	acceptedLabel: "Followed",
 	acceptedNoun: "followed",
 	confirmTitle: "Delete this invite?",
 	confirmLabel: "Delete invite",
-	confirmBody: (row) => {
-		// join the confirmation parts for a plain-text dialog
-		const { beforeTarget, target, afterTarget } = toTopicInviteConfirmation(row)
-		return beforeTarget + target + afterTarget
-	},
+	confirmBody: (row) => ({
+		beforeTarget: `${row.inviteeEmail ?? row.invitee?.username ?? "This invitee"} loses access to `,
+		target: row.targetName,
+		afterTarget: ", and they stop following it. Inviting them again starts over.",
+	}),
 }
 
 // sort invitations by their target, invitee, sent date, or acceptance date
@@ -59,21 +64,6 @@ export const sentInviteSortValues = {
  */
 export function toInviteeLabel(row: SentInviteRow): string {
 	return row.inviteeEmail ?? row.invitee?.username ?? "this invitee"
-}
-
-/**
- * Returns the Topic withdrawal explanation with its target available for emphasis.
- */
-export function toTopicInviteConfirmation(row: SentInviteRow): {
-	beforeTarget: string
-	target: string
-	afterTarget: string
-} {
-	return {
-		beforeTarget: `${row.inviteeEmail ?? row.invitee?.username ?? "This invitee"} loses access to `,
-		target: row.targetName,
-		afterTarget: ", and they stop following it. Inviting them again starts over.",
-	}
 }
 
 /**

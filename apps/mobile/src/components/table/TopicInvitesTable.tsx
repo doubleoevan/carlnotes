@@ -1,41 +1,40 @@
 import { sendDeleteTopicInvite } from "@carlnotes/client/activityClient"
-import type { ActivityResponse } from "@carlnotes/contracts/activity"
-import { TOPIC_INVITES_TABLE_LABELS } from "@carlnotes/core/lib/sentInvitesTableColumns"
+import type { InviteRow } from "@carlnotes/contracts/invites"
+import {
+	TopicInvitesTable as SharedTopicInvitesTable,
+	type TopicInvitesTableElements,
+} from "@carlnotes/core/components/TopicInvitesTable"
+import { View } from "react-native"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Text } from "@/components/primitives/text"
-import { SentInvitesTable } from "./SentInvitesTable"
+import { usePageMutation } from "@/hooks/usePageMutation"
+import { SENT_INVITES_TABLE_ELEMENTS } from "./SentInvitesTable"
 
 /**
- * Lists topic invitations using the shared invitation table and server permissions.
+ * Renders the web's topic invites table, whose delete drops the invitee's subscription with the invite.
  */
-export function TopicInvitesTable({
-	invites,
-	onReload,
-}: {
-	invites: ActivityResponse["invites"]
-	onReload: () => void
-}) {
-	const rows = invites.map((invite) => ({
-		...invite,
-		targetName: invite.name,
-		acceptedAt: invite.subscribedAt,
-		target: (
-			<AnchorLink href={`/topics/${invite.topicId}`} accessibilityLabel={invite.name}>
-				<Text className="text-sm text-link">{invite.name}</Text>
-			</AnchorLink>
-		),
-	}))
+export function TopicInvitesTable({ invites, onReload }: { invites: InviteRow[]; onReload: () => void }) {
+	// one change at a time, with a failed one kept on screen
+	const mutation = usePageMutation(onReload)
 	return (
-		<SentInvitesTable
-			inviteRows={rows}
-			{...TOPIC_INVITES_TABLE_LABELS}
-			onDeleteInvite={async (row) => {
-				const invite = invites.find((invite) => invite.inviteId === row.inviteId)
-				if (invite) {
-					await sendDeleteTopicInvite(invite.topicId, invite.inviteId)
-				}
-			}}
-			onReload={onReload}
-		/>
+		<View className="gap-2">
+			<SharedTopicInvitesTable
+				invites={invites}
+				isDisabled={mutation.isPending}
+				onDeleteInvite={(invite) => mutation.run(() => sendDeleteTopicInvite(invite.topicId, invite.inviteId))}
+				elements={TOPIC_INVITES_TABLE_ELEMENTS}
+			/>
+			{mutation.error && <Text className="text-destructive">{mutation.error}</Text>}
+		</View>
 	)
+}
+
+// the sent invites table's elements with the topic's name linked to its screen
+const TOPIC_INVITES_TABLE_ELEMENTS: TopicInvitesTableElements = {
+	...SENT_INVITES_TABLE_ELEMENTS,
+	TopicLink: ({ topicId, name }) => (
+		<AnchorLink href={`/topics/${topicId}`} accessibilityLabel={name}>
+			<Text className="text-sm text-link">{name}</Text>
+		</AnchorLink>
+	),
 }

@@ -7,7 +7,7 @@ import { loadUserOrPublicLiteLLMKey } from "@carlnotes/models/litellm"
 import { isBudgetRejection, SPENT_BUDGET_REJECTION } from "@carlnotes/models/models"
 import { toUntrustedFence, UNTRUSTED_DATA_TAG } from "@carlnotes/models/prompts/write"
 import { type ChatContext, retrieveChatContext } from "@carlnotes/pipeline/chat/retrieve"
-import { loadVisibleTopic, MCP_PAGE_MAX_CHARS } from "./results"
+import { loadVisibleTopic, MCP_PAGE_MAX_CHARS, toFencedNullable } from "./results"
 import type { ToolCaller } from "./toolCaller"
 
 // the most attachment context one result holds. it shortens first, ahead of any Finding
@@ -150,10 +150,10 @@ function toMcpTopicContext({
 				url: toFencedText(finding.url),
 				foundAt: finding.foundAt.toISOString(),
 				relevanceScore: finding.relevanceScore,
-				title: finding.title === null ? null : toFencedText(finding.title),
+				title: toFencedNullable(toFencedText, finding.title),
 				relevanceExplanation: toFencedText(finding.relevanceExplanation),
 				excerpt: toFencedText(finding.text),
-				personalAnnotation: personalAnnotation ? toFencedText(personalAnnotation) : null,
+				personalAnnotation: toFencedNullable(toFencedText, personalAnnotation),
 			}
 		}),
 		scanSummaries: chatContext.scanSummaries.map((scanSummary) =>
@@ -162,7 +162,7 @@ function toMcpTopicContext({
 		attachmentContext: attachmentContext
 			? toFencedText(attachmentContext.slice(0, MAX_ATTACHMENT_CONTEXT_CHARS))
 			: null,
-		personalSourcesContext: personalSourcesContext ? toFencedText(personalSourcesContext) : null,
+		personalSourcesContext: toFencedNullable(toFencedText, personalSourcesContext),
 		isAttachmentContextShortened: attachmentContext.length > MAX_ATTACHMENT_CONTEXT_CHARS,
 		leftOutFindingCount: 0,
 	}

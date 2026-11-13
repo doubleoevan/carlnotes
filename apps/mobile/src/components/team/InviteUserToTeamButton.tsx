@@ -157,9 +157,7 @@ async function removeProfileTeam({
 	profileUserId: string
 }): Promise<void> {
 	if (team.status === "member") {
-		if (!(await sendRemoveTeamMember(team.teamId, profileUserId))) {
-			throw new Error("A team must have at least one leader.")
-		}
+		await sendRemoveTeamMember(team.teamId, profileUserId)
 	} else if (team.inviteId) {
 		await sendDeleteTeamInvite(team.teamId, team.inviteId)
 	}

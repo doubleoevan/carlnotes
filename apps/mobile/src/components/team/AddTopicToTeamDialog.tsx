@@ -1,5 +1,5 @@
 import { authClient } from "@carlnotes/client/authClient"
-import { fetchLeaderTeams, sendAddTopicTeam, sendRemoveTopicFromTeam } from "@carlnotes/client/teamClient"
+import { fetchLeaderTeams, sendAddTopicTeam } from "@carlnotes/client/teamClient"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { toRemoveTopicConfirmation } from "@carlnotes/core/lib/confirmationCopy"
 import { useQuery } from "@tanstack/react-query"
@@ -14,6 +14,7 @@ import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
 import { ADD_TOPIC_TO_TEAM_LABEL } from "@/components/search/pageActionOptions"
 import { usePageMutation } from "@/hooks/usePageMutation"
+import { removeTopicFromTeam } from "@/teamTopicRemoval"
 import { EditTeamModal } from "./EditTeamModal"
 
 /**
@@ -66,9 +67,7 @@ export function AddTopicToTeamDialog({
 											...toRemoveTopicConfirmation({ topicName: topic.name, teamName: team.name }),
 											onConfirm: () =>
 												void mutation.run(async () => {
-													if (!(await sendRemoveTopicFromTeam(team.teamId, topic.id))) {
-														throw new Error("That topic didn't get removed.")
-													}
+													await removeTopicFromTeam({ teamId: team.teamId, topicId: topic.id })
 													setChangedIds((ids) => ({ ...ids, [team.teamId]: false }))
 												}),
 										})

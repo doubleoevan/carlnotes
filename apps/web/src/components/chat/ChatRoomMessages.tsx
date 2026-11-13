@@ -1,10 +1,13 @@
 import { sendDeleteChatRoomAttachment } from "@carlnotes/client/chatRoomClient"
 import type { ChatRoomMessage } from "@carlnotes/contracts/chat"
-import { useNow } from "@carlnotes/core/hooks/useNow"
+import {
+	type ChatRoomListBubbleProps,
+	ChatRoomMessageList,
+	useChatRoomListBubbleProps,
+} from "@carlnotes/core/components/ChatRoomMessageList"
 import { useStableCallback } from "@carlnotes/core/hooks/useStableCallback"
-import { toEmptyChatRoomCopy, toReportedChatMessageLabel } from "@carlnotes/core/lib/chatCopy"
+import { toReportedChatMessageLabel } from "@carlnotes/core/lib/chatCopy"
 import { deleteChatRoomMessage } from "@carlnotes/core/lib/chatRoomActions"
-import { toChatMessageQuotes } from "@carlnotes/core/lib/chatRoomMessages"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso"
@@ -13,6 +16,7 @@ import { ReportIssueDialog } from "@/components/common/ReportIssueDialog"
 import { clearMentionedChatMessage, useChatMessageMentioned } from "@/stores/chatPanelStore"
 import { ModelThinkingBubble } from "./ChatMessageParts"
 import { ChatRoomMessageBubble } from "./ChatRoomMessageBubble"
+import { CHAT_ROOM_MESSAGE_LIST_ELEMENTS, scrollToPlainListChatMessage } from "./chatRoomMessageListElements"
 import { ScrollDownButton, useAtBottom } from "./ScrollDownButton.tsx"
 import type { ChatRoomState } from "./useChatRoom"
 
@@ -71,11 +75,8 @@ export function ChatRoomMessages({
 		})
 	})
 
-	// one lookup table from chat message id, so a reply reference costs no scan per bubble
-	const chatMessageQuotes = useMemo(() => toChatMessageQuotes(chatMessages), [chatMessages])
-
-	// one clock for every footer, ticking by the minute so the chat bubble time ago label stays up to date
-	const now = useNow()
+	// each chat bubble's quote, ownership, delete right, and the one clock every time label reads
+	const toBubbleProps = useChatRoomListBubbleProps({ chatMessages, userId, canModerate: isTeamLeader || isAdmin })
 
 	// new chat messages keep the plain list pinned to the bottom, but only if the user is already there
 	const bottomRef = useRef<HTMLDivElement>(null)
@@ -127,7 +128,7 @@ export function ChatRoomMessages({
 		// the plain list scrolls up to the chat bubble's element
 		const currentChatMessages = chatMessagesRef.current
 		if (currentChatMessages.length < VIRTUALIZE_FROM_CHAT_MESSAGES) {
-			document.getElementById(`room-message-${chatMessageId}`)?.scrollIntoView({ behavior: "smooth", block: "center" })
+			scrollToPlainListChatMessage(chatMessageId)
 			return
 		}
 
@@ -168,18 +169,14 @@ export function ChatRoomMessages({
 	) : null
 
 	// one chat bubble with its props, shared by the plain and virtualized paths
-	const renderChatMessageBubble = (chatMessage: ChatRoomMessage) => (
+	const renderChatMessageBubble = (bubbleProps: ChatRoomListBubbleProps) => (
 		<ChatRoomMessageBubble
-			chatMessage={chatMessage}
+			{...bubbleProps}
 			topicId={topicId}
 			teamId={teamId}
-			canDelete={isTeamLeader || isAdmin || chatMessage.authorUserId === userId}
-			isLinkPreviewLoading={chatRoom.loadingChatMessageIds.has(chatMessage.id)}
+			isLinkPreviewLoading={chatRoom.loadingChatMessageIds.has(bubbleProps.chatMessage.id)}
 			voiceChatPage={chatRoom.voiceChatPage}
 			onAttachmentDelete={handleDeleteAttachment}
-			repliedChatMessage={chatMessageQuotes.get(chatMessage.id)}
-			isOwnChatMessage={chatMessage.authorUserId === userId}
-			now={now}
 			onReply={handleReplyChatMessage}
 			onQuoteClick={scrollToChatMessage}
 			onDeleteChatMessage={handleDeleteChatMessage}
@@ -226,7 +223,9 @@ export function ChatRoomMessages({
 					components={virtuosoComponents}
 					atBottomStateChange={setIsAtBottom}
 					atBottomThreshold={atBottomThreshold}
-					itemContent={(_, chatMessage) => <div className="px-3 py-2">{renderChatMessageBubble(chatMessage)}</div>}
+					itemContent={(_, chatMessage) => (
+						<div className="px-3 py-2">{renderChatMessageBubble(toBubbleProps(chatMessage))}</div>
+					)}
 				/>
 				{missingChatMessageNotice}
 				<ScrollDownButton isScrollDownShown={!isAtBottom} onScrollDown={scrollToLatestChatMessage} />
@@ -241,15 +240,15 @@ export function ChatRoomMessages({
 				onScroll={handleScroll}
 				className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-3 py-3 wrap-anywhere"
 			>
-				{chatMessages.length === 0 && (
-					<p className="text-muted-foreground px-1 py-6 text-center text-sm">{toEmptyChatRoomCopy(chatName)}</p>
-				)}
-				{chatMessages.map((chatMessage) => (
-					<div key={chatMessage.id} id={`room-message-${chatMessage.id}`}>
-						{renderChatMessageBubble(chatMessage)}
-					</div>
-				))}
-				{isMessageLoading && <ModelThinkingBubble />}
+				<ChatRoomMessageList
+					chatMessages={chatMessages}
+					userId={userId}
+					canModerate={isTeamLeader || isAdmin}
+					chatName={chatName}
+					isMessageLoading={isMessageLoading}
+					renderChatMessage={renderChatMessageBubble}
+					elements={CHAT_ROOM_MESSAGE_LIST_ELEMENTS}
+				/>
 				<div ref={bottomRef} />
 			</div>
 			{missingChatMessageNotice}

@@ -3,10 +3,10 @@ import { UpdatesList, type UpdatesListElements } from "@carlnotes/core/component
 import { toReadingTimeLabel } from "@carlnotes/core/lib/labels"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Coffee } from "lucide-react"
-import { AnchorLink } from "@/components/common/AnchorLink"
 import { PAGE_TITLE_CLASS, RESOURCE_LIST_CARD_CLASS, STANDALONE_LINE_LINK_CLASS } from "@/lib/styleClasses"
 import { FindingsTable, type FindingsTableRow } from "./FindingsTable"
 import { McpViewLink } from "./McpViewLink"
+import { McpViewSiteLink } from "./mcpViewElements"
 import { useMcpViewData } from "./mcpViewHost"
 import { useMcpViewFindings } from "./useMcpViewFindings"
 
@@ -46,9 +46,7 @@ export function UpdatesMcpView({ updates }: { updates: Updates }) {
 				<>
 					<FindingsTable rows={findingsTableRows} topicFeedHandlers={topicFeedHandlers} />
 					{updates.moreCount > 0 && (
-						<AnchorLink href={updates.morePath} className={cn(STANDALONE_LINE_LINK_CLASS, "mt-4")}>
-							{`and ${updates.moreCount} more`}
-						</AnchorLink>
+						<McpViewSiteLink href={updates.morePath}>{`and ${updates.moreCount} more`}</McpViewSiteLink>
 					)}
 				</>
 			}

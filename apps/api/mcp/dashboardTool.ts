@@ -24,7 +24,7 @@ import { and, eq } from "drizzle-orm"
 import { z } from "zod"
 import { loadDashboard, loadDashboardAccess } from "../dashboard/dashboards"
 import { loadMcpViewSession, toMcpViewMeta } from "./mcpViewData"
-import { CONNECT_ACCOUNT_TEXT } from "./results"
+import { CONNECT_ACCOUNT_TEXT, toFencedNullable } from "./results"
 import { type RegisterToolsOptions, toTextResult } from "./toolShapes"
 import { toMcpViewToolMeta } from "./uiResources"
 
@@ -129,7 +129,7 @@ function toDashboardToolResult({
 		subjectName: toFencedText(toDashboardSubjectName(subject)),
 		day: dashboard.day,
 		summary: dashboard.summary,
-		paragraph: dashboard.paragraph ? toFencedText(dashboard.paragraph) : null,
+		paragraph: toFencedNullable(toFencedText, dashboard.paragraph),
 		url: `${SITE_URL}${toDashboardPath({ dashboardKind, subjectId })}`,
 	}
 

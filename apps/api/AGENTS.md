@@ -1,6 +1,6 @@
 # apps/api/
 
-`mcp` serves four MCP Apps views, including `suggest-topics`; seven tools name MCP views.
+`mcp` serves sixteen MCP Apps views, including `suggest-topics`; twenty-two tools name MCP views.
 `personalSources/personalSourcesSendSmoke.ts` checks atomic multi-Topic sends, one charge, concurrency, rollback, and
 retries through the existing smoke entrypoint.
 
@@ -175,8 +175,11 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   /api/notes/:id/comments` behind view access, oldest first, each with its author, or null for a closed account, and
   whether the caller may delete it; `POST /api/notes/:id/comments` behind `canEditNote`, tracking `note_comment_added`
   with the note id; `DELETE /api/notes/:id/comments/:commentId` for the author alone; every rejection a 404 and a bad
-  body a 400 before any query), `notePayloads.ts` (a page's note list, one note as the api shapes it, and a note created
-  on a page), `permissions.ts` (visibility access), and `noteTestFixtures.ts` (the rows the stubbed connection pool
+  body a 400 before any query), `notePayloads.ts` (a page's note list, one note as the api shapes it, one opened
+  note with its body and version, a note created on a page, and `loadVisibleNote`, a note the user may see by its id,
+  with its page), `noteWrites.ts` (the create, the rename and visibility change, the delete, and the version-checked
+  body save that the routes and the MCP note tools share, each returning a status the route turns into its
+  response), `permissions.ts` (visibility access), and `noteTestFixtures.ts` (the rows the stubbed connection pool
   returns in the route tests).
 - `noteHtml.ts` — `sanitizeNoteHtml`, which the note and the Topic Post saves both clean a body with:
   `sanitize-html` over the editor's own tag set: `p`, `br`, `b`, `i`, `u`, `s`, `code`, `a` with an http, https, or
@@ -219,12 +222,29 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   of its own publish. Nothing missed while a subscriber was down is replayed. Chat catches up from its cursor.
   `chat/roomEvents.ts` serializes catch-up and live SSE deliveries. It checks the original session and current room
   access before each delivery and on heartbeats, closing the connection when access ends.
+  `chat/roomPosts.ts` is the one chat room post the room routes and `post_to_team_room` share: the Terms, the room's
+  access, moderation, and the post. `chat/roomReads.ts` is the one page of a room's messages both read.
 - `mcp/` — the mcp server on `@modelcontextprotocol/server`: `server.ts` (the `/mcp` and `/mcp/t/:topicId` routes and
   the web-standard transport), `origins.ts` (exact Origin validation on both transports, before caller resolution and
   limits in `index.ts`, allowing an absent header, production, and the configured app origin), `tools.ts` (the reads,
   the site search, and the per-user writes it registers, with their schemas and annotations), `topicEditTools.ts`
-  (`edit_topic`, `suggest_sources`, and `create_topic`), `socialTools.ts` (`save_reaction`, `read_hot_takes`, and
-  `post_hot_take`, over the same writes and limits as the site's routes, with a thread's bodies fenced), `toolShapes.ts`
+  (`edit_topic`, `suggest_sources`, and `create_topic`), `topicImageTool.ts` (`set_topic_image`, a regenerate or a
+  public image url, returning the topic MCP view), `topicAttachmentTool.ts` (`add_topic_attachment`, a url's page or
+  pasted text, owner only), `noteTools.ts` (`read_notes`, `save_note`, and `delete_note` through the note routes' own
+  reads and writes, with body saves on the note body save limit), `noteResults.ts` (what `read_notes` returns: a page's
+  notes fenced and paged, or one note with its html cut at a top-level block and no version once cut),
+  `teamTools.ts` (`list_teams` and `read_team`, the team page as the caller may see it with the chat's latest messages
+  for a member), `teamResults.ts` (what they return: each list limited, the room's newest messages in what is left of
+  the result limit, and everything people wrote fenced), `teamWriteTools.ts` (`request_to_join_team`, `send_invite`,
+  `respond_to_invite`, and `post_to_team_room` through the team, invite, and chat room modules the web's routes call),
+  `profileTool.ts` (`read_profile`, a person's profile page as the caller may see it with its week's news),
+  `profileResults.ts` (what it returns: each section limited and every name fenced), `activityTool.ts`
+  (`read_activity`, the caller's topics and the topic and team invites with the ids `respond_to_invite` takes),
+  `accountTool.ts` (`read_account`, the plan, the spend meter, the day's scans, and the regenerations left, with links
+  to the plans and account pages), `reportTools.ts` (`report_content` and `block_user`, through `flagContent` and
+  the user block functions the site's routes call),
+  `socialTools.ts` (`save_reaction`, `read_hot_takes`, `post_hot_take`, and
+  `delete_hot_take`, over the same writes and limits as the site's routes, with a thread's bodies fenced), `toolShapes.ts`
   (the topic id argument, the registration options, and the result shapes every tool shares), `topicEdits.ts` (the
   `edit_topic` flow: the topic read as its page reads it, the preview, and the save through the chat's save path),
   `topicEditConfirmations.ts` (the keyed confirmation that making a topic public or removing a source needs),
@@ -238,20 +258,32 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   returns), `uiResources.ts` (the MCP Apps view resources, each html written from the bundle `build:ui` makes in
   `apps/web/dist/mcp-views`, with the dashboard MCP view's own script and the script every other MCP view shares, every
   stored bundle's version read back from object storage, and the `_meta` a tool names its MCP view with),
-  `mcpViewData.ts` (what a tool result gives its MCP view in `_meta`: the caller, the podcast episodes with play tokens,
-  the findings MCP view's topic and findings, the updates list's Topics, the Scan status, the Dashboard read, and the
-  caller's private annotations), `toolCaller.ts` (the tool caller: the visitor or user an access token resolves to,
+  `mcpViewData.ts` (what a tool result gives its MCP view in `_meta`: the caller, the podcast episodes with play tokens
+  and, while `MCP_VIEW_FILM_PLAYBACK` is on, their films' video and captions urls, the findings MCP view's topic and
+  findings, the updates list's Topics, the Scan status, the Dashboard read, the podcast episodes of a profile's and a
+  team's cards, and the caller's private annotations), `noteMcpViewData.ts` (the note MCP view's page of notes and its
+  opened note), `topicsMcpViewData.ts` (the topics MCP view's section cards or similar topics), `toolCaller.ts` (the tool caller: the visitor or user an access token resolves to,
   verified in-process against the auth server's signing keys), `oauthClientNames.ts` (the registered name of each MCP
   client, which the tool caller, the consent page's route, and the app connection report read), `results.ts` (what the
   finding tools return for a visitor or a user, paged under a client's result limit, and the paging helpers), and
   `topicResults.ts` (what `list_topics` returns). `mcp.smoke.ts` runs the sections in `mcpSmokeSections.ts` and the
-  oauth flow in `mcpOAuthSmokeSections.ts` over the fixtures in `mcpSmokeFixtures.ts`, and stops the first scan of the
-  topic it creates through `topic/firstScanSmoke.ts`. `mcpContractTestFixtures.ts` holds the twenty-six-tool title,
+  oauth flow in `mcpOAuthSmokeSections.ts` over the fixtures in `mcpSmokeFixtures.ts` (with both routes' paths and a connected client each section shares), and stops the first scan of the
+  topic it creates through `topic/firstScanSmoke.ts`. `mcpContractTestFixtures.ts` holds the tool title,
   annotation, and phrase matrix shared by unit and smoke checks. `mcpDirectorySmokeFixtures.ts` seeds isolated private
   access, large feed, and search rows. `mcpDirectorySmokeSections.ts` checks both transports' Origin and identity cases,
   including a former follower losing private Topic access; `mcpResultSmokeSections.ts` checks complete cursor traversal
   and measures text, structured results, and MCP view metadata separately, and `mcpTopicToolSmokeSections.ts` checks
   `send_finding_feedback`, `read_updates`, `read_topic_context`, and the Scan tools on both routes.
+  `mcpTopicWriteSmokeSections.ts` checks the owner's `set_topic_image` and `add_topic_attachment` on both routes.
+  `mcpNoteSmokeSections.ts` creates, reads, saves, and deletes the owner's note on both routes, with a stale version, a
+  visitor's list, and a long note read cut inside the result bounds. `mcpTeamSmokeSections.ts` seeds the owner's team,
+  a second team, and a friend, and checks the chat post, the team list and page, the ask to join, a username invite,
+  and a missing invite's answer, with the bound route reaching no team.
+  `mcpAccountSmokeSections.ts` seeds a stranger with a public and a private topic and checks the owner's own profile,
+  the stranger's with its public topic alone, the activity, and the account, with the bound route reading no profile.
+  `mcpReportSmokeSections.ts` reports a finding to Resend's test inbox and finds it in the admin console's open
+  reports, blocks and unblocks a person, and posts and deletes a hot take, with the bound route reporting and blocking
+  nothing.
   `mcpTopicPostSmokeSections.ts` seeds a published Topic Post and a draft and checks `read_news`, `read_topic_posts`,
   and `read_topic_post` for a visitor and a user on both routes. The OAuth smoke verifies discovery, refresh,
   revocation, and already-issued JWT behavior. All fixture rows are removed in `finally`. Run `bun run smoke:mcp` before
@@ -268,9 +300,12 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   image file with the visibility gate and the cache headers, and `topic/topicImagesRoute.ts` serves a topic image's
   files (public ones immutable at the edge under `topic-image:<topicId>`, private ones behind `topic:view`), the
   editor's Regenerate within `imageRegenerationLimit`, the render an editor polls, and the upload. `topic/imageEdits.ts`
-  holds what both image routes share: the upload's body limit and checks, the image prompt's moderation, and the
-  editor's regeneration quota. `podcast/podcastEpisodeImagesRoute.ts` serves a podcast episode's own image files, gated
-  by its topic's visibility, and its editor's Regenerate and upload. `podcast/topicPodcastEpisodeVideoImagesRoute.ts`
+  holds what the image routes share: the upload's body limit and checks over an image's bytes, the image prompt's
+  moderation, and the editor's regeneration quota. `topic/topicImageEdits.ts` holds a topic image's edits that the
+  route and `set_topic_image` share: the editor check, the regenerate, the replacement from an image's bytes, and
+  `setTopicImageFromUrl`, which fetches a public image url through `fetchLinkPreviewImage` and the upload's checks.
+  `podcast/podcastEpisodeImagesRoute.ts` serves a podcast episode's own image files, gated by its topic's visibility,
+  and its editor's Regenerate and upload. `podcast/topicPodcastEpisodeVideoImagesRoute.ts`
   does the same for a film's own image: the poster at
   `/api/topic-podcast-episode-video-images/:podcastEpisodeId/:hash/poster.jpg`, a chapter's generated image at
   `/api/topic-podcast-episode-video-images/:podcastEpisodeId/chapters/:position/image.jpg`, behind the same gate and not
@@ -399,8 +434,9 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   screens without the wait. `runManualScan` in `topic/scans.ts` returns running while the Topic's first Scan waits, and
   past the scheduled scans cutoff opens a free user's manual row without a workflow and returns started. Both read
   `@carlnotes/db/dailySpendCutoffs`, and a paid user's request reads nothing new.
-- `report/` — content reports: `report/flagContent.ts` (the `POST /api/flag-content` route, the daily limit in Redis,
-  the stored report, and the email to `SUPPORT_EMAIL` with the admin console link), `report/reportSubjects.ts` (what a
+- `report/` — content reports: `report/flagContent.ts` (the `POST /api/flag-content` route, and `flagContent`, which
+  it and `report_content` call: the daily limit in Redis, the stored report, the email to `SUPPORT_EMAIL` with the admin
+  console link, and the report's events), `report/reportSubjects.ts` (what a
   report names, a Topic, profile, Team, chat room message, note, or note comment, each resolved under the same read rule
   that lets the reporter see it), `report/socialReportSubjects.ts` (the same for a Finding, a Podcast Episode, and a
   comment), and `report/reports.ts` (writing a report). The filter that hides a reported subject from its reporter in
@@ -414,10 +450,12 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   save, team create and update, and `topic/saveTopic.ts` for an invite or public Topic's name, prompt, and tags all
   check text. The room post's shared images and the user and team avatar uploads check images.
 - `termsAcceptance.ts` — the Terms acceptance gate and route: `toTermsOutdatedResponse` is the 403 a user-content
-  write gets while the session's accepted version is older than `TERMS_VERSION`, `hasAcceptedCurrentTerms` reads the
+  write gets while the session's accepted version is older than `TERMS_VERSION`, `isSessionTermsCurrent` is the same
+  check as a boolean for a module the route calls, `hasAcceptedCurrentTerms` reads the
   row for a write with no session, and `POST /api/users/me/terms-acceptance` records the published version and
   refreshes the user's sessions. Better Auth's user-create hook in `auth.ts` records the version on every sign-up path.
-- `userBlocks.ts` — one user blocking another: the block, unblock, and list routes' functions.
+- `userBlocks.ts` — one user blocking another: the block, unblock, and list routes' functions. `saveUserBlock` rejects
+  blocking oneself and an unknown user itself, so the route, a report's block, and `block_user` share the checks.
   `toNotUserBlockedAuthorFilter` in `@carlnotes/db/contentFilters` keeps a blocked user's rows out of the blocker's
   reads. `chat/roomVisibility.ts` applies the report and block filters to a room's loaded messages for one member, after
   the shared load. `loadAdminTopicSubscribers` lists a topic's subscribers by `isActiveNonOwnerTopicSubscription`, the
@@ -434,7 +472,8 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   the message's push workflow through `startChatMentionPushWorkflow` without awaiting it, and a failed start is
   reported under the `push` stage.
 - `activity.ts` — the activity page and its route, over `activityTopics.ts` (each topic's month scans, counts, chat
-  mentions, and latest podcast episode).
+  mentions, and latest podcast episode). `loadActivity` is exported for `read_activity`, and `loadProfile` in
+  `profiles.ts` for `read_profile`.
 - `invite/invites.ts` — the invite links, the topic or team a token opens, and the link routes. A topic's link shared
   from a Topic Post names the post in `invites.topic_post_id`, a published post of that topic, apart from the topic's
   own link;

@@ -8,6 +8,8 @@ import { toTestTopicFinding } from "@carlnotes/contracts/topicFeedTestFixtures"
 import { PODCAST_EPISODE_QUESTION_BUTTON_LABEL } from "@carlnotes/core/stores/podcastEpisodeQuestionRules"
 import type { McpUiStyles } from "@modelcontextprotocol/ext-apps"
 import { TOPIC_SUGGESTIONS_FIXTURE, TOPIC_SUGGESTIONS_INPUT } from "../topicSuggestionsFixtures"
+import { toAccountToolResult } from "./accountMcpViewSmokeSections"
+import { toActivityToolResult } from "./activityMcpViewSmokeSections"
 import {
 	FINDINGS_TOPIC,
 	LONG_FINDINGS_MCP_VIEW_DATA,
@@ -35,6 +37,10 @@ import {
 } from "./mcpViewTestHarness"
 import type { ToolCallResponder } from "./mcpViewTestHost"
 import { type OpenMcpViewOptions, TEST_SITE_URL } from "./mcpViewTestHost"
+import { OPENED_NOTE, toNotesToolResult } from "./noteMcpViewSmokeSections"
+import { toProfileToolResult } from "./profileMcpViewSmokeSections"
+import { toTeamToolResult } from "./teamMcpViewSmokeSections"
+import { toTopicsToolResult } from "./topicsMcpViewSmokeSections"
 import "./dashboardMcpViewSmokeSections"
 import "./findingsMcpViewSmokeSections"
 import "./newsMcpViewSmokeSections"
@@ -231,6 +237,13 @@ test.each([
 	["topic", toMcpViewToolResult({ structuredContent: TOPIC_EDIT_PREVIEW, mcpViewData: USER_MCP_VIEW_DATA })],
 	["updates", toUpdatesToolResult()],
 	["scan", toScanToolResult(FINISHED_SCAN_STATUS)],
+	["activity", toActivityToolResult()],
+	["account", toAccountToolResult()],
+	["note", toNotesToolResult()],
+	["note", toNotesToolResult({ openedNote: OPENED_NOTE })],
+	["team", toTeamToolResult()],
+	["profile", toProfileToolResult()],
+	["topics", toTopicsToolResult()],
 ] as const)("the %s MCP view never scrolls sideways at 320 pixels", async (mcpView, toolResult) => {
 	await withMcpView({ mcpView, width: NARROW_FRAME_WIDTH }, async ({ frame, sendToolInput, sendToolResult }) => {
 		await sendToolInput(TOPIC_SUGGESTIONS_INPUT)

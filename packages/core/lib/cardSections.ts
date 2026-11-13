@@ -47,3 +47,9 @@ export const TEAM_SECTIONS = {
 
 // the values of the team's card sections, which start open
 export const TEAM_SECTION_VALUES = Object.values(TEAM_SECTIONS).map((teamSection) => teamSection.value)
+
+// the values of the team page's sections, which start open: the card sections, then the members, topics, and notes
+export const TEAM_PAGE_SECTION_VALUES = [...TEAM_SECTION_VALUES, "members", "topics", "notes"]
+
+// the tooltip over the team page's topics table
+export const TEAM_TOPICS_TOOLTIP = "Topics on this team"

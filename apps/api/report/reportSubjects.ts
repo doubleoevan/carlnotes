@@ -1,7 +1,7 @@
 // what a report names, resolved under the same visibility rule that lets the reporter see it
 import type { ReportSubjectKind } from "@carlnotes/contracts/reports"
 import { toReportText } from "@carlnotes/contracts/reports"
-import { toTeamPath, toTopicPath, toTopicPostPath } from "@carlnotes/contracts/seo"
+import { toNotePagePath, toTeamPath, toTopicPath, toTopicPostPath } from "@carlnotes/contracts/seo"
 import { toHtmlText } from "@carlnotes/contracts/text"
 import { db } from "@carlnotes/db"
 import { chatRoomMessages } from "@carlnotes/db/schema/chat"
@@ -11,7 +11,7 @@ import { topics } from "@carlnotes/db/schema/topics"
 import { eq } from "drizzle-orm"
 import { decryptChatText } from "../chat/encryption"
 import { loadChatRoom } from "../chat/roomAccess"
-import { canSeeNote, loadNoteWithPage, loadPageAccess, type NotePage } from "../note/permissions"
+import { canSeeNote, loadNoteWithPage, loadPageAccess, toNotePageLink } from "../note/permissions"
 import { toTeamRole } from "../team/members"
 import { canSeeTopic, namedTopicColumns } from "../topic/permissions"
 import { canReadTopicPost, loadTopicPostRow } from "../topicPost/topicPosts"
@@ -196,7 +196,7 @@ async function toReportedNote(userId: string, noteId: string): Promise<ReportedS
 		kind: "note",
 		id: noteWithPage.note.id,
 		label: noteWithPage.note.name,
-		path: toNotePagePath(noteWithPage.page),
+		path: toNotePagePath(toNotePageLink(noteWithPage.page)),
 		text: toReportText(`${noteWithPage.note.name}\n${toHtmlText(noteWithPage.note.html)}`),
 		authorUserId: noteWithPage.note.ownerUserId,
 	}
@@ -225,13 +225,8 @@ async function toReportedNoteComment(userId: string, noteCommentId: string): Pro
 		kind: "noteComment",
 		id: noteComment.id,
 		label: `a comment on ${noteWithPage.note.name}`,
-		path: toNotePagePath(noteWithPage.page),
+		path: toNotePagePath(toNotePageLink(noteWithPage.page)),
 		text: toReportText(noteComment.body),
 		authorUserId: noteComment.authorUserId,
 	}
-}
-
-// the page a note lives on: its topic's page or its team's page
-function toNotePagePath(page: NotePage): string {
-	return page.kind === "topic" ? toTopicPath(page.topic) : toTeamPath(page.team.id)
 }

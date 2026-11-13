@@ -1,10 +1,13 @@
 // a topic edit's saves: the prompt, the settings, and each source removed or added, each through its Topic Tool, which
 // checks edit rights itself
+import { toModerationRejectionMessage } from "@carlnotes/contracts/moderation"
 import type { ChatToolCall } from "@carlnotes/contracts/payloads"
 import { KEEP_ONE_SOURCE_MESSAGE } from "@carlnotes/contracts/sources"
+import { TERMS_OUTDATED_LINE } from "@carlnotes/contracts/terms"
 import type { AddTopicSourcePayload, ProposeTopicEditPayload } from "@carlnotes/contracts/topicPayloads"
 import type { AnalyticsProperties } from "../currentUser"
 import type { PromptVersionOrigin } from "../topic/promptVersions"
+import { toTopicEditRejection } from "../topic/saveTopicGate"
 import {
 	type ChatTurnToolCalls,
 	CREATE_REJECTION_LINES,
@@ -27,7 +30,7 @@ import { type UpdateTopicFieldsResult, updateTopicFields, updateTopicPrompt } fr
 
 // the user and topic a save acts on, the adapter it saves from, the turn's tool calls the save is listed in, and the
 // request's analytics properties
-type TopicEditSaveBinding = {
+export type TopicEditSaveBinding = {
 	userId: string
 	topicId: string
 	origin: PromptVersionOrigin
@@ -36,9 +39,50 @@ type TopicEditSaveBinding = {
 }
 
 /**
- * Applies a topic edit's saves in order and returns each as a call of its tool.
+ * Applies a topic edit's saves in order and returns each as a call of its tool. An edit whose topic would fail the
+ * editor's Terms or moderation check saves nothing and returns the rejection as its one call.
  */
 export async function applyTopicEdit(
+	topicEditSaveBinding: TopicEditSaveBinding,
+	topicEdit: ProposeTopicEditPayload,
+): Promise<ChatToolCall[]> {
+	const topicEditRejectionCall = await toTopicEditRejectionCall(topicEditSaveBinding, topicEdit)
+	return topicEditRejectionCall ? [topicEditRejectionCall] : applyTopicEditSaves(topicEditSaveBinding, topicEdit)
+}
+
+/**
+ * Runs the editor's Terms and moderation check on the topic as the edit leaves it, before any save, and returns the
+ * rejection as a call, or null if the edit may save.
+ */
+export async function toTopicEditRejectionCall(
+	topicEditSaveBinding: TopicEditSaveBinding,
+	topicEdit: ProposeTopicEditPayload,
+): Promise<ChatToolCall | null> {
+	// the check, on the topic's name, prompt, tags, and visibility
+	const topicEditRejection = await toTopicEditRejection({
+		userId: topicEditSaveBinding.userId,
+		topicId: topicEditSaveBinding.topicId,
+		topicEdit,
+	})
+	if (!topicEditRejection) {
+		return null
+	}
+
+	// the rejection in Carl's words
+	const rejectionReason =
+		topicEditRejection.status === "objectionable"
+			? toModerationRejectionMessage(topicEditRejection.category)
+			: TERMS_OUTDATED_LINE
+	topicEditSaveBinding.toolCalls.topicSaveRejections.push(
+		toRejectionToast("save the name, prompt, and tags", rejectionReason),
+	)
+	return { toolName: "updateTopicFields", input: topicEdit, output: `${rejectionReason} Nothing was saved.` }
+}
+
+/**
+ * Applies a checked topic edit's saves in order, and returns each as a call of its tool.
+ */
+export async function applyTopicEditSaves(
 	topicEditSaveBinding: TopicEditSaveBinding,
 	topicEdit: ProposeTopicEditPayload,
 ): Promise<ChatToolCall[]> {

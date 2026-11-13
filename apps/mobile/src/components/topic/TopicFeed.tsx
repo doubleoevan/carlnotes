@@ -9,6 +9,7 @@ import { Footer } from "@/components/layout/Footer"
 import { EmptyListCard } from "@/components/table/TableCard"
 import { type TopicFeedRow, toInitialTopicSection, toTopicFeedRows } from "@/topicFeedRows"
 import { MoreButton } from "./MoreButton"
+import { NewTopicEmptyCard } from "./NewTopicEmptyCard"
 import { Topic } from "./Topic"
 import { TopicFindingList } from "./TopicFindingList"
 
@@ -90,6 +91,8 @@ function FeedRow({
 			return <TopicFindingList topic={row.topic} findingRows={row.findingRows} state={state} />
 		case "empty":
 			return <EmptyListCard text={row.text} className="mx-4 mb-2" />
+		case "newTopic":
+			return <NewTopicEmptyCard className="mx-4 mb-2" />
 		case "more":
 			return (
 				// the toggle starts at the findings card's left edge, inside the card's margin

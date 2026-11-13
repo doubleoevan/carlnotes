@@ -30,9 +30,10 @@ Keep `NoteDialog` lazy imports: listing notes must fetch neither bodies nor edit
 ## Shared mobile page foundations
 
 The Account budget/settings, plan cards, invite fields, and TeamFields delegate portable composition to core.
-OwnerTopicsTable, TopicsTable, TopicScansTable, TopicSubscriptionsTable, and SentInvitesTable consume shared domain
-columns through `table/DataTable.tsx`'s semantic DOM elements. Team membership/member rows retain web-specific
-expandable controls. The global Footer is a core composition with web routing and active-link styling supplied here.
+OwnerTopicsTable, TopicsTable, TeamMembersTable, TeamsMembershipTable, TopicSubscriptionsTable, TopicInvitesTable, and
+SentInvitesTable adapt their core tables, and TopicScansTable consumes shared domain columns, through
+`table/DataTable.tsx`'s semantic DOM elements. The teams table's subtables keep their web-specific expandable
+controls. The global Footer is a core composition with web routing and active-link styling supplied here.
 
 Topic fields, Source editing, Team choices, and Topic/Team saving now use core hooks and save functions. Web wrappers
 supply browser files, routing, and toast feedback. Retries keep created identities and accepted membership writes;

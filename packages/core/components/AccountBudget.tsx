@@ -1,8 +1,10 @@
+import type { MonthlySpend } from "@carlnotes/contracts/activity"
 import type { BillingProvider } from "@carlnotes/contracts/plans"
 import type { BillingState } from "@carlnotes/contracts/profiles"
 import type { ComponentType, ReactNode } from "react"
 import { useNow } from "../hooks/useNow"
-import { type SpendMeterProps, toSpendAmountLabel } from "../lib/spendMeter"
+import { toSpendAmountLabel } from "../lib/spendMeter"
+import { toRegenerationCountLabel } from "../lib/topicImageEditor"
 import { toDaysLabel, toHoursMinutesLabel, toUtcDayReset, toUtcMonthReset } from "../lib/utcResets"
 import type { MeterRingProps } from "./MeterRing"
 
@@ -21,6 +23,8 @@ export type AccountBudgetElements = {
 	Meters: Container
 	Meter: Container
 	MeterRing: ComponentType<MeterRingProps>
+	// a card's one label line, as the month's image regenerations under the coffee fund's meter
+	CardLine: Container
 	// the failed-payment notice, whose Update opens where the provider bills the plan
 	PaymentNotice: ComponentType<{ provider: BillingProvider | null }>
 }
@@ -38,7 +42,7 @@ export function AccountBudget({
 }: {
 	billing: BillingState
 	isReadOnly?: boolean
-	activity: SpendMeterProps | null
+	activity: MonthlySpend | null
 	spendMeter: ReactNode
 	elements: AccountBudgetElements
 }) {
@@ -54,6 +58,7 @@ export function AccountBudget({
 		Meters,
 		Meter,
 		MeterRing,
+		CardLine,
 		PaymentNotice,
 	} = elements
 	const isPastDue = billing.status === "past_due" || billing.status === "unpaid"
@@ -76,7 +81,8 @@ export function AccountBudget({
 	return (
 		<>
 			{isPastDue && !isReadOnly && <PaymentNotice provider={billing.provider} />}
-			{/* the coffee fund with its title, reset clock, and amount at the top, and the meter */}
+			{/* the coffee fund with its title, reset clock, and amount at the top, the meter, and the month's image
+			    regenerations */}
 			<Card>
 				<CardTopRow>
 					<CardTopStart>
@@ -95,6 +101,14 @@ export function AccountBudget({
 					</CardTopEnd>
 				</CardTopRow>
 				{spendMeter}
+				{billing.imageRegenerationQuota && (
+					<CardLine>
+						<Text>
+							<Text className="font-semibold">Image regenerations </Text>
+							<Text className="text-muted-foreground">{toRegenerationCountLabel(billing.imageRegenerationQuota)}</Text>
+						</Text>
+					</CardLine>
+				)}
 			</Card>
 			{/* the daily scans with their title, and the scans used beside the reset clock */}
 			<Card>

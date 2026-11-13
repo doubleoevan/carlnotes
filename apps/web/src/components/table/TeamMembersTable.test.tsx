@@ -25,7 +25,9 @@ test("a leader's footer has one cell per column and the member count under Activ
 	const headerHtml = tableHtml.slice(tableHtml.indexOf("<thead"), tableHtml.indexOf("</thead>"))
 	const footerHtml = tableHtml.slice(tableHtml.indexOf("<tfoot"), tableHtml.indexOf("</tfoot>"))
 	const headerCells = headerHtml.match(/<th[\s>]/g) ?? []
-	const footerCells = [...footerHtml.matchAll(/<td[^>]*>([^<]*)<\/td>/g)].map(([, text]) => text)
+	const footerCells = [...footerHtml.matchAll(/<td[^>]*>(.*?)<\/td>/g)].map(([, cellHtml]) =>
+		(cellHtml ?? "").replace(/<[^>]+>/g, ""),
+	)
 
 	// five columns, no spanning cell, and the count in the fourth one under Active
 	expect(headerCells).toHaveLength(5)

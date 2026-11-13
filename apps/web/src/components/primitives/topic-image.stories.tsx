@@ -1,16 +1,13 @@
 // the topic image primitive: each size with a file, and the ground a topic with no image shows
 import { topicImageSizes } from "@carlnotes/contracts/enums"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
+import { SAMPLE_TOPIC_IMAGE } from "../../../.storybook/fixtures/topics"
 import { TopicImage } from "./topic-image"
-
-// the podcast cover placeholder stands in for a topic's image at every size, which the app serves from its public files
-const SAMPLE_FILES = { url: "/podcast-cover-placeholder.jpg", url2x: "/podcast-cover-placeholder.jpg" }
-const SAMPLE_IMAGE = { page: SAMPLE_FILES, list: SAMPLE_FILES, thumbnail: SAMPLE_FILES }
 
 const meta = {
 	title: "Primitives/TopicImage",
 	component: TopicImage,
-	args: { image: SAMPLE_IMAGE, size: "page", name: "Home espresso" },
+	args: { image: SAMPLE_TOPIC_IMAGE, size: "page", name: "Home espresso" },
 	argTypes: { size: { control: "inline-radio", options: topicImageSizes } },
 	decorators: [(Story) => <div className="w-80">{Story()}</div>],
 } satisfies Meta<typeof TopicImage>

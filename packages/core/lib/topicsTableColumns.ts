@@ -4,6 +4,13 @@ import type { ReactNode } from "react"
 import type { TableColumn } from "../components/DataTable"
 import { toMonthYearLabel } from "./labels"
 
+/**
+ * Returns a topic's kept and seen counts as its table cell shows them, kept first.
+ */
+export function toKeptOverSeenLabel(topic: Pick<Topic, "keptCount" | "seenCount">): string {
+	return `${topic.keptCount.toLocaleString()} / ${topic.seenCount.toLocaleString()}`
+}
+
 export const topicSortValues = {
 	topic: (topic: Topic) => topic.name,
 	created: (topic: Topic) => topic.createdAt,

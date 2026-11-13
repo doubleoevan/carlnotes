@@ -2,11 +2,11 @@ import { sendAcceptInvite, sendDeclineInvite } from "@carlnotes/client/activityC
 import { sendDeleteSubscription, sendSubscriptionEmail, sendTopicSubscription } from "@carlnotes/client/topicClient"
 import type { SubscriptionRow } from "@carlnotes/contracts/activity"
 import {
-	subscriptionSortValues,
-	toTopicSubscriptionsTableColumns,
-} from "@carlnotes/core/lib/topicSubscriptionsTableColumns"
+	TopicSubscriptionsTable as SharedTopicSubscriptionsTable,
+	type TopicSubscriptionsTableElements,
+} from "@carlnotes/core/components/TopicSubscriptionsTable"
 import { X } from "lucide-react-native"
-import { Alert, View } from "react-native"
+import { View } from "react-native"
 import { PreferenceSwitch } from "@/components/common/PreferenceSwitch"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { Button } from "@/components/primitives/button"
@@ -16,10 +16,11 @@ import { TeamLink } from "@/components/team/TeamLink"
 import { usePageMutation } from "@/hooks/usePageMutation"
 import { offerPushPermission } from "@/pushPermission"
 import { DataTable } from "./DataTable"
+import { TableConfirmAlert } from "./TableConfirmAlert"
 import { TopicNameLink } from "./TopicNameLink"
 
 /**
- * Manages native follows and invitations through Activity's shared table.
+ * Renders the web's subscriptions table through native switches and the system alert, one change at a time.
  */
 export function TopicSubscriptionsTable({
 	subscriptions,
@@ -28,28 +29,10 @@ export function TopicSubscriptionsTable({
 	subscriptions: SubscriptionRow[]
 	onReloadPage: () => void
 }) {
+	// one change at a time, with a failed one kept on screen
 	const mutation = usePageMutation(onReloadPage)
-	function handleRemove(row: SubscriptionRow): void {
-		// preserve the web's warning before permanently removing access
-		const isInvitation = row.inviteId !== null
-		Alert.alert(
-			isInvitation ? "Delete this invite?" : "Delete this subscription?",
-			isInvitation
-				? `Your invite to ${row.name} goes away, and whoever sent it is not told.`
-				: `Your subscription to ${row.name} gets removed for good.`,
-			[
-				{ text: "Keep it", style: "cancel" },
-				{
-					text: isInvitation ? "Delete invite" : "Delete subscription",
-					style: "destructive",
-					onPress: () =>
-						void mutation.run(() =>
-							row.inviteId ? sendDeclineInvite(row.inviteId) : sendDeleteSubscription(row.topicId),
-						),
-				},
-			],
-		)
-	}
+
+	// accept a pending invite or flip a follow, and explain the notifications a followed topic can send
 	async function handleActiveChange(row: SubscriptionRow, isActive: boolean): Promise<void> {
 		if (row.inviteId) {
 			const acceptedInvite = await sendAcceptInvite(row.inviteId)
@@ -59,60 +42,50 @@ export function TopicSubscriptionsTable({
 		} else {
 			await sendTopicSubscription(row.topicId, isActive)
 		}
-
-		// a follow explains the notifications a followed Topic can send
 		if (isActive) {
 			void offerPushPermission()
 		}
 	}
-	const columns = toTopicSubscriptionsTableColumns({
-		subscriptions,
-		renderText: (text) => <Text className="text-sm text-muted-foreground">{text}</Text>,
-		renderName: (row) => (
-			<View>
-				<TopicNameLink topic={{ ...row, id: row.topicId }} />
-				{row.inviteId && <Text className="text-sm">Invited</Text>}
-			</View>
-		),
-		renderOwner: (row) => (row.team ? <TeamLink team={row.team} /> : <UserProfileLink user={row.owner} />),
-		renderActive: (row) => (
-			<PreferenceSwitch
-				label={row.inviteId ? `Accept the invite to ${row.name}` : `${row.name} subscription`}
-				isChecked={row.isActive}
-				isDisabled={mutation.isPending}
-				onChange={(isActive) => void mutation.run(() => handleActiveChange(row, isActive))}
-			/>
-		),
-		renderEmails: (row) => (
-			<PreferenceSwitch
-				label={`${row.name} emails`}
-				isChecked={row.isEmailEnabled}
-				isDisabled={mutation.isPending || !!row.inviteId}
-				onChange={(isEnabled) => void mutation.run(() => sendSubscriptionEmail(row.topicId, isEnabled))}
-			/>
-		),
-		renderRemove: (row) => (
-			<Button
-				variant="ghost"
-				size="icon-sm"
-				accessibilityLabel={`Delete ${row.inviteId ? "invite" : "subscription"} to ${row.name}`}
-				disabled={mutation.isPending}
-				onPress={() => handleRemove(row)}
-			>
-				<Icon as={X} className="size-4" />
-			</Button>
-		),
-	})
 	return (
 		<View className="gap-2">
-			<DataTable
-				rows={subscriptions}
-				columns={columns}
-				valueByKey={subscriptionSortValues}
-				initialSort={{ key: "subscribed", isDescending: true }}
-				getRowId={(row) => row.topicId}
+			<SharedTopicSubscriptionsTable
+				subscriptions={subscriptions}
+				isDisabled={mutation.isPending}
+				onActiveChange={(row, isActive) => void mutation.run(() => handleActiveChange(row, isActive))}
+				onEmailChange={(row, isEnabled) => void mutation.run(() => sendSubscriptionEmail(row.topicId, isEnabled))}
+				onDelete={(row) =>
+					mutation.run(() => (row.inviteId ? sendDeclineInvite(row.inviteId) : sendDeleteSubscription(row.topicId)))
+				}
+				elements={TOPIC_SUBSCRIPTIONS_TABLE_ELEMENTS}
 			/>
 			{mutation.error && <Text className="text-destructive">{mutation.error}</Text>}
 		</View>
 	)
+}
+
+// the native table with its sorting and pagination, links, switches, and the delete button
+const TOPIC_SUBSCRIPTIONS_TABLE_ELEMENTS: TopicSubscriptionsTableElements = {
+	Table: DataTable,
+	Text: ({ children }) => <Text className="text-sm text-muted-foreground">{children}</Text>,
+	TopicName: ({ row, invitedLabel }) => (
+		<View>
+			<TopicNameLink topic={{ ...row, id: row.topicId }} />
+			{invitedLabel && <Text className="text-sm">{invitedLabel}</Text>}
+		</View>
+	),
+	TeamLink,
+	UserProfileLink,
+	Switch: PreferenceSwitch,
+	RemoveButton: ({ action, topicName, isDisabled, onPress }) => (
+		<Button
+			variant="ghost"
+			size="icon-sm"
+			accessibilityLabel={`${action} ${topicName}`}
+			disabled={isDisabled}
+			onPress={onPress}
+		>
+			<Icon as={X} className="size-4" />
+		</Button>
+	),
+	Confirmation: TableConfirmAlert,
 }

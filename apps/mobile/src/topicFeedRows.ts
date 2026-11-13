@@ -1,25 +1,32 @@
 import type { TopicFinding } from "@carlnotes/contracts/findings"
 import type { TopicDetails, TopicFeedResponse, TopicSectionKey } from "@carlnotes/contracts/topics"
-import { EMPTY_FILTERED_FINDINGS, EMPTY_TOPIC_FINDINGS, EMPTY_TOPIC_SECTION } from "@carlnotes/core/lib/topicFeedLabels"
+import { EMPTY_FILTERED_FINDINGS, EMPTY_TOPIC_FINDINGS } from "@carlnotes/core/lib/topicFeedLabels"
 
-// one recycled list contains headings, finding cards, empty lines, and expansion buttons
+// one recycled list contains headings, finding cards, empty lines, a new topic line, and expansion buttons
 export type TopicFeedRow = { key: string } & (
 	| { kind: "section"; sectionKey: TopicSectionKey; topicCount: number; isExpanded: boolean }
 	| { kind: "topic"; topic: TopicDetails }
 	| { kind: "findings"; topic: TopicDetails; findingRows: TopicFindingRow[] }
 	| { kind: "empty"; text: string }
+	| { kind: "newTopic" }
 	| { kind: "more"; topicKey: string; findingCount: number; isExpanded: boolean }
 )
+
+// one topic's rows within its section, with the topics the user expanded
 type ToTopicPreviewRowsOptions = {
 	topic: TopicDetails
 	sectionKey: TopicSectionKey
 	expandedTopicKeys?: ReadonlySet<string>
 }
+
+// the feed, the one open section, and the topics the user expanded
 type ToTopicFeedRowsOptions = {
 	topicFeed: TopicFeedResponse
 	openSection: TopicSectionKey | null
 	expandedTopicKeys?: ReadonlySet<string>
 }
+
+// a finding with its rank in the topic, and whether it ends the topic's list
 export type TopicFindingRow = {
 	finding: TopicFinding
 	topicFindingRank: number | null
@@ -40,16 +47,22 @@ export function toTopicFeedRows({ topicFeed, openSection, expandedTopicKeys }: T
 			topicCount: section.topics.length,
 			isExpanded: section.key === openSection,
 		})
+
+		// a closed section shows only its heading
 		if (section.key !== openSection) {
 			continue
 		}
+
+		// the open section's topics, or its line that starts a new topic
 		if (section.topics.length === 0) {
-			rows.push({ key: `${section.key}:empty`, kind: "empty", text: EMPTY_TOPIC_SECTION })
+			rows.push({ key: `${section.key}:newTopic`, kind: "newTopic" })
 		}
 		for (const topic of section.topics) {
 			rows.push(...toTopicPreviewRows({ topic, sectionKey: section.key, expandedTopicKeys }))
 		}
 	}
+
+	// every heading, then the open section's rows under its heading
 	return rows
 }
 
@@ -92,6 +105,8 @@ function toTopicPreviewRows({ topic, sectionKey, expandedTopicKeys }: ToTopicPre
 	const rows: TopicFeedRow[] = [{ key: prefix, kind: "topic", topic }]
 	const isExpanded = expandedTopicKeys?.has(prefix) ?? false
 	const previewFindings = isExpanded ? topic.findings : topic.findings.slice(0, 5)
+
+	// the findings card, or the empty line for a topic with none to show
 	if (previewFindings.length > 0) {
 		rows.push({ key: `${prefix}:findings`, kind: "findings", topic, findingRows: toTopicFindingRows(previewFindings) })
 	}
@@ -102,6 +117,8 @@ function toTopicPreviewRows({ topic, sectionKey, expandedTopicKeys }: ToTopicPre
 			text: topic.lastScanAt ? EMPTY_FILTERED_FINDINGS : EMPTY_TOPIC_FINDINGS,
 		})
 	}
+
+	// the toggle for the findings past the first five
 	if (topic.findings.length > 5) {
 		rows.push({
 			key: `${prefix}:more`,

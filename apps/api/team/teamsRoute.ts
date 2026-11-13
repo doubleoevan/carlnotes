@@ -115,12 +115,12 @@ export const teamsRoute = new Hono<AppEnv>()
 			return context.json({ error: "unauthorized" }, 401)
 		}
 		// ask to join. a missing team and a member both answer not found, telling a non-member nothing
-		const isRequested = await requestToJoinTeam(userId, context.req.param("id"))
-		if (!isRequested) {
-			return context.json({ error: "not found" }, 404)
-		}
-		trackEvent("team_join_requested", userId, { ...toAnalyticsProperties(context), teamId: context.req.param("id") })
-		return context.json({ ok: true })
+		const isRequested = await requestToJoinTeam({
+			userId,
+			teamId: context.req.param("id"),
+			analyticsProperties: toAnalyticsProperties(context),
+		})
+		return isRequested ? context.json({ ok: true }) : context.json({ error: "not found" }, 404)
 	})
 	.delete("/teams/:id/join-requests/me", async (context) => {
 		// reject a signed-out visitor

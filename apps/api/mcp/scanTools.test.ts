@@ -18,7 +18,7 @@ import * as mcpViewData from "./mcpViewData"
 import * as results from "./results"
 import { CONNECT_ACCOUNT_TEXT } from "./results"
 import * as scanResults from "./scanResults"
-import { toRegisteredTools, toResultText, USER, VISITOR } from "./toolTestFixtures"
+import { toRegisteredTools, toResultText, toToolHandler, USER, VISITOR } from "./toolTestFixtures"
 
 // put the connection pool and the spies back after each test
 afterEach(() => {
@@ -47,12 +47,8 @@ function stubIdleScanReads(): void {
 }
 
 // call one tool as the user on the unbound route
-async function callTool(toolName: string, topicId = "topic-1"): Promise<CallToolResult> {
-	const tool = toRegisteredTools(USER).get(toolName)
-	if (!tool) {
-		throw new Error(`no tool named ${toolName}`)
-	}
-	return tool.handler({ topic_id: topicId })
+function callTool(toolName: string, topicId = "topic-1"): Promise<CallToolResult> {
+	return toToolHandler(toolName)({ topic_id: topicId })
 }
 
 test("the owner starts a Scan with no overage, and the result shows it", async () => {
@@ -159,7 +155,7 @@ test("a visitor starts and stops nothing", async () => {
 
 test("a visitor reads a public Topic's status", async () => {
 	stubScanReads()
-	const toolResult = await toRegisteredTools(VISITOR).get("read_scan_status")?.handler({ topic_id: "topic-1" })
+	const toolResult = await toToolHandler("read_scan_status", VISITOR)({ topic_id: "topic-1" })
 	expect(toolResult?.structuredContent).toMatchObject(RUNNING_STATUS_FIELDS)
 })
 

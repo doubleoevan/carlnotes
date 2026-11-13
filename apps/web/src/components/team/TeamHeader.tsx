@@ -3,8 +3,9 @@
 import { sendTeamAvatar } from "@carlnotes/client/teamClient"
 import { isLeaderRole } from "@carlnotes/contracts/enums"
 import { toTeamPath } from "@carlnotes/contracts/seo"
-import { type TeamPageResponse, toTeamPageTitle } from "@carlnotes/contracts/teams"
-import { ADD_TEAM_MEMBER_LABEL, toTeamDetails } from "@carlnotes/core/lib/teamFields"
+import type { TeamPageResponse } from "@carlnotes/contracts/teams"
+import { TeamHeader as SharedTeamHeader, type TeamHeaderElements } from "@carlnotes/core/components/TeamHeader"
+import { ADD_TEAM_MEMBER_LABEL } from "@carlnotes/core/lib/teamFields"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Plus } from "lucide-react"
 import { type ReactNode, useState } from "react"
@@ -106,31 +107,42 @@ export function TeamHeader({
 				)}
 				{topicButton}
 			</div>
-			<div className={PAGE_HEADER_FLOW_CLASS}>
-				<div className={PAGE_HEADER_AVATAR_FLOAT_CLASS}>
-					{isTeamLeader ? (
+			<SharedTeamHeader
+				teamPage={teamPage}
+				noteCount={noteCount}
+				avatar={
+					isTeamLeader ? (
 						<TeamHeaderAvatar team={teamPage} onChanged={onChanged} />
 					) : (
 						<TeamAvatar team={teamPage} className={PAGE_AVATAR_CLASS} />
-					)}
-				</div>
-				{/* the page's title, with the team chat room's unseen mentions. the badge's click opens the chat room */}
-				<span className={cn(PAGE_HEADER_TITLE_CLASS, "relative")}>
-					<h1 className="font-display text-2xl">{toTeamPageTitle(teamPage.name)}</h1>
+					)
+				}
+				mentionBadge={
+					// the team chat room's unseen mentions. the click opens the chat room in place
 					<PageUpdateCountBadge
 						topicId={null}
 						teamId={teamPage.teamId}
 						href={toTeamPath(teamPage.teamId)}
 						onClick={(event) => {
-							// the click opens the chat room in place instead of re-navigating to the page
 							event.preventDefault()
 							onOpenChat()
 						}}
 					/>
-				</span>
-				<DetailsLine className={PAGE_HEADER_DETAILS_CLASS} details={toTeamDetails({ teamPage, noteCount })} />
-				{teamPage.description && <p className={cn(PAGE_HEADER_DESCRIPTION_CLASS, "text-sm")}>{teamPage.description}</p>}
-			</div>
+				}
+				elements={TEAM_HEADER_ELEMENTS}
+			/>
 		</header>
 	)
+}
+
+// the avatar floats at the left with the title beside it, and the counts and the description flow around it
+export const TEAM_HEADER_ELEMENTS: TeamHeaderElements = {
+	Frame: ({ children }) => <div className={PAGE_HEADER_FLOW_CLASS}>{children}</div>,
+	AvatarRow: ({ children }) => <>{children}</>,
+	AvatarSlot: ({ children }) => <div className={PAGE_HEADER_AVATAR_FLOAT_CLASS}>{children}</div>,
+	Identity: ({ children }) => <>{children}</>,
+	TitleRow: ({ children }) => <span className={cn(PAGE_HEADER_TITLE_CLASS, "relative")}>{children}</span>,
+	Title: ({ children }) => <h1 className="font-display text-2xl">{children}</h1>,
+	Details: ({ details }) => <DetailsLine className={PAGE_HEADER_DETAILS_CLASS} details={details} />,
+	Description: ({ children }) => <p className={cn(PAGE_HEADER_DESCRIPTION_CLASS, "text-sm")}>{children}</p>,
 }

@@ -1,7 +1,7 @@
-import type { SpendMeterProps } from "./spendMeter"
+import type { MonthlySpend } from "@carlnotes/contracts/activity"
 
 // the cutoff-enabled account shared by web and mobile component previews
-export const SPEND_METER_STORY_ACTIVITY: SpendMeterProps = {
+export const SPEND_METER_STORY_ACTIVITY: MonthlySpend = {
 	scanSpendCents: 10,
 	chatSpendCents: 0,
 	podcastEpisodeSpendCents: 0,
@@ -15,7 +15,7 @@ export const SPEND_METER_STORY_ACTIVITY: SpendMeterProps = {
 }
 
 // all three cost categories at the phone account card's narrow width
-export const SPEND_METER_STORY_NARROW_ACTIVITY: SpendMeterProps = {
+export const SPEND_METER_STORY_NARROW_ACTIVITY: MonthlySpend = {
 	...SPEND_METER_STORY_ACTIVITY,
 	scanSpendCents: 374,
 	podcastEpisodeSpendCents: 1449,

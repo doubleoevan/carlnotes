@@ -5,8 +5,9 @@
 `app/topics/[topicId]/notes/[noteId].tsx` and `app/teams/[teamId]/notes/[noteId].tsx` open `components/note/NoteScreen`.
 The route checks membership in the owning page and fresh permissions before displaying server content.
 Public readers do not need a draft store. Draft records include their Topic or Team page context.
-`NoteEditor`, `NoteViewer`, `NoteToolbar`, `CreateNote`, `NoteComments`, `NoteConflictNotice`, and `NoteUnreadBadge`
-adapt actual shared core components. The native editor and reader use the same pinned enriched HTML 1.1.1 as web.
+`NoteEditor`, `NoteViewer`, `NoteToolbar`, `CreateNote`, `NoteComments`, `NoteConflictNotice`, `NoteUnreadBadge`,
+`NoteDetails`, and `NotesList` adapt actual shared core components. The native editor and reader use the same
+pinned enriched HTML 1.1.1 as web.
 The existing patch preserves web initialization and qualifies iOS React headers for the current native build.
 Generated `ios/` and `android/` projects are ignored; Expo configuration remains their source.
 

@@ -24,7 +24,7 @@ export type TopicImageProps = {
 }
 
 /**
- * Shows a topic's image at the size, or the muted background for a topic with no image yet.
+ * Shows a topic's image at the size, or the muted background while its first image renders.
  */
 export function TopicImage({
 	image,

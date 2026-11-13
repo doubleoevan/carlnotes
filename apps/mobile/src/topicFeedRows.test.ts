@@ -74,12 +74,10 @@ test("one expanded section has five findings per Topic and an in-place expander"
 	expect(ownRows.find((row) => row.kind === "findings")?.findingRows.at(-1)).toMatchObject({ isLast: true })
 })
 
-test("empty and collapsed sections retain their heading and matching copy", () => {
+test("empty and collapsed sections retain their heading, and an empty open section offers a new topic", () => {
 	const feed = toTestTopicFeedResponse([])
 	expect(toTopicFeedRows({ topicFeed: feed, openSection: null })).toHaveLength(4)
-	expect(toTopicFeedRows({ topicFeed: feed, openSection: "yours" }).find((row) => row.kind === "empty")).toMatchObject({
-		text: "Give Carl a topic. You know the one.",
-	})
+	expect(toTopicFeedRows({ topicFeed: feed, openSection: "yours" }).some((row) => row.kind === "newTopic")).toBe(true)
 })
 
 test("bookmarks keep their rank slot and filtered findings form one continuous card", () => {

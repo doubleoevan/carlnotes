@@ -3,23 +3,16 @@ import { authClient } from "@carlnotes/client/authClient"
 import type { ActivityResponse } from "@carlnotes/contracts/activity"
 import { toSessionProfileIdentity } from "@carlnotes/contracts/profiles"
 import { AvatarHeader, AvatarHeaderSkeleton } from "@carlnotes/core/components/AvatarHeader"
-import { toSectionCountLabel } from "@carlnotes/core/lib/labels"
 import { useTopicInviteBadges } from "@carlnotes/core/stores/topicInviteStore"
 import { Activity } from "lucide-react"
-import type * as React from "react"
 import { useEffect, useState } from "react"
-import { AccordionSection } from "@/components/common/AccordionSection"
-import { AnchorLink } from "@/components/common/AnchorLink"
+import { ActivitySections } from "@/components/activity/ActivitySections"
 import {
 	WEB_AVATAR_HEADER_ELEMENTS,
 	WEB_AVATAR_HEADER_SKELETON_ELEMENTS,
 } from "@/components/common/avatarHeaderElements"
 import { UpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { PageSkeleton } from "@/components/layout/PageSkeleton"
-import { Accordion } from "@/components/primitives/accordion"
-import { EmptyListCard } from "@/components/table/TableCard"
-import { TopicInvitesTable } from "@/components/table/TopicInvitesTable.tsx"
-import { TopicSubscriptionsTable } from "@/components/table/TopicSubscriptionsTable"
 import { NewTopicButton, useNewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { useSearchParams } from "@/hooks/useSearchParams"
@@ -115,69 +108,4 @@ export function ActivityPage() {
 			{newTopicDialog}
 		</main>
 	)
-}
-
-// the loaded page
-function ActivitySections({
-	activity,
-	isOwnView,
-	onReload,
-}: {
-	activity: ActivityResponse
-	isOwnView: boolean
-	onReload: () => void
-}) {
-	return (
-		<div className={ACTIVITY_SECTIONS_CLASS}>
-			<Accordion type="multiple" defaultValue={["subscriptions", "invites"]}>
-				{/* the user's subscriptions with their active and email preferences */}
-				<AccordionSection
-					value="subscriptions"
-					title="Topics you follow"
-					countLabel={toSectionCountLabel(activity.subscriptions.length, "topic")}
-				>
-					{activity.subscriptions.length > 0 ? (
-						<TopicSubscriptionsTable
-							subscriptions={activity.subscriptions}
-							onReloadPage={onReload}
-							isReadOnly={!isOwnView}
-						/>
-					) : isOwnView ? (
-						<EmptyActivitySection>
-							<AnchorLink href="/" className="sentence-link">
-								Follow a topic.
-							</AnchorLink>
-						</EmptyActivitySection>
-					) : (
-						<EmptyListCard>No subscriptions.</EmptyListCard>
-					)}
-				</AccordionSection>
-
-				{/* the invitations the user sent. the ones that were sent to them are subscriptions that are not active yet,
-				    so they sit in the subscriptions table above */}
-				<AccordionSection
-					value="invites"
-					title="Your topic invites"
-					countLabel={toSectionCountLabel(activity.invites.length, "invite")}
-				>
-					{activity.invites.length > 0 ? (
-						<TopicInvitesTable invites={activity.invites} onReload={onReload} isReadOnly={!isOwnView} />
-					) : isOwnView ? (
-						<EmptyActivitySection>
-							<AnchorLink href="/" className="sentence-link">
-								Share a topic.
-							</AnchorLink>
-						</EmptyActivitySection>
-					) : (
-						<EmptyListCard>No invites.</EmptyListCard>
-					)}
-				</AccordionSection>
-			</Accordion>
-		</div>
-	)
-}
-
-// what an activity section shows if it is empty
-function EmptyActivitySection({ children }: { children: React.ReactNode }) {
-	return <EmptyListCard>{children} You know the one.</EmptyListCard>
 }

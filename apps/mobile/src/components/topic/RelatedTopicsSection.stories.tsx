@@ -1,3 +1,4 @@
+import { TEST_RELATED_TOPICS } from "@carlnotes/contracts/topicFeedTestFixtures"
 import type { Meta, StoryObj } from "@storybook/react-native"
 import { RelatedTopicsSection } from "./RelatedTopicsSection"
 import { STORY_TOPIC_PAGE } from "./topicPageStories"
@@ -6,10 +7,11 @@ import { STORY_TOPIC_PAGE } from "./topicPageStories"
 const meta = {
 	title: "Topic/RelatedTopicsSection",
 	component: RelatedTopicsSection,
-	parameters: { webReference: "apps/web/src/components/topic/RelatedTopicsSection.tsx" },
+	parameters: { webReference: "apps/web/src/components/topic/RelatedTopicsSection.tsx at 375px" },
 	args: { relatedTopics: STORY_TOPIC_PAGE.relatedTopics },
 } satisfies Meta<typeof RelatedTopicsSection>
 export default meta
 type Story = StoryObj<typeof meta>
 export const Default: Story = {}
+export const Paginated: Story = { args: { relatedTopics: TEST_RELATED_TOPICS } }
 export const Empty: Story = { args: { relatedTopics: [] } }

@@ -50,6 +50,13 @@ export function useTopicFeed(): TopicFeedState {
 	return topicFeed
 }
 
+/**
+ * Returns the shared feed state, or null outside a TopicFeedProvider, as in a story.
+ */
+export function useOptionalTopicFeed(): TopicFeedState | null {
+	return useContext(TopicFeedContext)
+}
+
 // keep public reading in memory and discard it when the session changes
 function VisitorTopicFeedProvider({ canBrowse, children }: { canBrowse: boolean; children: ReactNode }) {
 	const [queryClient] = useState(toQueryClient)

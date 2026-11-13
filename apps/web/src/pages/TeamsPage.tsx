@@ -94,10 +94,7 @@ export function TeamsPage() {
 		if (!teamToLeave || !session) {
 			return
 		}
-		const isRemoved = await sendRemoveTeamMember(teamToLeave.teamId, session.user.id)
-		if (!isRemoved) {
-			toast.error("Promote another leader first. A team can't be left without one.")
-		}
+		await sendRemoveTeamMember(teamToLeave.teamId, session.user.id).catch((error: Error) => toast.error(error.message))
 		setTeamToLeave(null)
 		reloadTeams()
 	}

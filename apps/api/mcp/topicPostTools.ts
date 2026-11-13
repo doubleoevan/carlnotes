@@ -6,6 +6,7 @@ import { type TopicPostCard, toBodyParagraphs } from "@carlnotes/contracts/topic
 import { db } from "@carlnotes/db"
 import { topicPostDiscussions } from "@carlnotes/db/schema/topicPosts"
 import { toUntrustedFence } from "@carlnotes/models/prompts/write"
+import { appUrl } from "@carlnotes/server/appUrl"
 import { and, eq } from "drizzle-orm"
 import { z } from "zod"
 import { canReadTopicPost, loadTopicPostCards, loadTopicPostRow, toTopicPostCards } from "../topicPost/topicPosts"
@@ -15,6 +16,8 @@ import {
 	loadVisibleTopic,
 	MCP_PAGE_MAX_CHARS,
 	packPage,
+	toBudgetedTexts,
+	toFencedNullable,
 	toToolTopicId,
 	UNTRUSTED_TEXT_NOTICE,
 } from "./results"
@@ -127,7 +130,8 @@ export function registerTopicPostTools({ mcpServer, toolCaller, routeTopicId }: 
 	)
 }
 
-// a Topic Post as the model reads it: its ids, its times, and its link, with what a person wrote inside the fence
+// a Topic Post as the model reads it: its ids, its times, its link, and its image, with what a person wrote inside the
+// fence
 function toFencedTopicPost(topicPost: TopicPostCard, toFencedText: (text: string) => string): Record<string, unknown> {
 	return {
 		id: topicPost.id,
@@ -135,8 +139,10 @@ function toFencedTopicPost(topicPost: TopicPostCard, toFencedText: (text: string
 		title: toFencedText(topicPost.title),
 		authorUsername: toFencedText(topicPost.author.username),
 		publishedAt: topicPost.publishedAt,
-		summary: topicPost.summary ? toFencedText(topicPost.summary) : null,
+		summary: toFencedNullable(toFencedText, topicPost.summary),
 		url: `${SITE_URL}${topicPost.path}`,
+		// the post's image at its page size, null until it is drawn
+		imageUrl: topicPost.image ? `${appUrl()}${topicPost.image.page.url}` : null,
 	}
 }
 
@@ -149,17 +155,8 @@ export function toBudgetedBody(
 	pageUrl: string,
 	maxChars = MCP_PAGE_MAX_CHARS,
 ): { text: string; isCut: boolean } {
-	// take whole paragraphs until the next would pass the budget, and always the first
-	const keptParagraphs: string[] = []
-	let usedChars = 0
-	// keep whole paragraphs while they fit, and always the first
-	for (const paragraph of paragraphs) {
-		if (keptParagraphs.length > 0 && usedChars + paragraph.length > maxChars) {
-			break
-		}
-		keptParagraphs.push(paragraph)
-		usedChars += paragraph.length
-	}
+	// whole paragraphs inside the budget
+	const keptParagraphs = toBudgetedTexts(paragraphs, maxChars)
 
 	// a cut body says where the rest is
 	const isCut = keptParagraphs.length < paragraphs.length

@@ -1,4 +1,4 @@
-import type { ActivityResponse } from "@carlnotes/contracts/activity"
+import type { MonthlySpend } from "@carlnotes/contracts/activity"
 import { CHAT_NAME } from "@carlnotes/contracts/chat"
 import type { MonthlyBudgetCutoff } from "@carlnotes/contracts/plans"
 import { PODCAST_NAME } from "@carlnotes/contracts/podcastEpisodes"
@@ -22,12 +22,6 @@ export type CutoffMarker = { percent: number; monthlyBudgetCutoffs: MonthlyBudge
 
 // the share of the monthly budget spent, and the cutoffs it is measured against, lowest share first
 export type CutoffProgress = { budgetUsedShare: number; monthlyBudgetCutoffs: MonthlyBudgetCutoff[] }
-
-// the spend and cutoff fields both platform meters render
-export type SpendMeterProps = Pick<
-	ActivityResponse,
-	"scanSpendCents" | "chatSpendCents" | "podcastEpisodeSpendCents" | "budgetCents" | "monthlyBudgetCutoffs"
->
 
 // one ordered spend segment and the shared meter's amounts, legend, and visibility
 type SpendSegment = {
@@ -59,7 +53,7 @@ export function toSpendAmountLabel({
 	chatSpendCents,
 	podcastEpisodeSpendCents,
 	budgetCents,
-}: SpendMeterProps): string {
+}: MonthlySpend): string {
 	const totalCents = scanSpendCents + chatSpendCents + podcastEpisodeSpendCents
 	return `${toCentsLabel(totalCents)} of ${toCentsLabel(budgetCents)}`
 }
@@ -73,7 +67,7 @@ export function toSpendMeterModel({
 	podcastEpisodeSpendCents,
 	budgetCents,
 	monthlyBudgetCutoffs,
-}: SpendMeterProps): SpendMeterModel {
+}: MonthlySpend): SpendMeterModel {
 	// calculate the raw share and the rounded percentage shown beside the upgrade link
 	const totalCents = scanSpendCents + chatSpendCents + podcastEpisodeSpendCents
 	const budgetUsedShare = budgetCents > 0 ? totalCents / budgetCents : 1

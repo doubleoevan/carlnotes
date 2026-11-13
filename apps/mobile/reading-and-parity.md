@@ -119,9 +119,9 @@ Its `PodcastEpisodeRow` also supplies Topic roast's play button, numbered title,
 Topic roast's film row is the same row, with the Video button's poster thumbnail in its play button's place.
 Topic roast uses the labeled Share button from the web.
 `table/TableCard.tsx` shares the native table surface, header, and row separators. `table/TopicNameLink.tsx` shares
-linked Topic names with the same podcast play button. `RelatedTopicsSection.tsx` uses them for Similar topics,
-including name sorting and the same shared play action. `SortableHeader.tsx` draws core's sort state and also
-serves Notes. The pagination footer stays inside its table card. Future native tables reuse these components.
+linked Topic names with the same podcast play button. `RelatedTopicsSection.tsx` renders core's Similar topics section
+through them, with its name sorting and the same shared play action. `SortableHeader.tsx` draws core's sort state and
+also serves Notes. The pagination footer stays inside its table card. Future native tables reuse these components.
 `table/TablePagination.tsx` supplies native controls to core's shared table footer and `usePagination` state.
 Rows opens the anchored `Select` dropdown; changing size or sort returns to page one.
 `topicPageStories.tsx` supplies complete page fixtures and an isolated Query client for the card stories.

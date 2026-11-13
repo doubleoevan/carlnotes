@@ -6,7 +6,6 @@ import { GATE_COOKIE_NAME } from "@carlnotes/contracts/signupGate"
 import { toDeviceProperties } from "@carlnotes/contracts/userAgent"
 import { cacheJson } from "@carlnotes/db/redis"
 import { appUrl } from "@carlnotes/server/appUrl"
-import { traceRequestStage } from "@carlnotes/server/monitoring"
 import { zValidator } from "@hono/zod-validator"
 import { isAPIError } from "better-auth/api"
 import { Hono } from "hono"
@@ -17,7 +16,6 @@ import { adminRoute } from "./admin"
 import { adminBlocksRoute } from "./adminBlocks"
 import { appSignupGateRoute } from "./appSignupGate"
 import { auth, MCP_RESOURCE_URL } from "./auth"
-import { loadDailyTopicQuota, topicLimit, topicsRemaining } from "./authorization"
 import { AVATAR_UPLOAD_PATH, avatarsRoute, TEAM_AVATAR_UPLOAD_PATH } from "./avatarsRoute"
 import { billingRoute } from "./billingRoute"
 import { defaultBodyLimit } from "./bodyLimit"
@@ -76,11 +74,11 @@ import { reactionsRoute } from "./social/reactionsRoute"
 import { teamsRoute } from "./team/teamsRoute"
 import { termsAcceptanceRoute } from "./termsAcceptance"
 import { TOPIC_ATTACHMENT_UPLOAD_PATH, topicAttachmentsRoute } from "./topic/attachments"
-import { buildTopicFeeds, readVisitorTopicFeeds } from "./topic/feeds"
 import { findingsRoute } from "./topic/findings"
 import { homeOrderRoute } from "./topic/homeOrder"
 import { scansRoute } from "./topic/scans"
 import { subscriptionsRoute } from "./topic/subscriptions"
+import { loadTopicFeedResponse } from "./topic/topicFeedResponse"
 import { topicImagesRoute } from "./topic/topicImagesRoute"
 import { topicsRoute } from "./topic/topicsRoute"
 import { updatesRoute } from "./topic/updatesRoute"
@@ -247,26 +245,9 @@ export const apiRoute = new Hono<AppEnv>()
 		renderedCacheHeaders,
 		zValidator("query", topicFeedQuery),
 		async (context) => {
-			const userId = currentUser(context)
 			// only include consumed topic findings unless the api client asks for the "All" view
-			const includeConsumed = context.req.valid("query").all === "true"
-			// merge in the topic-creation quota. a signed-out visitor has none so gets zero, and every visitor shares one
-			// feed, read through Redis for half a minute
-			const [topicFeeds, remainingNewTopics, ownedTopicLimit, dailyTopicQuota] = await Promise.all([
-				traceRequestStage("topic_feed.build", () =>
-					userId ? buildTopicFeeds(userId, includeConsumed) : readVisitorTopicFeeds(includeConsumed),
-				),
-				userId ? topicsRemaining(userId) : Promise.resolve(0),
-				userId ? topicLimit(userId) : Promise.resolve(0),
-				userId ? loadDailyTopicQuota(userId) : Promise.resolve({ limit: 0, remainingTopics: 0 }),
-			])
-			return context.json({
-				...topicFeeds,
-				topicsRemaining: remainingNewTopics,
-				topicLimit: ownedTopicLimit,
-				dailyTopicLimit: dailyTopicQuota.limit,
-				dailyTopicsRemaining: dailyTopicQuota.remainingTopics,
-			})
+			const isConsumedIncluded = context.req.valid("query").all === "true"
+			return context.json(await loadTopicFeedResponse(currentUser(context), isConsumedIncluded))
 		},
 	)
 	// the site search, then the topic routes

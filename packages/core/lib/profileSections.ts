@@ -204,3 +204,7 @@ const PROFILE_RANKED_NOUNS: RankedNoun[] = ["topics", "films", "podcasts", "post
 export function toProfileRankedNouns(isOwnProfile: boolean): RankedNoun[] {
 	return isOwnProfile ? PROFILE_RANKED_NOUNS : []
 }
+
+// the line and the retry label of the person's own topics after their read fails
+export const TOPICS_LOAD_FAILED_LINE = "Topics didn't load."
+export const RETRY_LOADING_TOPICS_LABEL = "Retry loading topics"

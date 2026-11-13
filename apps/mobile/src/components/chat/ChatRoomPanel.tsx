@@ -5,18 +5,17 @@ import {
 } from "@carlnotes/client/chatRoomClient"
 import type { ChatRoomMessage } from "@carlnotes/contracts/chat"
 import type { TeamPageResponse } from "@carlnotes/contracts/teams"
+import { useChatRoomListBubbleProps } from "@carlnotes/core/components/ChatRoomMessageList"
 import { type ChatRoomState, useChatRoom } from "@carlnotes/core/hooks/useChatRoom"
 import { useEditableTopicDraft } from "@carlnotes/core/hooks/useEditableTopicDraft"
-import { useNow } from "@carlnotes/core/hooks/useNow"
 import { useRoomMembers } from "@carlnotes/core/hooks/useRoomMembers"
 import { type ChatRoomReply, useRoomReply } from "@carlnotes/core/hooks/useRoomReply"
 import { toEmptyChatRoomCopy, toReportedChatMessageLabel } from "@carlnotes/core/lib/chatCopy"
 import { CHAT_ROOM_REJECTION_COPY } from "@carlnotes/core/lib/chatRejectionCopy"
 import { deleteChatRoomMessage } from "@carlnotes/core/lib/chatRoomActions"
-import { toChatMessageQuotes } from "@carlnotes/core/lib/chatRoomMessages"
 import { clearProposedTopicEdit, toCurrentChatGuard } from "@carlnotes/core/stores/chatConversationStore"
 import { markChatRoomOpened } from "@carlnotes/core/stores/chatRoomStore"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Alert, type FlatList, ScrollView, View } from "react-native"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { LoadFailedNotice } from "@/components/common/LoadFailedNotice"
@@ -155,10 +154,10 @@ export function ChatRoomContent({
 	// keep virtual list and clock state local to the rendered room
 	const listRef = useRef<FlatList<ChatRoomMessage>>(null)
 	const [scrollTarget, setScrollTarget] = useState<{ key: string }>()
-	const now = useNow()
 	// the chat message whose report sheet is open, which can block its author
 	const [reportedChatMessage, setReportedChatMessage] = useState<ChatRoomMessage | null>(null)
-	const chatMessageQuotes = useMemo(() => toChatMessageQuotes(chatRoom.chatMessages), [chatRoom.chatMessages])
+	// each chat bubble's quote, ownership, delete right, and the one clock every time label reads, as the web's list
+	const toBubbleProps = useChatRoomListBubbleProps({ chatMessages: chatRoom.chatMessages, userId, canModerate })
 	if (chatRoom.isRejected) {
 		return <Text className="p-3 text-muted-foreground">Join this team to start the conversation</Text>
 	}
@@ -225,13 +224,9 @@ export function ChatRoomContent({
 				}
 				renderItem={(chatMessage) => (
 					<ChatRoomMessageBubble
-						chatMessage={chatMessage}
+						{...toBubbleProps(chatMessage)}
 						topicId={topicId}
 						teamId={teamId}
-						repliedChatMessage={chatMessageQuotes.get(chatMessage.id)}
-						isOwnChatMessage={chatMessage.authorUserId === userId}
-						now={now}
-						canDelete={chatMessage.authorUserId === userId || canModerate}
 						isLinkPreviewLoading={chatRoom.loadingChatMessageIds.has(chatMessage.id)}
 						voiceChatPage={chatRoom.voiceChatPage}
 						onReply={chatRoomReply.selectChatMessage}

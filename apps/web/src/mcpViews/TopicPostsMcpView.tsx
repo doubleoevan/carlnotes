@@ -3,17 +3,14 @@ import { toTopicPath } from "@carlnotes/contracts/seo"
 import type { TopicPostCard as TopicPostCardFields } from "@carlnotes/contracts/topicPosts"
 import { TopicPostCard, type TopicPostCardElements } from "@carlnotes/core/components/TopicPostCard"
 import { TopicPostsSection, type TopicPostsSectionElements } from "@carlnotes/core/components/TopicPostsSection"
-import { cn } from "@carlnotes/nightshift/classNames"
-import { AnchorLink } from "@/components/common/AnchorLink"
 import { CARD_TITLE_LINE_CLASS, TOPIC_POST_CARD_ELEMENTS } from "@/components/topicPost/TopicPostCard"
 import { TopicPostInfo } from "@/components/topicPost/TopicPostInfo"
 import { TOPIC_POSTS_SECTION_ELEMENTS } from "@/components/topicPost/TopicPostsSection"
-import { STANDALONE_LINE_LINK_CLASS, STRETCHED_CARD_LINK_CLASS } from "@/lib/styleClasses"
+import { McpViewCardLink } from "./McpViewCardLink"
 import { McpViewTopicHeader } from "./McpViewTopicHeader"
+import { MCP_VIEW_TOPIC_POST_INFO_ELEMENTS, McpViewSiteLink } from "./mcpViewElements"
 import { TOPIC_POST_ROUTE_PREFIX } from "./mcpViewHistory"
 import { moveMcpViewOneHop } from "./mcpViewHop"
-import { toMcpViewSiteUrl } from "./mcpViewHost"
-import { MCP_VIEW_TOPIC_POST_INFO_ELEMENTS } from "./mcpViewTopicPostInfoElements"
 
 // the tool that reads one Topic Post, which a card's press calls
 const TOPIC_POST_TOOL = "read_topic_post"
@@ -46,17 +43,15 @@ export function TopicPostsMcpView({
 			/>
 			{/* ponytail: the view shows the tool's first page of posts, and the rest on the Topic's page. page through the
 			    tool's cursor if Topics grow past a page of posts */}
-			{hasMoreTopicPosts && (
-				<AnchorLink href={toTopicPath(topic)} className={cn(STANDALONE_LINE_LINK_CLASS, "mt-4")}>
-					See all on CarlNotes
-				</AnchorLink>
-			)}
+			{hasMoreTopicPosts && <McpViewSiteLink href={toTopicPath(topic)}>See all on CarlNotes</McpViewSiteLink>}
 		</div>
 	)
 }
 
-// one Topic Post's card, whose press takes the one hop to the post
-function McpViewTopicPostCard({ topicPost }: { topicPost: TopicPostCardFields }) {
+/**
+ * One Topic Post's card in an MCP view, whose press takes the one hop to the post.
+ */
+export function McpViewTopicPostCard({ topicPost }: { topicPost: TopicPostCardFields }) {
 	const openTopicPost = (): void =>
 		void moveMcpViewOneHop({
 			toolName: TOPIC_POST_TOOL,
@@ -74,17 +69,9 @@ const MCP_VIEW_TOPIC_POST_CARD_ELEMENTS: TopicPostCardElements = {
 	Info: (props) => <TopicPostInfo {...props} isInline elements={MCP_VIEW_TOPIC_POST_INFO_ELEMENTS} />,
 	Title: ({ path, label, onOpen, aside, children }) => (
 		<div className={CARD_TITLE_LINE_CLASS}>
-			<a
-				href={toMcpViewSiteUrl(path)}
-				aria-label={label}
-				className={STRETCHED_CARD_LINK_CLASS}
-				onClick={(event) => {
-					event.preventDefault()
-					onOpen?.()
-				}}
-			>
+			<McpViewCardLink path={path} label={label} onOpen={onOpen}>
 				{children}
-			</a>
+			</McpViewCardLink>
 			{aside}
 		</div>
 	),

@@ -1,5 +1,6 @@
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import { FILM_ANCHOR_ID } from "@carlnotes/contracts/podcastEpisodes"
+import { TopicPodcastEpisodeVideoPlayer } from "@carlnotes/core/components/TopicPodcastEpisodeVideoPlayer"
 import { useEffect, useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { PodcastEpisodeAudio } from "@/components/podcast/PodcastEpisodeAudio"
@@ -10,11 +11,13 @@ import {
 	useIsPodcastPlayerShown,
 	usePodcastEpisodePlayer,
 } from "@/stores/podcastEpisodePlayerStore"
+import { MCP_VIEW_FILM_PLAYER_ELEMENTS } from "./mcpViewElements"
 
 /**
  * A MCP view's one podcast player, the site's own, which every play button in the MCP view plays through. If the host's
  * frame blocks the audio, or its play token has expired, the player gives way to a link to the podcast episode's page.
- * A loaded podcast episode with a film links to the film player on its page.
+ * A loaded podcast episode with a film plays it in the frame while films play there, and otherwise links to the film
+ * player on its page.
  */
 export function McpViewPodcastPlayer() {
 	// the podcast episode whose audio failed, which the link names
@@ -38,14 +41,27 @@ export function McpViewPodcastPlayer() {
 	return (
 		<>
 			<PodcastEpisodeAudio />
-			{/* the film player on the loaded podcast episode's page, which the MCP view cannot play */}
-			{isPlayerShown && loadedPodcastEpisode?.hasVideo && loadedPodcastEpisode.pagePath && (
-				<p className="text-muted-foreground mt-3 text-sm">
-					<AnchorLink href={`${loadedPodcastEpisode.pagePath}#${FILM_ANCHOR_ID}`} className={STANDALONE_LINK_CLASS}>
-						Watch on CarlNotes
-					</AnchorLink>
-				</p>
+			{/* the film in the frame, while the MCP view's data includes its files */}
+			{isPlayerShown && loadedPodcastEpisode?.video && (
+				<div className="mt-3">
+					<TopicPodcastEpisodeVideoPlayer
+						podcastEpisode={loadedPodcastEpisode}
+						isCard
+						elements={MCP_VIEW_FILM_PLAYER_ELEMENTS}
+					/>
+				</div>
 			)}
+			{/* the film player on the loaded podcast episode's page, while films play outside the frame */}
+			{isPlayerShown &&
+				!loadedPodcastEpisode?.video &&
+				loadedPodcastEpisode?.hasVideo &&
+				loadedPodcastEpisode.pagePath && (
+					<p className="text-muted-foreground mt-3 text-sm">
+						<AnchorLink href={`${loadedPodcastEpisode.pagePath}#${FILM_ANCHOR_ID}`} className={STANDALONE_LINK_CLASS}>
+							Watch on CarlNotes
+						</AnchorLink>
+					</p>
+				)}
 			{/* the space the fixed player bar covers, so it never hides the MCP view's last row */}
 			{isPlayerShown && <div className="h-16" aria-hidden="true" />}
 			{/* the podcast episode page's link in place of a player that cannot play here */}

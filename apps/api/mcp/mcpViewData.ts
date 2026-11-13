@@ -2,6 +2,7 @@
 // episodes its play buttons play with a play token each, the findings MCP view's topic and findings in the site's
 // shape, and the news MCP view's news. topicPostMcpViewData.ts holds the Topic Post MCP views' data
 
+import type { PodcastEpisodeCard } from "@carlnotes/contracts/home"
 import type { McpScanStatus } from "@carlnotes/contracts/mcpScanStatus"
 import { MCP_VIEW_META_KEY, type McpViewData, type McpViewNews, type McpViewTopic } from "@carlnotes/contracts/mcpViews"
 import type { PersonalSourcesSendResult } from "@carlnotes/contracts/personalSources"
@@ -18,6 +19,7 @@ import { topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
 import { appUrl } from "@carlnotes/server/appUrl"
 import { reportError } from "@carlnotes/server/monitoring"
+import { isMcpViewFilmPlaybackEnabled } from "@carlnotes/server/podcastEpisodeSettings"
 import { and, eq, inArray } from "drizzle-orm"
 import { withAvatarVersion } from "../avatars"
 import { toPlayToken } from "../podcast/playTokens"
@@ -264,8 +266,10 @@ export async function loadMcpViewSession(toolCaller: ToolCaller): Promise<Profil
 	return userRow ? withAvatarVersion(userRow) : null
 }
 
-// the published podcast episodes by id in the player's shape, each audio url with a play token for the caller
-async function loadMcpViewPodcastEpisodes(
+/**
+ * Loads the published podcast episodes by id in the player's shape, each audio url with a play token for the caller.
+ */
+export async function loadMcpViewPodcastEpisodes(
 	toolCaller: ToolCaller,
 	podcastEpisodeIds: string[],
 ): Promise<PodcastEpisode[]> {
@@ -293,6 +297,17 @@ async function loadMcpViewPodcastEpisodes(
 	return toMcpViewPodcastEpisodes(toolCaller, playerPodcastEpisodes)
 }
 
+/**
+ * Loads the podcast episodes of a page's podcast episode and film cards.
+ */
+export function loadMcpViewCardPodcastEpisodes(
+	toolCaller: ToolCaller,
+	podcastEpisodeCards: PodcastEpisodeCard[],
+): Promise<PodcastEpisode[]> {
+	const podcastEpisodeIds = podcastEpisodeCards.map((podcastEpisodeCard) => podcastEpisodeCard.podcastEpisode.id)
+	return loadMcpViewPodcastEpisodes(toolCaller, podcastEpisodeIds)
+}
+
 // each podcast episode as an MCP view plays it, from the audio route's absolute url with the caller's play token
 function toMcpViewPodcastEpisodes(toolCaller: ToolCaller, playerPodcastEpisodes: PodcastEpisode[]): PodcastEpisode[] {
 	const userId = toToolCallerUserId(toolCaller)
@@ -301,23 +316,37 @@ function toMcpViewPodcastEpisodes(toolCaller: ToolCaller, playerPodcastEpisodes:
 		// the caller's play token in place of a session
 		const playToken = toPlayToken({ podcastEpisodeId: podcastEpisode.id, userId })
 		const audioUrl = `${siteUrl}/api/episodes/${podcastEpisode.id}/audio.mp3?play=${playToken}`
-		return toMcpViewPodcastEpisode(podcastEpisode, audioUrl)
+		return toMcpViewPodcastEpisode(podcastEpisode, audioUrl, playToken)
 	})
 }
 
 /**
  * Returns a recording as an MCP view plays it: the audio url with a play token in place of a session, each cover's
  * absolute url, since the frame's media session has no origin to resolve a path against, and no voice chat. The film
- * plays only on the site, so the MCP view learns only whether one exists.
+ * keeps its absolute video and captions urls with the same play token while MCP_VIEW_FILM_PLAYBACK is on, and otherwise
+ * the MCP view learns only whether one exists.
  */
 export function toMcpViewPodcastEpisode(
 	{ video, ...podcastEpisode }: PodcastEpisode,
 	audioUrl: string,
+	playToken?: string,
 ): PodcastEpisode {
 	const siteUrl = appUrl()
 	const toSiteUrl = (coverUrl: string | null): string | null => coverUrl && new URL(coverUrl, siteUrl).toString()
+
+	// the film's files at absolute urls under the caller's play token, while films play in the frame
+	const toPlayUrl = (fileUrl: string): string => `${new URL(fileUrl, siteUrl).toString()}?play=${playToken}`
+	const mcpViewVideo =
+		video && playToken && isMcpViewFilmPlaybackEnabled()
+			? {
+					videoUrl: toPlayUrl(video.videoUrl),
+					captionsUrl: toPlayUrl(video.captionsUrl),
+					posterUrl: toSiteUrl(video.posterUrl ?? null),
+				}
+			: null
 	return {
 		...podcastEpisode,
+		...(mcpViewVideo && { video: mcpViewVideo }),
 		hasVideo: Boolean(video),
 		isVoiceChatConfigured: false,
 		audioUrl,

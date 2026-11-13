@@ -309,7 +309,16 @@ Featured Films right above them, with this app's accordion section, card column,
 sections in `HOME_SECTIONS`' order, as the web does, with New podcasts this week right below Featured podcasts and New
 posts this week right below Featured posts, each absent with no card. The profile's Featured Posts lists every post
 of its person and is its only Topic Post section. The team screen has the profile's four card sections, Featured
-Films right before Featured Podcasts, and its Featured Posts lists every post of its topics. `components/common/ViewerCountLine.tsx` adapts core's
+Films right before Featured Podcasts, and its Featured Posts lists every post of its topics.
+`components/account/ProfileSections.tsx` and `components/team/TeamSections.tsx` adapt core's `ProfileSections` and
+`TeamSections` over `components/common/pageSectionsElements.tsx`. The profile and team screens' card sections are
+`AccordionSection`s and their table sections are `CollapsibleSection`s, as on the Activity, Teams, and topic screens
+and in their loading states. `src/teamTopicRemoval.ts` removes a Topic from a team for the team screen and the add to
+team sheet, and throws the line both show if the remove fails.
+`components/team/TeamHeader.tsx` adapts core's `TeamHeader` with the leader's avatar picker, and
+`components/activity/ActivitySections.tsx` adapts core's `ActivitySections` with the subscriptions and sent invites
+tables, whose delete confirmations `components/table/TableConfirmAlert.tsx` opens as the system alert.
+`components/common/ViewerCountLine.tsx` adapts core's
 Visitors line at the end of the profile, team, and Topic Post screens, with the links to the person's Topic Dashboard
 and Podcast Dashboard and the team's Team Dashboard. `components/dashboard/DashboardScreen.tsx` is a Dashboard screen
 over core's `Dashboard`, with `dashboardElements.tsx` for its sections, cards, controls, and the sheet a tapped point
@@ -431,7 +440,10 @@ not open. `TopicPostScreen.tsx` renders the shared `TopicPostPage`: a
 published post in `PageScreen` with its actions menu, whose Featured posts opens the author's `ProfileRankDialog` on
 a published post of a public topic, image sheet, and comment thread, and a draft or an edit in
 the note screen's keyboard-safe frame. `src/platformPath.ts` maps a post's web path to its route.
-`src/components/account/ProfileHeader.tsx` adapts the shared profile header. `note/NoteLayout.tsx` exports
+`src/components/account/ProfileHeader.tsx` adapts the shared profile header. `note/NoteDetails.tsx` and
+`note/NotesList.tsx` adapt core's open note header and notes list, and `NoteScreen.tsx`'s open note renders the header
+with `note/NoteNameInput.tsx` and `note/NoteFooter.tsx`, the save status, retry, report, and delete.
+`note/NoteLayout.tsx` exports
 `NoteBodyScroll` and `NoteKeyboardDoneButton`, which the note and the Topic Post editor both lay out with. A
 disabled page action with a reason stays pressable and says its reason in a dialog.
 

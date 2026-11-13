@@ -1,13 +1,12 @@
 import { toCountLabel } from "@carlnotes/contracts/text"
 import type { TopicFeedResponse } from "@carlnotes/contracts/topics"
-import { EMPTY_TOPIC_SECTION, TOPIC_SECTION_TITLES } from "@carlnotes/core/lib/topicFeedLabels"
+import { TOPIC_SECTION_TITLES } from "@carlnotes/core/lib/topicFeedLabels"
 import { getRouteApi, Link } from "@tanstack/react-router"
 import type { MouseEvent } from "react"
 import { AccordionSection } from "@/components/common/AccordionSection"
 import { Pagination } from "@/components/common/Pagination"
-import { EmptyListCard } from "@/components/table/TableCard"
 import { toRenderedRows } from "@/lib/renderedRows"
-import { STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
+import { NewTopicEmptyCard } from "./NewTopicEmptyCard"
 import { Topic } from "./Topic"
 
 // every section shows this many topics per page
@@ -38,13 +37,7 @@ export function TopicSection({ section, onNewTopicChat }: TopicSectionProps) {
 			onTriggerClick={scrollTriggerToTop}
 		>
 			{/* the section topics, or a call to action to start one */}
-			{section.topics.length === 0 && (
-				<EmptyListCard>
-					<button type="button" onClick={onNewTopicChat} className={STANDALONE_LINK_CLASS}>
-						{EMPTY_TOPIC_SECTION}
-					</button>
-				</EmptyListCard>
-			)}
+			{section.topics.length === 0 && <NewTopicEmptyCard onNewTopicChat={onNewTopicChat} />}
 			{/* the topics, each at its position on its page */}
 			{renderedTopics.map(({ row: topic, className }, index) => (
 				<Topic key={topic.id} topic={topic} index={index % TOPICS_PER_PAGE} className={className} />

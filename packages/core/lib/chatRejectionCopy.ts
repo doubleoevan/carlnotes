@@ -1,5 +1,6 @@
 import type { ChatRejection } from "@carlnotes/client/chatClient"
 import {
+	CHAT_PAUSED_LINE,
 	CHAT_ROOM_ATTACHMENT_LIMIT,
 	type ChatRoomAttachmentRejection,
 	SPENT_BUDGET_LINE,
@@ -8,7 +9,7 @@ import {
 /** The sentence for each chat rejection. */
 export const CHAT_REJECTION_COPY: Record<ChatRejection, string> = {
 	budget: SPENT_BUDGET_LINE,
-	chatPaused: "Carl is taking a break until midnight UTC. Ask him again then.",
+	chatPaused: CHAT_PAUSED_LINE,
 	rateLimited: "Carl needs a minute to catch up. Ask again shortly.",
 	forbidden: "Carl can't talk about that.",
 	failed: "Carl lost his train of thought.",

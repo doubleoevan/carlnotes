@@ -1,7 +1,6 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { fetchNotes } from "@carlnotes/client/noteClient"
 import type { NotesResponse } from "@carlnotes/contracts/notes"
-import { SITE_URL } from "@carlnotes/contracts/site"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { toSectionCountLabel } from "@carlnotes/core/lib/labels"
 import { fontFamilies } from "@carlnotes/nightshift/typography"
@@ -13,15 +12,15 @@ import { View } from "react-native"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Sheet } from "@/components/common/Sheet"
-import { Button, toTouchTargetHitSlop } from "@/components/primitives/button"
+import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
-import { EmptyListCard } from "@/components/table/TableCard"
+import { TableCard } from "@/components/table/TableCard"
 import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
 import { useNoteDraftSnapshot, useNoteDraftStore } from "@/noteDraftStorage"
 import { openSessionScreen } from "@/sessionReturnPath"
 import { CreateNote } from "./CreateNote"
-import { NotesTable } from "./NotesTable"
+import { NotesList } from "./NotesList"
 import { PageNoteBadge } from "./NoteUnreadBadge"
 
 // the topic or the team whose notes the section lists, and where the count of the listed notes goes as it stands,
@@ -103,7 +102,7 @@ export function NotesSection(props: NotesSectionProps) {
 					</View>
 				}
 			>
-				<NotesList
+				<NotesSectionBody
 					data={query.data}
 					isPending={query.isPending}
 					isError={query.isError}
@@ -157,43 +156,8 @@ export function NotesSection(props: NotesSectionProps) {
 	)
 }
 
-// link the Topic name to the same creation action as the section's primary button
-function NoteInvitation({
-	pageType,
-	canCreate,
-	pageName,
-	path,
-	onAdd,
-}: {
-	canCreate: boolean
-	pageType: "topic" | "team"
-	pageName: string
-	path: string
-	onAdd: () => void
-}) {
-	if (!canCreate) {
-		return <EmptyListCard text={`No notes on this ${pageType} yet.`} />
-	}
-	return (
-		<AnchorLink
-			href={`${SITE_URL}${path}`}
-			accessibilityLabel={`Write a note on ${pageName}`}
-			className="min-h-6 justify-center active:opacity-75"
-			hitSlop={toTouchTargetHitSlop(24)}
-			onPress={(event) => {
-				event.preventDefault()
-				onAdd()
-			}}
-		>
-			<Text className="text-sm text-muted-foreground">
-				Write a note on <Text className="text-sm text-link">{pageName}</Text>.
-			</Text>
-		</AnchorLink>
-	)
-}
-
-// retain the same empty invitation and retry state for Topic and Team notes
-function NotesList({
+// the loading line and the retry in the web's card until the notes arrive, then the shared list
+function NotesSectionBody({
 	data,
 	isPending,
 	isError,
@@ -212,20 +176,17 @@ function NotesList({
 	onRetry: () => void
 	onAdd: () => void
 }) {
-	if (data && data.notes.length > 0) {
-		return <NotesTable notes={data.notes} path={path} />
+	if (data) {
+		return <NotesList notesResponse={data} pageType={pageType} canCreate={canCreate} path={path} onAdd={onAdd} />
 	}
 	return (
-		<View className="rounded-lg border border-separator bg-card p-4 shadow-raised">
+		<TableCard className="p-4">
 			{isPending && <CoffeeLoading label="Loading your Tasting Notes" />}
 			{isError && (
 				<Button variant="link" accessibilityLabel="Retry Tasting Notes" onPress={onRetry}>
 					<Text>Try again</Text>
 				</Button>
 			)}
-			{data?.notes.length === 0 && (
-				<NoteInvitation canCreate={canCreate} pageType={pageType} pageName={data.pageName} path={path} onAdd={onAdd} />
-			)}
-		</View>
+		</TableCard>
 	)
 }

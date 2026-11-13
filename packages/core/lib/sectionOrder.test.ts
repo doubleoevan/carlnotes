@@ -9,14 +9,11 @@ import { TEAM_SECTIONS } from "./cardSections"
 import { HOME_SECTIONS } from "./homeFaces"
 import { PROFILE_SECTIONS } from "./profileSections"
 
-// the files that place a profile's card sections, from the repo root
-const PROFILE_PAGE_FILES = [
-	"apps/web/src/components/account/ProfileSections.tsx",
-	"apps/mobile/app/profiles/[userId].tsx",
-]
+// the shared component that places a profile's card sections for both apps, from the repo root
+const PROFILE_PAGE_FILES = ["packages/core/components/ProfileSections.tsx"]
 
-// the files that place a team's card sections, from the repo root
-const TEAM_PAGE_FILES = ["apps/web/src/pages/TeamPage.tsx", "apps/mobile/app/teams/[teamId].tsx"]
+// the shared component that places a team's card sections for both apps, from the repo root
+const TEAM_PAGE_FILES = ["packages/core/components/TeamSections.tsx"]
 
 // the files that place the home's card sections, from the repo root
 const HOME_PAGE_FILES = ["apps/web/src/pages/HomePage.tsx", "apps/mobile/app/(tabs)/index.tsx"]

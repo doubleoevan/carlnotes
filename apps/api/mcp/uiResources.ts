@@ -19,7 +19,7 @@ import { MCP_VIEWS_BUNDLE_ROOT } from "../bundlePaths"
 export const MISSING_MCP_VIEW_BUNDLE_MESSAGE = "The MCP view bundle is not built. Run bun run build:ui."
 
 // the versions from before the first stored one, which serve the current build
-const ALIASED_MCP_VIEW_VERSIONS = [2, 3, 4, 5, 6, 7, 8, 9, 10]
+const ALIASED_MCP_VIEW_VERSIONS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 
 // what each MCP view shows, for the resource list
 const MCP_VIEW_DESCRIPTIONS: Record<McpView, string> = {
@@ -34,6 +34,12 @@ const MCP_VIEW_DESCRIPTIONS: Record<McpView, string> = {
 	"topic-posts": "A topic's Open Mic posts as cards, newest first, each opening its post.",
 	"topic-post": "An Open Mic post with its image, its body, its Coffee Break Discussion, and its hot takes.",
 	dashboard: "Topic, Podcast, or Team Specials: the summary, Carl's paragraph, and the charts of visitors and plays.",
+	note: "A page's tasting notes, or one note with its body and hot takes, and a link to edit it on CarlNotes.",
+	team: "A team page: its header, cards, members, topics, notes, and the newest messages in its room.",
+	profile: "A Café: the person's news, their topic, film, podcast, and post cards, and their topics and teams.",
+	activity: "The topics the user follows and the topic invites they sent, with their switches and withdrawals.",
+	account: "The user's plan, this month's spend meter with its cutoffs, the day's brews, and regenerations left.",
+	topics: "One section of the topics page as topic cards, or a topic's similar topics, each opening its findings.",
 }
 
 /**
@@ -72,9 +78,15 @@ export function registerMcpUiResources(
 		)
 	}
 	for (const mcpView of MCP_VIEWS) {
-		// the current version, with the aliases that keep existing connections readable after a bundle upgrade
+		// the current version, with the aliases that keep existing connections readable after a bundle upgrade. a stored
+		// version of this MCP view takes its version's uri from the alias
+		const storedVersions = storedMcpViewVersions
+			.filter(({ mcpViews }) => mcpViews.includes(mcpView))
+			.map(({ version }) => version)
 		const currentUiResourceUris = [toMcpUiResourceUri(mcpView), `ui://carlnotes/${mcpView}.html`]
-		const aliasUiResourceUris = ALIASED_MCP_VIEW_VERSIONS.map((version) => toMcpUiResourceUri(mcpView, version))
+		const aliasUiResourceUris = ALIASED_MCP_VIEW_VERSIONS.filter((version) => !storedVersions.includes(version)).map(
+			(version) => toMcpUiResourceUri(mcpView, version),
+		)
 		for (const [index, uiResourceUri] of [...currentUiResourceUris, ...aliasUiResourceUris].entries()) {
 			const uiResourceName = index === 0 ? `${mcpView}-card` : `${mcpView}-legacy-${index}-card`
 			registerUiResource(mcpView, { name: uiResourceName, uri: uiResourceUri, readHtml: () => toMcpViewHtml(mcpView) })

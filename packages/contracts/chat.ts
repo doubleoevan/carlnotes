@@ -80,6 +80,9 @@ export const SPENT_BUDGET_LINE = "Carl is staring at an empty mug."
 // the error that rejects a free user's chat turn once the day's free-plan spend is past the chat cutoff
 export const CHAT_PAUSED_ERROR = "chat paused"
 
+// the sentence that tells a free user their chat turn waits for the day's cutoff to reset, in carl's words
+export const CHAT_PAUSED_LINE = "Carl is taking a break until midnight UTC. Ask him again then."
+
 // the error that rejects a spoken question's transcription once the user's spend is past the spoken questions cutoff
 export const SPOKEN_QUESTIONS_PAUSED_ERROR = "spoken questions paused"
 

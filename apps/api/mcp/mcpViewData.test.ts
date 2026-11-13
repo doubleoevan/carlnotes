@@ -1,6 +1,8 @@
-// the private annotations in an MCP view's data: only the sender's MCP view holds them, and the model never reads them
+// the private annotations in an MCP view's data, which only the sender's MCP view holds and the model never reads, and
+// the podcast episode films an MCP view plays
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { MCP_VIEW_META_KEY, type McpSearchPage } from "@carlnotes/contracts/mcpViews"
+import { toPodcastEpisodeFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import { searchRequestPayload } from "@carlnotes/contracts/search"
 import { toTestTopicFinding } from "@carlnotes/contracts/topicFeedTestFixtures"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
@@ -10,6 +12,7 @@ import * as podcastEpisodeShapes from "../podcast/podcastEpisodeShapes"
 import * as accessibleFindings from "../topic/accessibleFindings"
 import * as findingPermissions from "../topic/findingPermissions"
 import * as permissions from "../topic/permissions"
+import { toMcpViewPodcastEpisode } from "./mcpViewData"
 import * as results from "./results"
 import * as searchResults from "./searchResults"
 import type { ToolCaller } from "./toolCaller"
@@ -63,6 +66,7 @@ const SEARCH_PAGE = {
 afterEach(() => {
 	mock.restore()
 	restoreConnectionPool()
+	delete Bun.env.MCP_VIEW_FILM_PLAYBACK
 })
 
 // the reads behind both tools, with a store that holds the sender's annotation alone
@@ -119,4 +123,28 @@ test.each(["read_topic_feed", "search"] as const)("a visitor's %s reads no priva
 	const loadFindingPersonalAnnotationsSpy = spyOn(findingPersonalAnnotations, "loadFindingPersonalAnnotations")
 	await toToolResult(toolName, VISITOR)
 	expect(loadFindingPersonalAnnotationsSpy).not.toHaveBeenCalled()
+})
+
+// a podcast episode with a film, and the play token its MCP view's files open with
+const FILM_PODCAST_EPISODE = toPodcastEpisodeFixture({
+	video: { videoUrl: "/api/episodes/episode-1/video.mp4", captionsUrl: "/api/episodes/episode-1/captions.vtt" },
+})
+const PLAY_TOKEN = "play-token-1"
+
+test("an MCP view's podcast episode keeps no film while films play outside the frame", () => {
+	delete Bun.env.MCP_VIEW_FILM_PLAYBACK
+	const mcpViewPodcastEpisode = toMcpViewPodcastEpisode(FILM_PODCAST_EPISODE, "/audio.mp3", PLAY_TOKEN)
+	expect(mcpViewPodcastEpisode.video).toBeUndefined()
+	expect(mcpViewPodcastEpisode.hasVideo).toBe(true)
+})
+
+test("an MCP view's podcast episode keeps its film at signed absolute urls while films play in the frame", () => {
+	Bun.env.MCP_VIEW_FILM_PLAYBACK = "true"
+	const mcpViewPodcastEpisode = toMcpViewPodcastEpisode(FILM_PODCAST_EPISODE, "/audio.mp3", PLAY_TOKEN)
+	expect(mcpViewPodcastEpisode.video?.videoUrl).toEndWith(`/api/episodes/episode-1/video.mp4?play=${PLAY_TOKEN}`)
+	expect(mcpViewPodcastEpisode.video?.captionsUrl).toEndWith(`/api/episodes/episode-1/captions.vtt?play=${PLAY_TOKEN}`)
+	expect(new URL(mcpViewPodcastEpisode.video?.videoUrl ?? "").protocol).toStartWith("http")
+
+	// a podcast episode read without a play token keeps no film
+	expect(toMcpViewPodcastEpisode(FILM_PODCAST_EPISODE, "/audio.mp3").video).toBeUndefined()
 })

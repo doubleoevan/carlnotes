@@ -115,8 +115,8 @@ export const Default: Story = {}
 export const DeleteConfirmation: Story = {
 	// press the delete button and wait for the dialog
 	play: async ({ canvas, userEvent }) => {
-		await userEvent.click(canvas.getByRole("button", { name: "Delete the subscription to Robot vacuums" }))
-		await screen.findByRole("dialog", { name: "Delete this subscription?" })
+		await userEvent.click(canvas.getByRole("button", { name: "Unfollow Robot vacuums" }))
+		await screen.findByRole("dialog", { name: "Unfollow this topic?" })
 	},
 }
 

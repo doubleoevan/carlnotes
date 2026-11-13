@@ -1,6 +1,6 @@
 // the MCP view routes, one for each MCP view, in a memory router. a user never sees these paths, /brew/$topicId is
-// the scan MCP view, /posts/$topicId a Topic's Topic Posts, /post/$topicPostId one Topic Post, and /specials one
-// Dashboard
+// the scan MCP view, /posts/$topicId a Topic's Topic Posts, /post/$topicPostId one Topic Post, /specials one
+// Dashboard, and /notes, /team, /profile, /activity, /account, and /topics the MCP views of those pages
 
 import type { McpSearchPage, McpView, McpViewTopicResult } from "@carlnotes/contracts/mcpViews"
 import { personalSourcesSendResult } from "@carlnotes/contracts/personalSources"
@@ -8,6 +8,8 @@ import type { TopicSuggestionsResult } from "@carlnotes/contracts/topicSuggestio
 import { createRootRoute, createRoute, createRouter, useLocation } from "@tanstack/react-router"
 import type { ReactNode } from "react"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
+import { AccountMcpView } from "./AccountMcpView"
+import { ActivityMcpView } from "./ActivityMcpView"
 import { DashboardMcpView } from "./DashboardMcpView"
 import { FindingsMcpView } from "./FindingsMcpView"
 import { McpViewShell } from "./McpViewShell"
@@ -22,12 +24,16 @@ import {
 } from "./mcpViewHistory"
 import { toMcpViewData } from "./mcpViewHost"
 import { NewsMcpView } from "./NewsMcpView"
+import { NoteMcpView } from "./NoteMcpView"
+import { ProfileMcpView } from "./ProfileMcpView"
 import { ScanMcpView } from "./ScanMcpView"
 import { SearchMcpView } from "./SearchMcpView"
+import { TeamMcpView } from "./TeamMcpView"
 import { TopicMcpView } from "./TopicMcpView"
 import { TopicPostMcpView } from "./TopicPostMcpView"
 import { TopicPostsMcpView } from "./TopicPostsMcpView"
 import { TopicSuggestionsMcpView } from "./TopicSuggestionsMcpView"
+import { TopicsMcpView } from "./TopicsMcpView"
 import { UpdatesMcpView } from "./UpdatesMcpView"
 
 // the id of a route whose tool result names no Topic or Topic Post, which shows the tool's rejection
@@ -55,6 +61,12 @@ const routeTree = rootRoute.addChildren([
 		component: TopicPostRoute,
 	}),
 	createRoute({ getParentRoute: () => rootRoute, path: "/specials", component: DashboardRoute }),
+	createRoute({ getParentRoute: () => rootRoute, path: "/notes", component: NoteRoute }),
+	createRoute({ getParentRoute: () => rootRoute, path: "/team", component: TeamRoute }),
+	createRoute({ getParentRoute: () => rootRoute, path: "/profile", component: ProfileRoute }),
+	createRoute({ getParentRoute: () => rootRoute, path: "/activity", component: ActivityRoute }),
+	createRoute({ getParentRoute: () => rootRoute, path: "/account", component: AccountRoute }),
+	createRoute({ getParentRoute: () => rootRoute, path: "/topics", component: TopicsRoute }),
 ])
 
 /**
@@ -79,6 +91,12 @@ export function toMcpViewOpeningPath(mcpView: McpView, { toolResult }: McpViewTo
 		"topic-posts": `${TOPIC_POSTS_ROUTE_PREFIX}${mcpViewData.topic?.id ?? NO_ROUTE_ID}`,
 		"topic-post": `${TOPIC_POST_ROUTE_PREFIX}${mcpViewData.topicPost?.id ?? NO_ROUTE_ID}`,
 		dashboard: "/specials",
+		note: "/notes",
+		team: "/team",
+		profile: "/profile",
+		activity: "/activity",
+		account: "/account",
+		topics: "/topics",
 	}
 	return openingPaths[mcpView]
 }
@@ -121,6 +139,42 @@ function TopicPostRoute(): ReactNode {
 function DashboardRoute(): ReactNode {
 	const { dashboard } = toMcpViewData(useMcpViewToolCall()?.toolResult._meta)
 	return dashboard ? <DashboardMcpView mcpViewDashboard={dashboard} /> : null
+}
+
+// a page's tasting notes, or the note the tool opened
+function NoteRoute(): ReactNode {
+	const { notes } = toMcpViewData(useMcpViewToolCall()?.toolResult._meta)
+	return notes ? <NoteMcpView mcpViewNotes={notes} /> : null
+}
+
+// a team page with its notes and the room's newest messages
+function TeamRoute(): ReactNode {
+	const { team } = toMcpViewData(useMcpViewToolCall()?.toolResult._meta)
+	return team ? <TeamMcpView mcpViewTeam={team} /> : null
+}
+
+// a person's Café
+function ProfileRoute(): ReactNode {
+	const { profile } = toMcpViewData(useMcpViewToolCall()?.toolResult._meta)
+	return profile ? <ProfileMcpView mcpViewProfile={profile} /> : null
+}
+
+// the caller's activity
+function ActivityRoute(): ReactNode {
+	const { activity } = toMcpViewData(useMcpViewToolCall()?.toolResult._meta)
+	return activity ? <ActivityMcpView mcpViewActivity={activity} /> : null
+}
+
+// the caller's account
+function AccountRoute(): ReactNode {
+	const { account } = toMcpViewData(useMcpViewToolCall()?.toolResult._meta)
+	return account ? <AccountMcpView mcpViewAccount={account} /> : null
+}
+
+// one section of the topics page, or a topic's similar topics
+function TopicsRoute(): ReactNode {
+	const { topics } = toMcpViewData(useMcpViewToolCall()?.toolResult._meta)
+	return topics ? <TopicsMcpView mcpViewTopics={topics} /> : null
 }
 
 // a Topic's running Scan or its latest recap

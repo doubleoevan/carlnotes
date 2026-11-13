@@ -3,8 +3,10 @@
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import type { ProposeTopicEditPayload } from "@carlnotes/contracts/topicPayloads"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
+import * as teams from "../team/teams"
 import * as topicSourceTools from "../tool/topicSourceTools"
 import * as topicTools from "../tool/topicTools"
+import * as saveTopicGate from "../topic/saveTopicGate"
 import * as topics from "../topic/topics"
 import { toMcpAnalyticsProperties } from "./toolCaller"
 import { isTopicEditConfirmed, TOPIC_EDIT_CONFIRMATION_LIFETIME_MS } from "./topicEditConfirmations"
@@ -48,6 +50,7 @@ beforeEach(() => {
 	Bun.env.BETTER_AUTH_SECRET = "test-secret"
 	topicPage = TOPIC_PAGE
 	spyOn(topics, "loadTopicPage").mockImplementation(async () => topicPage)
+	spyOn(saveTopicGate, "toTopicEditRejection").mockResolvedValue(null)
 	updateTopicPromptSpy = spyOn(topicTools, "updateTopicPrompt").mockResolvedValue({
 		status: "saved",
 		topicName: "Agents",
@@ -79,6 +82,7 @@ function toEditTopicOptions(topicEdit: ProposeTopicEditPayload, confirmation: st
 		userId: "user-1",
 		topicId: "topic-1",
 		topicEdit,
+		topicTeamChange: null,
 		confirmation,
 		analyticsProperties: toMcpAnalyticsProperties(USER),
 	}
@@ -218,6 +222,7 @@ test("a confirmation expires after fifteen minutes", async () => {
 		userId: "user-1",
 		topicId: "topic-1",
 		topicEdit: { visibility: "public" as const },
+		topicTeamChange: null,
 		editableTopicFields: toEditableTopicFields(TOPIC_PAGE),
 	}
 	expect(isTopicEditConfirmed(topicEditConfirmationOptions, confirmation)).toBe(true)
@@ -236,4 +241,58 @@ test("an edit with neither change saves on its first call", async () => {
 	expect(editTopicResult.status).toBe("saved")
 	expect(updateTopicPromptSpy).toHaveBeenCalledTimes(1)
 	expect(addTopicSourceSpy).toHaveBeenCalledTimes(1)
+})
+
+// a name the topic editor rejects saves nothing over MCP either, and the result names the fields it checked
+test("an objectionable name saves nothing", async () => {
+	spyOn(saveTopicGate, "toTopicEditRejection").mockResolvedValue({ status: "objectionable", category: "harassment" })
+	const editTopicResult = await editTopic(toEditTopicOptions({ name: "a rude name", frequency: "daily" }))
+	expect(updateTopicFieldsSpy).not.toHaveBeenCalled()
+	expect(updateTopicPromptSpy).not.toHaveBeenCalled()
+	expect(editTopicResult.status === "saved" && editTopicResult.rejectedLines[0]).toContain("name, prompt, and tags")
+})
+
+// adding a private topic to a team shares it with every member, so it saves only with a confirmation
+async function editTopicOnTeam(): Promise<Awaited<ReturnType<typeof editTopic>>> {
+	const topicTeamOptions = {
+		...toEditTopicOptions({ frequency: "daily" }),
+		topicTeamChange: { teamId: "team-1", isOnTeam: true },
+	}
+	const previewResult = await editTopic(topicTeamOptions)
+	if (previewResult.status !== "confirmRequired") {
+		throw new Error(`expected a preview, got ${previewResult.status}`)
+	}
+
+	// the preview names the sharing, and nothing is saved until the confirmation comes back
+	expect(previewResult.topicEditConfirmationReasons).toEqual(["sharesWithTeam"])
+	expect(previewResult.topicEditChanges).toEqual(["shares the topic with the team, so its members can read it"])
+	expect(updateTopicFieldsSpy).not.toHaveBeenCalled()
+	return editTopic({ ...topicTeamOptions, confirmation: previewResult.confirmation })
+}
+
+// a team leader adds their topic to the team through the team page's add, after the edit's other saves
+test("a leader adds the topic to their team", async () => {
+	const addTopicToTeamSpy = spyOn(teams, "addTopicToTeam").mockResolvedValue("added")
+	const editTopicResult = await editTopicOnTeam()
+	expect(addTopicToTeamSpy).toHaveBeenCalledWith("user-1", "team-1", "topic-1")
+	expect(editTopicResult.status === "saved" && editTopicResult.savedLines).toContain("Added the topic to the team.")
+})
+
+// a member who is not the leader gets the team page's rejection, and the edit's other saves still go through
+test("a member who is not the leader cannot add the topic", async () => {
+	spyOn(teams, "addTopicToTeam").mockResolvedValue("forbidden")
+	const editTopicResult = await editTopicOnTeam()
+	expect(updateTopicFieldsSpy).toHaveBeenCalled()
+	expect(editTopicResult.status === "saved" && editTopicResult.rejectedLines[0]).toContain("Only the team's leader")
+})
+
+// a public topic is readable by everyone already, so adding it to a team saves at once
+test("adding a public topic to a team needs no confirmation", async () => {
+	topicPage = { ...TOPIC_PAGE, visibility: "public" }
+	spyOn(teams, "addTopicToTeam").mockResolvedValue("added")
+	const editTopicResult = await editTopic({
+		...toEditTopicOptions({ frequency: "daily" }),
+		topicTeamChange: { teamId: "team-1", isOnTeam: true },
+	})
+	expect(editTopicResult.status).toBe("saved")
 })

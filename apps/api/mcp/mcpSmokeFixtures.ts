@@ -1,5 +1,6 @@
 // the fixtures of the mcp smoke: one run's ids, the seeded owner and topic, the checks, the sdk client, and the cleanup
 
+import { toNormalizedUsername } from "@carlnotes/contracts/usernames"
 import { db } from "@carlnotes/db"
 import { findings, resources, scans } from "@carlnotes/db/schema/scans"
 import { sources, topics } from "@carlnotes/db/schema/topics"
@@ -23,6 +24,9 @@ export const ownerEmail = `${ownerId}@example.com`
 export const ownerPassword = `${runId}-password`
 export const topicId = `${runId}-topic`
 const resourceUrls = [1, 2, 3].map((index) => `https://example.test/${runId}/${index}`)
+
+// both routes: every topic, and the one bound to the smoke's public topic
+export const routePaths = ["/mcp", `/mcp/t/${topicId}`]
 
 // each check prints its own line and counts its failure
 export let failureCount = 0
@@ -122,6 +126,17 @@ export async function cleanUp(registeredClientId: string): Promise<void> {
 	}
 }
 
+/** Inserts an account named by its id, with the id as its name and username. */
+export async function insertSmokeUser(userId: string): Promise<void> {
+	await db.insert(users).values({
+		id: userId,
+		name: userId,
+		email: `${userId}@example.com`,
+		username: userId,
+		usernameNormalized: toNormalizedUsername(userId),
+	})
+}
+
 /** Returns an sdk client for one route. Its transport fetches from the hono app in-process. */
 export function toClient(
 	path: string,
@@ -142,4 +157,20 @@ export async function mcpRequest(path: string, init: RequestInit): Promise<Respo
 /** Sends one request through the api tree, which has the session middleware and the forced consent. */
 export async function apiRequest(path: string, init?: RequestInit): Promise<Response> {
 	return apiRoute.request(`http://carlnotes.test${path}`, init)
+}
+
+/** Runs checks on a connected client for a route, as the account or a visitor, and always closes it. */
+export async function withClient(
+	routePath: string,
+	accessToken: string | undefined,
+	checkClient: (client: Client) => Promise<void>,
+): Promise<void> {
+	const { client, transport } = toClient(routePath, accessToken)
+	try {
+		await client.connect(transport)
+		await checkClient(client)
+	} finally {
+		// release the sdk transport after each route
+		await client.close()
+	}
 }

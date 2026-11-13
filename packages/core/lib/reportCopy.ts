@@ -52,3 +52,25 @@ export function toCommentReportProps(
 		author: { id: author.userId, username: author.username },
 	}
 }
+
+/**
+ * Returns the report dialog's subject and author for a note a signed-in user may report, or null for the owner, an
+ * admin, a visitor, and a note with no owner to report.
+ */
+export function toNoteReportProps({
+	noteId,
+	noteName,
+	owner,
+	canReport,
+}: {
+	noteId: string
+	noteName: string
+	owner: { id: string; username: string } | null | undefined
+	canReport: boolean
+}): { subjectKind: "note"; subjectId: string; subjectLabel: string; author: { id: string; username: string } } | null {
+	// a report needs an author to name
+	if (!canReport || !owner) {
+		return null
+	}
+	return { subjectKind: "note", subjectId: noteId, subjectLabel: noteName, author: owner }
+}

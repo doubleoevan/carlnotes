@@ -1,14 +1,17 @@
 // the invitations the user sent, which the topic and team invitation tables share: who was invited, when, whether
 // they accepted, and the Active switch that withdraws one
+import { toTopicPath } from "@carlnotes/contracts/seo"
+import { TOPIC_INVITES_TABLE_LABELS } from "@carlnotes/core/lib/sentInvitesTableColumns"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { fn } from "storybook/test"
+import { AnchorLink } from "@/components/common/AnchorLink"
 import { TeamLink } from "@/components/team/TeamLink"
+import { STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
 import { FIXTURE_DATE, LLM_TOOLING_TOPIC_FIXTURE, STORY_PEOPLE, toStoryProfile } from "../../../.storybook/fixtures"
 import { STORY_TEAMS } from "../../../.storybook/fixtures/teams"
 import { findVisibleByRole } from "../../../.storybook/play"
 import { type SentInviteRow, SentInvitesTable } from "./SentInvitesTable"
 import { TEAM_INVITES_TABLE_LABELS } from "./TeamInvitesTable"
-import { TOPIC_INVITES_TABLE_LABELS, toTopicInviteTarget } from "./TopicInvitesTable"
 
 // the people with accounts whom the invitations reached
 const [VIENNA, CARLOS, EVAN] = STORY_PEOPLE
@@ -16,6 +19,18 @@ const [VIENNA, CARLOS, EVAN] = STORY_PEOPLE
 // the topics the invitations opened
 const LLM_TOOLING_TOPIC = { topicId: LLM_TOOLING_TOPIC_FIXTURE.id, name: LLM_TOOLING_TOPIC_FIXTURE.name }
 const VECTOR_DATABASES_TOPIC = { topicId: "topic-vector-databases", name: "Vector databases" }
+
+// a topic invite's target cell, the topic's name linked to its page, with the name it sorts by
+function toTopicInviteTarget({ topicId, name }: { topicId: string; name: string }) {
+	return {
+		target: (
+			<AnchorLink href={toTopicPath({ id: topicId, name })} className={STANDALONE_LINK_CLASS}>
+				{name}
+			</AnchorLink>
+		),
+		targetName: name,
+	}
+}
 
 // a username invitation that was accepted, an email invitation still pending, and an email invitation that reached an
 // account and is still pending
@@ -75,18 +90,13 @@ const meta = {
 	title: "Table/SentInvitesTable",
 	component: SentInvitesTable,
 	args: {
-		...TOPIC_INVITES_TABLE_LABELS,
+		labels: TOPIC_INVITES_TABLE_LABELS,
 		inviteRows: TOPIC_INVITE_ROWS,
 		onDeleteInvite: fn(async () => {}),
 	},
 	argTypes: {
 		inviteRows: { control: false },
-		targetLabel: { control: "text" },
-		acceptedLabel: { control: "text" },
-		acceptedNoun: { control: "text" },
-		confirmTitle: { control: "text" },
-		confirmLabel: { control: "text" },
-		confirmBody: { control: false },
+		labels: { control: false },
 		onDeleteInvite: { control: false },
 	},
 	parameters: { session: "user" },
@@ -100,7 +110,7 @@ export const TopicInvitations: Story = {}
 
 // the team page's team invitations, worded for joining a team
 export const TeamInvitations: Story = {
-	args: { ...TEAM_INVITES_TABLE_LABELS, inviteRows: TEAM_INVITE_ROWS },
+	args: { labels: TEAM_INVITES_TABLE_LABELS, inviteRows: TEAM_INVITE_ROWS },
 }
 
 // an admin reading another user's invitations, with no Active column to withdraw one

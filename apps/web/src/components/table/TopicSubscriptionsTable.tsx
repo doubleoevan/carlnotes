@@ -1,27 +1,19 @@
 import { fetchTopicInviteBadges, sendAcceptInvite, sendDeclineInvite } from "@carlnotes/client/activityClient"
 import { sendDeleteSubscription, sendSubscriptionEmail, sendTopicSubscription } from "@carlnotes/client/topicClient"
 import type { SubscriptionRow } from "@carlnotes/contracts/activity"
-import { toTopicPath } from "@carlnotes/contracts/seo"
-import { DataTable } from "@carlnotes/core/components/DataTable"
 import {
-	subscriptionSortValues,
-	toTopicSubscriptionsTableColumns,
-} from "@carlnotes/core/lib/topicSubscriptionsTableColumns"
+	TopicSubscriptionsTable as SharedTopicSubscriptionsTable,
+	type TopicSubscriptionsTableElements,
+} from "@carlnotes/core/components/TopicSubscriptionsTable"
 import { setTopicInviteBadges } from "@carlnotes/core/stores/topicInviteStore"
-import { X } from "lucide-react"
-import { useState } from "react"
 import { toast } from "sonner"
-import { AnchorLink } from "@/components/common/AnchorLink"
-import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
-import { Button } from "@/components/primitives/button"
 import { Switch } from "@/components/primitives/switch"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { TeamLink } from "@/components/team/TeamLink"
 import { NEXT_SCAN_DISCLAIMER } from "@/lib/utils"
-import { DATA_TABLE_ELEMENTS } from "./DataTable"
-import { TableCard } from "./TableCard"
-import { TablePagination, usePaginatedRowSort } from "./TablePagination"
+import { DataTable } from "./DataTable"
+import { TableConfirmDialog } from "./TableConfirmDialog"
+import { TooltipRemoveButton } from "./TooltipRemoveButton"
 import { TopicNameLink } from "./TopicNameLink"
 
 /**
@@ -38,27 +30,14 @@ export function TopicSubscriptionsTable({
 	// an admin reading another user's page sees disabled controls and no delete button
 	isReadOnly?: boolean
 }) {
-	// defaults to the newest subscribed first
-	const { pageRows, sort, pagination } = usePaginatedRowSort({
-		rows: subscriptions,
-		valueByKey: subscriptionSortValues,
-		initialSort: { key: "subscribed", isDescending: true },
-	})
-	// the subscription waiting for delete confirmation or null
-	const [subscriptionToDelete, setSubscriptionToDelete] = useState<{
-		topicId: string
-		name: string
-		inviteId: string | null
-	} | null>(null)
-
-	// re-read the waiting invitations
+	// re-read the waiting invites
 	const updateTopicInviteBadges = (): void => {
 		fetchTopicInviteBadges()
 			.then(setTopicInviteBadges)
 			.catch(() => {})
 	}
 
-	// flip a subscription's active state on the server, cascading the email off when it deactivates
+	// flip a subscription's active state on the server, or accept a pending invite
 	async function handleActiveChange(row: SubscriptionRow, isActive: boolean): Promise<void> {
 		if (row.inviteId) {
 			await sendAcceptInvite(row.inviteId)
@@ -77,106 +56,51 @@ export function TopicSubscriptionsTable({
 	}
 
 	// flip the email preference on the server, independent of the active state
-	async function handleEmailChange(topicId: string, isEmailEnabled: boolean): Promise<void> {
-		await sendSubscriptionEmail(topicId, isEmailEnabled)
+	async function handleEmailChange(row: SubscriptionRow, isEmailEnabled: boolean): Promise<void> {
+		await sendSubscriptionEmail(row.topicId, isEmailEnabled)
 		onReloadPage()
 	}
 
-	// permanently remove the confirmed subscription, which drops the user's invite to that topic too
-	async function handleDeleteSubscription(): Promise<void> {
-		if (!subscriptionToDelete) {
-			return
-		}
-		if (subscriptionToDelete.inviteId) {
-			await sendDeclineInvite(subscriptionToDelete.inviteId)
+	// permanently remove the subscription, or decline the pending invite
+	async function handleDelete(row: SubscriptionRow): Promise<void> {
+		if (row.inviteId) {
+			await sendDeclineInvite(row.inviteId)
 			updateTopicInviteBadges()
 		} else {
-			await sendDeleteSubscription(subscriptionToDelete.topicId)
+			await sendDeleteSubscription(row.topicId)
 		}
-		setSubscriptionToDelete(null)
 		onReloadPage()
 	}
 
-	// keep the same column composition and totals on web and mobile
-	const columns = toTopicSubscriptionsTableColumns({
-		subscriptions,
-		renderText: (text) => <span>{text}</span>,
-		renderName: (row) => (
-			<>
-				<TopicNameLink topic={{ id: row.topicId, name: row.name, latestPodcastEpisode: row.latestPodcastEpisode }} />
-				{row.inviteId && <span className="block">Invited</span>}
-			</>
-		),
-		renderOwner: (row) =>
-			row.team ? (
-				<TeamLink team={row.team} label="" className="whitespace-nowrap" />
-			) : (
-				<UserProfileLink user={row.owner} className="whitespace-nowrap" />
-			),
-		renderActive: (row) => (
-			<Switch
-				checked={row.isActive}
-				disabled={isReadOnly}
-				onCheckedChange={(isActive) => void handleActiveChange(row, isActive)}
-				aria-label={row.inviteId ? `Accept the invite to ${row.name}` : `${row.name} subscription`}
-			/>
-		),
-		renderEmails: (row) => (
-			<Switch
-				checked={row.isEmailEnabled}
-				disabled={isReadOnly || !!row.inviteId}
-				onCheckedChange={(isEnabled) => void handleEmailChange(row.topicId, isEnabled)}
-				aria-label={`${row.name} emails`}
-			/>
-		),
-		renderRemove: (row) =>
-			!isReadOnly && (
-				<Tooltip>
-					<TooltipTrigger asChild>
-						<Button
-							size="icon-sm"
-							variant="ghost"
-							onClick={() => setSubscriptionToDelete(row)}
-							aria-label={`Delete the ${row.inviteId ? "invite" : "subscription"} to ${row.name}`}
-						>
-							<X className="size-4" />
-						</Button>
-					</TooltipTrigger>
-					<TooltipContent>
-						Delete the {row.inviteId ? "invite" : "subscription"} to <span className="font-semibold">{row.name}</span>
-					</TooltipContent>
-				</Tooltip>
-			),
-	})
 	return (
-		<TableCard className="mb-4">
-			<DataTable
-				columns={columns}
-				renderedRows={pageRows.map((row) => ({ row }))}
-				getRowId={(row) => row.topicId}
-				sort={sort}
-				elements={DATA_TABLE_ELEMENTS}
-			/>
-			<TablePagination {...pagination} />
-			{/* the delete confirmation, mounted only while a subscription is waiting for it */}
-			{subscriptionToDelete && (
-				<ConfirmDialog
-					title={subscriptionToDelete.inviteId ? "Delete this invite?" : "Delete this subscription?"}
-					confirmLabel={subscriptionToDelete.inviteId ? "Delete invite" : "Delete subscription"}
-					cancelLabel="Keep it"
-					onConfirm={handleDeleteSubscription}
-					onClose={() => setSubscriptionToDelete(null)}
-				>
-					{subscriptionToDelete.inviteId ? "Your invite to " : "Your subscription to "}
-					<AnchorLink
-						href={toTopicPath({ id: subscriptionToDelete.topicId, name: subscriptionToDelete.name })}
-						className="sentence-link"
-					>
-						{subscriptionToDelete.name}
-					</AnchorLink>
-					{subscriptionToDelete.inviteId ? " goes away, and whoever sent it is not told." : " gets removed for good."}
-				</ConfirmDialog>
-			)}
-		</TableCard>
+		<SharedTopicSubscriptionsTable
+			subscriptions={subscriptions}
+			isReadOnly={isReadOnly}
+			onActiveChange={(row, isActive) => void handleActiveChange(row, isActive)}
+			onEmailChange={(row, isEnabled) => void handleEmailChange(row, isEnabled)}
+			onDelete={handleDelete}
+			elements={TOPIC_SUBSCRIPTIONS_TABLE_ELEMENTS}
+		/>
 	)
+}
+
+// the web's card and pagination, links, switches, and the delete button with its tooltip
+export const TOPIC_SUBSCRIPTIONS_TABLE_ELEMENTS: TopicSubscriptionsTableElements = {
+	Table: (props) => <DataTable {...props} className="mb-4" />,
+	Text: ({ children }) => <span>{children}</span>,
+	TopicName: ({ row, invitedLabel }) => (
+		<>
+			<TopicNameLink topic={{ id: row.topicId, name: row.name, latestPodcastEpisode: row.latestPodcastEpisode }} />
+			{invitedLabel && <span className="block">{invitedLabel}</span>}
+		</>
+	),
+	TeamLink: ({ team }) => <TeamLink team={team} label="" className="whitespace-nowrap" />,
+	UserProfileLink: ({ user }) => <UserProfileLink user={user} className="whitespace-nowrap" />,
+	Switch: ({ label, isChecked, isDisabled, onChange }) => (
+		<Switch checked={isChecked} disabled={isDisabled} onCheckedChange={onChange} aria-label={label} />
+	),
+	RemoveButton: ({ action, topicName, isDisabled, onPress }) => (
+		<TooltipRemoveButton action={action} name={topicName} isDisabled={isDisabled} onPress={onPress} />
+	),
+	Confirmation: TableConfirmDialog,
 }

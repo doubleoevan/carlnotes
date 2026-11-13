@@ -2,9 +2,10 @@
 // footer that shows only with JavaScript
 
 import { PAGE_SIZES } from "@carlnotes/contracts/pagination"
+import { TEST_RELATED_TOPICS } from "@carlnotes/contracts/topicFeedTestFixtures"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { fn } from "storybook/test"
-import { type RelatedTopic, RelatedTopicsSection } from "@/components/topic/RelatedTopicsSection"
+import { RelatedTopicsSection } from "@/components/topic/RelatedTopicsSection"
 import { toOwnFrameDocs } from "../../../.storybook/parameters"
 import { TableCard } from "./TableCard"
 import { ScriptedTablePagination, SMALLEST_PAGE_SIZE, TablePagination } from "./TablePagination"
@@ -74,21 +75,5 @@ export const ScriptedWithoutJavaScript: Story = {
 // the topic page's related topics table, paged five rows at a time by the real pagination hook
 export const RelatedTopicsTable: Story = {
 	parameters: { controls: { disable: true } },
-	render: () => <RelatedTopicsSection relatedTopics={RELATED_TOPICS} />,
+	render: () => <RelatedTopicsSection relatedTopics={TEST_RELATED_TOPICS} />,
 }
-
-// the names the paged table's topics cycle through
-const TOPIC_NAME_STEMS = [
-	"LLM tooling",
-	"Battery chemistry",
-	"Open source licensing",
-	"Urban cycling",
-	"Sleep research",
-]
-
-// twenty-three related topics, five pages at the smallest page size
-const RELATED_TOPICS: RelatedTopic[] = Array.from({ length: 23 }, (_, i) => ({
-	id: `topic-related-${i + 1}`,
-	name: `${TOPIC_NAME_STEMS[i % TOPIC_NAME_STEMS.length]} ${Math.floor(i / TOPIC_NAME_STEMS.length) + 1}`,
-	latestPodcastEpisode: null,
-}))

@@ -27,7 +27,21 @@ export function toPageResult(mcpPage: McpPage<unknown> | null): CallToolResult {
 	if (!mcpPage) {
 		return toTextResult("No readable topic has that id.", true)
 	}
-	return { content: [{ type: "text", text: JSON.stringify(mcpPage) }], structuredContent: mcpPage }
+	return toJsonResult(mcpPage)
+}
+
+/**
+ * Shapes a result as json text and as the same structured content.
+ */
+export function toJsonResult(result: Record<string, unknown>): CallToolResult {
+	return { content: [{ type: "text", text: JSON.stringify(result) }], structuredContent: result }
+}
+
+/**
+ * Shapes a write's line as a tool result, with its structured status.
+ */
+export function toStatusResult(text: string, structuredContent: Record<string, unknown>): CallToolResult {
+	return { content: [{ type: "text", text }], structuredContent }
 }
 
 /**

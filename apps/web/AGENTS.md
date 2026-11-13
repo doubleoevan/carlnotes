@@ -80,19 +80,23 @@ the browser bundle and renders pages through the server build, behind its own ro
 - `components/table/` — the page tables and their cells: `TopicNameLink.tsx`, a topic's linked name with its latest
   podcast episode's play button, and `PodcastEpisodeTitleLink.tsx`, a podcast episode's linked title with its play
   button. `AdminReportsTable.tsx` is the admin console's open content reports, the one the email linked to first, each
-  with Remove and Keep. `TeamMembershipRows.tsx` holds the teams table's membership and invite rows, `TeamSubtablesRow.tsx` the
-  members or topics subtable a membership row opens under itself, with `useTeamSubtables`, the hook that holds which one
-  is open and the team page payload that fills it, `AdminUserRows.tsx` the admin users table's row with its subtables,
-  and `PagedTableSection.tsx` the titled section of a paged, sortable table that Similar topics and both episode tables
-  share. `OwnerTopicsTable.tsx` opens a topic row's scan costs from `TopicScansTable.tsx` and, in the admin console, its
-  subscribers from `TopicSubscribersTable.tsx`, which reads them when it opens. `UserLinks.tsx` holds the links the
-  user tables share: the avatar and username to the profile, and the email and plan to the activity and account pages.
-  `usePagination` in `TablePagination.tsx` wraps core's shared pagination hook with server-rendered row handling.
-  `usePaginatedRowSort` adds the same server policy around core's shared sorting and page-reset hook.
-  It starts a table at ten rows a page unless it asks for another size, and its
-  `ScriptedTablePagination` shows a paged table's pagination only with JavaScript.
+  with Remove and Keep. `TopicsTable.tsx`, `OwnerTopicsTable.tsx`, `TeamMembersTable.tsx`, `TeamsMembershipTable.tsx`,
+  `TopicSubscriptionsTable.tsx`, `TopicInvitesTable.tsx`, and `SentInvitesTable.tsx` adapt their core tables, and
+  `TableConfirmDialog.tsx` is their delete confirmation, its target linked or in bold, and `TooltipSwitch.tsx` and
+  `TooltipRemoveButton.tsx` are their row switch and ghost X button, each with a tooltip that names its action.
+  `TeamSubtables.tsx` holds the members or topics subtable a membership row opens under itself, on the sunken card, and
+  `loadTeamSubtablesPage`, the team page read that fills it, `AdminUserRows.tsx` the admin users table's row with its
+  subtables, and `PagedTableSection.tsx` the titled section of a paged, sortable table that Similar topics and both
+  episode tables share. `OwnerTopicsTable.tsx` opens a topic row's scan costs from `TopicScansTable.tsx` and, in the
+  admin console, its subscribers from `TopicSubscribersTable.tsx`, which reads them when it opens. `UserLinks.tsx` holds
+  the links the user tables share: the avatar and username to the profile, and the email and plan to the activity and
+  account pages. `usePagination` in `TablePagination.tsx` wraps core's shared pagination hook with server-rendered row
+  handling. `usePaginatedRowSort` adds the same server policy around core's shared sorting and page-reset hook. It
+  starts a table at ten rows a page unless it asks for another size, and its `ScriptedTablePagination` shows a paged
+  table's pagination only with JavaScript.
 - `components/chat/` — the chat panel, both composers, the chat message lists, and the hooks behind them.
-  `useChatRoom.ts` adapts core's room state with the browser stream and toasts. `MicButton.tsx` is the
+  `useChatRoom.ts` adapts core's room state with the browser stream and toasts. `ChatRoomMessages.tsx` lists a team
+  room's messages through core's `ChatRoomMessageList`. `MicButton.tsx` is the
   mic in an empty composer's send slot, `RecordingBar.tsx` the bar that replaces the box while a recording runs, and
   `useVoiceRecording.ts` wraps core's recording state machine with the browser's recorder adapter, which loads
   `lib/voiceRecorder.ts` on the first tap and opens an audio context for each composer's listen session and one for
@@ -134,7 +138,7 @@ the browser bundle and renders pages through the server build, behind its own ro
   `staleBundleReload.ts` reloads the page once if a deploy removed a bundle file the open page still asks for.
   `styleClasses.ts` holds the tailwind class strings pages share. The data tables' classes are in `tableClasses.ts`,
   the chat panel's in `chatClasses.ts`, and the page headers', a topic header's and the avatar header's, in
-  `pageHeaderClasses.ts`.
+  `pageHeaderClasses.ts`. `tableActionLabel.tsx` builds a table row control's tooltip and accessible name.
 - `components/session/` — the login and signup pages' layout and their sign-in pieces. `SessionLayout.tsx` opens the
   Google, GitHub, and Apple sign-ins and says so if one does not open. `VerifyEmailNotice.tsx` is the
   notice the signup page shows after a password signup, with a button straight into the app.
@@ -144,19 +148,21 @@ the browser bundle and renders pages through the server build, behind its own ro
   `toSignupNavigation` and `toSignupHref`, which every action that sends a visitor to signup goes through, tagged with
   the action's cta from `@carlnotes/core/lib/signupPrompts`, whose prompt the signup page shows as a toast on arrival.
 - `components/account/` — the account page's sections, which `pages/AccountPage.tsx` places in expandable Budget and
-  Settings sections through `AccordionSection`'s optional icon. `SpendMeter.tsx` is the monthly budget's bar, with a
-  circle above it for each monthly budget cutoff, a tooltip on each circle, and the list of what each cutoff stops,
-  drawn with `components/common/MeterBar.tsx`, `MeterMarker.tsx`, and `MeterCutoffList.tsx`, which the admin console's
-  `FreePlanSpendMeter.tsx` draws its spend meter with too. The admin console's reset clock and count rings
-  and the account budget's rings are `components/common/MeterRing.tsx`, which adapts core's `MeterRing`.
+  Settings sections through `AccordionSection`'s optional icon. `SpendMeter.tsx` adapts core's `SpendMeter`, the monthly
+  budget's bar, with a circle above it for each monthly budget cutoff, a tooltip on each circle, and the list of what
+  each cutoff stops, drawn with `components/common/MeterBar.tsx`, `MeterMarker.tsx`, and `MeterCutoffList.tsx`, which
+  the admin console's `FreePlanSpendMeter.tsx` draws its spend meter with too. The admin console's reset clock and count
+  rings and the account budget's rings are `components/common/MeterRing.tsx`, which adapts core's `MeterRing`.
   `AccountFields.tsx` holds the DOM elements of core's account sections, the Blocked people rows among them, which
   `UserBlocksSection.stories.tsx` shows in every state. `globals.css` scans `core/lib/spendMeter.ts` for the shared bar
   and legend colors. The legend uses compact row gaps when wrapping, matching native. Cutoffs come from the API; an
   admin without a budget override has none. `MonthlyBudgetCutoffTable.tsx` is the plans page's monthly budget cutoff
-  table of every plan's cutoffs, which a test checks against the docs page's copy, and `monthlyBudgetCutoffCopy.ts`
-  holds the wording both of them use.
+  table of every plan's cutoffs, which a test checks against the docs page's copy, both worded by core's
+  `monthlyBudgetCutoffCopy`. `ProfileSections.tsx` adapts core's `ProfileSections` in the profile's own accordion, with
+  the own topics' loading states.
 - `components/invite/` — the invite fields, editors, and modals, shared by the topic and team pages.
 - `components/topic/` — the topic page's sections, cards, dialogs, and editors, and the edit topic modal.
+  `RelatedTopicsSection.tsx` adapts core's `RelatedTopicsSection`, the page's similar topics.
   `TopicFindingControls.tsx` and `TopicFindingDetails.tsx` hold a Finding's controls and its expanded note, which the
   note popover and the MCP view tables share. `TopicNotePopover.tsx` adapts core's `TopicNotePopover`, a Topic's note
   under its note icon on a search row and a news row.
@@ -172,7 +178,11 @@ the browser bundle and renders pages through the server build, behind its own ro
   rows in `TopicSource.tsx` and its add a source link and Recommend button in `AddSourceButtons.tsx`.
   `TopicSource` and `TopicDefaultSource` adapt core's shared components, preserving the DOM badges, summaries, and
   tooltips. `core/lib/topicSources.ts` owns the staged summary formatter used by both editors.
-- `components/team/` — the team page's header, gate, menu, dialogs, and buttons, and the team modal. `saveTeam.ts` is
+- `components/team/` — the team page's header, gate, menu, dialogs, and buttons, and the team modal. `TeamHeader.tsx`
+  adapts core's `TeamHeader` under the page's button row, and `TeamSections.tsx` adapts core's `TeamSections` inside
+  the page's accordion, with the members table, the topics table and a leader's remove, and the notes section.
+- `components/activity/` — `ActivitySections.tsx`, the Activity page's sections over core's `ActivitySections`, with
+  the subscriptions and sent invites tables. `saveTeam.ts` is
   the team save flow the team modal and the topic modal's teams field share: `createTeam`, `createTeamForInviteLink`,
   `saveTeam`, and `TEAM_REJECTION_REASONS`, the sentence for each team rejection.
 - `components/share/` — the share menus for a topic and a team, over the options they both use. `ShareTopic` takes
@@ -296,7 +306,8 @@ the browser bundle and renders pages through the server build, behind its own ro
   and of a profile. `CommentMentionBadge.tsx` adapts core's mention badge, a count whose press opens
   `CommentMentionList.tsx` in a popover, with `CommentMentionMenuRow`, the user menu's Mentions row. It sits right
   after the title of the podcast episode page and of the Topic Post page, and on a comment section's title.
-- `components/note/` — the Tasting Notes section, table, and dialog, the dialog's create flow in `CreateNote.tsx`, and
+- `components/note/` — the Tasting Notes section, table, and dialog, `NotesList.tsx` and `NoteDetails.tsx` adapting
+  core's notes list and the open note's header, the dialog's create flow in `CreateNote.tsx`, and
   the shared core note composition adapted to `react-native-enriched-html`, whose web build is a Tiptap editor. `NoteDialog.tsx` fetches the
   note's html and version on every open, loads the comment thread through `useNoteComments` at the same time, and
   loads the editor or the reader lazily, starting the chunk as the dialog mounts, so neither chunk runs on the server:
@@ -333,7 +344,7 @@ the browser bundle and renders pages through the server build, behind its own ro
   after it, and every other link opens through the host by `LinkOpenerContext` in `AnchorLink`. `SearchMcpView.tsx`,
   `TopicMcpView.tsx`, `FindingsMcpView.tsx`, `UpdatesMcpView.tsx`, and `ScanMcpView.tsx` render the site's own
   components, `McpViewSubscribeButton.tsx` and `McpViewPodcastPlayer.tsx` beside them. `SearchResultsTable.tsx` and
-  `FindingsTable.tsx` lay those components out as tables over `mcpViewTableElements.tsx` and `McpViewFindingCells.tsx`,
+  `FindingsTable.tsx` lay those components out as tables over `mcpViewElements.tsx` and `McpViewFindingCells.tsx`,
   `useMcpViewFindings.ts` keeps an MCP view's rows as its tool calls change them, `useFindingPages.ts` pages the
   findings through the tool's cursor, and `useScanStatus.ts` polls `read_scan_status` at its own 10 and 30 second rates.
   `McpViewReactionRow.tsx` renders the shared reaction row in a finding's details where the tool result came with its
@@ -348,17 +359,33 @@ the browser bundle and renders pages through the server build, behind its own ro
   `mcpViewVoiceActivity.ts`, which never starts, and `mcpViewFetch.ts` returns a podcast episode read from the tool
   result, sends a finding's feedback, a comment thread's read and post, a reaction, and a Topic Post's read through
   their tools, and fails every other request, so an MCP view reaches the api only through a tool call.
-  `mcpViewTopicPostInfoElements.tsx` holds what an MCP view replaces in a Topic Post's info popup: reactions through
-  their tool, no Share, and the discussion's play button that plays a tool result's recording. `NewsMcpView.tsx`
+  `mcpViewElements.tsx` holds every element more than one MCP view replaces in the site's components: the tables'
+  narrow layout, the topics table with its kept count as text and its email switches disabled, a Topic Post's info
+  popup with reactions through their tool, no Share, and the discussion's play button that plays a tool result's
+  recording, the comment thread with no control a tool lacks, and `McpViewSiteLink`, the link under a view's list that
+  opens its page on the site. `NewsMcpView.tsx`
   renders the shared news list with the mentions above it, paging past the tool's rows through `read_news`.
   `TopicPostsMcpView.tsx`
   renders a Topic's posts as the site's cards with no publish button, and `TopicPostMcpView.tsx` one post with its
   image, its recording, and its comments in `McpViewCommentThread.tsx`, which has no edit, delete, or report control.
   `McpViewTopicHeader.tsx` is the Topic's header the findings and posts MCP views share, and `mcpViewHop.ts` the
   one hop a link or a post card takes. The build also aliases the Topic Post editor to `mcpViewTopicPostEditor.ts`,
-  which keeps the editor out of the bundle, and a post body's links to `mcpViewExternalLinks.ts`, which opens them
-  through the host. `DashboardMcpView.tsx` renders the shared Dashboard from a `read_dashboard` result with the outline
+  which keeps the editor out of the bundle, a post body's links to `mcpViewExternalLinks.ts`, which opens them
+  through the host, chat Markdown to `mcpViewChatMarkdown.tsx`, which renders Carl's room messages through
+  `SafeNoteText`, and the HEIC decoder to `mcpViewHeicTo.ts`, which rejects a file. The note views import
+  `note/NotesSectionItem.tsx` and the team view `chat/chatRoomMessageListElements.tsx`, which keep the note dialog's
+  editor and the virtualized room list out of the bundle. `DashboardMcpView.tsx` renders the shared Dashboard from a `read_dashboard` result with the outline
   map and links to the caller's three Dashboard pages, and another chart selection reads through the tool.
+  `NoteMcpView.tsx` renders a page's notes with the site's notes item and list, and one opened note read-only through
+  `read_notes`. `TeamMcpView.tsx` renders the team page's header, sections, members, topics, and notes, and a member's
+  room, whose earlier messages read through `read_team`'s cursor. `ProfileMcpView.tsx` renders a Café's header, news,
+  sections, and tables, `ActivityMcpView.tsx` the Activity sections, whose Active switch and invite answers call
+  `follow_topic` and `respond_to_invite`, and `AccountMcpView.tsx` the Budget section, whose plan and payment actions
+  link to the site. `TopicsMcpView.tsx` renders a `list_topics` section as the home's topic cards, or a topic's
+  similar topics. `McpViewTopicCard.tsx` is a Topic's card that takes the one hop to its findings, `McpViewCardLink.tsx`
+  the stretched title link of a card that opens in the MCP view, and `mcpViewPageCardElements.tsx` the cards the
+  profile and team MCP views' sections share. `McpViewPodcastPlayer.tsx` plays a film in the frame with
+  `mcpViewElements.tsx`'s film player elements while the tool result includes the film's files.
 - `stores/` — the stores that reach the browser or a component library, named `<thing>Store.ts` and built the way
   `packages/core/AGENTS.md` describes, on `@carlnotes/core/stores/storeListeners`. Reach for a store only when state
   outlives a page or crosses the tree; `useState` and `providers/` cover everything else. The DOM-free stores,
@@ -524,7 +551,9 @@ episodes, or Topic Posts.
 `components/topicPost/HomeTopicPostRankDialog.tsx` is the admin's Home posts list, which the home page's and a Topic
 Post page's actions menus open: it reads the pinned Topic Posts and the ones a pin may name, offers the page's post a
 place, and sends the order. `components/common/CardsSection.tsx` is the web's accordion section, grid, and page
-buttons for core's `CardsSection`, which the home's, the profile's, and the team page's card sections render,
+buttons for core's `CardsSection`, which the home's, the profile's, and the team page's card sections render, and
+`components/common/pageSectionsElements.tsx` is `PAGE_SECTIONS_ELEMENTS`, the sections and cards that the profile's
+and the team page's adapters spread,
 Featured Posts right below Featured Podcasts on the profile and the team page. The home writes its sections in
 `HOME_SECTIONS`' order, New podcasts this week right below Featured podcasts and New posts this week right below
 Featured posts, and a section with no card is absent. The profile's Featured Posts lists every post of its person and

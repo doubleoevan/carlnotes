@@ -4,12 +4,9 @@
 import { DASHBOARD_PAGE_NAMES, toDashboardPath } from "@carlnotes/contracts/dashboards"
 import { MCP_VIEW_META_KEY, type McpViewData } from "@carlnotes/contracts/mcpViews"
 import { SITE_URL } from "@carlnotes/contracts/site"
-import { check, ownerId, toClient, topicId, toResultJson } from "./mcpSmokeFixtures"
+import { check, ownerId, routePaths, toClient, toResultJson } from "./mcpSmokeFixtures"
 import { CONNECT_ACCOUNT_TEXT } from "./results"
 import { toResultText } from "./toolTestFixtures"
-
-// both routes: every topic, and the one bound to the smoke's public topic
-const routePaths = ["/mcp", `/mcp/t/${topicId}`]
 
 // the owner's Topic Dashboard page, which every read below opens
 const ownerDashboardUrl = `${SITE_URL}${toDashboardPath({ dashboardKind: "topicDashboard", subjectId: ownerId })}`

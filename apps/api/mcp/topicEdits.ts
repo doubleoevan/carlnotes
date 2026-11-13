@@ -1,15 +1,20 @@
 // the mcp edit_topic tool's flow: read the topic as its page does, preview an edit that needs the user's agreement,
 // and save every other edit, or a confirmed one, through the chat's own save path
+
+import type { ChatToolCall } from "@carlnotes/contracts/payloads"
 import { type EditableTopicFields, toEditableTopicDraft } from "@carlnotes/contracts/topicEdits"
 import type { ProposeTopicEditPayload, TopicDraft } from "@carlnotes/contracts/topicPayloads"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
+import { trackEvent } from "@carlnotes/server/analytics"
 import type { AnalyticsProperties } from "../currentUser"
-import { toEmptyChatTurnToolCalls } from "../tool/chatTools"
-import { applyTopicEdit } from "../tool/topicEditSaves"
+import { addTopicToTeam, removeTopicFromTeam } from "../team/teams"
+import { toEmptyChatTurnToolCalls, toRejectionToast } from "../tool/chatTools"
+import { applyTopicEditSaves, type TopicEditSaveBinding, toTopicEditRejectionCall } from "../tool/topicEditSaves"
 import { loadTopicPage } from "../topic/topics"
 import {
 	isTopicEditConfirmed,
 	type TopicEditConfirmationReason,
+	type TopicTeamChange,
 	toTopicEditConfirmation,
 	toTopicEditConfirmationReasons,
 } from "./topicEditConfirmations"
@@ -48,23 +53,27 @@ export type EditTopicResult =
 	| { status: "missing" }
 	| { status: "forbidden" }
 
-// who saves, the topic and its edit, the confirmation a previous call returned, and the request's analytics properties
+// who saves, the topic and its edit, the team change, the confirmation a previous call returned, and the request's
+// analytics properties
 export type EditTopicOptions = {
 	userId: string
 	topicId: string
 	topicEdit: ProposeTopicEditPayload
+	topicTeamChange: TopicTeamChange | null
 	confirmation: string | null
 	analyticsProperties: AnalyticsProperties
 }
 
 /**
- * Saves a topic edit through the chat's save path. An edit that makes the topic public or removes a source saves only
- * with a confirmation issued for that edit over the topic as it stands, and otherwise returns its preview.
+ * Saves a topic edit through the chat's save path. An edit that makes the topic public, removes a source, or shares a
+ * private topic with a team saves only with a confirmation issued for that edit over the topic as it stands, and
+ * otherwise returns its preview.
  */
 export async function editTopic({
 	userId,
 	topicId,
 	topicEdit,
+	topicTeamChange,
 	confirmation,
 	analyticsProperties,
 }: EditTopicOptions): Promise<EditTopicResult> {
@@ -79,8 +88,8 @@ export async function editTopic({
 
 	// an edit that needs the user's agreement returns its preview until a confirmation for it comes back
 	const editableTopicFields = toEditableTopicFields(topicPage)
-	const topicEditConfirmationOptions = { userId, topicId, topicEdit, editableTopicFields }
-	const topicEditConfirmationReasons = toTopicEditConfirmationReasons(editableTopicFields, topicEdit)
+	const topicEditConfirmationOptions = { userId, topicId, topicEdit, topicTeamChange, editableTopicFields }
+	const topicEditConfirmationReasons = toTopicEditConfirmationReasons(topicEditConfirmationOptions)
 	const isConfirmed = confirmation !== null && isTopicEditConfirmed(topicEditConfirmationOptions, confirmation)
 	if (topicEditConfirmationReasons.length > 0 && !isConfirmed) {
 		// the preview: the topic after the edit, each change in words, and the confirmation that saves it
@@ -99,12 +108,18 @@ export async function editTopic({
 		}
 	}
 
-	// save through the chat's path, which lists each save and each rejection, then read the topic as it now stands
+	// the editor's check first. a rejected edit saves nothing, the team change included
 	const toolCalls = toEmptyChatTurnToolCalls()
-	const serverToolCalls = await applyTopicEdit(
-		{ userId, topicId, origin: "mcp", toolCalls, analyticsProperties },
-		topicEdit,
-	)
+	const topicEditSaveBinding = { userId, topicId, origin: "mcp" as const, toolCalls, analyticsProperties }
+	const topicEditRejectionCall = await toTopicEditRejectionCall(topicEditSaveBinding, topicEdit)
+
+	// save through the chat's path, which lists each save and each rejection, then the team change
+	const serverToolCalls = topicEditRejectionCall
+		? [topicEditRejectionCall]
+		: [
+				...(await applyTopicEditSaves(topicEditSaveBinding, topicEdit)),
+				...(topicTeamChange ? [await saveTopicTeamChange(topicEditSaveBinding, topicTeamChange)] : []),
+			]
 	const savedTopicPage = await loadTopicPage(userId, topicId)
 	const afterTopicDraft = toEditableTopicDraft(
 		savedTopicPage ? toEditableTopicFields(savedTopicPage) : editableTopicFields,
@@ -167,5 +182,61 @@ function toTopicEditChanges({
 	return [
 		...(topicEditConfirmationReasons.includes("goesPublic") ? ["makes the topic public, so anyone can read it"] : []),
 		...(topicEditConfirmationReasons.includes("removesSources") ? [`removes ${removedSourceLabels.join(", ")}`] : []),
+		...(topicEditConfirmationReasons.includes("sharesWithTeam")
+			? ["shares the topic with the team, so its members can read it"]
+			: []),
 	]
+}
+
+// add the topic to a team or take it off, through the team page's own rules, and list the change or its rejection
+async function saveTopicTeamChange(
+	{ userId, topicId, toolCalls, analyticsProperties }: TopicEditSaveBinding,
+	{ teamId, isOnTeam }: TopicTeamChange,
+): Promise<ChatToolCall> {
+	// a leader adds a topic they can read, and a leader or the topic's owner takes it off
+	const editTopicTeamToolCall = { toolName: "editTopicTeam", input: { teamId, isOnTeam } }
+	const { output: teamChangeOutput, isSaved } = isOnTeam
+		? toAddedTopicTeamOutput(await addTopicToTeam(userId, teamId, topicId))
+		: (await removeTopicFromTeam(userId, teamId, topicId))
+			? { output: TEAM_CHANGE_SAVED_LINES.removed, isSaved: true }
+			: { output: TEAM_CHANGE_REJECTED_LINES.removeForbidden, isSaved: false }
+
+	// a saved change is listed with its event, and a rejected one for the toast
+	if (isSaved) {
+		toolCalls.topicSaves.push(teamChangeOutput)
+		trackEvent(isOnTeam ? "team_topic_added" : "team_topic_removed", userId, {
+			...analyticsProperties,
+			teamId,
+			topicId,
+		})
+	} else {
+		toolCalls.topicSaveRejections.push(
+			toRejectionToast(isOnTeam ? "add it to the team" : "take it off the team", teamChangeOutput),
+		)
+	}
+	return { ...editTopicTeamToolCall, output: teamChangeOutput }
+}
+
+// the lines a team change shows
+const TEAM_CHANGE_SAVED_LINES = { added: "Added the topic to the team.", removed: "Took the topic off the team." }
+const TEAM_CHANGE_REJECTED_LINES = {
+	alreadyAdded: "That team already has this topic.",
+	addForbidden: "Only the team's leader adds a topic, and a private topic stays with its owner.",
+	removeForbidden: "Only the team's leader or the topic's owner takes a topic off a team.",
+}
+
+// a team change's line, and whether the change saved
+type TopicTeamChangeOutput = { output: string; isSaved: boolean }
+
+// the line an add returns, and whether the add saved
+function toAddedTopicTeamOutput(addTopicResult: Awaited<ReturnType<typeof addTopicToTeam>>): TopicTeamChangeOutput {
+	switch (addTopicResult) {
+		case "added":
+			return { output: TEAM_CHANGE_SAVED_LINES.added, isSaved: true }
+		case "alreadyAdded":
+			return { output: TEAM_CHANGE_REJECTED_LINES.alreadyAdded, isSaved: false }
+		// a member who is not the leader, or a topic they may not hand over
+		case "forbidden":
+			return { output: TEAM_CHANGE_REJECTED_LINES.addForbidden, isSaved: false }
+	}
 }

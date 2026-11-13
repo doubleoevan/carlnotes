@@ -39,11 +39,11 @@ const ATTACHMENT_KIND_ICONS = {
  * Adds browser media, downloads, and speech to the shared chat message.
  */
 export const ChatRoomMessageBubble = memo(function ChatRoomMessageBubble(props: ChatRoomMessageBubbleProps) {
-	return <SharedChatRoomMessageBubble {...props} elements={chatRoomMessageElements} />
+	return <SharedChatRoomMessageBubble {...props} elements={CHAT_ROOM_MESSAGE_ELEMENTS} />
 })
 
 // the browser room-message elements
-const chatRoomMessageElements: ChatRoomMessageElements = {
+export const CHAT_ROOM_MESSAGE_ELEMENTS: ChatRoomMessageElements = {
 	Author: ChatAuthor,
 	Frame: ({ children, isOwn }) => (
 		<div className={cn("group flex w-full flex-col", isOwn ? "items-end" : "items-start")}>{children}</div>

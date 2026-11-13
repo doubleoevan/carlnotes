@@ -16,8 +16,9 @@ import {
 	REPORT_NOTE_LABEL,
 	toNoteDeleteDescription,
 } from "@carlnotes/core/lib/noteLabels"
+import { toNoteReportProps } from "@carlnotes/core/lib/reportCopy"
 import { cn } from "@carlnotes/nightshift/classNames"
-import { Flag, Maximize2, MessageSquareText, Minimize2, Pencil, X } from "lucide-react"
+import { Flag, Maximize2, Minimize2, Pencil, X } from "lucide-react"
 import { lazy, Suspense, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
@@ -27,6 +28,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { Input } from "@/components/primitives/input"
 import { isWideScreen } from "@/lib/utils"
 import { CreateNote } from "./CreateNote"
+import { NoteDetails } from "./NoteDetails"
 import { ToolbarButton } from "./NoteToolbar"
 import { type NoteVisibility, NoteVisibilitySelect, VISIBILITY_TOOLTIPS } from "./NoteVisibilitySelect"
 
@@ -162,24 +164,6 @@ function NoteFooter({
 	)
 }
 
-// the report a signed-in user who cannot delete the note may send about it, or null
-function toNoteReportSubject({
-	noteId,
-	noteName,
-	owner,
-	canReport,
-}: {
-	noteId: string
-	noteName: string
-	owner: Note["owner"] | undefined
-	canReport: boolean
-}): ReportSubject | null {
-	if (!canReport || !owner) {
-		return null
-	}
-	return { subjectKind: "note", subjectId: noteId, subjectLabel: noteName, author: owner }
-}
-
 // an open note: the header row, the body as an editor or a reader, and the footer
 function OpenNote({
 	note,
@@ -266,55 +250,54 @@ function OpenNote({
 
 	return (
 		<>
-			{/* the owner's visibility select on the left, the expand and close controls grouped on the right */}
-			<div className="flex min-h-9 items-center justify-between gap-2">
-				{isNoteOwner ? (
-					<NoteVisibilitySelect
-						visibilities={creatableVisibilities}
-						visibility={noteVisibility}
-						onNoteVisibilityChange={changeVisibility}
-					/>
-				) : (
-					<span />
-				)}
-				{/* the dialog's own controls, the toolbar's buttons. the comments toggle takes the pressed fill while the
-					thread shows, and the expand toggle only shows on a wide screen, since a phone is always full screen */}
-				<div className="flex items-center gap-0.5">
-					<ToolbarButton
-						label={isCommentsOpen ? "Hide comments" : "Show comments"}
-						Icon={MessageSquareText}
-						isPressed={isCommentsOpen}
-						className="text-muted-foreground"
-						onClick={() => setIsCommentsOpen((wasOpen) => !wasOpen)}
-					/>
-					<ToolbarButton
-						label={isExpanded ? "Collapse" : "Expand"}
-						Icon={isExpanded ? Minimize2 : Maximize2}
-						className="text-muted-foreground hidden sm:inline-flex"
-						onClick={onToggleExpand}
-					/>
-					<ToolbarButton label="Close" Icon={X} className="text-muted-foreground" onClick={onClose} />
-				</div>
-			</div>
-			{/* the note name on its own centered row. the pencil shows the name is editable and hides while it is being edited */}
-			{canEdit ? (
-				<div className="group relative">
-					{/* the name reads as a title at rest, with no field fill in either mode, and takes the ghost hover fill
-						while hovered or being edited */}
-					<Input
-						value={name}
-						onChange={(event) => setName(event.target.value)}
-						onBlur={() => void rename()}
-						aria-label="Note name"
-						maxLength={NOTE_NAME_MAX_CHARS}
-						disabled={isPending}
-						className="hover:bg-accent focus-visible:bg-accent dark:hover:bg-accent/50 dark:focus-visible:bg-accent/50 h-auto border-none px-8 text-center font-display text-2xl shadow-none focus-visible:ring-0 md:text-2xl bg-transparent"
-					/>
-					<Pencil className="text-muted-foreground pointer-events-none absolute top-1/2 right-2 size-4 -translate-y-1/2 group-focus-within:hidden" />
-				</div>
-			) : (
-				<DialogTitle className="truncate text-center font-display text-2xl font-normal">{name}</DialogTitle>
-			)}
+			{/* the owner's visibility select, the comments, expand, and close controls, the name, and the byline. the pencil
+				shows the name is editable and hides while it is being edited, and the expand toggle shows on a wide screen
+				only */}
+			<NoteDetails
+				note={{ name, owner: note.owner }}
+				visibility={
+					isNoteOwner && (
+						<NoteVisibilitySelect
+							visibilities={creatableVisibilities}
+							visibility={noteVisibility}
+							onNoteVisibilityChange={changeVisibility}
+						/>
+					)
+				}
+				title={
+					canEdit ? (
+						<div className="group relative">
+							{/* the name reads as a title at rest, with no field fill in either mode, and takes the ghost hover fill
+								while hovered or being edited */}
+							<Input
+								value={name}
+								onChange={(event) => setName(event.target.value)}
+								onBlur={() => void rename()}
+								aria-label="Note name"
+								maxLength={NOTE_NAME_MAX_CHARS}
+								disabled={isPending}
+								className="hover:bg-accent focus-visible:bg-accent dark:hover:bg-accent/50 dark:focus-visible:bg-accent/50 h-auto border-none px-8 text-center font-display text-2xl shadow-none focus-visible:ring-0 md:text-2xl bg-transparent"
+							/>
+							<Pencil className="text-muted-foreground pointer-events-none absolute top-1/2 right-2 size-4 -translate-y-1/2 group-focus-within:hidden" />
+						</div>
+					) : (
+						<DialogTitle className="truncate text-center font-display text-2xl font-normal">{name}</DialogTitle>
+					)
+				}
+				controls={
+					<>
+						<ToolbarButton
+							label={isExpanded ? "Collapse" : "Expand"}
+							Icon={isExpanded ? Minimize2 : Maximize2}
+							className="text-muted-foreground hidden sm:inline-flex"
+							onClick={onToggleExpand}
+						/>
+						<ToolbarButton label="Close" Icon={X} className="text-muted-foreground" onClick={onClose} />
+					</>
+				}
+				isCommentsOpen={isCommentsOpen}
+				onToggleComments={() => setIsCommentsOpen((wasOpen) => !wasOpen)}
+			/>
 			{/* the name slot stays present for the screen reader when the name renders as an input */}
 			{canEdit && <DialogTitle className="sr-only">{name}</DialogTitle>}
 			<DialogDescription className="sr-only">{VISIBILITY_TOOLTIPS[noteVisibility]}</DialogDescription>
@@ -347,7 +330,7 @@ function OpenNote({
 				canDelete={canDelete}
 				noteSaveStatus={noteSaveStatus}
 				onDelete={() => setIsConfirmingDelete(true)}
-				reportSubject={toNoteReportSubject({
+				reportSubject={toNoteReportProps({
 					noteId: note.id,
 					noteName: savedName,
 					owner: permissions?.owner,

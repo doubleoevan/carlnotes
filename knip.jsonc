@@ -101,6 +101,10 @@
 				"src/mcpViews/mcpViewExternalLinks.ts",
 				// vite.mcpViews.config.ts swaps the dashboard MCP view for this one by path outside the dashboard mode
 				"src/mcpViews/emptyDashboardMcpView.ts",
+				// vite.mcpViews.config.ts swaps the chat Markdown renderer for this one by path
+				"src/mcpViews/mcpViewChatMarkdown.tsx",
+				// vite.mcpViews.config.ts swaps the HEIC decoder for this one by name
+				"src/mcpViews/mcpViewHeicTo.ts",
 				// the smoke:mcp-views script, and the page mcpViewTestHost.ts bundles for the browser
 				"src/mcpViews/testHost/mcpViews.smoke.ts",
 				"src/mcpViews/testHost/hostPage.ts"

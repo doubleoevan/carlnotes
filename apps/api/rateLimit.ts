@@ -196,9 +196,10 @@ export const toolCallerRateLimiter = toRateLimiter({ limit: CALLER_RATE_LIMIT, s
 
 // the note body save's own limiter. the editor saves a second after each pause, so the caller limit is too low for it
 const NOTE_BODY_SAVE_RATE_LIMIT = 120
+const noteBodySaveRateLimitStore = toRateLimitStore("rate-limit:note-body")
 export const noteBodySaveRateLimiter = toRateLimiter({
 	limit: NOTE_BODY_SAVE_RATE_LIMIT,
-	store: toRateLimitStore("rate-limit:note-body"),
+	store: noteBodySaveRateLimitStore,
 })
 
 // the visitors' page render limiter, keyed by the client address. a request with a session cookie, or with an unknown
@@ -244,13 +245,29 @@ export const dashboardReadRateLimiter = toQuietRateLimiter({
 	store: toRateLimitStore("rate-limit:dashboard-read"),
 })
 
+// a counter of one hit against a store's limit under the caller's key, which returns whether it is within the limit
+function toRateLimitHitCounter(
+	store: Store<AppEnv>,
+	limit: number,
+): (rateLimitToolCaller: RateLimitToolCaller) => Promise<boolean> {
+	return async (rateLimitToolCaller) => {
+		const { totalHits } = await store.increment(toRateLimitKey(rateLimitToolCaller))
+		return totalHits <= limit
+	}
+}
+
 /**
  * Counts one search against the search limit under the caller's key, and returns whether it is within the limit.
  */
-export async function countSearchRateLimitHit(rateLimitToolCaller: RateLimitToolCaller): Promise<boolean> {
-	const { totalHits } = await searchRateLimitStore.increment(toRateLimitKey(rateLimitToolCaller))
-	return totalHits <= SEARCH_RATE_LIMIT
-}
+export const countSearchRateLimitHit = toRateLimitHitCounter(searchRateLimitStore, SEARCH_RATE_LIMIT)
+
+/**
+ * Counts one note body save against its limit under the caller's key, and returns whether it is within the limit.
+ */
+export const countNoteBodySaveRateLimitHit = toRateLimitHitCounter(
+	noteBodySaveRateLimitStore,
+	NOTE_BODY_SAVE_RATE_LIMIT,
+)
 
 // the speech limiter, keyed by the user else the address, over the spoken parts of a reply
 export const speechRateLimiter = toRateLimiter({

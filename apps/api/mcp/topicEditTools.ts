@@ -26,6 +26,15 @@ import { toMcpViewToolMeta } from "./uiResources"
 // what edit_topic takes: the topic, the edit carl proposes in chat, and the confirmation a preview returned
 const editTopicPayload = proposeTopicEditPayload.extend({
 	topic_id: topicIdArgument,
+	team_id: z
+		.string()
+		.min(1)
+		.optional()
+		.describe("A team to add the topic to or take it off, by the id list_teams shows."),
+	is_on_team: z
+		.boolean()
+		.optional()
+		.describe("True adds the topic to team_id, which is the default, and false takes it off."),
 	confirmation: z
 		.string()
 		.optional()
@@ -40,19 +49,24 @@ export function registerTopicEditTools({ mcpServer, toolCaller, routeTopicId }: 
 		"edit_topic",
 		{
 			title: "Edit a topic",
-			description: `Change a CarlNotes topic you may edit: its name, tags, visibility (public, invite, or private), how often it brews (daily, weekdays, or weekly), the time of day as HH:MM and the day a weekly brew runs, how many findings a brew keeps (5, 10, 15, or 20), the prompt every brew scores against, sources to add as option and value pairs, and source ids to remove, which list_topics shows.${toPodcastFieldDescription()} Name only what changes. Making a topic public or removing a source saves nothing at first: the result shows the topic as it would read and a confirmation. Ask the person, and once they agree, call again with the same edit and that confirmation. Every prompt save keeps a version, and no brew starts. Use it when the user asks Carl or CarlNotes to change a topic, with phrases like edit this topic, change the prompt, add a source, or change the schedule.`,
+			description: `Change a CarlNotes topic you may edit: its name, tags, visibility (public, invite, or private), how often it brews (daily, weekdays, or weekly), the time of day as HH:MM and the day a weekly brew runs, how many findings a brew keeps (5, 10, 15, or 20), the prompt every brew scores against, sources to add as option and value pairs, source ids to remove, which list_topics shows, and a team to add the topic to or take it off, which follows the team page's rules.${toPodcastFieldDescription()} Name only what changes. Making a topic public, removing a source, or adding a topic that is not public to a team saves nothing at first: the result shows the topic as it would read and a confirmation. Ask the person, and once they agree, call again with the same edit and that confirmation. Every prompt save keeps a version, and no brew starts. Use it when the user asks Carl or CarlNotes to change a topic, with phrases like edit this topic, change the prompt, add a source, change the schedule, or add this topic to my team.`,
 			inputSchema: editTopicPayload,
-			annotations: { readOnlyHint: false, destructiveHint: true },
+			annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
 			_meta: toMcpViewToolMeta("topic"),
 		},
-		async ({ topic_id, confirmation, ...topicEdit }) => {
+		async ({ topic_id, team_id, is_on_team, confirmation, ...topicEdit }) => {
 			const topicWriteCall = toTopicWriteCall({ toolCaller, routeTopicId, topicId: topic_id })
 			if ("rejectionResult" in topicWriteCall) {
 				return topicWriteCall.rejectionResult
 			}
 
 			// save the edit, or preview one that needs the user's agreement. the saves check edit rights themselves
-			const editTopicResult = await editTopic({ ...topicWriteCall, topicEdit, confirmation: confirmation ?? null })
+			const editTopicResult = await editTopic({
+				...topicWriteCall,
+				topicEdit,
+				topicTeamChange: team_id ? { teamId: team_id, isOnTeam: is_on_team ?? true } : null,
+				confirmation: confirmation ?? null,
+			})
 			return toEditTopicToolResult(editTopicResult)
 		},
 	)
@@ -63,7 +77,7 @@ export function registerTopicEditTools({ mcpServer, toolCaller, routeTopicId }: 
 			description:
 				"Verified sources for a CarlNotes topic name and prompt, each as the option and value create_topic takes. Draws on the account's daily suggestion limit. Use it when the user asks Carl or CarlNotes for sources, with phrases like suggest sources or find sources for this topic.",
 			inputSchema: z.object({ name: z.string().min(1), prompt: z.string().min(1) }),
-			annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+			annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
 		},
 		async ({ name, prompt }) => {
 			if (toolCaller.kind !== "user") {
@@ -85,7 +99,7 @@ export function registerTopicEditTools({ mcpServer, toolCaller, routeTopicId }: 
 			title: "Create a topic",
 			description: `Preview a CarlNotes Topic Draft for the connected account from a name, prompt, sources as option and value pairs, invite emails, visibility, team, tags, brew frequency, and finding limit.${toPodcastFieldDescription()} Call only when the user chooses to start a Topic. The first call creates nothing and returns the draft and a confirmation. Show the draft and wait for the user to confirm, then repeat the same fields with that confirmation. Creation uses the existing Topic Draft limits and starts its first brew. For a new send destination, set visibility private, team null, inviteEmails empty, and default Coffee Break on when the view's account budget permits it. Other unsaid fields use the editor's defaults: shared by invite, weekly on Wednesday, ten findings. Use it when the user asks Carl or CarlNotes for a new topic, with phrases like create a topic, start a topic, or have Carl track this.`,
 			inputSchema: createTopicPayload.extend({ confirmation: z.string().max(200).optional() }),
-			annotations: { readOnlyHint: false, destructiveHint: true },
+			annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
 			_meta: toMcpViewToolMeta("topic"),
 		},
 		async ({ confirmation, ...topicDraft }) => {

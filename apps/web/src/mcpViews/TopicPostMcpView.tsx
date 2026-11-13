@@ -7,8 +7,8 @@ import { TopicPostInfo } from "@/components/topicPost/TopicPostInfo"
 import { TOPIC_POST_PAGE_ELEMENTS } from "@/pages/TopicPostPage"
 import { McpViewCommentThread } from "./McpViewCommentThread"
 import { McpViewReactionRow } from "./McpViewReactionRow"
+import { MCP_VIEW_TOPIC_POST_INFO_ELEMENTS, McpViewDiscussionPlayButton } from "./mcpViewElements"
 import { useMcpViewData } from "./mcpViewHost"
-import { MCP_VIEW_TOPIC_POST_INFO_ELEMENTS, McpViewDiscussionPlayButton } from "./mcpViewTopicPostInfoElements"
 
 /**
  * The topic post MCP view: one published Topic Post as the site's own page shows it, with its image, its title with

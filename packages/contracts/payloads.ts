@@ -373,10 +373,13 @@ export const noteBodyPayload = z.object({
 	version: z.number().int().positive().max(POSTGRES_INTEGER_MAX),
 })
 
+// the new note body: its name, and a visibility the creator may use
 export const noteCreatePayload = z.object({
 	name: z.string().trim().min(1).max(NOTE_NAME_MAX_CHARS),
 	visibility: z.enum(noteVisibilities),
 })
+
+export type NoteCreatePayload = z.infer<typeof noteCreatePayload>
 
 // the note update body. a rename takes edit access, a visibility change is the owner's alone
 export const noteUpdatePayload = z.object({

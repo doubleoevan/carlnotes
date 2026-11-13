@@ -11,7 +11,7 @@ import { METADATA_LINE_CLASS } from "@/lib/styleClasses"
 import type { TopicFeedHandlers } from "@/providers/TopicFeedProvider"
 import { McpViewFindingDetails, McpViewFindingExpandButton, McpViewFindingTitle } from "./McpViewFindingCells"
 import { McpViewSubscribeButton } from "./McpViewSubscribeButton"
-import { MCP_VIEW_CONTROLS_COLUMN, MCP_VIEW_TABLE_ELEMENTS, UNSORTED_MCP_VIEW_TABLE_SORT } from "./mcpViewTableElements"
+import { MCP_VIEW_CONTROLS_COLUMN, MCP_VIEW_TABLE_ELEMENTS, UNSORTED_MCP_VIEW_TABLE_SORT } from "./mcpViewElements"
 
 // the controls column's width in pixels, which fits Follow
 const SEARCH_CONTROLS_COLUMN_WIDTH = 110

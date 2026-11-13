@@ -4,19 +4,15 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { fetchNotes, type NotePageRef } from "@carlnotes/client/noteClient"
 import type { Note, NotesResponse } from "@carlnotes/contracts/notes"
-import { toSectionCountLabel } from "@carlnotes/core/lib/labels"
-import { cn } from "@carlnotes/nightshift/classNames"
 import { useLocation } from "@tanstack/react-router"
 import { Plus } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { AnchorLink } from "@/components/common/AnchorLink"
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/primitives/accordion"
-import { Button, buttonVariants } from "@/components/primitives/button"
+import { Accordion } from "@/components/primitives/accordion"
+import { Button } from "@/components/primitives/button"
 import { toSignupHref } from "@/components/session/signupPrompts"
-import { EmptyListCard } from "@/components/table/TableCard"
-import { CARD_CLASS } from "@/lib/styleClasses"
 import { NoteDialog } from "./NoteDialog"
-import { NotesTable } from "./NotesTable"
+import { NotesList } from "./NotesList"
+import { ADD_NOTE_LABEL, AddNoteLink, NotesSectionItem } from "./NotesSectionItem"
 import { PageNoteBadge } from "./NoteUnreadBadge"
 
 /**
@@ -76,72 +72,41 @@ export function NotesSection({
 	if (!notes) {
 		return null
 	}
-	// a team's notes are its own, a topic's are Carl's tasting notes
-	const sectionTitle = pageType === "team" ? "Team notes" : "Tasting Notes"
 
 	// a visitor gets the same invitation a member does. cta names the link for analytics
 	const signUpHref = toSignupHref("note", pageHref)
 
-	// the invitation an empty section shows, worded the same for the creator's card and the visitor's link
-	const inviteCardClass = cn(CARD_CLASS, "mb-2 block w-full text-left text-sm")
-	const invitation = (
-		<>
-			<span className="text-muted-foreground">Write a note on </span>
-			<span className="text-link">{notes.pageName}</span>
-			<span className="text-muted-foreground">.</span>
-		</>
-	)
 	// the notes as one accordion item
 	const notesSection = (
-		<AccordionItem value="notes" className={accordionItemClassName}>
-			{/* the Add Note button sits beside the trigger. clicks on it never toggle the section */}
-			<div className={cn("flex items-center gap-2 [&>:first-child]:flex-1", hasCompactHeader && "mb-2")}>
-				<AccordionTrigger className={cn(hasCompactHeader && "py-2")}>
-					<span className={cn(titleClassName, "flex-1")}>{sectionTitle}</span>
-					{/* the section counts its notes at the far right of its title */}
-					<NoteCount noteCount={noteCount} />
-				</AccordionTrigger>
-				<PageNoteBadge pageType={pageType} pageId={pageId} />
-				{notes.creatableVisibilities.length > 0 ? (
-					<Button className="shrink-0" onClick={() => setOpenDialog("create")}>
-						<Plus className="size-4" />
-						Add Note
-					</Button>
-				) : (
-					isSignedOut && (
-						<AnchorLink href={signUpHref} className={cn(buttonVariants(), "shrink-0")}>
+		<NotesSectionItem
+			pageType={pageType}
+			noteCount={noteCount}
+			titleClassName={titleClassName}
+			hasCompactHeader={hasCompactHeader}
+			className={accordionItemClassName}
+			actions={
+				<>
+					<PageNoteBadge pageType={pageType} pageId={pageId} />
+					{notes.creatableVisibilities.length > 0 ? (
+						<Button className="shrink-0" onClick={() => setOpenDialog("create")}>
 							<Plus className="size-4" />
-							Add Note
-						</AnchorLink>
-					)
-				)}
-			</div>
-			<AccordionContent>
-				{/* an empty section a creator can fill, the card opening the create dialog */}
-				{notes.notes.length === 0 && notes.creatableVisibilities.length > 0 && (
-					<button type="button" onClick={() => setOpenDialog("create")} className={inviteCardClass}>
-						{invitation}
-					</button>
-				)}
-
-				{/* the same invitation for a visitor, who signs up to take it */}
-				{notes.notes.length === 0 && notes.creatableVisibilities.length === 0 && isSignedOut && (
-					<AnchorLink href={signUpHref} className={inviteCardClass}>
-						{invitation}
-					</AnchorLink>
-				)}
-
-				{/* signed in with nothing to read and nothing to write */}
-				{notes.notes.length === 0 && notes.creatableVisibilities.length === 0 && !isSignedOut && (
-					<EmptyListCard>
-						{pageType === "team" ? "No notes on this team yet." : "No notes on this topic yet."}
-					</EmptyListCard>
-				)}
-
-				{/* the note table */}
-				{notes.notes.length > 0 && <NotesTable notes={notes.notes} onOpenNote={setOpenDialog} />}
-			</AccordionContent>
-		</AccordionItem>
+							{ADD_NOTE_LABEL}
+						</Button>
+					) : (
+						isSignedOut && <AddNoteLink href={signUpHref} />
+					)}
+				</>
+			}
+		>
+			{/* the note table, or the invitation or the muted line of an empty section */}
+			<NotesList
+				notesResponse={notes}
+				pageType={pageType}
+				signUpHref={isSignedOut ? signUpHref : null}
+				onOpenNote={setOpenDialog}
+				onCreate={() => setOpenDialog("create")}
+			/>
+		</NotesSectionItem>
 	)
 	return (
 		<>
@@ -167,10 +132,4 @@ export function NotesSection({
 			)}
 		</>
 	)
-}
-
-// how many notes a section holds, or nothing for a section with none
-function NoteCount({ noteCount }: { noteCount: number | null }) {
-	const countLabel = toSectionCountLabel(noteCount, "note")
-	return countLabel ? <span className="text-muted-foreground text-sm">{countLabel}</span> : null
 }

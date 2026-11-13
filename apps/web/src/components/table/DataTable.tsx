@@ -1,7 +1,46 @@
-import type { DataTableElements } from "@carlnotes/core/components/DataTable"
+import { type DataTableElements, DataTable as SharedDataTable } from "@carlnotes/core/components/DataTable"
+import type { SortedTableProps } from "@carlnotes/core/lib/tableElements"
 import { cn } from "@carlnotes/nightshift/classNames"
+import type { ReactNode } from "react"
 import { TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/tableClasses"
 import { SortableHeader } from "./SortableHeader"
+import { TableCard } from "./TableCard"
+import { TablePagination, usePaginatedRowSort } from "./TablePagination"
+
+/**
+ * A sorted table in its card with the pagination under it.
+ */
+export function DataTable<Row>({
+	rows,
+	columns,
+	valueByKey,
+	initialSort,
+	getRowId,
+	className,
+	elements = DATA_TABLE_ELEMENTS,
+	renderDetails,
+}: SortedTableProps<Row> & {
+	className?: string
+	// the table's own elements, such as a wider table, in place of the default ones
+	elements?: DataTableElements
+	// the subtable an open row shows under itself
+	renderDetails?: (row: Row) => ReactNode
+}) {
+	const { pageRows, sort, pagination } = usePaginatedRowSort({ rows, valueByKey, initialSort })
+	return (
+		<TableCard className={className}>
+			<SharedDataTable
+				columns={columns}
+				renderedRows={pageRows.map((row) => ({ row }))}
+				getRowId={getRowId}
+				sort={sort}
+				elements={elements}
+				renderDetails={renderDetails}
+			/>
+			<TablePagination {...pagination} />
+		</TableCard>
+	)
+}
 
 // semantic DOM elements for the same table composition used by native screens
 export const DATA_TABLE_ELEMENTS: DataTableElements = {

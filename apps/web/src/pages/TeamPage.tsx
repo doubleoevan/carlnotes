@@ -1,35 +1,27 @@
 import { authClient } from "@carlnotes/client/authClient"
 import type { TeamPageResult } from "@carlnotes/client/teamClient"
-import { fetchTeamPage, sendDeleteTeam, sendRemoveTopicFromTeam } from "@carlnotes/client/teamClient"
+import { fetchTeamPage, sendDeleteTeam } from "@carlnotes/client/teamClient"
 import { fetchAddableTopics } from "@carlnotes/client/topicClient"
 import { isLeaderRole } from "@carlnotes/contracts/enums"
 import { type TeamPageResponse, toTeamPageTitle } from "@carlnotes/contracts/teams"
-import { TEAM_SECTION_VALUES, TEAM_SECTIONS } from "@carlnotes/core/lib/cardSections"
-import { toSectionCountLabel } from "@carlnotes/core/lib/labels"
+import { TEAM_PAGE_SECTION_VALUES } from "@carlnotes/core/lib/cardSections"
 import { sendTeamViewOnce } from "@carlnotes/core/lib/pageViews"
 import { getRouteApi, useNavigate } from "@tanstack/react-router"
 import { Pencil, Share, Trash2 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
-import { AccordionSection } from "@/components/common/AccordionSection"
-import { PagedCardsSection } from "@/components/common/CardsSection"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { ViewerCountLine } from "@/components/common/ViewerCountLine"
 import { PageSkeleton } from "@/components/layout/PageSkeleton"
 import { NotesSection } from "@/components/note/NotesSection"
-import { PodcastEpisodeCard } from "@/components/podcast/PodcastEpisodeCard"
 import { Accordion } from "@/components/primitives/accordion"
 import { ShareTeam } from "@/components/share/ShareTeam"
-import { EmptyListCard, TableCard } from "@/components/table/TableCard"
-import { TeamMembersTable } from "@/components/table/TeamMembersTable"
-import { TopicsTable } from "@/components/table/TopicsTable"
 import { AddTopicButton } from "@/components/team/AddTopicButton"
 import { type TeamDialog, TeamDialogs } from "@/components/team/TeamDialogs"
 import { TeamGateNotice, TeamSkeleton } from "@/components/team/TeamGate"
 import { TeamHeader } from "@/components/team/TeamHeader"
-import { TopicCard } from "@/components/topic/TopicCard"
+import { TeamSections } from "@/components/team/TeamSections"
 import { NewTopicButton, useNewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
-import { TopicPostCard } from "@/components/topicPost/TopicPostCard"
 import { useLoadInBrowser } from "@/hooks/useBrowserValue"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { PAGE_CLASS } from "@/lib/styleClasses"
@@ -226,40 +218,20 @@ export function TeamPage() {
 			{newTopicDialog}
 			{/* every section open by default, and the accordion holds the state for all of them */}
 			<div className="mt-2">
-				<Accordion type="multiple" defaultValue={[...TEAM_SECTION_VALUES, "members", "topics", "notes"]}>
-					{/* the team's topics and their films, podcast episodes, and Topic Posts as cards, the films right before
-					    the podcast episodes, each hidden while it has none */}
-					<PagedCardsSection
-						section={TEAM_SECTIONS.topicCards}
-						rows={teamPage.topicCards}
-						renderCard={(topic) => <TopicCard topic={topic} />}
-					/>
-					<PagedCardsSection
-						section={TEAM_SECTIONS.topicPodcastEpisodeVideoCards}
-						rows={teamPage.topicPodcastEpisodeVideoCards ?? []}
-						renderCard={(podcastEpisodeCard) => (
-							<PodcastEpisodeCard podcastEpisodeCard={podcastEpisodeCard} variant="video" videoSurface="team-videos" />
-						)}
-					/>
-					<PagedCardsSection
-						section={TEAM_SECTIONS.podcastEpisodeCards}
-						rows={teamPage.podcastEpisodeCards}
-						renderCard={(podcastEpisodeCard) => <PodcastEpisodeCard podcastEpisodeCard={podcastEpisodeCard} />}
-					/>
-					<PagedCardsSection
-						section={TEAM_SECTIONS.topicPostCards}
-						rows={teamPage.topicPostCards}
-						renderCard={(topicPost) => <TopicPostCard topicPost={topicPost} />}
-					/>
-					<TeamMembersSection teamPage={teamPage} onChanged={reloadTeam} />
-					<TeamTopicsSection teamPage={teamPage} onChanged={reloadTeam} />
-					{/* the team notes are the last section in the accordion */}
-					<NotesSection
-						pageType="team"
-						pageId={teamPage.teamId}
-						titleClassName="font-display text-xl"
-						isInsideAccordion
-						onNoteCountChange={setNoteCount}
+				<Accordion type="multiple" defaultValue={TEAM_PAGE_SECTION_VALUES}>
+					{/* the card sections, the members, the topics, and the team notes last */}
+					<TeamSections
+						teamPage={teamPage}
+						onChanged={reloadTeam}
+						notesSection={
+							<NotesSection
+								pageType="team"
+								pageId={teamPage.teamId}
+								titleClassName="font-display text-xl"
+								isInsideAccordion
+								onNoteCountChange={setNoteCount}
+							/>
+						}
 					/>
 				</Accordion>
 			</div>
@@ -321,60 +293,4 @@ function useTeamPageResult(teamId: string): {
 	const isLoadedOnServer = loadedTeamResult?.status === "visible" || loadedTeamResult?.status === "gated"
 	useLoadInBrowser({ pageId: teamId, isLoadedOnServer, loadPage: reloadTeam })
 	return { teamResult, reloadTeam }
-}
-
-/**
- * The team's members, and how many of them chose not to be shown.
- */
-function TeamMembersSection({ teamPage, onChanged }: { teamPage: TeamPageResponse; onChanged: () => void }) {
-	// the active members, shown or not, as the header counts them
-	const memberCount = teamPage.members.filter((member) => member.isActive).length + teamPage.hiddenMemberCount
-	return (
-		<AccordionSection value="members" title="Team members" countLabel={toSectionCountLabel(memberCount, "member")}>
-			<TableCard className="mb-2">
-				<TeamMembersTable
-					teamId={teamPage.teamId}
-					members={teamPage.members}
-					hiddenMemberCount={teamPage.hiddenMemberCount}
-					isTeamLeader={isLeaderRole(teamPage.role)}
-					onChanged={onChanged}
-				/>
-			</TableCard>
-			{/* the page never appears smaller than the team is */}
-			{teamPage.hiddenMemberCount > 0 && (
-				<p className="text-muted-foreground pb-2 pl-4 text-xs">
-					{`and ${teamPage.hiddenMemberCount} more member${teamPage.hiddenMemberCount === 1 ? "" : "s"}`}
-				</p>
-			)}
-		</AccordionSection>
-	)
-}
-
-/**
- * The team's topics, in the same table the profile page renders, plus the leader's button to remove one.
- */
-function TeamTopicsSection({ teamPage, onChanged }: { teamPage: TeamPageResponse; onChanged: () => void }) {
-	const isTeamLeader = isLeaderRole(teamPage.role)
-	return (
-		<AccordionSection
-			value="topics"
-			title="All Topics"
-			countLabel={toSectionCountLabel(teamPage.topics.length, "topic")}
-		>
-			{teamPage.topics.length === 0 ? (
-				<EmptyListCard>No topics on this team yet.</EmptyListCard>
-			) : (
-				<TopicsTable
-					topics={teamPage.topics}
-					includesNonPublicTopics={Boolean(teamPage.role)}
-					topicTooltip="Topics on this team"
-					onRemoveTopic={
-						isTeamLeader
-							? (topic) => void sendRemoveTopicFromTeam(teamPage.teamId, topic.id).then(onChanged)
-							: undefined
-					}
-				/>
-			)}
-		</AccordionSection>
-	)
 }

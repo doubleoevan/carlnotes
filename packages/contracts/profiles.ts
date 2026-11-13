@@ -4,6 +4,7 @@ import { toAvatarVersion } from "./avatars"
 import { billingIntervals, billingProviders, plans, teamRoles, visibilities } from "./enums"
 import { podcastEpisodeSummary } from "./podcast"
 import { displayEnum } from "./tolerantReads"
+import { imageRegenerationQuota } from "./topicImages"
 
 // the user identity for a profile page link, with the avatar's source and the version that its url names
 export const profileIdentity = z.object({
@@ -92,6 +93,9 @@ export const billingState = z.object({
 	isOverageBillable: z.boolean(),
 	// the id the app logs in to RevenueCat with before a store purchase or a restore
 	revenueCatAppUserId: z.string().nullable(),
+	// the topic image regenerations used this month against the plan's limit, null for an admin, who has none. optional,
+	// so a released app reads a payload without it
+	imageRegenerationQuota: imageRegenerationQuota.nullable().optional(),
 })
 
 export type BillingState = z.infer<typeof billingState>

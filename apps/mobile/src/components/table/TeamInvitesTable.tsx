@@ -23,7 +23,7 @@ export function SentTeamInvitesTable({
 	return (
 		<SentInvitesTable
 			inviteRows={rows}
-			{...TEAM_INVITES_TABLE_LABELS}
+			labels={TEAM_INVITES_TABLE_LABELS}
 			onDeleteInvite={async (row) => {
 				const invite = invites.find((invite) => invite.inviteId === row.inviteId)
 				if (invite) {

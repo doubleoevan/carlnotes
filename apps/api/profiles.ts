@@ -80,7 +80,7 @@ export function toUserSearchQuery({
  * A user's public profile by id, or null if there is no such user.
  * An owner viewing their own profile sees their private and invite topics, which are hidden for everyone else except an admin.
  */
-async function loadProfile(profileUserId: string, userId: string | null): Promise<ProfileResponse | null> {
+export async function loadProfile(profileUserId: string, userId: string | null): Promise<ProfileResponse | null> {
 	// the person, whether the reader sees their topics that are not public, which only the person and an admin do, and
 	// whether the signed-in reader has blocked the person
 	const isOwnProfile = userId === profileUserId

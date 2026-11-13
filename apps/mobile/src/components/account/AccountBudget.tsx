@@ -48,6 +48,7 @@ const ACCOUNT_BUDGET_ELEMENTS: AccountBudgetElements = {
 	Meters: ({ children }) => <View className="flex-row flex-wrap justify-center gap-8">{children}</View>,
 	Meter: ({ children }) => <View className="items-center gap-1.5">{children}</View>,
 	MeterRing,
+	CardLine: ({ children }) => <View className="flex-row flex-wrap">{children}</View>,
 	PaymentNotice,
 }
 

@@ -24,6 +24,9 @@ payloads, and the constants that the api validates with and the web app parses a
 it, and it imports only `zod`.
 
 `noteTestFixtures.ts` supplies inert Notes table rows to both apps' stories and shared-component tests.
+`teamTestFixtures.ts` supplies a team page, its topics table rows, the teams table's rows, and a received invite,
+`activityTestFixtures.ts` the Activity page's subscriptions, invites, and owner topics, and `profileTestFixtures.ts` a
+profile through `toTestProfile`, to both apps' stories and shared-component tests.
 `social.ts` holds a social target, a reaction summary, a Comment with its replies and its thread, the shared comment
 slots, the write payloads, the edit time, and `toSocialEventTarget` and `toCommentEventTarget`, how a kind reads in an
 analytics event's name. `socialText.ts` holds the body limit, the plain-text schema, the mention parsing, and the urls a
