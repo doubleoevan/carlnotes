@@ -33,11 +33,9 @@ test("a kept save returns the stored version", async () => {
 	expect(await save()).toEqual({ status: "saved", version: 4 })
 })
 
-test("a 409 is a newer version with its number, or a post past its edit time", async () => {
+test("a 409 is a newer version with its number", async () => {
 	stubFetch(Response.json({ error: "conflict", version: 7 }, { status: 409 }))
 	expect(await save()).toEqual({ status: "conflict", version: 7 })
-	stubFetch(Response.json({ error: "locked" }, { status: 409 }))
-	expect(await save()).toEqual({ status: "locked" })
 })
 
 test("a short post is incomplete, and any other rejection fails with what its body says", async () => {

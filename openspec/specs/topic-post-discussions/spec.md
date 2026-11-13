@@ -38,33 +38,6 @@ SHALL be rejected and written again, and a script that still fails SHALL fail th
 - **WHEN** a Topic Post of 1,200 words with four shared Comments is recorded, and one of 300 words with none
 - **THEN** the first is asked for at most 900 words and the second for at most 300
 
-### Requirement: The first discussion records once the edit time ends
-
-Publishing a Topic Post SHALL start its first discussion when the post's 15 minute edit time ends, reading the text
-as it then stands. A Topic Post deleted before that, and one whose editor's Regenerate already started a recording,
-SHALL record nothing then. No discussion exists during the wait, so the page SHALL show what a page with no discussion
-shows. While a recording is on its way the card SHALL show the recording state.
-
-#### Scenario: The wait shows no recording state
-
-- **WHEN** a reader and the author each open a Topic Post five minutes after it was published
-- **THEN** the reader sees no discussion card, and the author sees the card with "Not recorded yet." and Regenerate
-
-#### Scenario: A Regenerate during the wait is the only recording
-
-- **WHEN** an editor presses Regenerate five minutes after a publish, and the edit time then ends
-- **THEN** the editor's recording is made, and the publish starts no second one
-
-#### Scenario: An edit inside the time reaches the recording
-
-- **WHEN** an author publishes, corrects a paragraph five minutes later, and the edit time ends
-- **THEN** the discussion is written from the corrected text, and only one recording is made
-
-#### Scenario: A deleted post records nothing
-
-- **WHEN** an author deletes a Topic Post eight minutes after publishing
-- **THEN** no discussion is recorded and nothing is billed for one
-
 ### Requirement: A discussion reads the post and its shared Comments as untrusted data
 
 The script writer SHALL read the Topic Post's text and the post's Comments that are shared with Carl and Vienna, each
@@ -155,7 +128,7 @@ budget or a passed podcast budget cutoff SHALL record nothing and SHALL leave th
 
 #### Scenario: A spent budget leaves the post published
 
-- **WHEN** a publisher's budget is spent when the edit time ends
+- **WHEN** a publisher's budget is spent when the 15 minute wait after the publish ends
 - **THEN** no discussion is recorded, the Topic Post stays published, and its page shows no player
 
 ### Requirement: The discussion plays in the shared player
@@ -238,3 +211,34 @@ SHALL receive no turn of it, in the page's HTML or from the api.
 
 - **WHEN** a visitor requests a private Topic's post, as a page or from the api
 - **THEN** the response is the same as for a post that does not exist, and holds no turn of its discussion
+
+### Requirement: The first discussion records 15 minutes after the publish
+
+Publishing a Topic Post SHALL start its first discussion 15 minutes after the publish, from the text as it then
+stands. A post deleted before that, or one already recording from a Regenerate, SHALL record nothing then. A later edit
+SHALL leave the recording as it is. The wait SHALL show no discussion, and a recording on its way its recording state.
+
+#### Scenario: The wait shows no recording state
+
+- **WHEN** a reader and the author each open a Topic Post five minutes after it was published
+- **THEN** the reader sees no discussion card, and the author sees the card with "Not recorded yet." and Regenerate
+
+#### Scenario: A Regenerate during the wait is the only recording
+
+- **WHEN** an editor presses Regenerate five minutes after a publish, and the wait then ends
+- **THEN** the editor's recording is made, and the publish starts no second one
+
+#### Scenario: An edit during the wait reaches the recording
+
+- **WHEN** an author publishes, corrects a paragraph five minutes later, and the wait ends
+- **THEN** the discussion is written from the corrected text, and only one recording is made
+
+#### Scenario: An edit after the recording keeps it
+
+- **WHEN** an author corrects a paragraph a day after the first recording
+- **THEN** the recording stays as it is until an editor presses Regenerate
+
+#### Scenario: A deleted post records nothing
+
+- **WHEN** an author deletes a Topic Post eight minutes after publishing
+- **THEN** no discussion is recorded and nothing is billed for one

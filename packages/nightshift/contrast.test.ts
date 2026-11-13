@@ -27,6 +27,12 @@ const TEXT_ON_SURFACES: [ColorName, ColorName[]][] = [
 	["heroForeground", ["hero"]],
 	["heroMuted", ["hero"]],
 	["heroAccent", ["hero"]],
+	// a code block's colored code, on the block's muted fill
+	["syntaxKeyword", ["muted"]],
+	["syntaxString", ["muted"]],
+	["syntaxComment", ["muted"]],
+	["syntaxNumber", ["muted"]],
+	["syntaxFunction", ["muted"]],
 ]
 
 // each pair in each mode passes the ratio

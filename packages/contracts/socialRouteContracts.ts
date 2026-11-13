@@ -26,6 +26,7 @@ import {
 } from "./social"
 import { regenerateTopicImagePayload, regenerateTopicImageResponse, uploadTopicImageResponse } from "./topicImages"
 import { pinnedOrderPayload } from "./topicPayloads"
+import { topicPostBodyImageUploadResponse } from "./topicPostBodyImages"
 import {
 	topicPostDiscussionRegeneratePayload,
 	topicPostDiscussionRegenerateResponse,
@@ -141,6 +142,13 @@ export const socialRouteContracts: Record<string, ApiRouteContract> = {
 		params: idParam,
 		body: { multipart: multipartFile("image") },
 		response: uploadTopicImageResponse,
+	},
+	"topicPostClient.uploadTopicPostBodyImage": {
+		method: "POST",
+		path: "/api/topic-posts/:id/body-images",
+		params: idParam,
+		body: { multipart: multipartFile("image") },
+		response: topicPostBodyImageUploadResponse,
 	},
 	"topicPostClient.saveTopicPost": {
 		method: "PUT",

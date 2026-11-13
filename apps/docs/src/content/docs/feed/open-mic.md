@@ -16,13 +16,17 @@ hot take.
 
 1. Open a topic you own, or one a team of yours holds, and find the **Open Mic** section.
 2. Choose **Post**. Your draft opens in the editor, and only you can see it.
-3. Give it a title and write. The editor saves as you go and shows your word count.
+3. Give it a title and write. The editor saves as you go and shows your word count. Add images by the Image button, a
+   paste, or a drop. On the web, drag an image to move it or its corner to resize it. The align buttons align your
+   text, and on the web they place a selected image at a side with the text beside it or in the middle. On the web, a
+   code block shows in color, in a language guessed from the code or one you pick from its menu. Pick
+   Plain text to keep it plain.
 4. Choose **Publish** once the post has a title and 300 words.
 
 Carl checks the text before it goes out. If he declines it, he says so and keeps your draft.
 
-You can edit a post for 15 minutes after it goes out. After that the text stays as it is. You can delete your post at
-any time, and so can the topic's owner. Deleting a post removes its hot takes, its reactions, and its recording.
+You can edit or delete your post at any time after it goes out, and the topic's owner can delete it too. Deleting a
+post removes its hot takes, its reactions, and its recording.
 
 ## What a post's page shows
 
@@ -32,8 +36,7 @@ card, the body, and the hot takes below](../../../assets/screenshots/open-mic-po
 - **The image.** Carl draws one from the post when it publishes. Press the image to regenerate it, with an optional
   note on what to draw, or to upload your own. The post's author and the topic's editors can change it. Regenerations
   count toward the same monthly limit as topic images.
-- **The summary.** Press the info button beside the title for Carl's summary. An edit inside the 15 minutes writes it
-  again.
+- **The summary.** Press the info button beside the title for Carl's summary. An edit writes it again.
 - **Reactions and hot takes.** They work as they do everywhere else. See [Hot takes](/docs/feed/hot-takes/). A hot
   take on a post is never shared with Carl and Vienna until one of the topic's editors shares it.
 - **Report image.** The page's menu reports the image. You stop seeing an image you reported until it changes.
@@ -52,7 +55,7 @@ Carl and Vienna record a Coffee Break Discussion about each post: two to seven m
 it amongst themselves. A longer post gets a longer discussion, and so does a post with hot takes: they read up to six
 of the hot takes that were shared with them and credit each writer by username.
 
-The first recording starts 15 minutes after the post goes out, once its text can no longer change. Press play on the
+The first recording starts 15 minutes after the post goes out, from the text the post has then. Press play on the
 post's page to listen. It plays in the same player as the [Coffee Break podcast](/docs/feed/coffee-break/), so it
 keeps playing as you move around.
 

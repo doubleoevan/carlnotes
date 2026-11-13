@@ -9,21 +9,30 @@ import { clearUnseenCommentMentions, loadTopicPostMentionedUserIds } from "@carl
 import { addViewer } from "@carlnotes/db/viewerCounts"
 import { toUserViewerElement } from "@carlnotes/server/viewerElements"
 import { and, eq, isNull, sql } from "drizzle-orm"
+import { settleTopicPostBodyImages } from "./topicPostBodyImages"
 import { loadTopicPostObjectKeys } from "./topicPostObjectKeys"
 import type { TopicPostRow } from "./topicPosts"
 
-// what a save writes: the post, its cleaned title and body, the body's word count, and the version its editor opened at
+// what a save writes: the post as it was read, its cleaned title and body, the body's word count, and the version its
+// editor opened at
 type SaveTopicPostOptions = {
-	topicPost: Pick<TopicPostRow["topicPost"], "id" | "publishedAt">
+	topicPost: Pick<TopicPostRow["topicPost"], "id" | "publishedAt" | "html">
 	title: string
 	html: string
 	wordCount: number
 	version: number
 }
 
+// a save's outcome: the new version and the ids of the body images the save dropped, or the stored version if a newer
+// save holds the post
+type SaveTopicPostOutcome =
+	| { status: "saved"; version: number; droppedImageIds: string[] }
+	| { status: "conflict"; version: number }
+
 /**
- * Writes a Topic Post's title and body at the version its editor opened at, in one conditional statement with no
- * lock. Returns the new version, or the stored one if a newer save holds the post.
+ * Writes a Topic Post's title and body at the version its editor opened at, and settles the body's images on the same
+ * transaction, so a later save waits on the row until they are settled. Returns the new version and the dropped
+ * images, or the stored version if a newer save holds the post.
  */
 export async function saveTopicPost({
 	topicPost,
@@ -31,24 +40,38 @@ export async function saveTopicPost({
 	html,
 	wordCount,
 	version,
-}: SaveTopicPostOptions): Promise<{ status: "saved" | "conflict"; version: number }> {
+}: SaveTopicPostOptions): Promise<SaveTopicPostOutcome> {
 	// the write holds only while the stored version is the one the editor opened at, and a draft's write only while
 	// the post is still a draft. a published post notes its edit
 	const isDraftFilter = topicPost.publishedAt ? undefined : isNull(topicPosts.publishedAt)
-	const [savedRow] = await db
-		.update(topicPosts)
-		.set({
-			title,
-			html,
-			wordCount,
-			// the next version, and the edit's time on a published post
-			version: sql`${topicPosts.version} + 1`,
-			...(topicPost.publishedAt ? { editedAt: new Date() } : {}),
+	const savedOutcome = await db.transaction(async (transaction) => {
+		const [savedRow] = await transaction
+			.update(topicPosts)
+			.set({
+				title,
+				html,
+				wordCount,
+				// the next version, and the edit's time on a published post
+				version: sql`${topicPosts.version} + 1`,
+				...(topicPost.publishedAt ? { editedAt: new Date() } : {}),
+			})
+			.where(and(eq(topicPosts.id, topicPost.id), eq(topicPosts.version, version), isDraftFilter))
+			.returning({ version: topicPosts.version })
+		if (!savedRow) {
+			return null
+		}
+
+		// the images the save names keep their files, and the ones it dropped are queued for deletion
+		const droppedImageIds = await settleTopicPostBodyImages({
+			topicPostId: topicPost.id,
+			previousHtml: topicPost.html,
+			savedHtml: html,
+			handle: transaction,
 		})
-		.where(and(eq(topicPosts.id, topicPost.id), eq(topicPosts.version, version), isDraftFilter))
-		.returning({ version: topicPosts.version })
-	if (savedRow) {
-		return { status: "saved", version: savedRow.version }
+		return { status: "saved" as const, version: savedRow.version, droppedImageIds }
+	})
+	if (savedOutcome) {
+		return savedOutcome
 	}
 
 	// the version moved, so name the stored one

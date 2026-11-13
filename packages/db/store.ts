@@ -5,7 +5,7 @@ import { toChunks } from "@carlnotes/contracts/arrays"
 import type { DashboardSubject } from "@carlnotes/contracts/dashboards"
 import type { McpViewScriptFile } from "@carlnotes/contracts/mcpViewHtml"
 import { runWithConcurrency } from "@carlnotes/server/concurrency"
-import { eq, sql } from "drizzle-orm"
+import { and, eq, gt, inArray, like, sql } from "drizzle-orm"
 import { type DbHandle, db } from "./index"
 import { pendingObjectDeletions } from "./schema/storage"
 
@@ -56,6 +56,30 @@ export function recordPendingObjectDeletionBeforeUpload(objectKey: string): Prom
  */
 export async function clearPendingObjectDeletion(objectKey: string, handle: DbHandle = db): Promise<void> {
 	await handle.delete(pendingObjectDeletions).where(eq(pendingObjectDeletions.objectKey, objectKey))
+}
+
+/**
+ * Clears the pending deletions of several keys at once, on the caller's transaction if there is one. No key clears
+ * nothing.
+ */
+export async function clearPendingObjectDeletions(objectKeys: string[], handle: DbHandle = db): Promise<void> {
+	for (const objectKeyBatch of toChunks(objectKeys, PENDING_OBJECT_DELETION_BATCH_SIZE)) {
+		await handle.delete(pendingObjectDeletions).where(inArray(pendingObjectDeletions.objectKey, objectKeyBatch))
+	}
+}
+
+/**
+ * Returns the keys after a prefix that are still inside their upload grace: uploaded, not yet named by a save, and
+ * not yet due for the sweep.
+ */
+export async function loadUploadKeysInGrace(keyPrefix: string): Promise<string[]> {
+	// the prefix matches as written, with like's own wildcards escaped
+	const keyPattern = `${keyPrefix.replace(/[\\%_]/g, "\\$&")}%`
+	const uploadKeyRows = await db
+		.select({ objectKey: pendingObjectDeletions.objectKey })
+		.from(pendingObjectDeletions)
+		.where(and(like(pendingObjectDeletions.objectKey, keyPattern), gt(pendingObjectDeletions.nextTryAt, new Date())))
+	return uploadKeyRows.map((uploadKeyRow) => uploadKeyRow.objectKey)
 }
 
 /**

@@ -24,16 +24,11 @@ export async function startTopicPostPublishDiscussionActivity(topicPostId: strin
 }
 
 /**
- * Writes and stores a published Topic Post's summary, billed to its author, and returns the version of the text it
- * was written from, or null for a post with none to write. A post still at summarizedVersion keeps its summary. A
- * spent budget fails for good.
+ * Writes and stores a published Topic Post's summary, billed to its author. A spent budget fails for good.
  */
-export async function writeTopicPostSummary(
-	topicPostId: string,
-	summarizedVersion?: number | null,
-): Promise<number | null> {
+export async function writeTopicPostSummary(topicPostId: string): Promise<void> {
 	try {
-		return await writeStoredTopicPostSummary(topicPostId, summarizedVersion)
+		await writeStoredTopicPostSummary(topicPostId)
 	} catch (error) {
 		// a spent budget is final until the month resets
 		if (isBudgetRejection(error)) {

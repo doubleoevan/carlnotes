@@ -5,7 +5,7 @@ import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as moderation from "@carlnotes/models/moderation"
 import * as monitoring from "@carlnotes/server/monitoring"
-import { toObjectionableCategory, toObjectionableImageCategory } from "./moderation"
+import { toObjectionableCategory, toObjectionableImageCategory, toStrictImageModeration } from "./moderation"
 import { noteCommentsRoute } from "./note/noteComments"
 import { TEST_NOTE_ID, TEST_PUBLIC_TEAM_ROW, toNoteQueryRows } from "./note/noteTestFixtures"
 import { toJsonRequest, toSignedInApp } from "./testSession"
@@ -83,4 +83,31 @@ test("an image check names a violation and passes a failure with a report", asyn
 	expect(await toObjectionableImageCategory(imageOptions)).toBe("sexual")
 	expect(await toObjectionableImageCategory(imageOptions)).toBeNull()
 	expect(reportErrorSpy.mock.calls[0]?.[2]).toEqual({ moderationSubjectKind: "avatar", moderationSubjectId: "u1" })
+})
+
+// a body image's check fails closed: a violation in any frame rejects it, and a frame with no verdict is unavailable
+test("a strict image check rejects a violating frame and never passes an unchecked one", async () => {
+	const classifyImageSpy = spyOn(moderation, "classifyImage")
+	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
+	const frameOptions = { frameJpegs: [new Uint8Array([1]), new Uint8Array([2])], subjectKind: "body", subjectId: "p1" }
+	const clean = { outcome: "classified", verdict: { isViolation: false, category: null } } as const
+
+	// a clean frame beside a violating one
+	classifyImageSpy
+		.mockResolvedValueOnce(clean)
+		.mockResolvedValueOnce({ outcome: "classified", verdict: { isViolation: true, category: "violence" } })
+	expect(await toStrictImageModeration(frameOptions)).toEqual({ outcome: "objectionable", category: "violence" })
+
+	// a failed frame is unavailable and reported, and a skipped one is unavailable too
+	classifyImageSpy.mockResolvedValueOnce(clean).mockResolvedValueOnce({ outcome: "failed", error: new Error("down") })
+	expect(await toStrictImageModeration(frameOptions)).toEqual({ outcome: "unavailable" })
+	expect(reportErrorSpy.mock.calls[0]?.[2]).toEqual({ moderationSubjectKind: "body", moderationSubjectId: "p1" })
+	classifyImageSpy.mockResolvedValueOnce({ outcome: "skipped" }).mockResolvedValueOnce(clean)
+	expect(await toStrictImageModeration(frameOptions)).toEqual({ outcome: "unavailable" })
+
+	// an unreadable frame, then two clean ones
+	classifyImageSpy.mockResolvedValueOnce({ outcome: "unreadable" }).mockResolvedValueOnce(clean)
+	expect(await toStrictImageModeration(frameOptions)).toEqual({ outcome: "unreadable" })
+	classifyImageSpy.mockResolvedValueOnce(clean).mockResolvedValueOnce(clean)
+	expect(await toStrictImageModeration(frameOptions)).toEqual({ outcome: "clean" })
 })

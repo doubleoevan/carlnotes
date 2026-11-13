@@ -107,9 +107,12 @@ function ReportText({ text }: { text: string }) {
 	return text.length > SCROLLING_REPORT_TEXT_CHARS ? <ScrollBox className="max-h-40">{text}</ScrollBox> : text
 }
 
-// what Remove does to a report's subject: a topic's or a topic post's image is drawn again, and every other kind is
-// deleted
+// what Remove does to a report's subject: a topic's or a topic post's image is drawn again, a body image is taken out of
+// its post, and every other kind is deleted
 function toRemoveCopy(report: AdminReport): { label: string; pendingLabel: string; clause: string } {
+	if (report.subjectKind === "topicPostBodyImage") {
+		return { label: "Remove", pendingLabel: "Removing…", clause: "takes the image out of the post" }
+	}
 	if (!isImageReportSubjectKind(report.subjectKind)) {
 		return { label: "Remove", pendingLabel: "Removing…", clause: "deletes the content" }
 	}

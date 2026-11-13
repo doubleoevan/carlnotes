@@ -172,9 +172,11 @@ them.
 month, the regenerate payload with its note's limit, `TOPIC_POST_DISCUSSION_TITLE`, and the shape the podcast player
 plays a discussion in: `toTopicPostDiscussionPodcastEpisode`, `toDiscussionTopicPostId` for the player's id, and
 `toTopicPostDiscussionAudioPath`. `visitAnalytics.ts` holds `toPlayerVisitEvent`, which reports a discussion's play
-as `social_topic_post_discussion_play`. `reports.ts` has the `topicPostImage` subject kind and
-`isImageReportSubjectKind`. `chat.ts` gives a stored chat turn its `topicPost`, and `payloads.ts` lets a topic chat
-turn name a `topicPostId`, never beside a podcast episode chapter.
+as `social_topic_post_discussion_play`. `reports.ts` has the `topicPostImage` and `topicPostBodyImage` subject kinds
+and `isImageReportSubjectKind`. `topicPostBodyImages.ts` holds a body image's files, its path and its parse, and the
+ids a body names, and `topicPosts.ts` the reading column's width and the code block languages. `plans.ts` holds each
+plan's `topicPostBodyImageLimit` and `topicPostBodyImageBytes`. `chat.ts` gives a stored chat turn its `topicPost`,
+and `payloads.ts` lets a topic chat turn name a `topicPostId`, never beside a podcast episode chapter.
 
 `news.ts` holds the news: the `newsWindows` a read covers with their labels and lengths, `NEWS_PAGE_SIZE`, the
 `newsQuery` a read takes, a `NewsEvent` and its kinds, the `newsResponse` of one page, and the title, the failed line,

@@ -102,6 +102,23 @@ export const colors = {
 		dark: "#c99a5b",
 		description: "the budget's podcast episode segment, a brown between the scan and chat segments",
 	},
+	syntaxKeyword: {
+		light: "#9a3a12",
+		dark: "#ffad7a",
+		description: "a keyword in a Topic Post's code block, at 4.5:1 or more on the code block's muted fill",
+	},
+	syntaxString: { light: "#46651a", dark: "#cfe29a", description: "a string in a Topic Post's code block" },
+	syntaxComment: { light: "#705a40", dark: "#d0c3a6", description: "a comment in a Topic Post's code block" },
+	syntaxNumber: {
+		light: "#7a3f86",
+		dark: "#e8c2f5",
+		description: "a number or a literal in a Topic Post's code block",
+	},
+	syntaxFunction: {
+		light: "#1d5a73",
+		dark: "#a3dcef",
+		description: "a function, a type, or a built-in name in a Topic Post's code block",
+	},
 } satisfies Record<string, ColorToken>
 
 /** A color token's name. */

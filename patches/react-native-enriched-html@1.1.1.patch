@@ -1,33 +1,7 @@
-diff --git a/lib/module/web/EnrichedTextInput.js b/lib/module/web/EnrichedTextInput.js
-index 07130f396693972bdf0e411195c01e798ba1e727..08da5db25d29ab8b76030a0f7a81c9f7ee10dc2c 100644
---- a/lib/module/web/EnrichedTextInput.js
-+++ b/lib/module/web/EnrichedTextInput.js
-@@ -163,6 +163,7 @@ export const EnrichedTextInput = ({
-     extensions,
-     editable,
-     autofocus: autoFocus,
-+    immediatelyRender: false,
-     onCreate: ({
-       editor: _editor
-     }) => {
-@@ -237,9 +238,9 @@ export const EnrichedTextInput = ({
-   useOnChangeState(editor, resolvedHtmlStyle, onChangeState);
-   useOnLinkDetected(editor, linkEmitterRef);
-   useImperativeHandle(ref, () => ({
--    focus: () => editor.commands.focus(),
--    blur: () => editor.commands.blur(),
--    setValue: value => editor.commands.setContent(prepareHtmlForTiptap(value, useHtmlNormalizerRef.current, sanitizationConfigRef.current)),
-+    focus: () => editor?.commands.focus(),
-+    blur: () => editor?.commands.blur(),
-+    setValue: value => editor?.commands.setContent(prepareHtmlForTiptap(value, useHtmlNormalizerRef.current, sanitizationConfigRef.current)),
-     setSelection: (start, end) => {
-       const doc = editor.state.doc;
-       runFocused(editor, c => c.setTextSelection({
 diff --git a/lib/module/web/pmPlugins/MentionPlugin/useMentionEvents.js b/lib/module/web/pmPlugins/MentionPlugin/useMentionEvents.js
-index d09f6bdad078e6057e3a689553b53887fe774c0f..2fa1f81afb5f1efffcdd19bb31fc7e3567d5a387 100644
 --- a/lib/module/web/pmPlugins/MentionPlugin/useMentionEvents.js
 +++ b/lib/module/web/pmPlugins/MentionPlugin/useMentionEvents.js
-@@ -5,6 +5,7 @@ import { mentionPluginKey } from "./mentionPluginKey.js";
+@@ -5,6 +5,7 @@
  import { useEffect } from 'react';
  export function useMentionEvents(editor, getCallbacks) {
    useEffect(() => {
@@ -36,10 +10,9 @@ index d09f6bdad078e6057e3a689553b53887fe774c0f..2fa1f81afb5f1efffcdd19bb31fc7e35
        active: false
      };
 diff --git a/lib/module/web/useOnEditorChange.js b/lib/module/web/useOnEditorChange.js
-index 6363a1aaa8ad7925dbfc917ba6beb0ee5f23dae3..77be699e44b2dee929b32afc79814108209f2a44 100644
 --- a/lib/module/web/useOnEditorChange.js
 +++ b/lib/module/web/useOnEditorChange.js
-@@ -5,7 +5,7 @@ import { adaptWebToNativeEvent } from "./adaptWebToNativeEvent.js";
+@@ -5,7 +5,7 @@
  export const useOnEditorChange = (editor, handler, getValue) => {
    const lastValueRef = useRef('');
    useEffect(() => {
@@ -51,38 +24,48 @@ index 6363a1aaa8ad7925dbfc917ba6beb0ee5f23dae3..77be699e44b2dee929b32afc79814108
 diff --git a/ios/utils/ZeroWidthSpaceUtils.mm b/ios/utils/ZeroWidthSpaceUtils.mm
 --- a/ios/utils/ZeroWidthSpaceUtils.mm
 +++ b/ios/utils/ZeroWidthSpaceUtils.mm
-@@ -2,4 +2,3 @@
+@@ -2,7 +2,6 @@
  #import "EnrichedTextInputView.h"
  #import "StyleHeaders.h"
  #import "TextInsertionUtils.h"
 -#import "UIView+React.h"
+ 
+ @implementation ZeroWidthSpaceUtils
+ + (void)handleZeroWidthSpacesInHost:(id<EnrichedViewHost>)host {
 diff --git a/ios/utils/TextInsertionUtils.mm b/ios/utils/TextInsertionUtils.mm
 --- a/ios/utils/TextInsertionUtils.mm
 +++ b/ios/utils/TextInsertionUtils.mm
-@@ -1,2 +1,2 @@
+@@ -1,5 +1,5 @@
  #import "TextInsertionUtils.h"
 -#import "UIView+React.h"
 +#import <React/UIView+React.h>
+ 
+ @implementation TextInsertionUtils
+ + (void)insertText:(NSString *)text
 diff --git a/ios/styles/LinkStyle.mm b/ios/styles/LinkStyle.mm
 --- a/ios/styles/LinkStyle.mm
 +++ b/ios/styles/LinkStyle.mm
-@@ -4,5 +4,5 @@
+@@ -4,7 +4,7 @@
  #import "OccurenceUtils.h"
  #import "StyleHeaders.h"
  #import "TextInsertionUtils.h"
 -#import "UIView+React.h"
 +#import <React/UIView+React.h>
  #import "WordsUtils.h"
+ 
+ static NSString *const ManualLinkAttributeName = @"EnrichedManualLink";
 diff --git a/ios/styles/MentionStyle.mm b/ios/styles/MentionStyle.mm
 --- a/ios/styles/MentionStyle.mm
 +++ b/ios/styles/MentionStyle.mm
-@@ -3,5 +3,5 @@
+@@ -3,7 +3,7 @@
  #import "EnrichedTextInputView.h"
  #import "StyleHeaders.h"
  #import "TextInsertionUtils.h"
 -#import "UIView+React.h"
 +#import <React/UIView+React.h>
  #import "WordsUtils.h"
+ 
+ // custom NSAttributedStringKey to differentiate from links
 diff --git a/ios/EnrichedTextInputView.mm b/ios/EnrichedTextInputView.mm
 --- a/ios/EnrichedTextInputView.mm
 +++ b/ios/EnrichedTextInputView.mm
@@ -98,7 +81,10 @@ diff --git a/ios/EnrichedTextInputView.mm b/ios/EnrichedTextInputView.mm
 diff --git a/ios/utils/CheckboxHitTestUtils.mm b/ios/utils/CheckboxHitTestUtils.mm
 --- a/ios/utils/CheckboxHitTestUtils.mm
 +++ b/ios/utils/CheckboxHitTestUtils.mm
-@@ -83,2 +83,6 @@
+@@ -80,7 +80,11 @@
+   if (CGRectIsNull(rect))
+     return rect;
+ 
 -  return CGRectInset(rect, -kCheckboxHitSlopLeft, -kCheckboxHitSlopVertical);
 +  // keep compact checklist markers inside a 44-point touch target
 +  CGFloat horizontalInset = MAX(kCheckboxHitSlopLeft, (44.0 - rect.size.width) / 2.0);
@@ -106,11 +92,12 @@ diff --git a/ios/utils/CheckboxHitTestUtils.mm b/ios/utils/CheckboxHitTestUtils.
 +
 +  return CGRectInset(rect, -horizontalInset, -verticalInset);
  }
+ 
+ // MARK: - Public API
 diff --git a/lib/module/web/normalization/prepareHtmlForWeb.js b/lib/module/web/normalization/prepareHtmlForWeb.js
-index ffe6abdc1fc017a455a4d42db51de0469e6fe3a8..4f1c06a404ce79665f5470746b243e800ceb4135 100644
 --- a/lib/module/web/normalization/prepareHtmlForWeb.js
 +++ b/lib/module/web/normalization/prepareHtmlForWeb.js
-@@ -73,8 +73,11 @@ function checkboxHtmlToWeb(doc) {
+@@ -73,8 +73,11 @@
      ul.querySelectorAll('li').forEach(li => {
        const checked = li.hasAttribute('checked');
        const labelContent = li.innerHTML;
@@ -122,3 +109,585 @@ index ffe6abdc1fc017a455a4d42db51de0469e6fe3a8..4f1c06a404ce79665f5470746b243e80
      });
    });
  }
+diff --git a/lib/module/web/EnrichedTextInput.js b/lib/module/web/EnrichedTextInput.js
+--- a/lib/module/web/EnrichedTextInput.js
++++ b/lib/module/web/EnrichedTextInput.js
+@@ -28,6 +28,7 @@
+ import { EnrichedHeading } from "./formats/EnrichedHeading.js";
+ import { EnrichedBlockquote } from "./formats/EnrichedBlockquote.js";
+ import { EnrichedCodeBlock } from "./formats/EnrichedCodeBlock.js";
++import { CodeBlockHighlightPlugin } from "./pmPlugins/CodeBlockHighlightPlugin.js";
+ import { EnrichedImage } from "./formats/EnrichedImage.js";
+ import { EnrichedLink, setLink, removeLink } from "./formats/EnrichedLink.js";
+ import { EnrichedMention } from "./formats/EnrichedMention.js";
+@@ -42,7 +43,7 @@
+ import { MergeAdjacentSameKindBlocksPlugin } from "./pmPlugins/MergeAdjacentSameKindBlocksPlugin.js";
+ import { OrderedListMarkerWidthPlugin } from "./pmPlugins/OrderedListMarkerWidthPlugin.js";
+ import { StripMarksInCodeBlockPlugin } from "./pmPlugins/StripMarksInCodeBlockPlugin.js";
+-import { handleClipboardPasteImages } from "./pasteImages.js";
++import { handleClipboardPasteImages, handleDroppedImages } from "./pasteImages.js";
+ import { MentionPlugin, setMention, startMention, useMentionEvents } from "./pmPlugins/MentionPlugin/index.js";
+ import { StripMarksOnImagePlugin } from "./pmPlugins/StripMarksOnImagePlugin.js";
+ import { ShortcutPlugin } from "./pmPlugins/ShortcutPlugin.js";
+@@ -144,7 +145,7 @@
+   }, [linkRegex, onLinkDetected]);
+   const extensions = useMemo(() => [Document, Paragraph, Text, History, EnrichedBold, EnrichedItalic, EnrichedUnderline, EnrichedStrike, EnrichedCode, EnrichedLink.configure({
+     getLinkRegex: () => linkEmitterRef.current.linkRegex
+-  }), EnrichedImage, EnrichedMention, EnrichedHeading, EnrichedBlockquote, EnrichedCodeBlock, EnrichedListItem, EnrichedCheckboxItem, EnrichedUnorderedList, EnrichedOrderedList, EnrichedCheckboxList, EnrichedTextAlign, StripMarksInCodeBlockPlugin, StripMarksOnImagePlugin, StripBoldInStyledHeadingsPlugin.configure({
++  }), EnrichedImage, EnrichedMention, EnrichedHeading, EnrichedBlockquote, EnrichedCodeBlock, CodeBlockHighlightPlugin, EnrichedListItem, EnrichedCheckboxItem, EnrichedUnorderedList, EnrichedOrderedList, EnrichedCheckboxList, EnrichedTextAlign, StripMarksInCodeBlockPlugin, StripMarksOnImagePlugin, StripBoldInStyledHeadingsPlugin.configure({
+     getHtmlStyle: () => htmlStyleRef.current
+   }), MergeAdjacentSameKindBlocksPlugin, OrderedListMarkerWidthPlugin, StrictMarksPlugin, MentionPlugin.configure({
+     getIndicators: () => mentionIndicatorsRef.current
+@@ -163,6 +164,7 @@
+     extensions,
+     editable,
+     autofocus: autoFocus,
++    immediatelyRender: false,
+     onCreate: ({
+       editor: _editor
+     }) => {
+@@ -205,6 +207,7 @@
+     editorProps: {
+       handleKeyDown: (view, event) => handleKeyDown(view.state.doc, event),
+       handlePaste: (_view, event) => handleClipboardPasteImages(event, () => editorInstanceRef.current, () => onPasteImagesRef.current),
++      handleDrop: (view, event, _slice, moved) => handleDroppedImages(view, event, moved, () => editorInstanceRef.current, () => onPasteImagesRef.current),
+       attributes: {
+         autoCapitalize,
+         enterkeyhint: returnKeyTypeToEnterKeyHint(returnKeyType)
+@@ -237,9 +240,9 @@
+   useOnChangeState(editor, resolvedHtmlStyle, onChangeState);
+   useOnLinkDetected(editor, linkEmitterRef);
+   useImperativeHandle(ref, () => ({
+-    focus: () => editor.commands.focus(),
+-    blur: () => editor.commands.blur(),
+-    setValue: value => editor.commands.setContent(prepareHtmlForTiptap(value, useHtmlNormalizerRef.current, sanitizationConfigRef.current)),
++    focus: () => editor?.commands.focus(),
++    blur: () => editor?.commands.blur(),
++    setValue: value => editor?.commands.setContent(prepareHtmlForTiptap(value, useHtmlNormalizerRef.current, sanitizationConfigRef.current)),
+     setSelection: (start, end) => {
+       const doc = editor.state.doc;
+       runFocused(editor, c => c.setTextSelection({
+@@ -272,6 +275,7 @@
+       level: 6
+     })),
+     toggleCodeBlock: () => runFocused(editor, c => c.toggleCodeBlock()),
++    setCodeBlockLanguage: language => runFocused(editor, c => c.setCodeBlockLanguage(language)),
+     toggleBlockQuote: () => runFocused(editor, c => c.toggleBlockquote()),
+     toggleOrderedList: () => runFocused(editor, c => c.toggleOrderedList()),
+     toggleUnorderedList: () => runFocused(editor, c => c.toggleUnorderedList()),
+@@ -285,11 +289,14 @@
+       checkMentionAttributes(attributes);
+       setMention(editor, indicator, text, sanitizeMentionAttributes(attributes));
+     },
+-    setImage: (src, width, height) => runFocused(editor, c => c.setImage({
++    setImage: (src, width, height, alt) => runFocused(editor, c => c.setImage({
+       src,
+       width,
+-      height
++      height,
++      alt
+     })),
++    setImageAlt: alt => runFocused(editor, c => c.setImageAlt(alt)),
++    setImageAlign: align => runFocused(editor, c => c.setImageAlign(align)),
+     measure: () => {},
+     measureInWindow: () => {},
+     measureLayout: () => {},
+diff --git a/lib/module/web/formats/EnrichedCodeBlock.js b/lib/module/web/formats/EnrichedCodeBlock.js
+--- a/lib/module/web/formats/EnrichedCodeBlock.js
++++ b/lib/module/web/formats/EnrichedCodeBlock.js
+@@ -7,6 +7,17 @@
+ export const EnrichedCodeBlock = Blockquote.extend({
+   name: 'codeBlock',
+   content: '(paragraph)+',
++  addAttributes() {
++    return {
++      language: {
++        default: null,
++        parseHTML: element => element.getAttribute('data-language'),
++        renderHTML: attributes => attributes.language ? {
++          'data-language': attributes.language
++        } : {}
++      }
++    };
++  },
+   parseHTML() {
+     return [{
+       tag: 'codeblock'
+@@ -23,7 +34,12 @@
+         editor,
+         commands,
+         chain
+-      }) => toggleParagraphFormat(() => editor.isActive('codeBlock'), () => commands.lift('codeBlock'), c => c.toggleWrap('codeBlock'), chain, editor)
++      }) => toggleParagraphFormat(() => editor.isActive('codeBlock'), () => commands.lift('codeBlock'), c => c.toggleWrap('codeBlock'), chain, editor),
++      setCodeBlockLanguage: language => ({
++        commands
++      }) => commands.updateAttributes('codeBlock', {
++        language: language || null
++      })
+     };
+   },
+   addInputRules() {
+diff --git a/lib/module/web/formats/EnrichedImage.js b/lib/module/web/formats/EnrichedImage.js
+--- a/lib/module/web/formats/EnrichedImage.js
++++ b/lib/module/web/formats/EnrichedImage.js
+@@ -4,6 +4,7 @@
+ import { ReactNodeViewRenderer } from '@tiptap/react';
+ import { EnrichedImageNodeView } from "./EnrichedImageNodeView.js";
+ import { isImageBlocked } from "./formatRules.js";
++const IMAGE_ALIGNS = new Set(['left', 'center', 'right']);
+ export const EnrichedImage = Image.extend({
+   addOptions() {
+     const parent = this.parent?.();
+@@ -15,13 +16,25 @@
+       HTMLAttributes: parent?.HTMLAttributes ?? {}
+     };
+   },
++  addAttributes() {
++    return {
++      ...this.parent?.(),
++      align: {
++        default: null,
++        parseHTML: element => IMAGE_ALIGNS.has(element.getAttribute('data-align')) ? element.getAttribute('data-align') : null,
++        renderHTML: () => ({})
++      }
++    };
++  },
+   renderHTML({
+     node
+   }) {
+     return ['img', {
+       src: node.attrs.src,
++      alt: node.attrs.alt,
+       width: node.attrs.width,
+-      height: node.attrs.height
++      height: node.attrs.height,
++      'data-align': node.attrs.align ?? undefined
+     }];
+   },
+   addNodeView() {
+@@ -46,11 +59,22 @@
+           type: this.name,
+           attrs: {
+             src: options.src,
++            alt: options.alt ?? null,
+             width: options.width ?? null,
+             height: options.height ?? null
+           }
+         });
+-      }
++      },
++      setImageAlign: align => ({
++        commands
++      }) => commands.updateAttributes(this.name, {
++        align: IMAGE_ALIGNS.has(align) ? align : null
++      }),
++      setImageAlt: alt => ({
++        commands
++      }) => commands.updateAttributes(this.name, {
++        alt: alt || null
++      })
+     };
+   }
+ });
+diff --git a/lib/module/web/useOnChangeState.js b/lib/module/web/useOnChangeState.js
+--- a/lib/module/web/useOnChangeState.js
++++ b/lib/module/web/useOnChangeState.js
+@@ -64,7 +64,10 @@
+       level: 6
+     })),
+     blockQuote: paragraphFormat(editor.isActive('blockquote')),
+-    codeBlock: paragraphFormat(editor.isActive('codeBlock'), editor.isActive('link')),
++    codeBlock: {
++      ...paragraphFormat(editor.isActive('codeBlock'), editor.isActive('link')),
++      language: editor.isActive('codeBlock') ? editor.getAttributes('codeBlock').language ?? null : null
++    },
+     orderedList: paragraphFormat(editor.isActive('orderedList')),
+     unorderedList: paragraphFormat(editor.isActive('unorderedList')),
+     checkboxList: paragraphFormat(editor.isActive('checkboxList')),
+@@ -72,6 +75,8 @@
+     mention: inlineFormat('mention', editor.isActive('code') || editor.isActive('codeBlock')),
+     image: {
+       isActive: editor.isActive('image'),
++      alt: editor.isActive('image') ? editor.getAttributes('image').alt ?? '' : null,
++      align: editor.isActive('image') ? editor.getAttributes('image').align ?? null : null,
+       isConflicting: editor.isActive('link'),
+       isBlocking: isFormatBlocked('image', editor, htmlStyle)
+     },
+@@ -81,8 +86,8 @@
+ function hashState(state) {
+   return Object.values(state).map(formatState => {
+     if (typeof formatState === 'string') return formatState;
+-    return String(getFormatHash(formatState.isActive, formatState.isConflicting, formatState.isBlocking));
+-  }).join('');
++    return String(getFormatHash(formatState.isActive, formatState.isConflicting, formatState.isBlocking)) + (formatState.language ?? '') + '/' + (formatState.alt ?? '') + '/' + (formatState.align ?? '');
++  }).join('|');
+ }
+ function getFormatHash(isActive, isConflicting, isBlocking) {
+   // eslint-disable-next-line no-bitwise
+diff --git a/lib/module/web/normalization/htmlNormalizer.js b/lib/module/web/normalization/htmlNormalizer.js
+--- a/lib/module/web/normalization/htmlNormalizer.js
++++ b/lib/module/web/normalization/htmlNormalizer.js
+@@ -172,7 +172,7 @@
+     case 'a':
+       return emitOneAttr(el, 'href');
+     case 'img':
+-      return (el.getAttribute('src') ? emitOneAttr(el, 'src') : ' src=""') + emitOneAttr(el, 'alt') + emitOneAttr(el, 'width') + emitOneAttr(el, 'height');
++      return (el.getAttribute('src') ? emitOneAttr(el, 'src') : ' src=""') + emitOneAttr(el, 'alt') + emitOneAttr(el, 'width') + emitOneAttr(el, 'height') + emitOneAttr(el, 'data-align');
+     case 'ul':
+       return (isCheckboxList(el) ? ' data-type="checkbox"' : '') + emitAlignment(el, name);
+     case 'li':
+@@ -525,7 +525,7 @@
+   // <codeblock>: wrap inline content in <p>
+   if (outName === 'codeblock') {
+     const wrap = isPurelyInline(node);
+-    out.buf += '<codeblock>';
++    out.buf += `<codeblock${emitOneAttr(node, 'data-language')}>`;
+     if (wrap) out.buf += '<p>';
+     walkChildren(node, out);
+     if (wrap) out.buf += '</p>';
+diff --git a/lib/module/web/formats/EnrichedImageNodeView.js b/lib/module/web/formats/EnrichedImageNodeView.js
+--- a/lib/module/web/formats/EnrichedImageNodeView.js
++++ b/lib/module/web/formats/EnrichedImageNodeView.js
+@@ -1,10 +1,19 @@
+ "use strict";
+ 
+ import { NodeViewWrapper } from '@tiptap/react';
+-import { useState } from 'react';
++import { useRef, useState } from 'react';
+ import { BROKEN_IMAGE_PATH_D } from "../constants/brokenImageGlyph.js";
+-import { jsx as _jsx } from "react/jsx-runtime";
++import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+ const IMAGE_FALLBACK_SIZE = 80;
++const RESIZE_MIN_WIDTH = 48;
++const RESIZE_KEY_STEP = 0.1;
++function toResizeMaxWidth(wrapper) {
++  let block = wrapper?.parentElement;
++  while (block && getComputedStyle(block).display === 'inline') block = block.parentElement;
++  if (!block) return Infinity;
++  const style = getComputedStyle(block);
++  return block.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
++}
+ function BrokenImageGlyph() {
+   return /*#__PURE__*/_jsx("svg", {
+     viewBox: "0 0 960 960",
+@@ -27,12 +36,63 @@
+   return Number.isNaN(n) ? undefined : n;
+ }
+ export function EnrichedImageNodeView({
+-  node
++  node,
++  editor,
++  selected,
++  updateAttributes
+ }) {
+   const src = (node.attrs.src ?? '').trim();
+   const rawW = dim(node.attrs.width);
+   const rawH = dim(node.attrs.height);
+   const [errored, setErrored] = useState(false);
++  const wrapperRef = useRef(null);
++  const imgRef = useRef(null);
++  const dragRef = useRef(null);
++  const [draftWidth, setDraftWidth] = useState(null);
++  const [isHovered, setIsHovered] = useState(false);
++  const [isHandleFocused, setIsHandleFocused] = useState(false);
++  const toAspect = () => {
++    if (rawW && rawH) return rawH / rawW;
++    const img = imgRef.current;
++    return img && img.naturalWidth ? img.naturalHeight / img.naturalWidth : 1;
++  };
++  const clampWidth = width => Math.max(RESIZE_MIN_WIDTH, Math.min(width, toResizeMaxWidth(wrapperRef.current)));
++  const resizeTo = width => {
++    const nextWidth = Math.round(clampWidth(width));
++    updateAttributes({
++      width: nextWidth,
++      height: Math.max(1, Math.round(nextWidth * toAspect()))
++    });
++  };
++  const currentWidth = () => imgRef.current?.getBoundingClientRect().width ?? rawW ?? IMAGE_FALLBACK_SIZE;
++  const handlePointerDown = event => {
++    event.preventDefault();
++    event.currentTarget.setPointerCapture(event.pointerId);
++    dragRef.current = {
++      startX: event.clientX,
++      startWidth: currentWidth()
++    };
++    setDraftWidth(dragRef.current.startWidth);
++  };
++  const handlePointerMove = event => {
++    if (dragRef.current) {
++      setDraftWidth(clampWidth(dragRef.current.startWidth + event.clientX - dragRef.current.startX));
++    }
++  };
++  const handlePointerUp = event => {
++    if (!dragRef.current) return;
++    event.currentTarget.releasePointerCapture(event.pointerId);
++    dragRef.current = null;
++    if (draftWidth != null) resizeTo(draftWidth);
++    setDraftWidth(null);
++  };
++  const handleKeyDown = event => {
++    const direction = event.key === 'ArrowRight' || event.key === 'ArrowUp' ? 1 : event.key === 'ArrowLeft' || event.key === 'ArrowDown' ? -1 : 0;
++    if (direction === 0) return;
++    event.preventDefault();
++    const width = currentWidth();
++    resizeTo(width + direction * width * RESIZE_KEY_STEP);
++  };
+   const showPlaceholder = src.length === 0 || errored;
+   const placeholderW = rawW ?? IMAGE_FALLBACK_SIZE;
+   const placeholderH = rawH ?? IMAGE_FALLBACK_SIZE;
+@@ -51,8 +111,14 @@
+   }
+   let imgDims;
+   let imgStyle;
+-  if (rawW != null && rawH != null) {
++  if (draftWidth != null) {
+     imgDims = {
++      width: Math.round(draftWidth),
++      height: Math.round(draftWidth * toAspect())
++    };
++    imgStyle = undefined;
++  } else if (rawW != null && rawH != null) {
++    imgDims = {
+       width: rawW,
+       height: rawH
+     };
+@@ -72,19 +138,61 @@
+       height: 'auto'
+     };
+   }
+-  return /*#__PURE__*/_jsx(NodeViewWrapper, {
++  const isResizable = editor.isEditable && typeof updateAttributes === 'function';
++  const isHandleShown = selected || isHovered || isHandleFocused || draftWidth != null;
++  return /*#__PURE__*/_jsxs(NodeViewWrapper, {
+     as: "span",
+     className: "eti-inline-image",
+-    children: /*#__PURE__*/_jsx("img", {
++    ref: wrapperRef,
++    "data-align": node.attrs.align ?? undefined,
++    style: isResizable ? {
++      position: 'relative',
++      cursor: 'grab'
++    } : undefined,
++    draggable: isResizable ? true : undefined,
++    "data-drag-handle": isResizable ? "" : undefined,
++    onPointerEnter: isResizable ? () => setIsHovered(true) : undefined,
++    onPointerLeave: isResizable ? () => setIsHovered(false) : undefined,
++    children: [/*#__PURE__*/_jsx("img", {
+       ...imgDims,
++      ref: imgRef,
+       src: src,
+-      alt: "",
++      alt: node.attrs.alt ?? "",
+       className: "eti-inline-image-img",
+       style: imgStyle,
+       contentEditable: false,
+       draggable: false,
+       onError: () => setErrored(true)
+-    })
++    }), isResizable && /*#__PURE__*/_jsx("button", {
++      type: "button",
++      className: "eti-inline-image-resize-handle",
++      "aria-label": "Resize image. Drag, or use the arrow keys.",
++      title: "Drag to resize",
++      contentEditable: false,
++      onPointerDown: handlePointerDown,
++      onPointerMove: handlePointerMove,
++      onPointerUp: handlePointerUp,
++      onPointerCancel: handlePointerUp,
++      onKeyDown: handleKeyDown,
++      onFocus: () => setIsHandleFocused(true),
++      onBlur: () => setIsHandleFocused(false),
++      style: {
++        position: 'absolute',
++        zIndex: 1,
++        right: -6,
++        bottom: -6,
++        width: 16,
++        height: 16,
++        padding: 0,
++        borderRadius: 9999,
++        border: '2px solid #fff',
++        boxShadow: '0 0 0 1px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.5)',
++        background: 'var(--primary, #c47a3a)',
++        cursor: 'nwse-resize',
++        touchAction: 'none',
++        opacity: isHandleShown ? 1 : 0
++      }
++    })]
+   });
+ }
+ //# sourceMappingURL=EnrichedImageNodeView.js.map
+\ No newline at end of file
+diff --git a/lib/module/web/pasteImages.js b/lib/module/web/pasteImages.js
+--- a/lib/module/web/pasteImages.js
++++ b/lib/module/web/pasteImages.js
+@@ -61,6 +61,29 @@
+   const onPasteImages = getOnPasteImages();
+   if (!onPasteImages) return false;
+   event.preventDefault();
++  emitImageFiles(event, files, getEditor, onPasteImages);
++  return true;
++}
++
++/** A drop of image files moves the caret to the drop point, then emits them as a paste there. */
++export function handleDroppedImages(view, event, moved, getEditor, getOnPasteImages) {
++  if (moved || !event.dataTransfer) return false;
++  const files = clipboardImageFiles(event.dataTransfer);
++  if (files.length === 0) return false;
++  const ed = getEditor();
++  const onPasteImages = getOnPasteImages();
++  if (!ed || !onPasteImages) return false;
++  event.preventDefault();
++  const dropPosition = view.posAtCoords({
++    left: event.clientX,
++    top: event.clientY
++  });
++  if (dropPosition) ed.commands.setTextSelection(dropPosition.pos);
++  if (!isImageBlocked(ed)) emitImageFiles(event, files, getEditor, onPasteImages);
++  return true;
++}
++/** The callback of the render the paste began in gets the images, so a later render's never does. */
++function emitImageFiles(event, files, getEditor, onPasteImages) {
+   (async () => {
+     try {
+       const images = await buildPasteImagesPayload(files);
+@@ -73,6 +96,5 @@
+       console.error(err);
+     }
+   })();
+-  return true;
+ }
+ //# sourceMappingURL=pasteImages.js.map
+\ No newline at end of file
+diff --git a/lib/module/index.js b/lib/module/index.js
+--- a/lib/module/index.js
++++ b/lib/module/index.js
+@@ -2,4 +2,5 @@
+ 
+ export { EnrichedTextInput } from "./web/EnrichedTextInput.js";
+ export { EnrichedText } from "./web/EnrichedText.js";
++export { setCodeBlockHighlighter } from "./web/pmPlugins/CodeBlockHighlightPlugin.js";
+ //# sourceMappingURL=index.js.map
+\ No newline at end of file
+diff --git a/lib/typescript/src/index.d.ts b/lib/typescript/src/index.d.ts
+--- a/lib/typescript/src/index.d.ts
++++ b/lib/typescript/src/index.d.ts
+@@ -1,4 +1,5 @@
+ export { EnrichedTextInput } from './web/EnrichedTextInput.js';
+ export { EnrichedText } from './web/EnrichedText.js';
++export declare function setCodeBlockHighlighter(highlighter: ((code: string, language: string | null) => { from: number; to: number; className: string }[] | null) | null): void;
+ export type { EnrichedInputStyle, EnrichedTextInputProps, EnrichedTextProps, OnChangeTextEvent, OnChangeHtmlEvent, OnChangeStateEvent, OnLinkDetected, OnMentionDetected, OnChangeSelectionEvent, OnKeyPressEvent, OnPasteImagesEvent, OnSubmitEditing, HtmlStyle, MentionStyleProperties, FocusEvent, BlurEvent, EnrichedTextInputInstance, EnrichedTextInstance, ContextMenuItem, OnChangeMentionEvent, EnrichedTextHtmlStyle, OnMentionPressEvent, OnLinkPressEvent, TextShortcut, } from './types.js';
+ //# sourceMappingURL=index.d.ts.map
+\ No newline at end of file
+diff --git a/lib/module/web/pmPlugins/CodeBlockHighlightPlugin.js b/lib/module/web/pmPlugins/CodeBlockHighlightPlugin.js
+new file mode 100644
+--- /dev/null
++++ b/lib/module/web/pmPlugins/CodeBlockHighlightPlugin.js
+@@ -0,0 +1,94 @@
++"use strict";
++
++import { Extension } from '@tiptap/core';
++import { Plugin, PluginKey } from '@tiptap/pm/state';
++import { Decoration, DecorationSet } from '@tiptap/pm/view';
++const codeBlockHighlightKey = new PluginKey('codeBlockHighlight');
++
++// The registered highlighter: (code, language) => [{ from, to, className }] over the code's text, with lines joined by
++// "\n", or null for a block it does not color. A block with no language is passed a null language. The open editors
++// redraw when one registers.
++let codeBlockHighlighter = null;
++const openViews = new Set();
++export function setCodeBlockHighlighter(highlighter) {
++  codeBlockHighlighter = highlighter;
++  for (const view of openViews) {
++    view.dispatch(view.state.tr.setMeta(codeBlockHighlightKey, true));
++  }
++}
++
++// Each code block, its lines' text joined by "\n", with the document position of every character. A block whose
++// language and code an earlier pass highlighted reuses that pass's tokens, so a keystroke highlights only the block it
++// changed. The tokens kept are the current document's blocks alone.
++function toCodeBlockHighlights(doc, previousTokensByBlock) {
++  const tokensByBlock = new Map();
++  if (!codeBlockHighlighter) return { decorations: DecorationSet.empty, tokensByBlock };
++  const decorations = [];
++  doc.descendants((node, position) => {
++    if (node.type.name !== 'codeBlock') return true;
++    const language = node.attrs.language ?? null;
++    let code = '';
++    const positions = [];
++    node.forEach((line, offset, index) => {
++      if (index > 0) {
++        code += '\n';
++        positions.push(-1);
++      }
++      const textStart = position + 1 + offset + 1;
++      line.forEach((child, childOffset) => {
++        if (!child.isText) return;
++        for (let i = 0; i < child.text.length; i += 1) positions.push(textStart + childOffset + i);
++        code += child.text;
++      });
++    });
++    const blockKey = `${language ?? ''}\u0000${code}`;
++    const tokens = tokensByBlock.get(blockKey) ?? previousTokensByBlock.get(blockKey) ?? codeBlockHighlighter(code, language) ?? [];
++    tokensByBlock.set(blockKey, tokens);
++    for (const {
++      from,
++      to,
++      className
++    } of tokens) {
++      // A token over a line break is split at it, since each line is its own paragraph.
++      let start = from;
++      for (let i = from; i <= to; i += 1) {
++        if (i === to || positions[i] === -1) {
++          if (i > start && positions[start] !== -1) {
++            decorations.push(Decoration.inline(positions[start], positions[i - 1] + 1, {
++              class: className
++            }));
++          }
++          start = i + 1;
++        }
++      }
++    }
++    return false;
++  });
++  return { decorations: DecorationSet.create(doc, decorations), tokensByBlock };
++}
++export const CodeBlockHighlightPlugin = Extension.create({
++  name: 'codeBlockHighlight',
++  addProseMirrorPlugins() {
++    return [new Plugin({
++      key: codeBlockHighlightKey,
++      state: {
++        init: (_config, state) => toCodeBlockHighlights(state.doc, new Map()),
++        // A new highlighter colors every block again, and a changed document reuses the unchanged blocks' tokens.
++        apply: (tr, highlights) => {
++          if (tr.getMeta(codeBlockHighlightKey)) return toCodeBlockHighlights(tr.doc, new Map());
++          return tr.docChanged ? toCodeBlockHighlights(tr.doc, highlights.tokensByBlock) : highlights;
++        }
++      },
++      props: {
++        decorations: state => codeBlockHighlightKey.getState(state).decorations
++      },
++      view: view => {
++        openViews.add(view);
++        return {
++          destroy: () => openViews.delete(view)
++        };
++      }
++    })];
++  }
++});
++//# sourceMappingURL=CodeBlockHighlightPlugin.js.map
+diff --git a/lib/module/web/pmPlugins/MergeAdjacentSameKindBlocksPlugin.js b/lib/module/web/pmPlugins/MergeAdjacentSameKindBlocksPlugin.js
+--- a/lib/module/web/pmPlugins/MergeAdjacentSameKindBlocksPlugin.js
++++ b/lib/module/web/pmPlugins/MergeAdjacentSameKindBlocksPlugin.js
+@@ -22,7 +22,8 @@
+           const boundaryPos = pos + node.nodeSize;
+           const $pos = newState.doc.resolve(boundaryPos);
+           const after = $pos.nodeAfter;
+-          if (after && after.type === node.type) {
++          // two code blocks join only in the same language, so each keeps its own
++          if (after && after.type === node.type && (node.type.name !== 'codeBlock' || after.attrs.language === node.attrs.language)) {
+             joinPositions.push(boundaryPos);
+           }
+           return true;

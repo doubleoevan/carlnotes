@@ -1,118 +1,21 @@
 // the Topic Post routes: who starts, saves, publishes, reads, and deletes a post, and what each rejection keeps
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
-import {
-	ADMIN_USER_ACCESS_ROW,
-	FREE_USER_ACCESS_ROW,
-	restoreConnectionPool,
-	stubConnectionPool,
-} from "@carlnotes/db/connectionPoolStub"
-// the modules a route test stands in for
-import * as socialLimits from "@carlnotes/db/socialLimits"
+import { restoreConnectionPool } from "@carlnotes/db/connectionPoolStub"
+import * as topicImages from "@carlnotes/db/topicImages"
 import { MODERATION_TEXT_MAX_CHARS } from "@carlnotes/models/moderation"
 import * as temporalClient from "@carlnotes/pipeline/temporalClient"
-import * as analytics from "@carlnotes/server/analytics"
-import * as edgeCache from "../edgeCache"
+import * as edgePurge from "@carlnotes/server/edgePurge"
 import * as moderation from "../moderation"
-import { toJsonRequest, toSignedInApp } from "../testSession"
-import * as homeOrder from "../topic/homeOrder"
-import type { TopicPostRow } from "./topicPosts"
-import * as topicPosts from "./topicPosts"
+import { toJsonRequest } from "../testSession"
 import { topicPostsRoute } from "./topicPostsRoute"
-import * as topicPostWrites from "./topicPostWrites"
-
-// a body of a given count of words, as the editor saves it
-const toBodyHtml = (wordCount: number): string => `<p>${Array.from({ length: wordCount }, () => "word").join(" ")}</p>`
-
-// a draft by member-1 on owner-1's public Topic
-const DRAFT_ROW: TopicPostRow = {
-	topicPost: {
-		id: "post-1",
-		topicId: "topic-1",
-		authorUserId: "member-1",
-		title: "Dialing in",
-		// a body past the 300 words, at its third version
-		html: toBodyHtml(320),
-		wordCount: 320,
-		version: 3,
-		publishedAt: null,
-		editedAt: null,
-		summary: null,
-		cost: "0",
-		imageHash: null,
-		imageOrigin: null,
-		imagePrompt: null,
-		imageUpdatedAt: null,
-		homeOrder: null,
-		profileOrder: null,
-		viewerCount: 0,
-		createdAt: new Date("2026-11-09T12:00:00Z"),
-		updatedAt: new Date("2026-11-09T12:00:00Z"),
-	},
-	topic: {
-		id: "topic-1",
-		ownerId: "owner-1",
-		visibility: "public",
-		teamId: "team-1",
-		name: "Home espresso",
-		imageHash: null,
-	},
-	author: { userId: "member-1", username: "member-1", avatarSource: "generated", avatarKey: null },
-}
-
-// the same post published a given count of minutes ago
-const toPublishedRow = (minutesAgo: number): TopicPostRow => ({
-	...DRAFT_ROW,
-	topicPost: { ...DRAFT_ROW.topicPost, publishedAt: new Date(Date.now() - minutesAgo * 60_000) },
-})
-
-// stand in for the reads and writes around a route: the post's row, the team's memberships, each user's access row,
-// the day's limit, the classification, and the events
-function stubTopicPostRoutes(topicPostRow: TopicPostRow | null): {
-	saveSpy: ReturnType<typeof spyOn>
-	publishSpy: ReturnType<typeof spyOn>
-	deleteSpy: ReturnType<typeof spyOn>
-	clearHomeSpy: ReturnType<typeof spyOn>
-	purgeProfileSpy: ReturnType<typeof spyOn>
-	trackEventSpy: ReturnType<typeof spyOn>
-} {
-	// member-1, member-2, and the owner are on the Topic's team, and admin-1 is an admin
-	stubConnectionPool(({ text, values }) => {
-		if (text.includes('from "team_members"')) {
-			const ownerMembership = ["owner-1", "leader"]
-			const memberId = values.find((value) => value === "member-1" || value === "member-2")
-			return memberId ? [[memberId, "member"], ownerMembership] : [ownerMembership]
-		}
-		return values.includes("admin-1") ? [ADMIN_USER_ACCESS_ROW] : [FREE_USER_ACCESS_ROW]
-	})
-
-	// the post's read, its page, the day's limit, and a clean classification
-	spyOn(topicPosts, "loadTopicPostRow").mockResolvedValue(topicPostRow)
-	spyOn(topicPosts, "toTopicPostResponse").mockImplementation(
-		async (_userId, readRow) => ({ id: readRow.topicPost.id }) as never,
-	)
-	spyOn(socialLimits, "countSocialWriteToday").mockResolvedValue(true)
-	spyOn(moderation, "toObjectionableCategory").mockResolvedValue(null)
-
-	// the workflows a publish and an edit start
-	spyOn(temporalClient, "startTopicPostPublishWorkflow").mockResolvedValue()
-	spyOn(temporalClient, "startTopicPostSummaryWorkflow").mockResolvedValue()
-	return {
-		saveSpy: spyOn(topicPostWrites, "saveTopicPost").mockResolvedValue({ status: "saved", version: 4 }),
-		publishSpy: spyOn(topicPostWrites, "publishTopicPost").mockResolvedValue(true),
-		deleteSpy: spyOn(topicPostWrites, "deleteTopicPost").mockResolvedValue(),
-		// the caches a published post's delete clears
-		clearHomeSpy: spyOn(homeOrder, "clearHomeCaches").mockResolvedValue(),
-		purgeProfileSpy: spyOn(edgeCache, "purgeProfileAtEdge").mockResolvedValue(undefined),
-		trackEventSpy: spyOn(analytics, "trackEvent").mockImplementation(() => {}),
-	}
-}
-
-// a request as one user
-const toUserApp = (userId: string): ReturnType<typeof toSignedInApp> => toSignedInApp(topicPostsRoute, userId)
-
-// a save of a title and a body at a version
-const toSave = (wordCount: number, version = 3): RequestInit =>
-	toJsonRequest({ title: "Dialing in", html: toBodyHtml(wordCount), version }, "PUT")
+import {
+	DRAFT_ROW,
+	stubTopicPostRoutes,
+	toImageDraftRow,
+	toPublishedRow,
+	toSave,
+	toUserApp,
+} from "./topicPostsRouteTestFixtures"
 
 // put the connection pool and the spies back after each test
 afterEach(() => {
@@ -137,6 +40,62 @@ test("a draft's save writes the cleaned body with its word count, and a stale ve
 	const conflictResponse = await toUserApp("member-1").request("/topic-posts/post-1", toSave(320))
 	expect(conflictResponse.status).toBe(409)
 	expect(await conflictResponse.json()).toEqual({ error: "conflict", version: 7 })
+})
+
+test("a save that drops an image of a public post purges the post's images from the edge", async () => {
+	// a published post on a public Topic, and a save that dropped one image
+	const topicPostId = crypto.randomUUID()
+	const publishedRow = toPublishedRow(10)
+	const { saveSpy } = stubTopicPostRoutes({
+		...publishedRow,
+		topicPost: { ...publishedRow.topicPost, id: topicPostId },
+	})
+	saveSpy.mockResolvedValue({ status: "saved", version: 4, droppedImageIds: [crypto.randomUUID()] })
+	const purgeSpy = spyOn(edgePurge, "purgeEdgeCacheTagAfterDeletion").mockResolvedValue()
+
+	// the save sends the post as it was read, so its images settle on the save's own transaction
+	const response = await toUserApp("member-1").request(`/topic-posts/${topicPostId}`, toSave(320))
+	expect(response.status).toBe(200)
+	expect(saveSpy.mock.calls[0]?.[0]).toMatchObject({
+		topicPost: { id: topicPostId, html: publishedRow.topicPost.html },
+	})
+	expect(purgeSpy).toHaveBeenCalledWith("topic-image:topic-1")
+})
+
+test("a save from an editor opened before an admin removed an image leaves the image out", async () => {
+	// a draft whose saved body still names a kept image and the removed one
+	const topicPostId = crypto.randomUUID()
+	const [keptImageId = "", removedImageId = ""] = [crypto.randomUUID(), crypto.randomUUID()]
+	const { saveSpy } = stubTopicPostRoutes(toImageDraftRow(topicPostId, []))
+	spyOn(topicImages, "loadRemovedTopicPostBodyImageIds").mockResolvedValue([removedImageId])
+	const html = toImageDraftRow(topicPostId, [keptImageId, removedImageId]).topicPost.html
+	const response = await toUserApp("member-1").request(
+		`/topic-posts/${topicPostId}`,
+		toJsonRequest({ title: "Dialing in", html, version: 3 }, "PUT"),
+	)
+
+	// the saved body keeps the other image alone
+	expect(response.status).toBe(200)
+	const savedHtml: string = saveSpy.mock.calls[0]?.[0].html ?? ""
+	expect(savedHtml).toContain(keptImageId)
+	expect(savedHtml).not.toContain(removedImageId)
+})
+
+test("a save that shows more images than the author's plan allows is rejected and writes nothing", async () => {
+	// six images on the free plan's five
+	const topicPostId = crypto.randomUUID()
+	const { saveSpy } = stubTopicPostRoutes(toImageDraftRow(topicPostId, []))
+	const imageIds = Array.from({ length: 6 }, () => crypto.randomUUID())
+	const response = await toUserApp("member-1").request(
+		`/topic-posts/${topicPostId}`,
+		toJsonRequest(
+			{ title: "Dialing in", html: toImageDraftRow(topicPostId, imageIds).topicPost.html, version: 3 },
+			"PUT",
+		),
+	)
+	expect(response.status).toBe(422)
+	expect(await response.json()).toEqual({ error: "image-limit-reached" })
+	expect(saveSpy).not.toHaveBeenCalled()
 })
 
 test("a title with a control character is a bad request, and a NUL in the body is dropped before the write", async () => {
@@ -249,64 +208,6 @@ test("a publish on a topic that is not public leaves the home's cards and the au
 	// nothing a visitor reads changed
 	expect(clearHomeSpy).not.toHaveBeenCalled()
 	expect(purgeProfileSpy).not.toHaveBeenCalled()
-})
-
-test("an edit ten minutes after publishing is saved, and one at 16 minutes is locked", async () => {
-	const { saveSpy, trackEventSpy } = stubTopicPostRoutes(toPublishedRow(10))
-	const editedResponse = await toUserApp("member-1").request("/topic-posts/post-1", toSave(300))
-	expect(editedResponse.status).toBe(200)
-	expect(saveSpy).toHaveBeenCalledTimes(1)
-	expect(trackEventSpy.mock.calls.at(-1)?.[0]).toBe("social_topic_post_edit")
-
-	// the edit starts the summary's rewrite, named by the post alone
-	expect(temporalClient.startTopicPostSummaryWorkflow).toHaveBeenCalledWith("post-1")
-
-	// an edit keeps the 300 words
-	const shortResponse = await toUserApp("member-1").request("/topic-posts/post-1", toSave(299))
-	expect(shortResponse.status).toBe(400)
-
-	// past the edit time the body stays as it is
-	stubTopicPostRoutes(toPublishedRow(16))
-	const lockedResponse = await toUserApp("member-1").request("/topic-posts/post-1", toSave(320))
-	expect(lockedResponse.status).toBe(409)
-	expect(await lockedResponse.json()).toEqual({ error: "locked" })
-	expect(saveSpy).toHaveBeenCalledTimes(1)
-})
-
-test("an edit of a published post counts toward no daily limit, and its changed text is classified on every save", async () => {
-	// the author is at the day's limit, ten minutes after publishing
-	const { saveSpy } = stubTopicPostRoutes(toPublishedRow(10))
-	const countSpy = spyOn(socialLimits, "countSocialWriteToday").mockResolvedValue(false)
-	const classifySpy = spyOn(moderation, "toObjectionableCategory").mockResolvedValue(null)
-
-	// two saves of a changed text are both written, and both classified
-	expect((await toUserApp("member-1").request("/topic-posts/post-1", toSave(310))).status).toBe(200)
-	expect((await toUserApp("member-1").request("/topic-posts/post-1", toSave(311))).status).toBe(200)
-	expect(saveSpy).toHaveBeenCalledTimes(2)
-	expect(classifySpy).toHaveBeenCalledTimes(2)
-	expect(countSpy).not.toHaveBeenCalled()
-
-	// a flagged edit is not written
-	classifySpy.mockResolvedValue("harassment")
-	expect((await toUserApp("member-1").request("/topic-posts/post-1", toSave(312))).status).toBe(422)
-	expect(saveSpy).toHaveBeenCalledTimes(2)
-})
-
-test("an edit of a published post's formatting alone is neither classified nor summarized again", async () => {
-	// the stored words in a heading in place of a paragraph
-	const { saveSpy } = stubTopicPostRoutes(toPublishedRow(10))
-	const classifySpy = spyOn(moderation, "toObjectionableCategory").mockResolvedValue(null)
-	const headingHtml = toBodyHtml(320).replace("<p>", "<h2>").replace("</p>", "</h2>")
-	const formattedResponse = await toUserApp("member-1").request(
-		"/topic-posts/post-1",
-		toJsonRequest({ title: "Dialing in", html: headingHtml, version: 3 }, "PUT"),
-	)
-
-	// the save is written with no classification and no summary rewrite
-	expect(formattedResponse.status).toBe(200)
-	expect(saveSpy).toHaveBeenCalledTimes(1)
-	expect(classifySpy).not.toHaveBeenCalled()
-	expect(temporalClient.startTopicPostSummaryWorkflow).not.toHaveBeenCalled()
 })
 
 test("a draft reads for its author alone, and a published post for whoever may open its Topic", async () => {

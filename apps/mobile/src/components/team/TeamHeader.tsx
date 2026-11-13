@@ -3,7 +3,7 @@ import { toTeamAvatarImagePath } from "@carlnotes/contracts/avatars"
 import { isLeaderRole } from "@carlnotes/contracts/enums"
 import type { TeamPageResponse } from "@carlnotes/contracts/teams"
 import { TeamHeader as SharedTeamHeader, type TeamHeaderElements } from "@carlnotes/core/components/TeamHeader"
-import { TEAM_AVATAR_UPLOAD_FAILED_TEXT, toAvatarRejectionText } from "@carlnotes/core/lib/imageUpload"
+import { IMAGE_UPLOAD_FAILED_TEXT, toAvatarRejectionText } from "@carlnotes/core/lib/imageUpload"
 import { View } from "react-native"
 import { useAvatarPicker } from "@/components/avatar/avatarUpload"
 import { Avatar, PAGE_AVATAR_SIZE } from "@/components/branding/Avatar"
@@ -36,7 +36,7 @@ export function TeamHeader({
 			mutation.run(async () => {
 				const rejection = await sendTeamAvatarBody(teamId, body)
 				if (rejection) {
-					throw new Error(toAvatarRejectionText(rejection, TEAM_AVATAR_UPLOAD_FAILED_TEXT))
+					throw new Error(toAvatarRejectionText(rejection, IMAGE_UPLOAD_FAILED_TEXT))
 				}
 			}),
 	})

@@ -39,6 +39,7 @@ export function NoteInput({
 	onChangeState,
 	onChangeSelection,
 	onLinkDetected,
+	onPasteImages,
 }: RichTextEditorInputProps) {
 	return (
 		<div className={NOTE_BODY_CLASS} style={NOTE_BODY_STYLE}>
@@ -53,6 +54,7 @@ export function NoteInput({
 				onChangeState={(event) => onChangeState(event.nativeEvent)}
 				onChangeSelection={(event) => onChangeSelection(event.nativeEvent)}
 				onLinkDetected={onLinkDetected}
+				onPasteImages={onPasteImages && ((event) => onPasteImages(event.nativeEvent.images))}
 			/>
 		</div>
 	)

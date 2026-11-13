@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import { EMPTY_COMMENT_THREAD } from "@carlnotes/contracts/social"
 import type { TopicPostResponse } from "@carlnotes/contracts/topicPosts"
+import { appUrl } from "@carlnotes/server/appUrl"
 import { readPlayToken } from "../podcast/playTokens"
 import type { TopicPostRow } from "../topicPost/topicPosts"
 import * as topicPosts from "../topicPost/topicPosts"
@@ -35,8 +36,8 @@ const TOPIC_POST = {
 	discussionRegenerationQuota: { used: 1, limit: 10 },
 } as unknown as TopicPostResponse
 const TOPIC_POST_ROW = {
-	topicPost: { id: TOPIC_POST.id, topicId: TOPIC_POST.topicId },
-	topic: { id: TOPIC_POST.topicId, name: TOPIC_POST.topicName },
+	topicPost: { id: TOPIC_POST.id, topicId: TOPIC_POST.topicId, publishedAt: new Date(), html: "<p>Light</p>" },
+	topic: { id: TOPIC_POST.topicId, name: TOPIC_POST.topicName, visibility: "public" },
 } as TopicPostRow
 
 test("a post's MCP view data plays its discussion with the caller's play token, and holds no regeneration quota", async () => {
@@ -71,4 +72,12 @@ test("a post with no recording has no podcast episode to play", async () => {
 	spyOn(topicPosts, "toTopicPostResponse").mockResolvedValue({ ...TOPIC_POST, discussion: null })
 	spyOn(socialTools, "loadToolCommentPage").mockResolvedValue(EMPTY_COMMENT_THREAD)
 	expect((await loadTopicPostMcpViewData(USER, TOPIC_POST_ROW)).podcastEpisodes).toEqual([])
+})
+
+test("the post's body images load from the site's absolute url, which the view asks the post's page for", async () => {
+	spyOn(mcpViewData, "loadMcpViewSession").mockResolvedValue(null)
+	const responseSpy = spyOn(topicPosts, "toTopicPostResponse").mockResolvedValue(TOPIC_POST)
+	spyOn(socialTools, "loadToolCommentPage").mockResolvedValue(EMPTY_COMMENT_THREAD)
+	await loadTopicPostMcpViewData(USER, TOPIC_POST_ROW)
+	expect(responseSpy).toHaveBeenCalledWith("user-1", TOPIC_POST_ROW, { siteUrl: appUrl() })
 })

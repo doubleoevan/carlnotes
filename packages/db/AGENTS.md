@@ -300,4 +300,6 @@ Topic Posts beyond their tables: `quotas.ts` holds `loadDiscussionRegenerationQu
 into the month's podcast spend. `topicImages.ts` holds `isImageReportedByUser`, which a Topic's and a Topic Post's
 image both read, and `loadTopicPostImageUrlsByPost` for the admin's reports. `topic_posts.image_updated_at` is when a
 post's image last changed, which a reporter's hidden image compares against. `sharedComments.ts` reads a post's
-shared Comments for its discussion and, for one reader, its chat. `store.ts` holds a discussion's audio key.
+shared Comments for its discussion and, for one reader, its chat. `store.ts` holds a discussion's audio key, and
+`loadUploadKeysInGrace` and `clearPendingObjectDeletions` for a post's body images. `quotas.ts` holds
+`loadTopicPostBodyImageLimits`.

@@ -4,6 +4,7 @@ import { expect, test } from "bun:test"
 import { toTestOwnComment, toTestReactionSummary } from "@carlnotes/contracts/socialTestFixtures"
 import {
 	TOPIC_POST,
+	TOPIC_POST_BODY_IMAGE_URL,
 	TOPIC_POST_BODY_LINK_URL,
 	toMcpViewToolResult,
 	toTopicPostToolResult,
@@ -24,7 +25,9 @@ const respondToSocialToolCall: ToolCallResponder = ({ name }) => {
 }
 
 test("the topic post MCP view shows the post with its player and its thread, and calls no tool on load", async () => {
-	await withMcpView({ mcpView: "topic-post" }, async ({ frame, links, toolCalls, sendToolResult }) => {
+	await withMcpView({ mcpView: "topic-post" }, async ({ frame, links, page, toolCalls, sendToolResult }) => {
+		// the body image's request, which the policy lets reach the network
+		const bodyImageRequest = page.waitForRequest(TOPIC_POST_BODY_IMAGE_URL)
 		await sendToolResult(toTopicPostToolResult())
 
 		// the image from the site, the title with its author and date, the summary in the info popup, and the body
@@ -33,6 +36,11 @@ test("the topic post MCP view shows the post with its player and its thread, and
 		await frame.getByRole("link", { name: TOPIC_POST.author.username }).first().waitFor()
 		await frame.getByText("Nov 3, 2026").first().waitFor()
 		await frame.getByText("bean bean bean").first().waitFor()
+
+		// the body image loads from the site under the policy, and the TypeScript code block takes its colors
+		await frame.locator('img[alt="A cupping table"]').waitFor()
+		await bodyImageRequest
+		await frame.locator('codeblock[data-language="typescript"][data-colored] .hljs-keyword').waitFor()
 		await frame.getByRole("button", { name: "About this post" }).click()
 		await frame.getByText(TOPIC_POST.summary ?? "").waitFor()
 

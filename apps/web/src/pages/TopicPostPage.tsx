@@ -5,6 +5,7 @@ import { toTopicPath } from "@carlnotes/contracts/seo"
 import { type TopicPostResponse, toBodyParagraphs } from "@carlnotes/contracts/topicPosts"
 import {
 	TopicPostPage as SharedTopicPostPage,
+	type TopicPostBodyProps,
 	type TopicPostPageElements,
 } from "@carlnotes/core/components/TopicPostPage"
 import { useTopicPostView } from "@carlnotes/core/hooks/useTopicPostView"
@@ -321,7 +322,7 @@ type UseRegisterTopicPostPageActionsOptions = {
 }
 
 // register the actions menu: Share on a published Topic Post, which opens its share dialog as the info popup's Share
-// opens its share options, Edit post for its author, disabled past its edit time, Home posts for an admin and
+// opens its share options, Edit post for its author, Home posts for an admin and
 // Featured posts for its author on a published Topic Post of a public topic, Delete post for whoever may delete it,
 // and Report image on a published Topic Post
 function useRegisterTopicPostPageActions({
@@ -342,8 +343,6 @@ function useRegisterTopicPostPageActions({
 								label: TOPIC_POST_LABELS.edit,
 								Icon: Pencil,
 								onSelect: onEdit,
-								isDisabled: !topicPost.isEditable,
-								disabledReason: TOPIC_POST_LABELS.lockedError,
 							},
 						]
 					: []),
@@ -358,7 +357,7 @@ function useRegisterTopicPostPageActions({
 
 // the body on a page card. the server and the first browser render show its text as plain paragraphs at the rich
 // text's line spacing, and the rich text display replaces them once it loads in the browser
-function TopicPostBody({ html }: { html: string }) {
+function TopicPostBody({ html, bodyImageReports, onBodyImageReportClosed }: TopicPostBodyProps) {
 	const isMounted = useIsMounted()
 	const plainBody = (
 		<div className={cn(NOTE_BODY_CLASS, "space-y-3")} style={NOTE_BODY_STYLE}>
@@ -372,7 +371,11 @@ function TopicPostBody({ html }: { html: string }) {
 		<article className="bg-card my-4 rounded-lg border py-4 shadow-raised sm:py-6">
 			{isMounted ? (
 				<Suspense fallback={plainBody}>
-					<TopicPostReader html={html} />
+					<TopicPostReader
+						html={html}
+						bodyImageReports={bodyImageReports}
+						onBodyImageReportClosed={onBodyImageReportClosed}
+					/>
 				</Suspense>
 			) : (
 				plainBody

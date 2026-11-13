@@ -1,5 +1,6 @@
 // the team avatar with the camera overlay
 import type { TeamIdentity } from "@carlnotes/contracts/teamIdentity"
+import { UNSUPPORTED_IMAGE_TYPE_TEXT } from "@carlnotes/core/lib/imageUpload"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Camera } from "lucide-react"
 import { toast } from "sonner"
@@ -56,7 +57,7 @@ export function TeamAvatarPicker({
 	const handleDropFiles = (files: File[]): void => {
 		const droppedImage = toDroppedImage(files)
 		if (!droppedImage) {
-			toast.error(AVATAR_REJECTIONS["unsupported-type"] ?? "PNG, JPEG, WebP or GIF only.")
+			toast.error(UNSUPPORTED_IMAGE_TYPE_TEXT)
 			return
 		}
 		void handleResizeAvatarFile(droppedImage)

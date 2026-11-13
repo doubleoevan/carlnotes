@@ -292,6 +292,13 @@ export const appSignupGateRateLimiter = toRateLimiter({
 	store: toRateLimitStore("rate-limit:app-signup-gate"),
 })
 
+// the Topic Post body image upload limiter, keyed by the user. a paste of a few screenshots stays well under it
+const TOPIC_POST_BODY_IMAGE_RATE_LIMIT = 10
+export const topicPostBodyImageRateLimiter = toRateLimiter({
+	limit: TOPIC_POST_BODY_IMAGE_RATE_LIMIT,
+	store: toRateLimitStore("rate-limit:topic-post-body-image"),
+})
+
 // the push device limiter, keyed by the user, over registering and unregistering a phone
 export const pushDeviceRateLimiter = toRateLimiter({
 	limit: PUSH_DEVICE_RATE_LIMIT,

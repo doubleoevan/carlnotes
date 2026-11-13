@@ -447,6 +447,76 @@
 				"hex": "#c99a5b"
 			},
 			"$description": "the budget's podcast episode segment, a brown between the scan and chat segments"
+		},
+		"syntaxKeyword": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					1,
+					0.6784,
+					0.4784
+				],
+				"alpha": 1,
+				"hex": "#ffad7a"
+			},
+			"$description": "a keyword in a Topic Post's code block, at 4.5:1 or more on the code block's muted fill"
+		},
+		"syntaxString": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					0.8118,
+					0.8863,
+					0.6039
+				],
+				"alpha": 1,
+				"hex": "#cfe29a"
+			},
+			"$description": "a string in a Topic Post's code block"
+		},
+		"syntaxComment": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					0.8157,
+					0.7647,
+					0.651
+				],
+				"alpha": 1,
+				"hex": "#d0c3a6"
+			},
+			"$description": "a comment in a Topic Post's code block"
+		},
+		"syntaxNumber": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					0.9098,
+					0.7608,
+					0.9608
+				],
+				"alpha": 1,
+				"hex": "#e8c2f5"
+			},
+			"$description": "a number or a literal in a Topic Post's code block"
+		},
+		"syntaxFunction": {
+			"$type": "color",
+			"$value": {
+				"colorSpace": "srgb",
+				"components": [
+					0.6392,
+					0.8627,
+					0.9373
+				],
+				"alpha": 1,
+				"hex": "#a3dcef"
+			},
+			"$description": "a function, a type, or a built-in name in a Topic Post's code block"
 		}
 	},
 	"radius": {

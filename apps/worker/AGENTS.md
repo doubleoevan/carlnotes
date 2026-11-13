@@ -187,14 +187,14 @@ quotes for a question about the app; a section whose hash is unchanged is not em
 Temporal supplies replayable waits and activity calls.
 
 - `workflows/publishTopicPost.ts` and `publishTopicPostActivities.ts` run on the `topic-posts` queue:
-  `publishTopicPostWorkflow` writes a published Topic Post's summary and starts its image's render, and
-  `summarizeTopicPostWorkflow` writes the summary again after an edit: one workflow per post, which waits 30 seconds and
-  summarizes the stored text, so the edits saved in that time share one rewrite. `publishTopicPostWorkflow` writes a
-  last summary once the edit time ends, if the post changed since its first one. Every step is best effort. The image
-  render itself is `renderTopicImageWorkflow`, which stores a Topic Post render's files under the post.
+  `publishTopicPostWorkflow` writes a published Topic Post's summary, starts its image's render, and starts its first
+  discussion 15 minutes later. `summarizeTopicPostWorkflow` writes the summary again after an edit: one workflow per
+  post, which waits 30 seconds and summarizes the stored text, so the edits saved in that time share one rewrite. Every
+  step is best effort. The image render itself is `renderTopicImageWorkflow`, which stores a Topic Post render's files
+  under the post.
 
-Topic Post Discussions: `publishTopicPostWorkflow` waits out the post's edit time after the summary and the image,
-then starts the post's first discussion, billed to its author, through `startTopicPostPublishDiscussionActivity`.
+Topic Post Discussions: `publishTopicPostWorkflow` waits 15 minutes after the summary and the image, then starts the
+post's first discussion, billed to its author, through `startTopicPostPublishDiscussionActivity`.
 `workflows/recordTopicPostDiscussion.ts` holds `recordTopicPostDiscussionWorkflow`: the script, then the one speech
 call with its encode and store, closing the row as failed if either fails for good. Its activities are in
 `workflows/recordTopicPostDiscussionActivities.ts`, and both are exported from `recordPodcastEpisode.ts` and

@@ -1,12 +1,14 @@
 // Topic Post copy tests: the word count's label, when the editor shows, what a failed write says, and what a post's
 // share options take
 import { expect, test } from "bun:test"
+import { toTopicPostBodyImagePath } from "@carlnotes/contracts/topicPostBodyImages"
 import { TOPIC_POST_DISCUSSION_STORY } from "./topicPostStories"
 import {
 	isTopicPostEditorShown,
 	isTopicPostPinnable,
 	isTopicPostUrlStale,
 	TOPIC_POST_LABELS,
+	toTopicPostBodyImageReports,
 	toTopicPostDetails,
 	toTopicPostDetailsText,
 	toTopicPostFailureMessage,
@@ -28,11 +30,11 @@ test("a body's words are counted over its text, not its markup", () => {
 	expect(toTopicPostWordCount("<html><br></html>")).toBe(0)
 })
 
-test("a draft always shows its editor, and a published post only while its author edits it inside its edit time", () => {
-	expect(isTopicPostEditorShown({ publishedAt: null, isEditable: true }, false)).toBe(true)
-	expect(isTopicPostEditorShown({ publishedAt: "2026-11-01T10:00:00Z", isEditable: true }, false)).toBe(false)
-	expect(isTopicPostEditorShown({ publishedAt: "2026-11-01T10:00:00Z", isEditable: true }, true)).toBe(true)
-	expect(isTopicPostEditorShown({ publishedAt: "2026-11-01T10:00:00Z", isEditable: false }, true)).toBe(false)
+test("a draft always shows its editor, and a published post only while its author edits it", () => {
+	expect(isTopicPostEditorShown({ publishedAt: null, isAuthor: true }, false)).toBe(true)
+	expect(isTopicPostEditorShown({ publishedAt: "2026-11-01T10:00:00Z", isAuthor: true }, false)).toBe(false)
+	expect(isTopicPostEditorShown({ publishedAt: "2026-11-01T10:00:00Z", isAuthor: true }, true)).toBe(true)
+	expect(isTopicPostEditorShown({ publishedAt: "2026-11-01T10:00:00Z", isAuthor: false }, true)).toBe(false)
 })
 
 test("a Topic Post takes a pin once it is published on a public topic", () => {
@@ -65,7 +67,7 @@ test("a post page's details put its thread's comment count after the reading tim
 })
 
 test("a failed write says why, and a failure with no words of its own gets the fallback", () => {
-	expect(toTopicPostFailureMessage({ status: "locked" }, "fallback")).toBe(TOPIC_POST_LABELS.lockedError)
+	expect(toTopicPostFailureMessage({ status: "conflict", version: 3 }, "fallback")).toBe(TOPIC_POST_LABELS.conflict)
 	expect(toTopicPostFailureMessage({ status: "incomplete" }, "fallback")).toBe(TOPIC_POST_LABELS.incompleteError)
 	expect(toTopicPostFailureMessage({ status: "failed", message: "Carl's words" }, "fallback")).toBe("Carl's words")
 	expect(toTopicPostFailureMessage({ status: "failed", message: null }, "fallback")).toBe("fallback")
@@ -111,4 +113,50 @@ test("a post's share options take its topic at its visibility and the post in th
 	const olderTopicPost = { ...topicPost, topicVisibility: undefined }
 	expect(toTopicPostShare(olderTopicPost).topic.visibility).toBe("private")
 	expect(toTopicPostShare({ ...olderTopicPost, isTopicPublic: true }).topic.visibility).toBe("public")
+})
+
+test("each body image's report names the image under its post and reads as its place in the post, for a reader alone", () => {
+	// two images, the first one twice, and an image of another post
+	const [postId, otherPostId] = ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"]
+	const [imageA, imageB, imageC] = [
+		"00000000-0000-4000-8000-00000000000a",
+		"00000000-0000-4000-8000-00000000000b",
+		"00000000-0000-4000-8000-00000000000c",
+	]
+	const toImg = (topicPostId: string, imageId: string): string =>
+		`<img src="${toTopicPostBodyImagePath({ topicPostId, imageId })}?signature=s">`
+	const html = `<p>Cupping</p>${toImg(postId, imageA)}${toImg(postId, imageB)}${toImg(postId, imageA)}${toImg(otherPostId, imageC)}`
+	const topicPost = {
+		id: postId,
+		title: "Light roasts",
+		html,
+		publishedAt: "2026-11-12T10:00:00.000Z",
+		isAuthor: false,
+	}
+	expect(toTopicPostBodyImageReports(topicPost, true)).toEqual([
+		{
+			imageId: imageA,
+			subjectKind: "topicPostBodyImage",
+			subjectId: `${postId}/${imageA}`,
+			subjectLabel: "image 1 of Light roasts",
+			optionLabel: "Report image 1 in post",
+		},
+		{
+			imageId: imageB,
+			subjectKind: "topicPostBodyImage",
+			subjectId: `${postId}/${imageB}`,
+			subjectLabel: "image 2 of Light roasts",
+			optionLabel: "Report image 2 in post",
+		},
+	])
+
+	// an untitled post's images read under its displayed title
+	expect(toTopicPostBodyImageReports({ ...topicPost, title: "" }, true)[0]?.subjectLabel).toBe(
+		"image 1 of Untitled post",
+	)
+
+	// a visitor, the author, and a draft have nothing to report
+	expect(toTopicPostBodyImageReports(topicPost, false)).toEqual([])
+	expect(toTopicPostBodyImageReports({ ...topicPost, isAuthor: true }, true)).toEqual([])
+	expect(toTopicPostBodyImageReports({ ...topicPost, publishedAt: null }, true)).toEqual([])
 })

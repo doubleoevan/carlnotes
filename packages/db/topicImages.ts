@@ -1,7 +1,8 @@
-// the topic image reads: a topic's current image and the image urls of many topics at once
+// the topic image reads: a topic's current image, the image urls of many topics at once, and the reports that hide an
+// image from its reporter
 
 import { type TopicImageUrls, toTopicImageUrls, toTopicPostImageUrls } from "@carlnotes/contracts/topicImages"
-import { and, eq, gt, inArray } from "drizzle-orm"
+import { and, eq, gt, inArray, like } from "drizzle-orm"
 import { OPEN_OR_CLEARED_REPORT_FILTER } from "./contentFilters"
 import { db } from "./index"
 import { reports } from "./schema/reports"
@@ -75,6 +76,42 @@ export async function isImageReportedByUser({
 		)
 		.limit(1)
 	return Boolean(report)
+}
+
+/**
+ * Returns the ids of the images in a Topic Post's body that an admin removed on a report, by Remove or Block.
+ */
+export async function loadRemovedTopicPostBodyImageIds(topicPostId: string): Promise<string[]> {
+	const reportRows = await db
+		.selectDistinct({ subjectId: reports.subjectId })
+		.from(reports)
+		.where(
+			and(
+				eq(reports.subjectKind, "topicPostBodyImage"),
+				like(reports.subjectId, `${topicPostId}/%`),
+				inArray(reports.resolution, ["removed", "blocked"]),
+			),
+		)
+	return reportRows.map((reportRow) => reportRow.subjectId.slice(topicPostId.length + 1))
+}
+
+/**
+ * Returns the ids of the images in a Topic Post's body that the user reported, open or cleared. A body image never
+ * changes under its id, so every report of one counts.
+ */
+export async function loadReportedTopicPostBodyImageIds(userId: string, topicPostId: string): Promise<string[]> {
+	const reportRows = await db
+		.select({ subjectId: reports.subjectId })
+		.from(reports)
+		.where(
+			and(
+				eq(reports.reporterUserId, userId),
+				eq(reports.subjectKind, "topicPostBodyImage"),
+				like(reports.subjectId, `${topicPostId}/%`),
+				OPEN_OR_CLEARED_REPORT_FILTER,
+			),
+		)
+	return reportRows.map((reportRow) => reportRow.subjectId.slice(topicPostId.length + 1))
 }
 
 /**

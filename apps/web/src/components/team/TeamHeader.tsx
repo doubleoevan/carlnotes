@@ -10,7 +10,7 @@ import { cn } from "@carlnotes/nightshift/classNames"
 import { Plus } from "lucide-react"
 import { type ReactNode, useState } from "react"
 import { toast } from "sonner"
-import { TEAM_AVATAR_UPLOAD_FAILED_TEXT, toAvatarRejectionText } from "@/components/avatar/AvatarUpload"
+import { IMAGE_UPLOAD_FAILED_TEXT, toAvatarRejectionText } from "@/components/avatar/AvatarUpload"
 import { TeamAvatarPicker } from "@/components/avatar/TeamAvatarPicker"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"
 import { DetailsLine } from "@/components/common/DetailsLine"
@@ -41,7 +41,7 @@ function TeamHeaderAvatar({
 		setIsUploading(true)
 		const rejection = await sendTeamAvatar(team.teamId, avatarFile).finally(() => setIsUploading(false))
 		if (rejection) {
-			toast.error(toAvatarRejectionText(rejection, TEAM_AVATAR_UPLOAD_FAILED_TEXT))
+			toast.error(toAvatarRejectionText(rejection, IMAGE_UPLOAD_FAILED_TEXT))
 			return
 		}
 		onChanged()

@@ -533,7 +533,7 @@ sections leave a profile's titles and order. It reads the profile's and the team
 
 Topic Posts: `components/TopicPostCard`, `TopicPostInfo`, `TopicPostsSection`, `TopicPostEditor`, and
 `TopicPostPage` are the shared Topic Post components, each over its app's elements. `TopicPostPage` shows the editor
-for a draft and for a published post its author edits inside its edit time, and the post otherwise. `TopicPostInfo`
+for a draft and for a published post its author edits, and the post otherwise. `TopicPostInfo`
 is the post's info popup, which follows the Topic's: it takes the post's id and title, reads the post through
 `fetchTopicPost` once it opens, under the mobile screen's `topic-post` cache key, unless its page passes the post, and
 shows the author with the reactions and Share, the post's image, the discussion's play button with the line from
@@ -544,8 +544,17 @@ invite names.
 `hooks/useRichTextEditor.ts` holds the editor state a note and a Topic Post share: the format state, the selection,
 the link at the caret, and the baseline that tells the editor's first rendering of a stored body from an edit.
 `hooks/useTopicPostSave.ts` saves a post's title and body together once typing stops, one save at a time at the
-version the last save returned, and stops on a newer version or a post past its edit time. `lib/topicPosts.ts` holds
-the Topic Post copy, the word count's label, and the post's editable image, and `lib/topicPostStories.ts` the
+version the last save returned, and sends the draft again once at the version a 409 names.
+`hooks/useTopicPostBodyImageUpload.ts` uploads the images that a pick or a paste names, one at a time, and inserts each
+by its stored url at the caret where the upload began, or inserts nothing and says why. A closed editor aborts its
+uploads on their way, and each picked or pasted image's blob url is let go once its upload ends. `lib/topicPostBodyHtml.ts`
+puts each image in a paragraph of its own for the readers and the editors, gives a reader's image with no alt text the
+post's title, and returns to an edited body the code block languages and
+image alt texts and places that the phone's editor drops. It also scales each image to a view's width for a view that
+draws an image at its stored size, and puts each image's stored size back before such a view's save. `lib/topicPostAlignment.ts` picks what an alignment button
+sets: a selected image's place, or the alignment of the paragraphs at the caret. `lib/topicPosts.ts` holds
+the Topic Post copy, the word count's label, the post's editable image, and what a report of each body image names, and
+`lib/topicPostStories.ts` the
 fixtures both apps' stories show. `components/ProfileHeader` is the profile page's shared header.
 `components/cardElements` includes the reaction count, which the topic card shows at the right of its tags' row or,
 with no tag, its byline's row, the podcast episode card at the right of its detail line, and the Topic Post card at

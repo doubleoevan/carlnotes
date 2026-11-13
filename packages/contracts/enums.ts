@@ -198,9 +198,9 @@ export const noteVisibilities = ["private", "team", "public"] as const
 // where a prompt version comes from: the topic editor, a chat tool, or an MCP tool
 export const promptVersionOrigins = ["editor", "chat", "mcp"] as const
 // what a report names: a Topic, a profile, a Team, a chat room message, a note, a note comment, a Finding, a Podcast
-// Episode, a Comment, or a Topic's image
+// Episode, a Comment, a Topic's image, a Topic Post's image, or one of a Topic Post's body images
 // biome-ignore format: one line keeps the kinds under the comment-density hook's limit
-export const reportSubjectKinds = ["topic", "profile", "team", "chatMessage", "note", "noteComment", "finding", "podcastEpisode", "comment", "topicImage", "topicPostImage"] as const
+export const reportSubjectKinds = ["topic", "profile", "team", "chatMessage", "note", "noteComment", "finding", "podcastEpisode", "comment", "topicImage", "topicPostImage", "topicPostBodyImage"] as const
 // how an admin closes a report: the content was removed, it was cleared and stays, or its author got an admin block
 export const reportResolutions = ["removed", "cleared", "blocked"] as const
 // the types a Reaction can hold, every one positive, in the order the picker shows them

@@ -8,12 +8,16 @@ import {
 	type TopicPostEditorProps,
 	type TopicPostTitleInputProps,
 } from "@carlnotes/core/components/TopicPostEditor"
+import type { PickedBodyImage } from "@carlnotes/core/hooks/useTopicPostBodyImageUpload"
 import { cn } from "@carlnotes/nightshift/classNames"
+import { useEffect } from "react"
 import { toast } from "sonner"
-import { NoteConflictNotice } from "@/components/note/NoteConflictNotice"
 import { NoteInput } from "@/components/note/NoteEditor"
 import { NoteToolbar } from "@/components/note/NoteToolbar"
+import { CODE_BLOCK_COLORS_CLASS } from "@/components/note/noteStyle"
 import { Button } from "@/components/primitives/button"
+import { hasColoredCodeBlock, loadEditorCodeBlockColors } from "@/hooks/useCodeBlockColors"
+import { TopicPostBodyControls } from "./TopicPostBodyControls"
 
 // keep platform elements stable so typing never remounts the editor
 const ELEMENTS: TopicPostEditorElements = {
@@ -21,7 +25,7 @@ const ELEMENTS: TopicPostEditorElements = {
 	TitleInput: TopicPostTitleInput,
 	Input: NoteInput,
 	Toolbar: NoteToolbar,
-	ConflictNotice: NoteConflictNotice,
+	BodyControls: TopicPostBodyControls,
 	Footer: TopicPostEditorFooter,
 }
 
@@ -29,23 +33,29 @@ const ELEMENTS: TopicPostEditorElements = {
  * Adapts the shared Topic Post editor to browser input and toast feedback.
  */
 export function TopicPostEditor(props: Omit<TopicPostEditorProps, "onError">) {
-	return <SharedTopicPostEditor {...props} onError={toast.error} elements={ELEMENTS} />
+	// a body that opens with a code block to color loads the highlighter that colors the editor's code blocks
+	const { html } = props.topicPost
+	useEffect(() => {
+		if (hasColoredCodeBlock(html)) {
+			loadEditorCodeBlockColors()
+		}
+	}, [html])
+	return <SharedTopicPostEditor {...props} onError={toast.error} elements={ELEMENTS} appendImage={appendBodyImage} />
 }
 
-// the toolbar, then one page card with the title over a divider and the body under it, then the footer. a press on
-// the body's area outside the text focuses the body
-function TopicPostEditorLayout({
-	titleInput,
-	toolbar,
-	conflict,
-	footer,
-	editorRef,
-	children,
-}: TopicPostEditorLayoutProps) {
+// a picked or pasted image's bytes, read from the local blob url its preview shows
+async function appendBodyImage(body: FormData, image: PickedBodyImage): Promise<void> {
+	const response = await fetch(image.uri)
+	body.append("image", await response.blob())
+}
+
+// the toolbar, which stays at the top of the window while the post scrolls under it, then one page card with the
+// title over a divider and the body under it, then the footer. a press on the body's area outside the text focuses
+// the body
+function TopicPostEditorLayout({ titleInput, toolbar, footer, editorRef, children }: TopicPostEditorLayoutProps) {
 	return (
 		<div className="flex flex-col gap-4 py-4">
-			{toolbar}
-			{conflict}
+			<div className="sticky top-2 z-20">{toolbar}</div>
 			<div className="bg-card rounded-lg border shadow-raised">
 				<div className="border-b px-4 py-4 sm:px-6">{titleInput}</div>
 				<div
@@ -54,7 +64,7 @@ function TopicPostEditorLayout({
 							editorRef.current?.focus()
 						}
 					}}
-					className="min-h-80 py-4 sm:py-6"
+					className={cn("min-h-80 py-4 sm:py-6", CODE_BLOCK_COLORS_CLASS)}
 				>
 					{children}
 				</div>
@@ -64,7 +74,8 @@ function TopicPostEditorLayout({
 	)
 }
 
-// the title in the display font at the top of the body's card, limited to the longest title
+// the title in the display font at the top of the body's card, limited to the longest title, at a line height that
+// holds the font's descenders
 function TopicPostTitleInput({ value, label, placeholder, maxLength, onChange }: TopicPostTitleInputProps) {
 	return (
 		<input
@@ -73,7 +84,7 @@ function TopicPostTitleInput({ value, label, placeholder, maxLength, onChange }:
 			placeholder={placeholder}
 			maxLength={maxLength}
 			onChange={(event) => onChange(event.target.value)}
-			className="font-display text-card-foreground placeholder:text-muted-foreground w-full bg-transparent text-2xl outline-none sm:text-3xl"
+			className="font-display text-card-foreground placeholder:text-muted-foreground w-full bg-transparent text-2xl leading-normal outline-none sm:text-3xl sm:leading-normal"
 		/>
 	)
 }

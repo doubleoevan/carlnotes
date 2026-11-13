@@ -994,6 +994,11 @@ Check for:
      `apps/web/src/mcpViews/mcpViewElements.tsx`)
    - `apps/web/src/components/table/TeamSubtablesRow.tsx`, its story, its test, and `TeamSubtablesRow` (now
      `TeamSubtables.tsx`, its story, and its test, with `TeamSubtables` alone)
+   - `useTopicPostSave`'s and the Topic Post editor's `saveDraft`, `sendDraft`, `draftRef`, `savedRef`, and
+     `isDraftSaved` (now `saveTopicPostDraft`, `sendTopicPostDraft`, `topicPostDraftRef`, `savedTopicPostDraftRef`, and
+     `isTopicPostDraftSaved`)
+   - `DailySpendCutoffsCard`'s `saveDraft`, `draft`, `savedDraft`, and `savedDraftRef` (now `saveSpendControlDraft`,
+     `spendControlDraft`, `savedSpendControlDraft`, and `savedSpendControlDraftRef`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

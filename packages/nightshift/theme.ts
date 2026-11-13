@@ -44,6 +44,11 @@ export const extraThemeColorNames: ColorName[] = [
 	"separatorSunken",
 	"spendChat",
 	"spendPodcastEpisode",
+	"syntaxKeyword",
+	"syntaxString",
+	"syntaxComment",
+	"syntaxNumber",
+	"syntaxFunction",
 ]
 
 // the localStorage key that the saved theme lives under, which the web app and the api's own pages read

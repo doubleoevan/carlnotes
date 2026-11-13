@@ -1177,6 +1177,13 @@
       "when": 1794514118612,
       "tag": "0167_right_sleeper",
       "breakpoints": true
+    },
+    {
+      "idx": 168,
+      "version": "7",
+      "when": 1794529266068,
+      "tag": "0168_true_stick",
+      "breakpoints": true
     }
   ]
 }

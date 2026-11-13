@@ -7,7 +7,7 @@ import {
 	sendUpdateTeam,
 } from "@carlnotes/client/teamClient"
 import type { CreateTeamPayload } from "@carlnotes/contracts/payloads"
-import { TEAM_AVATAR_UPLOAD_FAILED_TEXT, toAvatarRejectionText } from "./imageUpload"
+import { IMAGE_UPLOAD_FAILED_TEXT, toAvatarRejectionText } from "./imageUpload"
 import type { PendingInvite } from "./teamFields"
 
 // what each rejection tells the person saving a team, in the team modal and the topic modal's teams field
@@ -93,7 +93,7 @@ export async function saveTeam<Avatar>({
 	if (avatarFile) {
 		const avatarRejection = await uploadAvatar(teamId, avatarFile)
 		if (avatarRejection) {
-			return toAvatarRejectionText(avatarRejection, TEAM_AVATAR_UPLOAD_FAILED_TEXT)
+			return toAvatarRejectionText(avatarRejection, IMAGE_UPLOAD_FAILED_TEXT)
 		}
 	}
 

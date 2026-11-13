@@ -44,10 +44,14 @@ export function TopicPostMcpView({ topicPost }: { topicPost: TopicPostResponse }
 	)
 }
 
-// the web's elements of the page, with the MCP view's info popup, reactions that save through their tool, and the
-// discussion's play button that plays the tool result's recording
+// the web's elements of the page, with the MCP view's info popup, reactions that save through their tool, the
+// discussion's play button that plays the tool result's recording, and a body with no Report image button, which has
+// no tool
 const MCP_VIEW_TOPIC_POST_PAGE_ELEMENTS: TopicPostPageElements = {
 	...TOPIC_POST_PAGE_ELEMENTS,
+	Body: ({ html }) => (
+		<TOPIC_POST_PAGE_ELEMENTS.Body html={html} bodyImageReports={[]} onBodyImageReportClosed={ignoreChange} />
+	),
 	Info: (props) => <TopicPostInfo {...props} elements={MCP_VIEW_TOPIC_POST_INFO_ELEMENTS} />,
 	Reactions: (props) => <McpViewReactionRow {...props} className="flex flex-col gap-1" />,
 	discussionElements: { ...TOPIC_POST_PAGE_ELEMENTS.discussionElements, PlayButton: McpViewDiscussionPlayButton },

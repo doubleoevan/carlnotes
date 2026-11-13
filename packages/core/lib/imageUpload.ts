@@ -13,8 +13,9 @@ export const MAX_AVATAR_PIXELS = 512
 // image limit
 export const MAX_ATTACHMENT_IMAGE_PIXELS = 2048
 
-// what a user is told about an image that can't be decoded
+// what a user is told about an image that can't be decoded, and about a file of a type no image upload takes
 export const UNREADABLE_IMAGE_TEXT = "That image couldn't be read. Try a JPEG or PNG."
+export const UNSUPPORTED_IMAGE_TYPE_TEXT = "PNG, JPEG, WebP or GIF only."
 
 // the jpeg quality a resized photo re-encodes at
 export const AVATAR_JPEG_QUALITY = 0.85
@@ -62,15 +63,15 @@ export function toResizedImage({
 export const AVATAR_REJECTIONS: Record<string, string> = {
 	"too-large": "That image is over 2MB.",
 	empty: "That file was empty.",
-	"unsupported-type": "PNG, JPEG, WebP or GIF only.",
+	"unsupported-type": UNSUPPORTED_IMAGE_TYPE_TEXT,
 	undecodable: UNREADABLE_IMAGE_TEXT,
 }
 
 // the feedback for a failed upload without an api rejection reason
 export const AVATAR_UPLOAD_FAILED_TEXT = "That didn't reach Carl. Try again."
 
-// the feedback for a team avatar upload that failed without an api rejection reason
-export const TEAM_AVATAR_UPLOAD_FAILED_TEXT = "That image didn't reach Carl. Try again."
+// the feedback for a team avatar or a Topic Post body image upload that failed without an api rejection reason
+export const IMAGE_UPLOAD_FAILED_TEXT = "That image didn't reach Carl. Try again."
 
 /**
  * Returns what a rejected avatar upload shows: the rule it broke, Carl's rejection of an image others may not see, or

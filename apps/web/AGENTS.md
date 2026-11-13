@@ -326,7 +326,14 @@ the browser bundle and renders pages through the server build, behind its own ro
   the component mounts and lets its hooks and ref methods take a null editor until then. Tiptap destroys an editor
   made during render a millisecond later if nothing has mounted, and a cold open of the dialog lost that race. The
   patch also names each checklist checkbox in `EnrichedText` by its line's text, since the package's label beside the
-  checkbox is not tied to it.
+  checkbox is not tied to it. A drop of image files moves the caret to the drop point and sends them as a paste
+  there. `noteStyle.ts` makes the image wrapper a block as wide as its image, so each image sits on its own line. Its
+  image node view marks its wrapper as the drag handle, so a drag of the image moves it, and adds a resize handle, a button at the image's corner that a drag or
+  the arrow keys move, which sets the image's width and height inside the column. Its image node keeps an `align`
+  attribute as the img's `data-align`, set by `setImageAlign`, which `noteStyle.ts` floats at a side or centers. A `CodeBlockHighlightPlugin` colors a code block in a
+  language with decorations from the highlighter that `setCodeBlockHighlighter` registers, which
+  `hooks/useCodeBlockColors.ts` loads into the Topic Post editor. A change highlights only the blocks it changed, and
+  an unlabeled block's language is guessed from its first 2,000 characters.
 - Clients — the typed api clients live in `@carlnotes/client`, imported as `@carlnotes/client/<domain>Client`.
   `lib/webApiClient.ts` holds the app's `configureApiClient` call, with the base url, `""` in the browser and the api on
   port 3000 on the server, and `showError`, which toasts the message; `router.tsx` calls it where both the server
@@ -566,8 +573,13 @@ notebook-pen tile for a row, which `components/social/NewsList.tsx` draws on a p
 and the page's Share open `components/share/ShareTopic.tsx` with the post as its `topicPost`, which shares the post's
 page, title, and card in the topic's place, and whose invite option creates a link that opens the post),
 `TopicPostsSection` (the Topic Posts section on the topic page, whose button creates a draft), and
-`TopicPostEditor` (the title over the note's rich text input and toolbar), with `TopicPostReader.tsx`, which loads
-with the editor package in the browser alone. The server and the first render show the body's plain paragraphs at the
+`TopicPostEditor` (the title over the note's rich text input and toolbar, whose `TopicPostBodyControls.tsx` adds the
+Image button with each upload's preview, the code block's language menu, and the selected image's alt text), with
+`TopicPostReader.tsx`, which loads with the editor package in the browser alone, puts a Report image button over each
+body image a reader may report through `TopicPostBodyImageReportButtons.tsx`, and colors a code block in a language
+through `hooks/useCodeBlockColors.ts`. That hook imports `lib/codeBlockColors.ts`, highlight.js's core with the
+languages the menu offers, only for a body with such a block, and the colors come from `CODE_BLOCK_COLORS_CLASS` in
+`noteStyle.ts`. The server and the first render show the body's plain paragraphs at the
 rich text's line spacing until it loads. `pages/TopicPostPage.tsx` is the page at
 `/topics/$topicId/$topicSlug/posts/$topicPostId/$postSlug`: the shared `TopicPostPage` with the web's elements, the
 actions menu's Share, Edit post, and Delete post, Home posts for an admin and Featured posts for the author on a

@@ -7,7 +7,10 @@ import { View } from "react-native"
 import { TopicPostEditor } from "./TopicPostEditor"
 
 // a save the story keeps, at the next version
-const saveStoryDraft: NonNullable<TopicPostEditorProps["saveDraft"]> = async (_topicPostId, topicPostSavePayload) => ({
+const saveStoryTopicPostDraft: NonNullable<TopicPostEditorProps["saveTopicPostDraft"]> = async (
+	_topicPostId,
+	topicPostSavePayload,
+) => ({
 	status: "saved",
 	version: topicPostSavePayload.version + 1,
 })
@@ -20,7 +23,7 @@ const meta = {
 		topicPost: TOPIC_POST_SHORT_DRAFT_STORY,
 		onPublished: () => {},
 		onDone: () => {},
-		saveDraft: saveStoryDraft,
+		saveTopicPostDraft: saveStoryTopicPostDraft,
 	},
 	render: (args) => (
 		<View style={{ height: 600 }}>
@@ -37,8 +40,3 @@ export const ShortDraft: Story = {}
 
 // a draft with a title and enough words shows its count alone and offers Publish
 export const ReadyDraft: Story = { args: { topicPost: TOPIC_POST_READY_DRAFT_STORY } }
-
-// a save that lost to a newer version shows the notice after the first keystroke, and keeps the words
-export const Conflict: Story = {
-	args: { topicPost: TOPIC_POST_READY_DRAFT_STORY, saveDraft: async () => ({ status: "conflict", version: 5 }) },
-}

@@ -49,7 +49,8 @@ the worker's docs embed read, and `sourceFileTestFixtures.ts` lists the source f
 that scan them.
 
 `concurrency.ts` runs tasks a few at a time for the review's scoring, the sweep's reads of each owner's daily Topics,
-key budget, and daily scans cutoff, the stored object deletes, and the reset's replacements. `retry.ts` tries a failed
+key budget, and daily scans cutoff, the stored object deletes, and the reset's replacements, and its
+`createConcurrencyLimiter` limits work across every caller in a process, as a Topic Post body image's encode. `retry.ts` tries a failed
 attempt again after a fixed wait, or after one chosen from the failure, which can also end the retries. Its callers are
 the worker's first Temporal connection, a podcast episode's publish, a film's images, the podcast episode smoke's
 chapters, and the model call runner in `@carlnotes/models/modelCallRetry`. Every fetch of a user-supplied url goes

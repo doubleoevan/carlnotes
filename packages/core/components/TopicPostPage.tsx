@@ -8,8 +8,15 @@ import { toTopicPath } from "@carlnotes/contracts/seo"
 import type { ReactionSummary, SocialTarget } from "@carlnotes/contracts/social"
 import type { TopicImageUrls } from "@carlnotes/contracts/topicImages"
 import type { TopicPostResponse } from "@carlnotes/contracts/topicPosts"
-import type { ComponentType, PropsWithChildren, ReactNode } from "react"
-import { isTopicPostEditorShown, toTopicPostDetails, toTopicPostTitle } from "../lib/topicPosts"
+import { type ComponentType, type PropsWithChildren, type ReactNode, useMemo } from "react"
+import { toTopicPostReaderHtml } from "../lib/topicPostBodyHtml"
+import {
+	isTopicPostEditorShown,
+	type TopicPostBodyImageReport,
+	toTopicPostBodyImageReports,
+	toTopicPostDetails,
+	toTopicPostTitle,
+} from "../lib/topicPosts"
 import { usePageCommentMentions } from "../stores/commentMentionStore"
 import type { DetailsLineProps } from "./DetailsLine"
 import { TopicPostDiscussionCard, type TopicPostDiscussionCardElements } from "./TopicPostDiscussionCard"
@@ -31,6 +38,14 @@ export type TopicPostPageProps = PropsWithChildren<{
 	onEditImage?: () => void
 }>
 
+// the body's html, what a report of each of its images names, and the read of the Topic Post again after a report,
+// which hides the reported image from its reporter
+export type TopicPostBodyProps = {
+	html: string
+	bodyImageReports: TopicPostBodyImageReport[]
+	onBodyImageReportClosed: () => void
+}
+
 // each app's elements: the header's layout, the image, pulsing until it is drawn, the title with its info popup and
 // its mention badge, the badge that counts the mentions and opens their list, the row of the byline and the reactions,
 // the details line under that row, the discussion card's elements, the body, and the app's editor
@@ -45,13 +60,13 @@ export type TopicPostPageElements = {
 	Reactions: ComponentType<{ target: SocialTarget; summary: ReactionSummary; isSignedIn: boolean }>
 	DetailsLine: ComponentType<DetailsLineProps>
 	discussionElements: TopicPostDiscussionCardElements
-	Body: ComponentType<{ html: string }>
+	Body: ComponentType<TopicPostBodyProps>
 	Editor: ComponentType<Omit<TopicPostEditorProps, "onError">>
 }
 
 /**
  * Shows a published Topic Post to its readers, and the editor to the author of a draft or of a published Topic Post
- * inside its edit time.
+ * they are editing.
  */
 export function TopicPostPage({
 	topicPost,
@@ -70,9 +85,13 @@ export function TopicPostPage({
 	// the reader's unseen mentions in the Topic Post's own thread, which the title's badge counts
 	const commentMentions = usePageCommentMentions({ kind: "post", id: topicPost.id })
 
-	// a draft opens in its editor, and so does a published Topic Post its author edits inside its edit time
+	// what a report of each body image names, kept across renders so the app's buttons place once per body
+	const bodyImageReports = useMemo(() => toTopicPostBodyImageReports(topicPost, isSignedIn), [topicPost, isSignedIn])
+
+	// a draft opens in its editor, and so does a published Topic Post its author edits. another Topic Post opens a new
+	// editor, which aborts the uploads that the last one started
 	if (isTopicPostEditorShown(topicPost, isEditing)) {
-		return <Editor topicPost={topicPost} onPublished={onPublished} onDone={onEditDone} />
+		return <Editor key={topicPost.id} topicPost={topicPost} onPublished={onPublished} onDone={onEditDone} />
 	}
 	const title = toTopicPostTitle(topicPost)
 	return (
@@ -108,7 +127,11 @@ export function TopicPostPage({
 				<DetailsLine details={toTopicPostDetails(topicPost, commentCount ?? topicPost.commentThread?.commentCount)} />
 			</Header>
 			<TopicPostDiscussionCard topicPost={topicPost} onChanged={onChanged} elements={elements.discussionElements} />
-			<Body html={topicPost.html} />
+			<Body
+				html={toTopicPostReaderHtml(topicPost)}
+				bodyImageReports={bodyImageReports}
+				onBodyImageReportClosed={onChanged}
+			/>
 			{children}
 		</>
 	)

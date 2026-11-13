@@ -189,16 +189,18 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
 - `topicPost/` — a Topic's Topic Posts: `topicPostsRoute.ts` (`GET /api/topics/:id/topic-posts`, the caller's own
   drafts first, and `POST` there for a draft behind `topicPost:publish`; `GET /api/topic-posts/:id`, a draft for its
   author alone; `PUT /api/topic-posts/:id` at `TOPIC_POST_PATH`, the save at the version its editor opened at, with the
-  note save's body limit and sanitizer, where a published post is edited inside `SOCIAL_EDIT_MS` alone, keeps its
-  title and `TOPIC_POST_MIN_WORDS`, and is counted and classified again only if its text changed;
-  `POST /api/topic-posts/:id/publish`, which counts against the day and classifies the title and text; and `DELETE`
-  for the author, the Topic's owner, and an admin. An access rejection is a 404, a newer version a 409 `conflict` with
-  the version, a post past its edit time a 409 `locked`, a short post a 400 `incomplete`, the day's limit a 429, and
-  a flagged text a 422. Each write sends its `social_topic_post_*` event with the two ids and `isOwner`, and no
-  text), `topicPosts.ts` (the row a card and a page read, `canReadTopicPost`, the cards, and the page's response),
-  and `topicPostWrites.ts` (the conditional save, the publish, the draft's create, and the delete, which releases the
-  post's home order and its profile order first. A published post's delete clears the home's caches and purges its
-  author's profile page).
+  note save's body limit and sanitizer, where a stale version is a 409 before anything is classified and a published
+  post is edited at any time, keeps its title and `TOPIC_POST_MIN_WORDS`, counts toward no daily limit, and has only
+  its changed title and its new paragraphs and alt texts classified; `POST /api/topic-posts/:id/publish`, which counts
+  against the day and classifies the title, the text, and the alt texts; and `DELETE` for the author, the Topic's
+  owner, and an admin. `topicPostModeration.ts` holds the texts a reader sees in a body and their classification. An
+  access rejection is a 404, a newer version a 409 `conflict` with the version, a short post a 400 `incomplete`, the
+  day's limit a 429, and a flagged text a 422. Each write sends its `social_topic_post_*` event with the two ids and
+  `isOwner`, and no text), `topicPosts.ts` (the row a card and a page read, `canReadTopicPost`, the cards, and the
+  page's response), and `topicPostWrites.ts` (the conditional save, the publish, the draft's create, and the delete,
+  which releases the post's home order and its profile order first. A published post's delete clears the home's caches
+  and purges its author's profile page). `topicPostsRoute.test.ts` and `topicPostEditsRoute.test.ts`, the published
+  edits, share the draft and the stubbed reads and writes in `topicPostsRouteTestFixtures.ts`.
 - `news/` — a person's news: `newsRoute.ts` (`GET /api/news`, the signed-in user's own, and
   `GET /api/profiles/:userId/news`, a profile's as anyone may read it, both under the social read limit),
   `readNews.ts` (one numbered page of a window, whose first read fixes the window's end and each group's row count in
@@ -618,6 +620,23 @@ two post views' data, with a play token for a post's recording, and `mcpViewData
 `podcast/playTokens.ts` signs a token for a podcast episode or a Topic Post, and the recording's audio route accepts it
 as `?play=`.
 
+Topic Post body images: `topicPost/topicPostImagesRoute.ts` also takes the author's upload at `POST
+/api/topic-posts/:id/body-images` (`TOPIC_POST_BODY_IMAGE_UPLOAD_PATH`, with a body limit of its own at the largest
+plan's file size), behind the per-user `topicPostBodyImageRateLimiter`, the plan's file size and count of images, the
+decode in `@carlnotes/pipeline/topicPosts/topicPostBodyImageFiles.ts`, and `toStrictImageModeration` in `moderation.ts`,
+which fails closed with a 503 `moderation-unavailable`. It serves one file at `GET
+/api/topic-post-body-images/:topicPostId/:imageId/:file`: a saved image to whoever may read the post, an upload the body
+does not name to its author, and either to a valid read signature, cached at the edge only for a public Topic's
+published post. `topicPost/topicPostBodyImages.ts` signs a non-public post's image urls, writes the html each reader
+gets with `toTopicPostHtmlForReader` (absolute for an MCP view), counts a post's images over its saved body and its
+uploads in grace, settles a save's images (the added ones keep their files and the dropped ones are queued for
+deletion), and purges a public post's images from the edge after a save drops one or the post is deleted. A file read
+loads `loadTopicPostBodyImageAccessRow`, which finds the image's path in the body in the database and never reads the
+body. `topicPost/topicPostBodyImageReports.ts` removes a reported body image for an admin: the body without it, written
+only at the version it read, its files queued for deletion, and a public post purged from the edge. The save cleans the body with
+`sanitizeTopicPostHtml` in `noteHtml.ts`, which admits an `img` of the post's own and a code block's `data-language`,
+and rejects a body past the plan's count with a 422 `image-limit-reached`.
+
 Topic Post Discussions and the Topic Post chat: `topicPost/topicPostDiscussionsRoute.ts` serves the newest recording's
 audio at `GET|HEAD /api/topic-posts/:id/discussion/audio.mp3` to whoever may read the post, through the podcast
 episode's own audio response, and takes `POST /api/topic-posts/:id/discussion/regenerate` from whoever holds
@@ -625,7 +644,8 @@ episode's own audio response, and takes `POST /api/topic-posts/:id/discussion/re
 `discussionRegenerationLimit`, a 409 while one records, and `social_topic_post_discussion_regenerate` by ids alone.
 `topicPost/topicPostDiscussions.ts` reads what a post's page shows of its discussion, the newest recording's script
 as a transcript among it, which reaches only a reader the post's own read admits, and
-`topicPost/topicPostObjectKeys.ts` lists a post's stored objects, its image files and its recordings' audio, which a
+`topicPost/topicPostObjectKeys.ts` lists a post's stored objects, its image files, its saved body images' files, and its
+recordings' audio, which a
 post's delete, a topic's delete, and an account's delete each schedule for deletion. A post's page hides its image from
 a reader who reported it until the image changes. `report/reportSubjects.ts` resolves the `topicPostImage` subject,
 and `report/adminReports.ts` shows the image on its row and, on Regenerate, removes an upload and starts an `admin`

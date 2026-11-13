@@ -37,12 +37,13 @@ export async function loadTopicPostMcpViewData(
 	toolCaller: ToolCaller,
 	topicPostRow: TopicPostRow,
 ): Promise<McpViewData> {
-	// the post as the caller reads it, and its thread as a user who shares nothing
+	// the post as the caller reads it, its body images loading from the site with no session, so each src is absolute
+	// and signed for a post that is not public, and its thread as a user who shares nothing
 	const userId = toToolCallerUserId(toolCaller)
 	const { topicPost, topic } = topicPostRow
 	const [session, topicPostResponse, commentThread] = await Promise.all([
 		loadMcpViewSession(toolCaller),
-		toTopicPostResponse(userId, topicPostRow),
+		toTopicPostResponse(userId, topicPostRow, { siteUrl: appUrl() }),
 		loadToolCommentPage({ userId, topic, target: { kind: "post", id: topicPost.id } }),
 	])
 

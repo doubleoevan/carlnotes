@@ -235,3 +235,43 @@ test("flagContent records the report's event itself", async () => {
 	expect(trackEventSpy.mock.calls[0]?.[0]).toBe("content_flagged")
 	expect(trackEventSpy.mock.calls[0]?.[2]).toMatchObject({ kind: "topic", platform: "mcp" })
 })
+
+// a body image's report is stored under its post and image, beside the post's author
+test("a body image report is stored under its post and image", async () => {
+	Bun.env.SUPPORT_EMAIL = "support@carlnotes.test"
+	spyOn(redisRateLimits, "incrementRateLimitWindow").mockResolvedValue({ count: 1, resetAt: 0 })
+	spyOn(emails, "sendEmail").mockResolvedValue(true)
+	spyOn(analytics, "trackEvent").mockImplementation(() => {})
+	const subjectId = "post-1/image-1"
+	const toReportedSubjectSpy = spyOn(reportSubjects, "toReportedSubject").mockResolvedValue({
+		kind: "topicPostBodyImage",
+		id: subjectId,
+		label: "Light roasts",
+		path: "/topics/topic-1/home-espresso/posts/post-1/light-roasts",
+		text: "Light roasts",
+		authorUserId: "user-2",
+	})
+
+	// the stored report's id, and the username the email reads
+	const sentQueries = stubConnectionPool(({ text }) => {
+		if (text.startsWith('insert into "reports"')) {
+			return [["report-1"]]
+		}
+		return text.includes('from "users"') ? [["vienna"]] : []
+	})
+	const response = await toSignedInApp(flagContentRoute, "user-1").request(
+		"/flag-content",
+		toJsonRequest({ subjectKind: "topicPostBodyImage", subjectId, reason: "not mine" }),
+	)
+	expect(response.status).toBe(200)
+	expect(toReportedSubjectSpy).toHaveBeenCalledWith(
+		"user-1",
+		expect.objectContaining({ subjectKind: "topicPostBodyImage", subjectId }),
+	)
+
+	// the stored report names the body image, its post's author, and the reporter
+	const insertReportQuery = sentQueries.find((sentQuery) => sentQuery.text.startsWith('insert into "reports"'))
+	expect(insertReportQuery?.values).toEqual(
+		expect.arrayContaining(["topicPostBodyImage", subjectId, "user-2", "user-1", "not mine"]),
+	)
+})

@@ -1,25 +1,58 @@
 // the Topic Post image routes. one file of a Topic Post's image, gated by its topic's visibility, and an editor's
-// regenerate and upload
+// regenerate and upload. one file of a body image, gated by the post's reader or a read signature, and its author's
+// upload
 
+import { MAX_TOPIC_POST_BODY_IMAGE_BYTES } from "@carlnotes/contracts/plans"
 import {
 	fromTopicImageFileName,
 	regenerateTopicImagePayload,
 	toTopicPostImageUrls,
 } from "@carlnotes/contracts/topicImages"
+import { fromTopicPostBodyImagePath, TOPIC_POST_BODY_IMAGES_PATH } from "@carlnotes/contracts/topicPostBodyImages"
+import { loadTopicPostBodyImageLimits } from "@carlnotes/db/quotas"
 import { topicImageRegenerateModel } from "@carlnotes/models/topicImageModel"
 import { storeTopicPostImageFiles, toTopicPostImageFileKey } from "@carlnotes/pipeline/topicImages/topicImageFiles"
 import { startTopicImageRender } from "@carlnotes/pipeline/topicImages/topicImageRenders"
+import {
+	storeTopicPostBodyImage,
+	type TopicPostBodyImage,
+	toTopicPostBodyImage,
+	toTopicPostBodyImageFileKey,
+} from "@carlnotes/pipeline/topicPosts/topicPostBodyImageFiles"
 import { replaceTopicPostImage } from "@carlnotes/pipeline/topicPosts/topicPostImageRenders"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { zValidator } from "@hono/zod-validator"
 import { type Context, Hono } from "hono"
 import { isAllowed } from "../authorization"
-import { uploadSignedOutRejection } from "../bodyLimit"
+import { MULTIPART_ENVELOPE_BYTES, toBodyLimit, uploadSignedOutRejection } from "../bodyLimit"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
-import { toolCallerRateLimiter } from "../rateLimit"
+import { toObjectionableContentResponse, toStrictImageModeration } from "../moderation"
+import { toolCallerRateLimiter, topicPostBodyImageRateLimiter } from "../rateLimit"
+import { toTermsOutdatedResponse } from "../termsAcceptance"
 import { imageUploadBodyLimit, readUploadedImageOriginal, toImagePromptRejection } from "../topic/imageEdits"
 import { serveImageFile } from "../topic/serveImageFile"
-import { canEditTopicPostImage, loadTopicPostRow, type TopicPostRow } from "./topicPosts"
+import {
+	isTopicPostPublic,
+	isValidTopicPostBodyImageSignature,
+	loadTopicPostBodyImageCount,
+	toUploadedTopicPostBodyImageUrl,
+} from "./topicPostBodyImages"
+import {
+	canEditTopicPostImage,
+	canReadTopicPost,
+	loadAuthoredTopicPost,
+	loadTopicPostBodyImageAccessRow,
+	loadTopicPostRow,
+	type TopicPostBodyImageAccessRow,
+	type TopicPostRow,
+} from "./topicPosts"
+
+// the path of a body image upload, after the /api base, with a body limit of its own
+export const TOPIC_POST_BODY_IMAGE_UPLOAD_PATH = "/topic-posts/:id/body-images"
+
+// the body image upload's limit, set before parseBody buffers the body: the largest plan's file plus the multipart
+// envelope. the uploader's own plan is checked after
+const topicPostBodyImageBodyLimit = toBodyLimit(MAX_TOPIC_POST_BODY_IMAGE_BYTES + MULTIPART_ENVELOPE_BYTES, "too-large")
 
 // the signed-in editor of the route's Topic Post image with the post, or the response that turns the request away
 type TopicPostImageEditor = { userId: string; topicPostRow: TopicPostRow } | { response: Response }
@@ -41,8 +74,161 @@ async function loadTopicPostImageEditor(context: Context<AppEnv>): Promise<Topic
 	return { userId, topicPostRow }
 }
 
+// whether a request may read a body image's file. a saved image goes to the post's readers and to a valid read
+// signature. an image the body does not name, an upload not yet saved, goes to the post's author and to a valid read
+// signature
+async function canReadTopicPostBodyImage(
+	context: Context<AppEnv>,
+	{ accessRow, path }: { accessRow: TopicPostBodyImageAccessRow; path: string },
+): Promise<boolean> {
+	// a valid signature reads either
+	if (
+		isValidTopicPostBodyImageSignature({
+			path,
+			expires: context.req.query("expires"),
+			signature: context.req.query("signature"),
+		})
+	) {
+		return true
+	}
+
+	// a saved image follows the post, and an unsaved one is its author's
+	const userId = currentUser(context)
+	if (!accessRow.isImageSaved) {
+		return userId !== null && accessRow.topicPost.authorUserId === userId
+	}
+	return isTopicPostPublic(accessRow) || canReadTopicPost(userId, accessRow)
+}
+
+// the uploader and the post an upload goes to
+type ReadTopicPostBodyImageUploadOptions = { userId: string; topicPostRow: TopicPostRow }
+
+// read the request's body image upload, or the response that rejects it: past the plan's file size, past the post's
+// count of images, not an image by its bytes, past the pixel limit, abandoned, objectionable, or unchecked by the
+// moderation
+async function readTopicPostBodyImageUpload(
+	context: Context<AppEnv>,
+	{ userId, topicPostRow }: ReadTopicPostBodyImageUploadOptions,
+): Promise<{ bodyImage: TopicPostBodyImage } | { response: Response }> {
+	// the uploaded file
+	const uploadedFile = (await context.req.parseBody()).image
+	if (!(uploadedFile instanceof File) || uploadedFile.size === 0) {
+		return { response: context.json({ error: "unsupported-type" }, 400) }
+	}
+
+	// the plan's file size and count of images
+	const bodyImageLimits = await loadTopicPostBodyImageLimits(userId)
+	if (uploadedFile.size > bodyImageLimits.imageBytes) {
+		return { response: context.json({ error: "too-large" }, 413) }
+	}
+	if ((await loadTopicPostBodyImageCount(topicPostRow)) >= bodyImageLimits.imageLimit) {
+		return { response: context.json({ error: "image-limit-reached" }, 422) }
+	}
+
+	// the files, decoded within the pixel limit and re-encoded
+	const bodyImage = await toTopicPostBodyImage(new Uint8Array(await uploadedFile.arrayBuffer()))
+	if ("rejection" in bodyImage) {
+		const status = bodyImage.rejection === "too-large" ? 413 : 400
+		return { response: context.json({ error: bodyImage.rejection }, status) }
+	}
+
+	// an upload its author abandoned while it encoded is neither classified nor stored
+	if (context.req.raw.signal.aborted) {
+		return { response: context.json({ error: "aborted" }, 400) }
+	}
+
+	// the moderation of its frames, which lets nothing through that it could not check
+	const imageModeration = await toStrictImageModeration({
+		frameJpegs: bodyImage.moderationJpegs,
+		subjectKind: "topic post body image",
+		subjectId: topicPostRow.topicPost.id,
+	})
+
+	// a flagged image is rejected with its category
+	if (imageModeration.outcome === "objectionable") {
+		return { response: toObjectionableContentResponse(context, imageModeration.category) }
+	}
+
+	// an image the moderation could not read, or could not check, is rejected too
+	if (imageModeration.outcome === "unreadable") {
+		return { response: context.json({ error: "unreadable" }, 400) }
+	}
+	if (imageModeration.outcome === "unavailable") {
+		return { response: context.json({ error: "moderation-unavailable" }, 503) }
+	}
+
+	// a clean image is ready to store
+	return { bodyImage }
+}
+
 // the Topic Post image routes
 export const topicPostImagesRoute = new Hono<AppEnv>()
+	// one file of a body image, to whoever may read it
+	.get("/topic-post-body-images/:topicPostId/:imageId/:file", async (context) => {
+		// a path that names no body image file, and a post that does not exist, are not found
+		const { topicPostId, imageId, file } = context.req.param()
+		const path = `${TOPIC_POST_BODY_IMAGES_PATH}/${topicPostId}/${imageId}/${file}`
+		const bodyImagePath = fromTopicPostBodyImagePath(path)
+		const accessRow = bodyImagePath ? await loadTopicPostBodyImageAccessRow(topicPostId, imageId) : null
+		if (!bodyImagePath || !accessRow) {
+			return context.json({ error: "not found" }, 404)
+		}
+
+		// an image the caller may not read is not found either
+		if (!(await canReadTopicPostBodyImage(context, { accessRow, path }))) {
+			return context.json({ error: "not found" }, 404)
+		}
+
+		// the edge caches a public post's saved image alone. every other read stays in the browser
+		const isEdgeCached = isTopicPostPublic(accessRow) && accessRow.isImageSaved
+		return serveImageFile(context, {
+			topic: accessRow.topic,
+			objectKey: toTopicPostBodyImageFileKey(topicPostId, imageId, bodyImagePath.file),
+			checkedReadAccess: isEdgeCached ? "public" : "private",
+		})
+	})
+	// an author's body image upload: a jpeg, png, webp, or gif, judged by its bytes, re-encoded, and moderated, failing
+	// closed. it is stored as pending deletion until a save names it
+	.post(
+		TOPIC_POST_BODY_IMAGE_UPLOAD_PATH,
+		topicPostBodyImageRateLimiter,
+		uploadSignedOutRejection,
+		topicPostBodyImageBodyLimit,
+		async (context) => {
+			// the post's author
+			const userId = currentUser(context)
+			const topicPostRow = await loadAuthoredTopicPost(userId, context.req.param("id"))
+			if (!userId || !topicPostRow) {
+				return context.json({ error: "not found" }, 404)
+			}
+			// a write waits on the current Terms
+			const termsOutdatedResponse = toTermsOutdatedResponse(context)
+			if (termsOutdatedResponse) {
+				return termsOutdatedResponse
+			}
+
+			// the upload, checked and re-encoded
+			const { topicPost } = topicPostRow
+			const uploadedImage = await readTopicPostBodyImageUpload(context, { userId, topicPostRow })
+			if ("response" in uploadedImage) {
+				return uploadedImage.response
+			}
+
+			// an upload abandoned while it was classified is not stored
+			if (context.req.raw.signal.aborted) {
+				return context.json({ error: "aborted" }, 400)
+			}
+
+			// the files under a new image id, and the url the editor inserts
+			const imageId = crypto.randomUUID()
+			await storeTopicPostBodyImage({ topicPostId: topicPost.id, imageId, files: uploadedImage.bodyImage.files })
+			return context.json({
+				url: toUploadedTopicPostBodyImageUrl(topicPostRow, imageId),
+				width: uploadedImage.bodyImage.width,
+				height: uploadedImage.bodyImage.height,
+			})
+		},
+	)
 	// one derived file, at the post's current hash alone, to anyone who may see its topic
 	.get("/topic-post-images/:topicPostId/:hash/:file", async (context) => {
 		// the file the url names, and the published post at its current hash alone

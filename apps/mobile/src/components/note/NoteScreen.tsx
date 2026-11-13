@@ -7,27 +7,24 @@ import { useNoteComments } from "@carlnotes/core/hooks/useNoteComments"
 import { useNoteManagement } from "@carlnotes/core/hooks/useNoteManagement"
 import { NOTE_DELETE, NOTE_LABELS, NOTE_SAVE_ERRORS, toNoteDeleteDescription } from "@carlnotes/core/lib/noteLabels"
 import { toNoteReportProps } from "@carlnotes/core/lib/reportCopy"
-import { useIsPodcastPlayerShown } from "@carlnotes/core/stores/podcastEpisodePlayerStore"
 import { onlineManager, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { X } from "lucide-react-native"
 import { type ReactNode, useEffect, useState } from "react"
-import { Alert, Keyboard, KeyboardAvoidingView, View } from "react-native"
+import { Alert, Keyboard, View } from "react-native"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { AnchorLink } from "@/components/common/AnchorLink"
-import { ClassNameSafeAreaView } from "@/components/common/ClassNameSafeAreaView"
 import { LoadFailedNotice } from "@/components/common/LoadFailedNotice"
-import { Header } from "@/components/layout/Header"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
-import { useFontScaledSize } from "@/hooks/useFontScaledSize"
 import { useIsKeyboardVisible } from "@/hooks/useIsKeyboardVisible"
 import { useNoteDraftSnapshot, useNoteDraftStore } from "@/noteDraftStorage"
 import { loadNote, type OpenedNote } from "@/noteRead"
 import type { NoteDraftStore } from "@/stores/noteDraftStore"
 import { NoteDetails } from "./NoteDetails"
 import { NoteEditor } from "./NoteEditor"
+import { NoteEditorScreen } from "./NoteEditorScreen"
 import { NoteFooter } from "./NoteFooter"
 import { NoteNameInput } from "./NoteNameInput"
 import { NoteViewer } from "./NoteViewer"
@@ -41,41 +38,19 @@ export function NoteScreen() {
 	const page = { pageType: teamId ? ("team" as const) : ("topic" as const), pageId: teamId ?? topicId ?? "" }
 	const { data: session, isPending: isSessionPending } = authClient().useSession()
 	const store = useNoteDraftStore()
-	const [headerHeight, setHeaderHeight] = useState(0)
-	const isKeyboardVisible = useIsKeyboardVisible()
-	const isPodcastPlayerShown = useIsPodcastPlayerShown()
-	const chatPillClearance = useFontScaledSize(44) + 24
 	return (
-		<View className="flex-1 bg-background">
-			<View onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}>
-				{!isKeyboardVisible && <Header />}
-			</View>
-			<ClassNameSafeAreaView
-				edges={isKeyboardVisible ? ["top", "left", "right", "bottom"] : ["left", "right", "bottom"]}
-				className="w-full max-w-3xl flex-1 self-center"
-			>
-				<KeyboardAvoidingView
-					className="flex-1"
-					enabled={!isPodcastPlayerShown}
-					keyboardVerticalOffset={headerHeight}
-					behavior="padding"
-				>
-					{/* reserve launcher space inside the keyboard-adjusted viewport */}
-					<View className="flex-1" style={{ paddingBottom: isKeyboardVisible ? 0 : chatPillClearance }}>
-						{!isSessionPending && (!session || store?.accountId === session.user.id) ? (
-							<NoteScreenContent
-								key={`${session?.user.id ?? "visitor"}:${noteId}`}
-								store={session ? store : null}
-								page={page}
-								noteId={noteId}
-							/>
-						) : (
-							<CoffeeLoading label="Loading your Tasting Note" />
-						)}
-					</View>
-				</KeyboardAvoidingView>
-			</ClassNameSafeAreaView>
-		</View>
+		<NoteEditorScreen>
+			{!isSessionPending && (!session || store?.accountId === session.user.id) ? (
+				<NoteScreenContent
+					key={`${session?.user.id ?? "visitor"}:${noteId}`}
+					store={session ? store : null}
+					page={page}
+					noteId={noteId}
+				/>
+			) : (
+				<CoffeeLoading label="Loading your Tasting Note" />
+			)}
+		</NoteEditorScreen>
 	)
 }
 

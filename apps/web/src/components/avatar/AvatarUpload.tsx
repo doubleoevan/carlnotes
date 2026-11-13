@@ -5,8 +5,8 @@ import { resizeImageFile } from "@/lib/imageResize"
 
 export {
 	AVATAR_REJECTIONS,
+	IMAGE_UPLOAD_FAILED_TEXT,
 	PICKED_IMAGE_ACCEPT,
-	TEAM_AVATAR_UPLOAD_FAILED_TEXT,
 	toAvatarRejectionText,
 } from "@carlnotes/core/lib/imageUpload"
 

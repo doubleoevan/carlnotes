@@ -33,7 +33,7 @@ function toThemeBlock(): string {
 		`\t--font-display: ${fontFamilies.display.stack};`,
 		"\t/* shadcn semantic tokens, mapped to the CarlNotes palette below */",
 		...shadcnThemeColorNames.map(toThemeColorLine),
-		"\t/* CarlNotes extras: the hero band, the badge, links and expanders, row separators, and the budget's segments */",
+		"\t/* CarlNotes extras: the hero band, the badge, links and expanders, row separators, the budget's segments, and a code block's syntax colors */",
 		...extraThemeColorNames.map(toThemeColorLine),
 		...(Object.keys(radiusSteps) as RadiusStep[]).map(toRadiusLine),
 		"}",

@@ -4,6 +4,7 @@ import { expect, test } from "bun:test"
 import { billingIntervals } from "./enums"
 import {
 	isOverageBillable,
+	MAX_TOPIC_POST_BODY_IMAGE_BYTES,
 	type MonthlyBudgetCutoff,
 	PLANS,
 	toCentsFromDollars,
@@ -129,4 +130,15 @@ test("Free has one Topic for new accounts and preserves grandfathered three-Topi
 	expect(userTopicLimit({ plan: "free" })).toBe(1)
 	expect(userTopicLimit({ plan: "plus", freeTopicLimit: 3 })).toBe(10)
 	expect(userTopicLimit({ plan: "premium", freeTopicLimit: 3 })).toBe(25)
+})
+
+test("each plan limits a Topic Post's body images, and the largest file size bounds every upload", () => {
+	expect([
+		PLANS.free.topicPostBodyImageLimit,
+		PLANS.plus.topicPostBodyImageLimit,
+		PLANS.premium.topicPostBodyImageLimit,
+	]).toEqual([5, 20, 40])
+	expect(PLANS.free.topicPostBodyImageBytes).toBe(5 * 1024 * 1024)
+	expect(PLANS.premium.topicPostBodyImageBytes).toBe(10 * 1024 * 1024)
+	expect(MAX_TOPIC_POST_BODY_IMAGE_BYTES).toBe(10 * 1024 * 1024)
 })

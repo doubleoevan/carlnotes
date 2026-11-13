@@ -1,5 +1,5 @@
 // a Topic Post's save: its title and body go out together once typing stops, one save at a time, at the version the
-// last save returned. a newer version or a post past its edit time stops the saves
+// last save returned. a newer version is saved over once
 import { saveTopicPost } from "@carlnotes/client/topicPostClient"
 import type { TopicPostResponse, TopicPostWriteFailure } from "@carlnotes/contracts/topicPosts"
 import { focusManager } from "@tanstack/react-query"
@@ -22,18 +22,17 @@ export function toTopicPostSaveDebounceMs(topicPost: Pick<TopicPostResponse, "pu
 // a Topic Post's title and body as its editor holds them
 type TopicPostDraft = { title: string; html: string }
 
-// the post the editor opened on, and what a save that failed for any reason but a newer version reports
+// the post the editor opened on, and what a failed save reports
 type UseTopicPostSaveOptions = {
 	topicPost: Pick<TopicPostResponse, "id" | "title" | "html" | "version" | "publishedAt">
 	onSaveError: (topicPostWriteFailure: TopicPostWriteFailure) => void
 	// the save request. a test and a story pass a fake
-	saveDraft?: typeof saveTopicPost
+	saveTopicPostDraft?: typeof saveTopicPost
 }
 
 // where the post stands, its title, and the calls that feed the save
 type TopicPostSave = {
 	status: NoteSaveStatus
-	hasConflict: boolean
 	title: string
 	setTitle: (title: string) => void
 	// take the editor's latest body, and save it once typing stops
@@ -42,8 +41,6 @@ type TopicPostSave = {
 	setSavedHtml: (html: string) => void
 	// send a waiting save now. resolves to whether the server holds the latest draft
 	saveNow: () => Promise<boolean>
-	// take the post a reload fetched, which ends the conflict
-	resolveConflict: (topicPost: Pick<TopicPostResponse, "title" | "html" | "version">) => void
 }
 
 /**
@@ -53,24 +50,29 @@ type TopicPostSave = {
 export function useTopicPostSave({
 	topicPost,
 	onSaveError,
-	saveDraft = saveTopicPost,
+	saveTopicPostDraft = saveTopicPost,
 }: UseTopicPostSaveOptions): TopicPostSave {
-	// what the editor shows: the title, where the post stands, and whether a newer version holds it
+	// what the editor shows: the title and where the post stands
 	const [title, setTitleState] = useState(topicPost.title)
 	const [status, setStatus] = useState<NoteSaveStatus>("saved")
-	const [hasConflict, setHasConflict] = useState(false)
 
 	// the latest draft, the draft the server holds with its version, the save on its way, and the waiting timer
-	const draftRef = useRef<TopicPostDraft>({ title: topicPost.title, html: topicPost.html })
-	const savedRef = useRef({ title: topicPost.title, html: topicPost.html, version: topicPost.version })
+	const topicPostDraftRef = useRef<TopicPostDraft>({ title: topicPost.title, html: topicPost.html })
+	const savedTopicPostDraftRef = useRef<{ title: string | null; html: string | null; version: number }>({
+		title: topicPost.title,
+		html: topicPost.html,
+		version: topicPost.version,
+	})
 	const sendingRef = useRef<Promise<boolean> | null>(null)
 	const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-	const isStoppedRef = useRef(false)
 	const handleSaveError = useStableCallback(onSaveError)
 
 	// whether the server holds the latest draft
-	function isDraftSaved(): boolean {
-		return draftRef.current.title === savedRef.current.title && draftRef.current.html === savedRef.current.html
+	function isTopicPostDraftSaved(): boolean {
+		return (
+			topicPostDraftRef.current.title === savedTopicPostDraftRef.current.title &&
+			topicPostDraftRef.current.html === savedTopicPostDraftRef.current.html
+		)
 	}
 
 	// cancel a waiting save
@@ -81,31 +83,32 @@ export function useTopicPostSave({
 		}
 	}
 
-	// send one draft at the stored version, and keep what the server returns
-	async function sendDraft(topicPostDraft: TopicPostDraft): Promise<boolean> {
+	// send one draft at the stored version, and keep what the server returns. a newer version, from the author's other
+	// tab or device or an admin's removal of an image, is saved over once, and the server keeps a removed image out
+	async function sendTopicPostDraft(topicPostDraft: TopicPostDraft, isRetry = false): Promise<boolean> {
 		setStatus("saving")
-		const topicPostSaveResult = await saveDraft(topicPost.id, {
+		const topicPostSaveResult = await saveTopicPostDraft(topicPost.id, {
 			...topicPostDraft,
-			version: savedRef.current.version,
+			version: savedTopicPostDraftRef.current.version,
 		})
 
 		// a kept save moves the stored draft and its version
 		if (topicPostSaveResult.status === "saved") {
-			savedRef.current = { ...topicPostDraft, version: topicPostSaveResult.version }
-			setStatus(isDraftSaved() ? "saved" : "saving")
+			savedTopicPostDraftRef.current = { ...topicPostDraft, version: topicPostSaveResult.version }
+			setStatus(isTopicPostDraftSaved() ? "saved" : "saving")
 			return true
 		}
 
-		// a newer version and a post past its edit time stop the saves
-		setStatus("unsaved")
-		isStoppedRef.current = topicPostSaveResult.status === "conflict" || topicPostSaveResult.status === "locked"
-
-		// a newer version shows its notice, and any other failure is reported
-		if (topicPostSaveResult.status === "conflict") {
-			setHasConflict(true)
-		} else {
-			handleSaveError(topicPostSaveResult)
+		// a newer version is saved over at that version. its text is unknown, so no draft counts as saved until a save
+		// is kept
+		if (topicPostSaveResult.status === "conflict" && topicPostSaveResult.version !== null && !isRetry) {
+			savedTopicPostDraftRef.current = { title: null, html: null, version: topicPostSaveResult.version }
+			return sendTopicPostDraft(topicPostDraft, true)
 		}
+
+		// any other failure is reported
+		setStatus("unsaved")
+		handleSaveError(topicPostSaveResult)
 		return false
 	}
 
@@ -116,16 +119,13 @@ export function useTopicPostSave({
 			await sendingRef.current
 		}
 
-		// a stopped save sends nothing, and a saved draft has nothing to send
-		if (isStoppedRef.current) {
-			return false
-		}
-		if (isDraftSaved()) {
+		// a saved draft has nothing to send
+		if (isTopicPostDraftSaved()) {
 			return true
 		}
 
 		// one save at a time, so each goes out at the version the one before it returned
-		const sending = sendDraft({ ...draftRef.current })
+		const sending = sendTopicPostDraft({ ...topicPostDraftRef.current })
 		sendingRef.current = sending
 		const isSaved = await sending
 		sendingRef.current = null
@@ -134,15 +134,11 @@ export function useTopicPostSave({
 
 	// take an edit, and save it once typing stops
 	function scheduleSave(topicPostDraft: TopicPostDraft): void {
-		draftRef.current = topicPostDraft
+		topicPostDraftRef.current = topicPostDraft
 		clearTimer()
-		if (isStoppedRef.current) {
-			setStatus("unsaved")
-			return
-		}
 
 		// an edit back to the saved draft has nothing to send
-		if (isDraftSaved() && !sendingRef.current) {
+		if (isTopicPostDraftSaved() && !sendingRef.current) {
 			setStatus("saved")
 			return
 		}
@@ -168,28 +164,17 @@ export function useTopicPostSave({
 	// where the post stands, and the calls that feed the save
 	return {
 		status,
-		hasConflict,
 		title,
 		setTitle: (nextTitle) => {
 			setTitleState(nextTitle)
-			scheduleSave({ ...draftRef.current, title: nextTitle })
+			scheduleSave({ ...topicPostDraftRef.current, title: nextTitle })
 		},
-		scheduleHtml: (html) => scheduleSave({ ...draftRef.current, html }),
+		scheduleHtml: (html) => scheduleSave({ ...topicPostDraftRef.current, html }),
 		setSavedHtml: (html) => {
 			// the editor's own rendering of the stored body is no edit
-			draftRef.current = { ...draftRef.current, html }
-			savedRef.current = { ...savedRef.current, html }
+			topicPostDraftRef.current = { ...topicPostDraftRef.current, html }
+			savedTopicPostDraftRef.current = { ...savedTopicPostDraftRef.current, html }
 		},
 		saveNow,
-		resolveConflict: (storedTopicPost) => {
-			// the stored post replaces the draft, and the saves start again
-			clearTimer()
-			draftRef.current = { title: storedTopicPost.title, html: storedTopicPost.html }
-			savedRef.current = { ...draftRef.current, version: storedTopicPost.version }
-			isStoppedRef.current = false
-			setTitleState(storedTopicPost.title)
-			setHasConflict(false)
-			setStatus("saved")
-		},
 	}
 }

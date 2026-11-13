@@ -2,12 +2,13 @@
 
 import { toReactionCount } from "@carlnotes/contracts/home"
 import { toTopicPostPath } from "@carlnotes/contracts/seo"
-import { SOCIAL_EDIT_MS, type SocialTarget, toSocialTargetKey } from "@carlnotes/contracts/social"
+import { type SocialTarget, toSocialTargetKey } from "@carlnotes/contracts/social"
 import {
 	type ImageRegenerationQuota,
 	toTopicImageUrlsOrNull,
 	toTopicPostImageUrls,
 } from "@carlnotes/contracts/topicImages"
+import { TOPIC_POST_BODY_IMAGES_PATH } from "@carlnotes/contracts/topicPostBodyImages"
 import type { TopicPostCard, TopicPostResponse } from "@carlnotes/contracts/topicPosts"
 // the tables, the gate, and the readers the rows join
 import { db } from "@carlnotes/db"
@@ -25,6 +26,11 @@ import { loadTopicCounts } from "../counts/viewerCounts"
 import { loadPageCommentThread } from "../social/pageCommentThread"
 import { loadReactionSummaries, loadReactionSummary } from "../social/reactionRows"
 import { loadEditorImageRegenerationQuota } from "../topic/imageEdits"
+import {
+	isTopicPostPublic,
+	loadTopicPostHtmlWithoutReportedImages,
+	toTopicPostHtmlForReader,
+} from "./topicPostBodyImages"
 import { loadTopicPostDiscussion } from "./topicPostDiscussions"
 
 // what a Topic Post's read joins: the post, its Topic's gate columns, name, and image, and its author's identity
@@ -81,11 +87,40 @@ export async function loadTopicPostRow(topicPostId: string) {
 	return topicPostRow ?? null
 }
 
+// what a read check needs of a Topic Post: whether it is published, its author, and its Topic
+export type TopicPostAccessRow = {
+	topicPost: Pick<TopicPostRow["topicPost"], "publishedAt" | "authorUserId">
+	topic: TopicPostRow["topic"]
+}
+
+// what a read of one body image checks, without the post's body
+export type TopicPostBodyImageAccessRow = Awaited<ReturnType<typeof loadTopicPostBodyImageAccessRow>> & {}
+
+/**
+ * Loads what a read of one body image checks, without the post's body: the post's access columns, its Topic, and
+ * whether its saved body names the image by its path.
+ */
+// biome-ignore lint/nursery/useExplicitReturnType: the row's type is the join's generated type
+export async function loadTopicPostBodyImageAccessRow(topicPostId: string, imageId: string) {
+	// the post and its Topic in one read, with the body searched in the database for the image's path
+	const imagePath = `${TOPIC_POST_BODY_IMAGES_PATH}/${topicPostId}/${imageId}/`
+	const [accessRow] = await db
+		.select({
+			topicPost: { publishedAt: topicPosts.publishedAt, authorUserId: topicPosts.authorUserId },
+			topic: topicPostRowColumns.topic,
+			isImageSaved: sql<boolean>`position(${imagePath} in ${topicPosts.html}) > 0`,
+		})
+		.from(topicPosts)
+		.innerJoin(topics, eq(topics.id, topicPosts.topicId))
+		.where(eq(topicPosts.id, topicPostId))
+	return accessRow ?? null
+}
+
 /**
  * Returns whether the user may read a Topic Post. A draft is its author's alone, and a published one is read by
  * whoever may open its Topic.
  */
-export async function canReadTopicPost(userId: string | null, topicPostRow: TopicPostRow): Promise<boolean> {
+export async function canReadTopicPost(userId: string | null, topicPostRow: TopicPostAccessRow): Promise<boolean> {
 	if (!topicPostRow.topicPost.publishedAt) {
 		return topicPostRow.topicPost.authorUserId === userId
 	}
@@ -183,6 +218,18 @@ function toTopicPostCard({ topicPost, topic, author }: TopicPostCardRow, reactio
 }
 
 /**
+ * Loads a Topic Post for a write by its author, who must still be one of its Topic's editors. Returns null for anyone
+ * else.
+ */
+export async function loadAuthoredTopicPost(userId: string | null, topicPostId: string): Promise<TopicPostRow | null> {
+	const topicPostRow = await loadTopicPostRow(topicPostId)
+	if (!userId || !topicPostRow || topicPostRow.topicPost.authorUserId !== userId) {
+		return null
+	}
+	return (await isAllowed(userId, "topicPost:publish", topicPostRow.topic)) ? topicPostRow : null
+}
+
+/**
  * Returns whether the user may change a Topic Post's image: its author, and whoever may edit its Topic, while they may
  * still read the post.
  */
@@ -194,13 +241,9 @@ export async function canEditTopicPostImage(userId: string | null, topicPostRow:
 	return topicPostRow.topicPost.authorUserId === userId || isAllowed(userId, "topicPost:editImage", topicPostRow.topic)
 }
 
-/**
- * Returns whether a published Topic Post is still inside its author's edit time, which an edit does not extend. A
- * draft is edited freely.
- */
-export function isTopicPostEditable(topicPost: { publishedAt: Date | null }, now = new Date()): boolean {
-	return !topicPost.publishedAt || now.getTime() - topicPost.publishedAt.getTime() <= SOCIAL_EDIT_MS
-}
+// what a Topic Post's page adds: the first page of its comment thread, and the site's origin before each body image's
+// path, for a reader that loads the images from another origin
+type TopicPostResponseOptions = { isCommentThreadIncluded?: boolean; siteUrl?: string }
 
 /**
  * Returns a Topic Post's page for one reader: its card, its body, its reactions, and what the reader may do with it.
@@ -209,27 +252,38 @@ export function isTopicPostEditable(topicPost: { publishedAt: Date | null }, now
 export async function toTopicPostResponse(
 	userId: string | null,
 	topicPostRow: TopicPostRow,
-	{ isCommentThreadIncluded = false }: { isCommentThreadIncluded?: boolean } = {},
+	{ isCommentThreadIncluded = false, siteUrl }: TopicPostResponseOptions = {},
 ): Promise<TopicPostResponse> {
 	// the caller's part in the post: its author, its Topic's owner, an admin, or an editor of its Topic
 	const { topicPost, topic } = topicPostRow
 	const isAuthor = userId !== null && topicPost.authorUserId === userId
 	const isTopicOwner = userId !== null && topic.ownerId === userId
-	const [isAdmin, canPublish, canEditImage, isImageReported, discussion, reactions, commentThread, topicCountsResult] =
-		await Promise.all([
-			isAllowed(userId, "admin:console"),
-			isAllowed(userId, "topicPost:publish", topic),
-			canEditTopicPostImage(userId, topicPostRow),
-			isTopicPostImageReported(userId, topicPost),
-			topicPost.publishedAt ? loadTopicPostDiscussion(topicPost.id) : null,
-			loadReactionSummary(userId, toTopicPostTarget(topicPost.id)),
-			// a draft has no thread
-			isCommentThreadIncluded && topicPost.publishedAt
-				? loadPageCommentThread({ userId, topic, target: { kind: "post", id: topicPost.id } })
-				: undefined,
-			// the Topic's viewers and subscribers, as its own page reads them
-			loadTopicCounts(userId, topic.id),
-		])
+	const [
+		isAdmin,
+		canPublish,
+		canEditImage,
+		isImageReported,
+		discussion,
+		reactions,
+		commentThread,
+		topicCountsResult,
+		readerHtml,
+	] = await Promise.all([
+		isAllowed(userId, "admin:console"),
+		isAllowed(userId, "topicPost:publish", topic),
+		canEditTopicPostImage(userId, topicPostRow),
+		isTopicPostImageReported(userId, topicPost),
+		topicPost.publishedAt ? loadTopicPostDiscussion(topicPost.id) : null,
+		loadReactionSummary(userId, toTopicPostTarget(topicPost.id)),
+		// a draft has no thread
+		isCommentThreadIncluded && topicPost.publishedAt
+			? loadPageCommentThread({ userId, topic, target: { kind: "post", id: topicPost.id } })
+			: undefined,
+		// the Topic's viewers and subscribers, as its own page reads them
+		loadTopicCounts(userId, topic.id),
+		// the body without the images the reader reported
+		loadTopicPostHtmlWithoutReportedImages(userId, topicPostRow),
+	])
 
 	// whoever may change the image reads their regenerations this month, where it came from, and its image prompt
 	const imageRegenerationQuota = canEditImage && userId ? await loadEditorImageRegenerationQuota(userId) : null
@@ -242,7 +296,7 @@ export async function toTopicPostResponse(
 	return {
 		...topicPostCard,
 		image: isImageReported ? null : topicPostCard.image,
-		html: topicPost.html,
+		html: toTopicPostHtmlForReader(readerHtml, { isSigned: !isTopicPostPublic(topicPostRow), siteUrl }),
 		version: topicPost.version,
 		editedAt: topicPost.editedAt?.toISOString() ?? null,
 		isTopicPublic: topic.visibility === "public",
@@ -254,7 +308,7 @@ export async function toTopicPostResponse(
 		// what the caller may do
 		isTopicOwner,
 		isAuthor,
-		isEditable: isAuthor && isTopicPostEditable(topicPost),
+		isEditable: isAuthor,
 		canDelete: isAuthor || isAdmin || isTopicOwner,
 		discussion,
 		discussionRegenerationQuota,

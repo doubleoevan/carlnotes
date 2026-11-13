@@ -23,6 +23,9 @@ export const TOPIC_ATTACHMENT_ACCEPT = [
 	...DOCUMENT_FILE_SUFFIXES,
 ]
 
+// what a Topic Post body's Image action offers, the image types the server takes and judges again by their bytes
+export const TOPIC_POST_BODY_IMAGE_ACCEPT = ["image/png", "image/jpeg", "image/webp", "image/gif"]
+
 // what the chat composers' pickers offer, named on their own so a widened topic list never widens chat
 export const CHAT_ATTACHMENT_ACCEPT = [
 	"image/*",

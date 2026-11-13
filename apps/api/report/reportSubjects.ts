@@ -3,6 +3,7 @@ import type { ReportSubjectKind } from "@carlnotes/contracts/reports"
 import { toReportText } from "@carlnotes/contracts/reports"
 import { toNotePagePath, toTeamPath, toTopicPath, toTopicPostPath } from "@carlnotes/contracts/seo"
 import { toHtmlText } from "@carlnotes/contracts/text"
+import { toTopicPostBodyImageIds } from "@carlnotes/contracts/topicPostBodyImages"
 import { db } from "@carlnotes/db"
 import { chatRoomMessages } from "@carlnotes/db/schema/chat"
 import { noteComments } from "@carlnotes/db/schema/notes"
@@ -59,6 +60,7 @@ const REPORT_SUBJECT_RESOLVERS: Record<
 	comment: toReportedComment,
 	topicImage: toReportedTopicImage,
 	topicPostImage: toReportedTopicPostImage,
+	topicPostBodyImage: toReportedTopicPostBodyImage,
 }
 
 // a topic under the same visibility rule the Topic page uses, so anyone who can open a Topic can report it
@@ -103,6 +105,31 @@ async function toReportedTopicPostImage(userId: string, topicPostId: string): Pr
 	return {
 		kind: "topicPostImage",
 		id: topicPost.id,
+		label: topicPost.title,
+		path: toTopicPostPath(topic, topicPost),
+		text: toReportText(topicPost.title),
+		authorUserId: topicPost.authorUserId,
+	}
+}
+
+// an image in a published Topic Post's body, named "<topicPostId>/<imageId>", under the post's read rule while the body
+// still shows it. the post's title is the text, and its author is the image's
+async function toReportedTopicPostBodyImage(userId: string, subjectId: string): Promise<ReportedSubject | null> {
+	// the post, and the image its saved body names
+	const [topicPostId = "", imageId = ""] = subjectId.split("/")
+	const topicPostRow = await loadTopicPostRow(topicPostId)
+	const isReportable =
+		topicPostRow?.topicPost.publishedAt &&
+		toTopicPostBodyImageIds(topicPostRow.topicPost.html, topicPostId).includes(imageId)
+	if (!topicPostRow || !isReportable || !(await canReadTopicPost(userId, topicPostRow))) {
+		return null
+	}
+
+	// the post's page is where the image shows
+	const { topicPost, topic } = topicPostRow
+	return {
+		kind: "topicPostBodyImage",
+		id: subjectId,
 		label: topicPost.title,
 		path: toTopicPostPath(topic, topicPost),
 		text: toReportText(topicPost.title),

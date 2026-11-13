@@ -50,6 +50,11 @@
 			--color-separator-sunken: #a68d64;
 			--color-spend-chat: #6b4a26;
 			--color-spend-podcast-episode: #a8703a;
+			--color-syntax-keyword: #9a3a12;
+			--color-syntax-string: #46651a;
+			--color-syntax-comment: #705a40;
+			--color-syntax-number: #7a3f86;
+			--color-syntax-function: #1d5a73;
 		}
 
 		@variant dark {
@@ -84,6 +89,11 @@
 			--color-separator-sunken: #69553f;
 			--color-spend-chat: #f0e6d6;
 			--color-spend-podcast-episode: #c99a5b;
+			--color-syntax-keyword: #ffad7a;
+			--color-syntax-string: #cfe29a;
+			--color-syntax-comment: #d0c3a6;
+			--color-syntax-number: #e8c2f5;
+			--color-syntax-function: #a3dcef;
 		}
 	}
 }

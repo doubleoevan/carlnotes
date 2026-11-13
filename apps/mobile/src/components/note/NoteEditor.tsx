@@ -39,6 +39,7 @@ export function NoteInput({
 	onChangeState,
 	onChangeSelection,
 	onLinkDetected,
+	onPasteImages,
 }: RichTextEditorInputProps) {
 	const noteStyle = useNoteStyle()
 	const height = useNoteEditorHeight()
@@ -57,6 +58,7 @@ export function NoteInput({
 			onChangeState={(event) => onChangeState(event.nativeEvent)}
 			onChangeSelection={(event) => onChangeSelection(event.nativeEvent)}
 			onLinkDetected={onLinkDetected}
+			onPasteImages={onPasteImages && ((event) => onPasteImages(event.nativeEvent.images))}
 		/>
 	)
 }

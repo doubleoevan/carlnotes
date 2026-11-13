@@ -7,6 +7,11 @@ import {
 	type ReportSubjectKind,
 } from "@carlnotes/contracts/reports"
 import type { TopicImageUrls } from "@carlnotes/contracts/topicImages"
+import {
+	fromTopicPostBodyImagePath,
+	toTopicPostBodyImageIds,
+	toTopicPostBodyImagePath,
+} from "@carlnotes/contracts/topicPostBodyImages"
 import { db } from "@carlnotes/db"
 import { chatRoomMessages } from "@carlnotes/db/schema/chat"
 import { noteComments, notes } from "@carlnotes/db/schema/notes"
@@ -26,6 +31,8 @@ import { setAdminBlock } from "../adminBlocks"
 import { deleteChatRoomMessage } from "../chat/roomDeletes"
 import { deleteNoteComment } from "../note/noteComments"
 import { deleteCommentThread } from "../social/comments"
+import { removeReportedTopicPostBodyImage } from "../topicPost/topicPostBodyImageReports"
+import { toSignedTopicPostBodyImageUrl } from "../topicPost/topicPostBodyImages"
 import { toReportTextHash } from "./reports"
 
 // the reporter and the author, each joined to the report from the users table
@@ -73,13 +80,20 @@ export async function loadOpenReports(): Promise<AdminReport[]> {
 		loadTopicPostImageUrlsByPost(toSubjectIdsOfKind(reportRows, "topicPostImage")),
 	])
 
-	// a reported image as it stands now: a Topic's, a Topic Post's, or none for any other kind
+	// a reported image as it stands now: a Topic's, a Topic Post's, a body image's, or none for any other kind
 	const toSubjectImage = ({ subjectKind, subjectId }: (typeof reportRows)[number]): TopicImageUrls | null => {
 		if (subjectKind === "topicImage") {
 			return topicImageUrlsByTopic.get(subjectId) ?? null
 		}
+
+		// a body image is signed for the admin
+		if (subjectKind === "topicPostBodyImage") {
+			return toReportedBodyImageUrls(subjectId)
+		}
 		return subjectKind === "topicPostImage" ? (topicPostImageUrlsByPost.get(subjectId) ?? null) : null
 	}
+
+	// each report with its subject's image and whether the subject is still there
 	return reportRows.map((reportRow) => ({
 		id: reportRow.id,
 		subjectKind: reportRow.subjectKind,
@@ -101,6 +115,21 @@ export async function loadOpenReports(): Promise<AdminReport[]> {
 		// an author who is not yet under an admin block can be blocked from the report
 		canAdminBlock: Boolean(reportRow.authorId) && reportRow.authorAdminBlockedAt === null,
 	}))
+}
+
+// a reported body image's column copy at every size, signed for the admin, who may not be one of its post's readers
+function toReportedBodyImageUrls(subjectId: string): TopicImageUrls | null {
+	// the post and the image the subject names
+	const [topicPostId = "", imageId = ""] = subjectId.split("/")
+	const bodyImagePath = toTopicPostBodyImagePath({ topicPostId, imageId })
+	if (!fromTopicPostBodyImagePath(bodyImagePath)) {
+		return null
+	}
+
+	// one signed url for every size
+	const bodyImageUrl = toSignedTopicPostBodyImageUrl(bodyImagePath)
+	const bodyImageSizeUrls = { url: bodyImageUrl, url2x: bodyImageUrl }
+	return { page: bodyImageSizeUrls, list: bodyImageSizeUrls, thumbnail: bodyImageSizeUrls }
 }
 
 // the subject ids of one kind among some reports
@@ -127,27 +156,44 @@ async function loadExistingSubjectKeys(
 	const commentIds = toSubjectIdsOfKind(reportRows, "comment")
 	const topicImageTopicIds = toSubjectIdsOfKind(reportRows, "topicImage")
 	const topicPostIds = toSubjectIdsOfKind(reportRows, "topicPostImage")
+	const bodyImageSubjectIds = toSubjectIdsOfKind(reportRows, "topicPostBodyImage")
+	const bodyImageTopicPostIds = bodyImageSubjectIds.map((subjectId) => subjectId.split("/")[0] ?? "")
 
 	// one read per kind that has any
-	const [chatMessageRows, noteRows, noteCommentRows, commentRows, topicRows, topicPostRows] = await Promise.all([
-		chatMessageIds.length
-			? db
-					.select({ id: chatRoomMessages.id })
-					.from(chatRoomMessages)
-					.where(inArray(chatRoomMessages.id, chatMessageIds))
-			: [],
-		noteIds.length ? db.select({ id: notes.id }).from(notes).where(inArray(notes.id, noteIds)) : [],
-		noteCommentIds.length
-			? db.select({ id: noteComments.id }).from(noteComments).where(inArray(noteComments.id, noteCommentIds))
-			: [],
-		commentIds.length ? db.select({ id: comments.id }).from(comments).where(inArray(comments.id, commentIds)) : [],
-		topicImageTopicIds.length
-			? db.select({ id: topics.id }).from(topics).where(inArray(topics.id, topicImageTopicIds))
-			: [],
-		topicPostIds.length
-			? db.select({ id: topicPosts.id }).from(topicPosts).where(inArray(topicPosts.id, topicPostIds))
-			: [],
-	])
+	const [chatMessageRows, noteRows, noteCommentRows, commentRows, topicRows, topicPostRows, bodyImagePostRows] =
+		await Promise.all([
+			chatMessageIds.length
+				? db
+						.select({ id: chatRoomMessages.id })
+						.from(chatRoomMessages)
+						.where(inArray(chatRoomMessages.id, chatMessageIds))
+				: [],
+			noteIds.length ? db.select({ id: notes.id }).from(notes).where(inArray(notes.id, noteIds)) : [],
+			noteCommentIds.length
+				? db.select({ id: noteComments.id }).from(noteComments).where(inArray(noteComments.id, noteCommentIds))
+				: [],
+			commentIds.length ? db.select({ id: comments.id }).from(comments).where(inArray(comments.id, commentIds)) : [],
+			topicImageTopicIds.length
+				? db.select({ id: topics.id }).from(topics).where(inArray(topics.id, topicImageTopicIds))
+				: [],
+			topicPostIds.length
+				? db.select({ id: topicPosts.id }).from(topicPosts).where(inArray(topicPosts.id, topicPostIds))
+				: [],
+			// a body image's post, whose body may still show it
+			bodyImageTopicPostIds.length
+				? db
+						.select({ id: topicPosts.id, html: topicPosts.html })
+						.from(topicPosts)
+						.where(inArray(topicPosts.id, bodyImageTopicPostIds))
+				: [],
+		])
+
+	// a body image exists while its post's body shows it
+	const existingBodyImageSubjectIds = bodyImagePostRows.flatMap((bodyImagePostRow) =>
+		toTopicPostBodyImageIds(bodyImagePostRow.html, bodyImagePostRow.id).map(
+			(imageId) => `${bodyImagePostRow.id}/${imageId}`,
+		),
+	)
 	return new Set([
 		...chatMessageRows.map((chatMessageRow) => `chatMessage:${chatMessageRow.id}`),
 		...noteRows.map((noteRow) => `note:${noteRow.id}`),
@@ -155,6 +201,7 @@ async function loadExistingSubjectKeys(
 		...commentRows.map((commentRow) => `comment:${commentRow.id}`),
 		...topicRows.map((topicRow) => `topicImage:${topicRow.id}`),
 		...topicPostRows.map((topicPostRow) => `topicPostImage:${topicPostRow.id}`),
+		...existingBodyImageSubjectIds.map((subjectId) => `topicPostBodyImage:${subjectId}`),
 	])
 }
 
@@ -224,7 +271,8 @@ type RemoveReportedSubjectOptions = {
 	subjectId: string
 }
 
-// delete a reported message, note, note comment, or comment as the admin, or render a reported image again
+// delete a reported message, note, note comment, or comment as the admin, render a reported image again, or take a
+// reported body image out of its post
 async function removeReportedSubject({
 	context,
 	adminUserId,
@@ -274,6 +322,11 @@ async function removeReportedSubject({
 	}
 	if (subjectKind === "topicPostImage") {
 		await regenerateReportedTopicPostImage(subjectId)
+	}
+
+	// a body image is taken out of its post's body
+	if (subjectKind === "topicPostBodyImage") {
+		await removeReportedTopicPostBodyImage(subjectId)
 	}
 }
 

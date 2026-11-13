@@ -278,12 +278,16 @@ until explicit deletion. Released read contracts retain nullable expiry fields a
 survive the MCP picker outside matching and open from the shared AI sender label; missing references remain plain
 labels.
 
-- `topicPosts/` — what follows a Topic Post's publish. `summarizeTopicPost.ts` builds the `summarize-topic-post`
-  prompt with the title and the text fenced and writes the summary, `topicPostSummaries.ts` writes it on the
-  author's key and stores it, and `topicPostImageRenders.ts` reads a post's scene input, starts its first render,
-  and replaces its image. `attach.ts` adds a topic's published Topic Posts to a review's context after the
-  attachments, each under its title and cut at the longest extract. `temporalClient.ts` starts the publish and the
-  summary workflows on the `topic-posts` queue.
+- `topicPosts/` — what follows a Topic Post's publish. `summarizeTopicPost.ts` builds the `summarize-topic-post` prompt
+  with the title and the text fenced and writes the summary, `topicPostSummaries.ts` writes it on the author's key and
+  stores it, and `topicPostImageRenders.ts` reads a post's scene input, starts its first render, and replaces its image.
+  `attach.ts` adds a topic's published Topic Posts to a review's context after the attachments, each under its title and
+  cut at the longest extract. `temporalClient.ts` starts the publish and the summary workflows on the `topic-posts`
+  queue. `topicPostBodyImageFiles.ts` reads a body image upload's type by its bytes, rejects one past the pixel limit
+  over every frame before it decodes, one past 128 frames, and one that does not decode whole, re-encodes it as one
+  column-sized WebP with no metadata and still animated, a few uploads at a time, lays every frame the moderation
+  screens on sheets of sixteen, on black as well as white for a transparent image, and stores the file pending deletion
+  until a save names it. `topicPostBodyImageTestFixtures.ts` holds the pngs its tests and the api's share.
 
 Topic Post Discussions and the Topic Post chat: `topicPosts/topicPostDiscussionScript.ts` builds the
 `write-topic-post-discussion` prompt with the hosts block and the post, its Comments, and the starter's note each

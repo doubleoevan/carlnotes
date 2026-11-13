@@ -48,6 +48,9 @@ export function NoteLayout({
 	)
 }
 
+// the body card's padding and border at its two sides, which the body's width leaves out
+export const NOTE_BODY_CARD_INSET = 34
+
 /**
  * Scrolls the bounded body card within the remaining keyboard-safe space, under the notice above it, with an optional
  * header over a divider at the top of the card.

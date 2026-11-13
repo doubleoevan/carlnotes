@@ -281,13 +281,21 @@ export const QUIET_DAY_NEWS_RESULT: McpViewNews = {
 // the url a link in the Topic Post's body opens
 export const TOPIC_POST_BODY_LINK_URL = "https://example.com/roast-notes"
 
+// a body image in the Topic Post, at its signed url on the site, as the MCP tool's read returns it
+export const TOPIC_POST_BODY_IMAGE_URL = `${TEST_SITE_URL}/api/topic-post-body-images/00000000-0000-4000-8000-000000000001/00000000-0000-4000-8000-000000000002/column.webp?expires=1&signature=s`
+
 // a Topic's published Topic Post as its card, and the same post as its page shows it, with an image on the site, a
-// link in its body, a recording, and its comment thread's first page
+// link, a body image, and a TypeScript code block in its body, a recording, and its comment thread's first page
 export const TOPIC_POST_CARD: TopicPostCard = TOPIC_POST_CARD_STORY
 const TOPIC_POST_IMAGE_FILES = { url: "/topic-post-image.jpg", url2x: "/topic-post-image-2x.jpg" }
 export const TOPIC_POST: TopicPostResponse = {
 	...TOPIC_POST_DISCUSSION_STORY,
-	html: `<p>Start with <a href="${TOPIC_POST_BODY_LINK_URL}">the roast notes</a>.</p>${TOPIC_POST_DISCUSSION_STORY.html}`,
+	html: [
+		`<p>Start with <a href="${TOPIC_POST_BODY_LINK_URL}">the roast notes</a>.</p>`,
+		`<img src="${TOPIC_POST_BODY_IMAGE_URL.replace("&", "&amp;")}" alt="A cupping table" width="640" height="480" />`,
+		'<codeblock data-language="typescript"><p>const roast = "light"</p></codeblock>',
+		TOPIC_POST_DISCUSSION_STORY.html,
+	].join(""),
 	image: { page: TOPIC_POST_IMAGE_FILES, list: TOPIC_POST_IMAGE_FILES, thumbnail: TOPIC_POST_IMAGE_FILES },
 	commentThread: toTestCommentThread(),
 }

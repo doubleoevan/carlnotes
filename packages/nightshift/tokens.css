@@ -26,7 +26,7 @@
 	--color-border: var(--border);
 	--color-input: var(--input);
 	--color-ring: var(--ring);
-	/* CarlNotes extras: the hero band, the badge, links and expanders, row separators, and the budget's segments */
+	/* CarlNotes extras: the hero band, the badge, links and expanders, row separators, the budget's segments, and a code block's syntax colors */
 	--color-hero: var(--hero);
 	--color-hero-foreground: var(--hero-foreground);
 	--color-hero-muted: var(--hero-muted);
@@ -38,6 +38,11 @@
 	--color-separator-sunken: var(--separator-sunken);
 	--color-spend-chat: var(--spend-chat);
 	--color-spend-podcast-episode: var(--spend-podcast-episode);
+	--color-syntax-keyword: var(--syntax-keyword);
+	--color-syntax-string: var(--syntax-string);
+	--color-syntax-comment: var(--syntax-comment);
+	--color-syntax-number: var(--syntax-number);
+	--color-syntax-function: var(--syntax-function);
 	--radius-xs: calc(var(--radius) - 7px);
 	--radius-sm: calc(var(--radius) - 4px);
 	--radius-md: calc(var(--radius) - 2px);
@@ -117,6 +122,16 @@
 	--spend-chat: #6b4a26;
 	/* the budget's podcast episode segment, a brown between the scan and chat segments */
 	--spend-podcast-episode: #a8703a;
+	/* a keyword in a Topic Post's code block, at 4.5:1 or more on the code block's muted fill */
+	--syntax-keyword: #9a3a12;
+	/* a string in a Topic Post's code block */
+	--syntax-string: #46651a;
+	/* a comment in a Topic Post's code block */
+	--syntax-comment: #705a40;
+	/* a number or a literal in a Topic Post's code block */
+	--syntax-number: #7a3f86;
+	/* a function, a type, or a built-in name in a Topic Post's code block */
+	--syntax-function: #1d5a73;
 }
 
 /* Dark roast, dark mode */
@@ -153,4 +168,9 @@
 	--ring-line: rgba(201, 186, 153, 0.18);
 	--spend-chat: #f0e6d6;
 	--spend-podcast-episode: #c99a5b;
+	--syntax-keyword: #ffad7a;
+	--syntax-string: #cfe29a;
+	--syntax-comment: #d0c3a6;
+	--syntax-number: #e8c2f5;
+	--syntax-function: #a3dcef;
 }

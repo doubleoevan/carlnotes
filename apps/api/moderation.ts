@@ -91,6 +91,55 @@ function toViolationCategory({
 	return classification.verdict.isViolation ? classification.verdict.category : null
 }
 
+// what a check that fails closed finds in an image's frames: nothing, a violation, an image it cannot read, or no
+// verdict at all
+export type StrictImageModeration =
+	| { outcome: "clean" }
+	| { outcome: "objectionable"; category: ModerationCategory }
+	| { outcome: "unreadable" }
+	| { outcome: "unavailable" }
+
+// the frames under review as jpegs, and what names them in a failure report
+export type ToStrictImageModerationOptions = { frameJpegs: Uint8Array[]; subjectKind: string; subjectId: string }
+
+/**
+ * Checks every frame of an image other users will see in public, failing closed: a skipped or failed check of any frame
+ * is unavailable and never clean, and a failure is reported with the subject's kind and id and never the image.
+ */
+export async function toStrictImageModeration({
+	frameJpegs,
+	subjectKind,
+	subjectId,
+}: ToStrictImageModerationOptions): Promise<StrictImageModeration> {
+	// every frame at once
+	const classifications = await Promise.all(
+		frameJpegs.map((frameJpeg) =>
+			classifyImage({ dataUrl: `data:image/jpeg;base64,${Buffer.from(frameJpeg).toString("base64")}` }),
+		),
+	)
+
+	// a violation in any frame rejects it, then a frame the check could not read
+	for (const classification of classifications) {
+		if (classification.outcome === "classified" && classification.verdict.isViolation) {
+			return { outcome: "objectionable", category: classification.verdict.category }
+		}
+	}
+	if (classifications.some((classification) => classification.outcome === "unreadable")) {
+		return { outcome: "unreadable" }
+	}
+
+	// a frame with no verdict leaves the image unchecked, so it is unavailable, and a failure is reported
+	const failedClassification = classifications.find((classification) => classification.outcome === "failed")
+	if (failedClassification?.outcome === "failed") {
+		reportError(failedClassification.error, "api-route", {
+			moderationSubjectKind: subjectKind,
+			moderationSubjectId: subjectId,
+		})
+	}
+	const isEveryFrameClassified = classifications.every((classification) => classification.outcome === "classified")
+	return isEveryFrameClassified ? { outcome: "clean" } : { outcome: "unavailable" }
+}
+
 /**
  * Returns the 422 a violating text or image gets, naming its category.
  */

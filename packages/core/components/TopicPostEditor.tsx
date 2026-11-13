@@ -1,22 +1,31 @@
 // a Topic Post's editor: its title over the rich text editor a note has, with the word count and the button that
 // publishes a draft or leaves a published post's edit
-import { fetchTopicPost, publishTopicPost, type saveTopicPost } from "@carlnotes/client/topicPostClient"
+import { publishTopicPost, type saveTopicPost } from "@carlnotes/client/topicPostClient"
 import {
 	isTopicPostComplete,
 	TOPIC_POST_TITLE_MAX_CHARS,
 	type TopicPostResponse,
 } from "@carlnotes/contracts/topicPosts"
-import { type ComponentType, type PropsWithChildren, type ReactNode, type RefObject, useState } from "react"
+import { type ComponentType, type PropsWithChildren, type ReactNode, type RefObject, useRef, useState } from "react"
 import { type RichTextEditorInputProps, useRichTextEditor } from "../hooks/useRichTextEditor"
+import { type PickedBodyImage, useTopicPostBodyImageUpload } from "../hooks/useTopicPostBodyImageUpload"
 import { useTopicPostSave } from "../hooks/useTopicPostSave"
+import type { NoteFormatState } from "../lib/noteFormats"
 import { NOTE_SAVE_STATUS_LABELS } from "../lib/noteLabels"
+import {
+	toApiBodyImageHtml,
+	toBlockImageHtml,
+	toBodyImageSizes,
+	toSiteBodyImageHtml,
+	toStoredSizeImageHtml,
+	toWidthLimitedImageHtml,
+} from "../lib/topicPostBodyHtml"
 import {
 	TOPIC_POST_LABELS,
 	toTopicPostFailureMessage,
 	toTopicPostWordCount,
 	toTopicPostWordCountLabel,
 } from "../lib/topicPosts"
-import type { NoteConflictNoticeProps } from "./NoteConflictNotice"
 import type { NoteToolbarProps } from "./NoteToolbar"
 import type { NoteEditorInstance } from "./NoteViewer"
 
@@ -27,14 +36,28 @@ export type TopicPostEditorProps = {
 	onDone: () => void
 	onError: (message: string) => void
 	// the save request. a story passes a fake
-	saveDraft?: typeof saveTopicPost
+	saveTopicPostDraft?: typeof saveTopicPost
 }
 
-// where each app places the editor's parts: the title, the toolbar, the conflict notice, the body, and the footer
+// the controls only a Topic Post's toolbar has: the Image button with the uploads on their way, the alignment of the
+// paragraphs at the caret or of the selected image, the code block's language while the caret is in one, and the
+// selected image's alt text
+export type TopicPostBodyControlsProps = {
+	editorRef: RefObject<NoteEditorInstance | null>
+	formatState: NoteFormatState | null
+	previewUris: string[]
+	isImageBlocked: boolean
+	onPickImages: (images: PickedBodyImage[]) => void
+	codeBlockLanguage: string | null
+	isCodeBlockActive: boolean
+	// the selected image's alt text, or null while no image is selected
+	imageAlt: string | null
+}
+
+// where each app places the editor's parts: the title, the toolbar, the body, and the footer
 export type TopicPostEditorLayoutProps = PropsWithChildren<{
 	titleInput: ReactNode
 	toolbar: ReactNode
-	conflict: ReactNode
 	footer: ReactNode
 	editorRef: RefObject<NoteEditorInstance | null>
 }>
@@ -58,14 +81,14 @@ export type TopicPostEditorFooterProps = {
 	onAction: () => void
 }
 
-// each app's elements: the layout, the title's input, the rich text input and toolbar a note has, the conflict notice,
-// and the footer
+// each app's elements: the layout, the title's input, the rich text input and toolbar a note has, the Topic Post's own
+// toolbar controls, and the footer
 export type TopicPostEditorElements = {
 	Layout: ComponentType<TopicPostEditorLayoutProps>
 	TitleInput: ComponentType<TopicPostTitleInputProps>
 	Input: ComponentType<RichTextEditorInputProps>
 	Toolbar: ComponentType<NoteToolbarProps>
-	ConflictNotice: ComponentType<NoteConflictNoticeProps>
+	BodyControls: ComponentType<TopicPostBodyControlsProps>
 	Footer: ComponentType<TopicPostEditorFooterProps>
 }
 
@@ -78,29 +101,67 @@ export function TopicPostEditor({
 	onPublished,
 	onDone,
 	onError,
-	saveDraft,
-	elements: { Layout, TitleInput, Input, Toolbar, ConflictNotice, Footer },
-}: TopicPostEditorProps & { elements: TopicPostEditorElements }) {
-	// the body the editor opened on, its word count, and whether the button's work or a reload is on its way
-	const [initialHtml] = useState(topicPost.html)
+	saveTopicPostDraft,
+	appendImage,
+	keepLostHtml,
+	imageWidthLimit,
+	elements: { Layout, TitleInput, Input, Toolbar, BodyControls, Footer },
+}: TopicPostEditorProps & {
+	elements: TopicPostEditorElements
+	// how the platform puts a local image's bytes in an upload's form
+	appendImage: (body: FormData, image: PickedBodyImage) => Promise<void>
+	// what a platform's editor drops from the body, put back from the body before the edit
+	keepLostHtml?: (previousHtml: string, editedHtml: string) => string
+	// the widest a platform's editor that draws an image at its stored size shows one. a save puts the stored size back
+	imageWidthLimit?: number
+}) {
+	// the body the editor opened on, with each image on its own line, its word count, and whether the button's work is
+	// on its way
+	const [initialHtml] = useState(() => toEditorHtml(topicPost.html, imageWidthLimit))
 	const [wordCount, setWordCount] = useState(topicPost.wordCount)
 	const [isActing, setIsActing] = useState(false)
-	const [isReloading, setIsReloading] = useState(false)
 
-	// the save, and the editor that feeds it. the editor's own rendering of the stored body is the saved one
+	// the save
 	const topicPostSave = useTopicPostSave({
 		topicPost,
-		saveDraft,
+		saveTopicPostDraft,
 		onSaveError: (topicPostWriteFailure) =>
 			onError(toTopicPostFailureMessage(topicPostWriteFailure, TOPIC_POST_LABELS.saveError)),
 	})
-	const { editorRef, toolbarProps, inputProps, setHtml } = useRichTextEditor({
+
+	// the body as last kept at its site paths, from which a platform's editor's losses come back, and each image's
+	// stored size by its path, which a save puts back over the size an editor with an image width limit shows
+	const previousHtmlRef = useRef(topicPost.html)
+	const storedImageSizesRef = useRef(toBodyImageSizes(topicPost.html))
+	const keepEditedHtml = (editedHtml: string): string => {
+		const siteHtml = imageWidthLimit
+			? toStoredSizeImageHtml(toSiteBodyImageHtml(editedHtml), storedImageSizesRef.current)
+			: toSiteBodyImageHtml(editedHtml)
+		previousHtmlRef.current = keepLostHtml ? keepLostHtml(previousHtmlRef.current, siteHtml) : siteHtml
+		return previousHtmlRef.current
+	}
+
+	// the editor, whose own rendering of the stored body is the saved one
+	const { editorRef, toolbarProps, inputProps } = useRichTextEditor({
 		initialHtml,
-		onBaselineHtml: topicPostSave.setSavedHtml,
-		onChangeHtml: (html) => {
+		onBaselineHtml: (html) => topicPostSave.setSavedHtml(keepEditedHtml(html)),
+		onChangeHtml: (editedHtml) => {
+			const html = keepEditedHtml(editedHtml)
 			setWordCount(toTopicPostWordCount(html))
 			topicPostSave.scheduleHtml(html)
 		},
+	})
+	const { formatState } = toolbarProps
+
+	// the body's image uploads, from the Image button and from a paste
+	const bodyImageUpload = useTopicPostBodyImageUpload({
+		topicPostId: topicPost.id,
+		editorRef,
+		selection: toolbarProps.selection,
+		appendImage,
+		onError,
+		imageWidthLimit,
+		onImageStored: (path, size) => storedImageSizesRef.current.set(path, size),
 	})
 	const isPublished = topicPost.publishedAt !== null
 	const isComplete = isTopicPostComplete(topicPostSave.title, wordCount)
@@ -129,24 +190,6 @@ export function TopicPostEditor({
 		}
 	}
 
-	// replace the draft with the stored post only after a deliberate reload returns it
-	async function handleReload(): Promise<void> {
-		setIsReloading(true)
-		try {
-			const storedTopicPost = await fetchTopicPost(topicPost.id)
-			if (!storedTopicPost?.isEditable) {
-				onError(TOPIC_POST_LABELS.lockedError)
-				return
-			}
-			topicPostSave.resolveConflict(storedTopicPost)
-			setWordCount(storedTopicPost.wordCount)
-			setHtml(storedTopicPost.html)
-		} catch {
-			onError(TOPIC_POST_LABELS.reloadError)
-		} finally {
-			setIsReloading(false)
-		}
-	}
 	return (
 		<Layout
 			editorRef={editorRef}
@@ -159,16 +202,19 @@ export function TopicPostEditor({
 					onChange={topicPostSave.setTitle}
 				/>
 			}
-			toolbar={<Toolbar {...toolbarProps} />}
-			conflict={
-				topicPostSave.hasConflict ? (
-					<ConflictNotice
-						message={TOPIC_POST_LABELS.conflict}
-						lastEditorUsername={null}
-						isReloading={isReloading}
-						onReload={() => void handleReload()}
+			toolbar={
+				<Toolbar {...toolbarProps}>
+					<BodyControls
+						editorRef={editorRef}
+						formatState={formatState}
+						previewUris={bodyImageUpload.previewUris}
+						isImageBlocked={formatState?.image?.isBlocking ?? false}
+						onPickImages={bodyImageUpload.uploadImages}
+						codeBlockLanguage={formatState?.codeBlock?.language ?? null}
+						isCodeBlockActive={formatState?.codeBlock?.isActive ?? false}
+						imageAlt={formatState?.image?.isActive ? (formatState.image.alt ?? "") : null}
 					/>
-				) : null
+				</Toolbar>
 			}
 			footer={
 				<Footer
@@ -176,14 +222,25 @@ export function TopicPostEditor({
 					isComplete={isComplete}
 					saveStatusLabel={NOTE_SAVE_STATUS_LABELS[topicPostSave.status]}
 					actionLabel={toActionLabel(isPublished, isActing)}
-					isActionDisabled={isActing || topicPostSave.hasConflict || !isComplete}
+					isActionDisabled={isActing || !isComplete}
 					onAction={() => void handleAction()}
 				/>
 			}
 		>
-			<Input {...inputProps} placeholder={TOPIC_POST_LABELS.bodyPlaceholder} />
+			<Input
+				{...inputProps}
+				placeholder={TOPIC_POST_LABELS.bodyPlaceholder}
+				onPasteImages={bodyImageUpload.uploadImages}
+			/>
 		</Layout>
 	)
+}
+
+// a stored body as the editor opens it: each image on its own line, at the api's origin, and no wider than the
+// editor's image width limit if it has one
+function toEditorHtml(html: string, imageWidthLimit: number | undefined): string {
+	const editorHtml = toBlockImageHtml(toApiBodyImageHtml(html))
+	return imageWidthLimit ? toWidthLimitedImageHtml(editorHtml, imageWidthLimit) : editorHtml
 }
 
 // the button's label: Done on a published post, and Publish on a draft, or Publishing while the publish is on its way

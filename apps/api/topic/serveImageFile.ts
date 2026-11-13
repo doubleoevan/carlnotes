@@ -16,12 +16,14 @@ import {
 import type { NamedTopic } from "./permissions"
 
 // the topic whose visibility gates the file, the object key of the file, its content type, which is webp if none is
-// given, and whether the url changes with the image, which it does if not given
+// given, whether the url changes with the image, which it does if not given, and the read a caller already checked,
+// which replaces the topic's gate and decides whether the edge may cache the file
 export type ServeImageFileOptions = {
 	topic: NamedTopic
 	objectKey: string
 	contentType?: string
 	isUrlVersioned?: boolean
+	checkedReadAccess?: "public" | "private"
 }
 
 /**
@@ -31,11 +33,11 @@ export type ServeImageFileOptions = {
  */
 export async function serveImageFile(
 	context: Context<AppEnv>,
-	{ topic, objectKey, contentType = "image/webp", isUrlVersioned = true }: ServeImageFileOptions,
+	{ topic, objectKey, contentType = "image/webp", isUrlVersioned = true, checkedReadAccess }: ServeImageFileOptions,
 ): Promise<Response> {
 	// a non-public topic's file goes to a session the view gate grants, and never to the edge
-	const isPublic = topic.visibility === "public"
-	if (!isPublic && !(await isAllowed(currentUser(context), "topic:view", topic))) {
+	const isPublic = checkedReadAccess ? checkedReadAccess === "public" : topic.visibility === "public"
+	if (!checkedReadAccess && !isPublic && !(await isAllowed(currentUser(context), "topic:view", topic))) {
 		return context.json({ error: "not found" }, 404)
 	}
 

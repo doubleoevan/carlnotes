@@ -6,6 +6,7 @@ import type { NoteEditorInstance } from "../components/NoteViewer"
 import type { NoteFormatState, NoteLink, NoteSelection } from "../lib/noteFormats"
 import { EMPTY_EDITOR_HTML } from "./useNoteBodySave"
 import { useStableCallback } from "./useStableCallback"
+import type { PickedBodyImage } from "./useTopicPostBodyImageUpload"
 
 // what each app's rich text input takes: the editor's ref, the body it opens with, its placeholder, and its events
 export type RichTextEditorInputProps = {
@@ -17,6 +18,8 @@ export type RichTextEditorInputProps = {
 	onChangeState: (state: NoteFormatState) => void
 	onChangeSelection: (selection: NoteSelection) => void
 	onLinkDetected: (link: NoteLink | null) => void
+	// a Topic Post's pasted images. a note's input leaves a paste to the editor
+	onPasteImages?: (images: PickedBodyImage[]) => void
 }
 
 // the body the editor opens with, the editor's own rendering of it, which is no edit, and each edit after it

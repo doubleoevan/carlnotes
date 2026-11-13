@@ -1,11 +1,15 @@
 // the api client for Topic Posts: one post's read, a draft's create and saves, the publish, the delete, the image's
-// regenerate and upload, and a post's place among its author's profile pins and the home's pins. a Topic's posts
+// regenerate and upload, a body image's upload, and a post's place among its author's profile pins and the home's pins. a Topic's posts
 // come with its page
 import {
 	regenerateTopicImageResponse,
 	type TopicImageUrls,
 	uploadTopicImageResponse,
 } from "@carlnotes/contracts/topicImages"
+import {
+	type TopicPostBodyImageUploadResponse,
+	topicPostBodyImageUploadResponse,
+} from "@carlnotes/contracts/topicPostBodyImages"
 import {
 	type HomeTopicPostsResponse,
 	homeTopicPostsResponse,
@@ -181,6 +185,26 @@ export async function uploadTopicPostImageBody(topicPostId: string, body: FormDa
 	return (await readApiResponse(uploadTopicImageResponse, response)).image
 }
 
+/**
+ * Uploads an image for a Topic Post's body. Returns the url to insert and its size. Throws an error with the api's
+ * words on a rejection. An upload the caller abandons is aborted through its signal.
+ */
+export async function uploadTopicPostBodyImage(
+	topicPostId: string,
+	body: FormData,
+	signal?: AbortSignal,
+): Promise<TopicPostBodyImageUploadResponse> {
+	const response = await fetchApi(`/api/topic-posts/${encodeURIComponent(topicPostId)}/body-images`, {
+		method: "POST",
+		body,
+		signal,
+	})
+	if (!response.ok) {
+		throw new Error((await readApiErrorMessage(response)) ?? `upload failed: ${response.status}`)
+	}
+	return readApiResponse(topicPostBodyImageUploadResponse, response)
+}
+
 // a write that returns the post: the post as stored, the failure its response means, or the failure of a request that
 // never arrived
 async function toTopicPostWriteResult(sendRequest: () => Promise<ApiResponse>): Promise<TopicPostWriteResult> {
@@ -199,12 +223,10 @@ async function toTopicPostWriteResult(sendRequest: () => Promise<ApiResponse>): 
 
 // why a rejected write changed nothing, read from its status and its body
 async function toTopicPostWriteFailure(response: ApiResponse): Promise<TopicPostWriteFailure> {
-	// a 409 is a newer version with its number, or a post past its edit time
+	// a 409 is a newer version with its number
 	if (response.status === 409) {
 		const conflict = await readApiResponse(topicPostConflictResponse, response)
-		return conflict.error === "locked"
-			? { status: "locked" }
-			: { status: "conflict", version: conflict.version ?? null }
+		return { status: "conflict", version: conflict.version ?? null }
 	}
 
 	// a post short of a title or of its words, and any other rejection with what its body says

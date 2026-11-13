@@ -46,6 +46,9 @@ type PlanConfig = {
 	imageRegenerationLimit: number
 	// how many Topic Post Discussion regenerations the person may run in a UTC month
 	discussionRegenerationLimit: number
+	// how many images one Topic Post's body may hold, and the most bytes one body image file may hold
+	topicPostBodyImageLimit: number
+	topicPostBodyImageBytes: number
 	// how many of those topics may run on a daily frequency, which is what actually decides the monthly spend
 	dailyTopicLimit: BillingIntervalLimit
 	dailyScanLimit: BillingIntervalLimit
@@ -63,6 +66,9 @@ type PlanConfig = {
 
 // the "remaining" count an admin sees for a quota they bypass
 export const ADMIN_QUOTA = 999
+
+// one megabyte in bytes, for a plan's file sizes
+const MEGABYTE = 1024 * 1024
 
 // an admin's monthly spend backstop in cents
 export const ADMIN_BUDGET_CENTS = 100_000
@@ -85,6 +91,8 @@ export const PLANS = {
 		inviteLimit: 30,
 		imageRegenerationLimit: 2,
 		discussionRegenerationLimit: 2,
+		topicPostBodyImageLimit: 5,
+		topicPostBodyImageBytes: 5 * MEGABYTE,
 		dailyTopicLimit: { monthly: 1, yearly: 1 },
 		dailyScanLimit: { monthly: 5, yearly: 5 },
 		canEmailCarl: false,
@@ -108,6 +116,8 @@ export const PLANS = {
 		inviteLimit: 30,
 		imageRegenerationLimit: 15,
 		discussionRegenerationLimit: 10,
+		topicPostBodyImageLimit: 20,
+		topicPostBodyImageBytes: 10 * MEGABYTE,
 		dailyTopicLimit: { monthly: 3, yearly: 4 },
 		dailyScanLimit: { monthly: 15, yearly: 20 },
 		canEmailCarl: true,
@@ -131,6 +141,8 @@ export const PLANS = {
 		inviteLimit: 50,
 		imageRegenerationLimit: 30,
 		discussionRegenerationLimit: 20,
+		topicPostBodyImageLimit: 40,
+		topicPostBodyImageBytes: 10 * MEGABYTE,
 		dailyTopicLimit: { monthly: 6, yearly: 7 },
 		dailyScanLimit: { monthly: 30, yearly: 40 },
 		canEmailCarl: true,
@@ -146,6 +158,11 @@ export const PLANS = {
 		priceYearlyCents: MONTHLY_PRICE_CENTS.premium * YEARLY_MONTHS,
 	},
 } as const satisfies Record<Plan, PlanConfig>
+
+// the most bytes any plan lets one body image file hold, which an upload's body limit allows before the plan is read
+export const MAX_TOPIC_POST_BODY_IMAGE_BYTES = Math.max(
+	...Object.values(PLANS).map((planConfig) => planConfig.topicPostBodyImageBytes),
+)
 
 // the path and the labels that lead to a purchase
 export const PLANS_PATH = "/plans"

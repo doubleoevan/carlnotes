@@ -433,18 +433,24 @@ Topic Posts: `src/components/topicPost/` holds the app's adapters of the shared 
 `TopicPostInfoButton`, which a sheet needs no second frame for. Its
 Share and the screen's Share open `src/components/share/ShareTopic.tsx` with the post as its `topicPost`, which shares
 the post in the topic's place, and whose invite link opens the post), `TopicPostsSection`, and
-`TopicPostEditor`, and `TopicPostScreen.tsx`, the
-screen at `app/topics/[topicId]/posts/[topicPostId].tsx`. `ShareTopic.tsx`, `ShareTeam.tsx`, and a Dashboard screen's
+`TopicPostEditor`, whose `TopicPostBodyControls.tsx` adds the Image button from the photo library with each upload's
+preview, and which returns to each save the code block languages and alt texts the native editor drops. The native
+input and reader draw an image at its stored size, so the editor opens and the post's body shows once their width is
+measured, with each image no wider than it, and a save keeps each image's stored size, and
+`TopicPostScreen.tsx`, the screen at `app/topics/[topicId]/posts/[topicPostId].tsx`, with the post's body in
+`TopicPostBody.tsx`. `ShareTopic.tsx`, `ShareTeam.tsx`,
+and a Dashboard screen's
 Share open the operating system's share sheet through `share/shareSheet.ts`, which shows an error if the sheet does
 not open. `TopicPostScreen.tsx` renders the shared `TopicPostPage`: a
 published post in `PageScreen` with its actions menu, whose Featured posts opens the author's `ProfileRankDialog` on
 a published post of a public topic, image sheet, and comment thread, and a draft or an edit in
-the note screen's keyboard-safe frame. `src/platformPath.ts` maps a post's web path to its route.
+`note/NoteEditorScreen.tsx`, as a note's. `src/platformPath.ts` maps a post's web path to its route.
 `src/components/account/ProfileHeader.tsx` adapts the shared profile header. `note/NoteDetails.tsx` and
 `note/NotesList.tsx` adapt core's open note header and notes list, and `NoteScreen.tsx`'s open note renders the header
 with `note/NoteNameInput.tsx` and `note/NoteFooter.tsx`, the save status, retry, report, and delete.
 `note/NoteLayout.tsx` exports
-`NoteBodyScroll` and `NoteKeyboardDoneButton`, which the note and the Topic Post editor both lay out with. A
+`NoteBodyScroll` and `NoteKeyboardDoneButton`, which the note and the Topic Post editor both lay out with, and
+`note/NoteEditorScreen.tsx` is the screen both are edited on: the header over the editor in the keyboard-safe space. A
 disabled page action with a reason stays pressable and says its reason in a dialog.
 
 Topic Post Discussions and the Topic Post chat: `src/components/topicPost/TopicPostDiscussionCard.tsx` adapts the
@@ -459,5 +465,6 @@ opened above the post's keeps its own chat. On that screen `toChatHref` in `src/
 to `/topics/[topicId]/chat` with `privateChat=true`, so the chat screen opens on the topic's private chat, and a
 visitor's press opens the sign-up sheet. `useChatPage` labels the private chat's choice with `toPrivateChatIdLabel`
 on one line, and `PrivateChatPanel` reads its placeholder from `toPrivateChatPlaceholder`. Report image is the
-screen's report in its actions sheet. `src/components/chat/TopicPostTag.tsx` adapts the shared tag to a pressable
+screen's report in its actions sheet, beside a Report image N in post option for each body image a reader may report.
+`src/components/chat/TopicPostTag.tsx` adapts the shared tag to a pressable
 link.

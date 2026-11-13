@@ -1,11 +1,15 @@
+import type { TopicPostAlign } from "@carlnotes/contracts/topicPostBodyImages"
+
 // the editor commands both platform adapters implement
 export type NoteEditorCommands = {
+	// the focus and the inline marks
 	blur?: () => void
 	toggleBold: () => void
 	toggleItalic: () => void
 	toggleUnderline: () => void
 	toggleStrikeThrough: () => void
 	toggleInlineCode: () => void
+	// the headings, the lists, and the blocks
 	toggleH1: () => void
 	toggleH2: () => void
 	toggleH3: () => void
@@ -14,26 +18,50 @@ export type NoteEditorCommands = {
 	toggleCheckboxList: (isChecked: boolean) => void
 	toggleBlockQuote: () => void
 	toggleCodeBlock: () => void
+	// a link over a range
 	setLink: (start: number, end: number, text: string, url: string) => void
 	removeLink: (start: number, end: number) => void
+	// a Topic Post's body: the caret, an image at it, the image's alt text and alignment, the code block's language, and
+	// the alignment of the paragraphs at the caret
+	setSelection?: (start: number, end: number) => void
+	setImage?: (src: string, width: number, height: number, alt?: string) => void
+	setImageAlt?: (alt: string) => void
+	setImageAlign?: (align: TopicPostAlign | null) => void
+	setTextAlignment?: (alignment: TextAlignment) => void
+	setCodeBlockLanguage?: (language: string | null) => void
 }
 
-// the format state, selection, and detected link contain no platform types
+// the format state, selection, and detected link contain no platform types. the inline marks come first
 export type NoteFormatKey =
 	| "bold"
 	| "italic"
 	| "underline"
 	| "strikeThrough"
 	| "inlineCode"
+	// the headings
 	| "h1"
 	| "h2"
 	| "h3"
+	// the lists and the blocks
 	| "unorderedList"
 	| "orderedList"
 	| "checkboxList"
 	| "blockQuote"
 	| "codeBlock"
-export type NoteFormatState = Partial<Record<NoteFormatKey | "link", { isActive: boolean; isBlocking: boolean }>>
+
+// each format's state as the editor reports it
+export type NoteFormatState = Partial<Record<NoteFormatKey | "link", { isActive: boolean; isBlocking: boolean }>> & {
+	// the web editor's code block language and selected image's alt text and alignment, null where nothing of the kind is
+	// active, and the alignment of the paragraphs at the caret
+	codeBlock?: { language?: string | null }
+	image?: { isActive: boolean; isBlocking: boolean; alt?: string | null; align?: TopicPostAlign | null }
+	alignment?: string
+}
+
+// a paragraph's alignment as the editor sets it. auto is the text's own direction
+type TextAlignment = "left" | "center" | "right" | "auto"
+
+// the selected range, the link at the caret, and one format the toolbar offers
 export type NoteSelection = { start: number; end: number; text: string }
 export type NoteLink = NoteSelection & { url: string }
 export type NoteFormat = {

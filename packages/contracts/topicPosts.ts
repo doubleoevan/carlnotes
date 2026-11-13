@@ -8,8 +8,13 @@ import { profileIdentity } from "./profiles"
 import { commentThreadResponse, reactionSummary } from "./social"
 import { CONTROL_CHARACTER_PATTERN } from "./socialText"
 import { toHtmlText } from "./text"
+import { MINUTE_MS } from "./time"
 import { imageRegenerationQuota, topicImageUrls } from "./topicImages"
 import { topicCounts } from "./viewerCounts"
+
+// the wait from a Topic Post's publish to its first discussion, which reads the text the author settled on in the
+// first edits
+export const TOPIC_POST_DISCUSSION_WAIT_MS = 15 * MINUTE_MS
 
 // the title of the section that lists Topic Posts, on a Topic's page and on a profile's
 export const OPEN_MIC_TITLE = "Open Mic"
@@ -20,6 +25,48 @@ export const TOPIC_POST_MIN_WORDS = 300
 
 // the longest summary a model writes of a published Topic Post
 export const TOPIC_POST_SUMMARY_MAX_CHARS = 400
+
+// the widest the Topic Post page's reading column draws, in css pixels. a body image's column copy is twice it
+export const TOPIC_POST_COLUMN_WIDTH = 960
+
+// the languages a code block's menu offers, by the value its data-language stores. a block that stores none has its
+// language guessed for coloring, and Plain text stores its own value
+export const CODE_BLOCK_LANGUAGES = [
+	{ value: "bash", label: "Bash" },
+	{ value: "css", label: "CSS" },
+	{ value: "go", label: "Go" },
+	{ value: "html", label: "HTML" },
+	{ value: "java", label: "Java" },
+	{ value: "javascript", label: "JavaScript" },
+	{ value: "json", label: "JSON" },
+	{ value: "markdown", label: "Markdown" },
+	{ value: "python", label: "Python" },
+	{ value: "rust", label: "Rust" },
+	{ value: "sql", label: "SQL" },
+	{ value: "typescript", label: "TypeScript" },
+	{ value: "yaml", label: "YAML" },
+] as const
+export type CodeBlockLanguage = (typeof CODE_BLOCK_LANGUAGES)[number]["value"]
+
+// the menu's labels for a code block whose language is guessed, and for one kept as plain text, with the value Plain
+// text stores
+export const AUTO_LANGUAGE_LABEL = "Auto"
+export const PLAIN_TEXT_LABEL = "Plain text"
+export const PLAIN_TEXT_LANGUAGE = "plaintext"
+
+/**
+ * Returns whether a value is a language a code block may store and color.
+ */
+export function isCodeBlockLanguage(value: string): value is CodeBlockLanguage {
+	return CODE_BLOCK_LANGUAGES.some((language) => language.value === value)
+}
+
+/**
+ * Returns whether a value is one a code block's data-language may store: a language, or Plain text.
+ */
+export function isStoredCodeBlockLanguage(value: string): boolean {
+	return value === PLAIN_TEXT_LANGUAGE || isCodeBlockLanguage(value)
+}
 
 // the largest version a save names, the database's integer limit
 const TOPIC_POST_VERSION_MAX = 2_147_483_647
@@ -105,9 +152,10 @@ export const topicPostResponse = topicPostCard.extend({
 	reactions: reactionSummary,
 	// the first page of a published post's comment thread. absent on a write's response
 	commentThread: commentThreadResponse.optional(),
-	// whether the caller owns its Topic, wrote it, may still edit it, may delete it, and may publish on its Topic
+	// whether the caller owns its Topic, wrote it, may delete it, and may publish on its Topic
 	isTopicOwner: z.boolean(),
 	isAuthor: z.boolean(),
+	// the same as isAuthor
 	isEditable: z.boolean(),
 	canDelete: z.boolean(),
 	canPublish: z.boolean(),
@@ -168,11 +216,10 @@ export const topicPostSaveResponse = z.object({ version: z.number() })
 // what a save or a publish lost to a newer version returns: the stored version
 export const topicPostConflictResponse = z.object({ error: z.string(), version: z.number().optional() })
 
-// why a Topic Post write changed nothing: a newer version holds the post, the post is past its edit time, it is short
-// of a title or of its words, or the write failed, with Carl's words if the text was rejected
+// why a Topic Post write changed nothing: a newer version holds the post, it is short of a title or of its words, or
+// the write failed, with Carl's words if the text was rejected
 export type TopicPostWriteFailure =
 	| { status: "conflict"; version: number | null }
-	| { status: "locked" }
 	| { status: "incomplete" }
 	| { status: "failed"; message: string | null }
 

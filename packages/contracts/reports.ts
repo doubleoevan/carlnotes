@@ -9,7 +9,7 @@ import { topicImageUrls } from "./topicImages"
 export type ReportSubjectKind = (typeof reportSubjectKinds)[number]
 
 // the report subject kinds an admin removes from the console, where removing a topic's or a topic post's image
-// renders a new one. a Topic, profile, Team, Finding, or Podcast Episode is cleared or acted on through the console's
+// renders a new one, and removing a body image takes it out of its post. a Topic, profile, Team, Finding, or Podcast Episode is cleared or acted on through the console's
 // own tools
 export const REMOVABLE_REPORT_SUBJECT_KINDS: ReadonlySet<ReportSubjectKind> = new Set([
 	"chatMessage",
@@ -18,13 +18,14 @@ export const REMOVABLE_REPORT_SUBJECT_KINDS: ReadonlySet<ReportSubjectKind> = ne
 	"comment",
 	"topicImage",
 	"topicPostImage",
+	"topicPostBodyImage",
 ])
 
 /**
- * Returns whether a report's subject is an image: a Topic's or a Topic Post's.
+ * Returns whether a report's subject is an image: a Topic's, a Topic Post's, or one in a Topic Post's body.
  */
 export function isImageReportSubjectKind(subjectKind: ReportSubjectKind): boolean {
-	return subjectKind === "topicImage" || subjectKind === "topicPostImage"
+	return subjectKind === "topicImage" || subjectKind === "topicPostImage" || subjectKind === "topicPostBodyImage"
 }
 
 export type ReportResolution = (typeof reportResolutions)[number]
@@ -42,6 +43,7 @@ export const REPORT_SUBJECT_KIND_LABELS: Record<ReportSubjectKind, string> = {
 	comment: "hot take",
 	topicImage: "topic image",
 	topicPostImage: "topic post image",
+	topicPostBodyImage: "topic post body image",
 }
 
 // how much of the subject's text a report keeps. a note body is cut to this length

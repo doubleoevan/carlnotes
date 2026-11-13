@@ -1,7 +1,9 @@
 // a Topic Post's copy and the values both apps read from it: the editor's labels, the word count, the date line, and
 // what its share options share
 import type { Visibility } from "@carlnotes/contracts/enums"
+import { isModerationRejectionMessage } from "@carlnotes/contracts/moderation"
 import { READING_WORDS_PER_MINUTE, toCountLabel, toDotSeparatedText, toHtmlText } from "@carlnotes/contracts/text"
+import { toTopicPostBodyImageIds } from "@carlnotes/contracts/topicPostBodyImages"
 import {
 	TOPIC_POST_MIN_WORDS,
 	type TopicPostCard,
@@ -11,6 +13,7 @@ import {
 } from "@carlnotes/contracts/topicPosts"
 import type { EditableImage } from "../components/TopicImageEditor"
 import { toCountDetails } from "./detailsLine"
+import { IMAGE_UPLOAD_FAILED_TEXT, UNREADABLE_IMAGE_TEXT, UNSUPPORTED_IMAGE_TYPE_TEXT } from "./imageUpload"
 
 // what the editor, the page, and the section say
 export const TOPIC_POST_LABELS = {
@@ -42,10 +45,34 @@ export const TOPIC_POST_LABELS = {
 	saveError: "That post didn't save. Carl kept your words — try again in a moment.",
 	publishError: "That post didn't publish. Carl kept your draft — try again in a moment.",
 	incompleteError: `A post needs a title and ${TOPIC_POST_MIN_WORDS} words before it goes out.`,
-	lockedError: "A post can be edited for 15 minutes after it goes out. This one is past that.",
 	deleteError: "Carl couldn't toss that post. Try again in a moment.",
-	reloadError: "Carl couldn't reload that post. Try again in a moment.",
-	conflict: "Saved from another window since you opened it. Copy anything you want to keep, then reload.",
+	conflict: "This post changed in another tab or on another device. Try again in a moment.",
+	addImage: "Add image",
+	imageUploading: "Uploading image…",
+	imageAlt: "Alt text",
+	imageAltPlaceholder: "Describe the image",
+	codeBlockLanguage: "Code language",
+}
+
+// what a rejected body image upload shows, by the api's rejection
+const TOPIC_POST_BODY_IMAGE_REJECTIONS: Record<string, string> = {
+	"too-large": "That image is over your plan's size limit.",
+	"unsupported-type": UNSUPPORTED_IMAGE_TYPE_TEXT,
+	unreadable: UNREADABLE_IMAGE_TEXT,
+	"image-limit-reached": "This post holds as many images as your plan allows.",
+	"moderation-unavailable": "Carl couldn't check that image just now. Try again in a moment.",
+	"rate limited": "That's a lot of images at once. Give it a minute.",
+}
+
+/**
+ * Returns what a rejected body image upload shows: the rule it broke, Carl's rejection of an image others may not see,
+ * or the fallback text.
+ */
+export function toTopicPostBodyImageRejectionText(rejection: string): string {
+	return (
+		TOPIC_POST_BODY_IMAGE_REJECTIONS[rejection] ??
+		(isModerationRejectionMessage(rejection) ? rejection : IMAGE_UPLOAD_FAILED_TEXT)
+	)
 }
 
 // both apps confirm a delete of the post and its thread
@@ -63,11 +90,9 @@ export function toTopicPostDeleteDescription(title: string): string {
  */
 export function toTopicPostFailureMessage(topicPostWriteFailure: TopicPostWriteFailure, fallback: string): string {
 	switch (topicPostWriteFailure.status) {
-		// a newer version, and a post past its edit time
+		// a newer version
 		case "conflict":
 			return TOPIC_POST_LABELS.conflict
-		case "locked":
-			return TOPIC_POST_LABELS.lockedError
 
 		// a post short of a title or of words, and any other failure by its own words
 		case "incomplete":
@@ -138,13 +163,13 @@ export function toTopicPostDetailsText(topicPost: TopicPostDetailsFields): strin
 
 /**
  * Whether a Topic Post shows its editor: a draft always does, and a published post does while its author is editing
- * it inside its edit time.
+ * it.
  */
 export function isTopicPostEditorShown(
-	topicPost: Pick<TopicPostCard, "publishedAt"> & { isEditable: boolean },
+	topicPost: Pick<TopicPostCard, "publishedAt"> & { isAuthor: boolean },
 	isEditing: boolean,
 ): boolean {
-	return !topicPost.publishedAt || (isEditing && topicPost.isEditable)
+	return !topicPost.publishedAt || (isEditing && topicPost.isAuthor)
 }
 
 /**
@@ -201,6 +226,35 @@ export function toTopicPostImageReport(topicPost: Pick<TopicPostResponse, "id" |
 	subjectLabel: string
 } {
 	return { subjectKind: "topicPostImage", subjectId: topicPost.id, subjectLabel: `the image of ${topicPost.title}` }
+}
+
+// what a report of one body image names, and the label of the actions menu option that opens it on the phone
+export type TopicPostBodyImageReport = {
+	imageId: string
+	subjectKind: "topicPostBodyImage"
+	subjectId: string
+	subjectLabel: string
+	optionLabel: string
+}
+
+/**
+ * Returns what a report of each body image in a published Topic Post names, in body order: the image as
+ * `<topicPostId>/<imageId>`, read as its place in the post. A visitor, the post's author, and a draft have none.
+ */
+export function toTopicPostBodyImageReports(
+	topicPost: Pick<TopicPostResponse, "id" | "title" | "html" | "publishedAt" | "isAuthor">,
+	isSignedIn: boolean,
+): TopicPostBodyImageReport[] {
+	if (!isSignedIn || !topicPost.publishedAt || topicPost.isAuthor) {
+		return []
+	}
+	return toTopicPostBodyImageIds(topicPost.html, topicPost.id).map((imageId, i) => ({
+		imageId,
+		subjectKind: "topicPostBodyImage",
+		subjectId: `${topicPost.id}/${imageId}`,
+		subjectLabel: `image ${i + 1} of ${toTopicPostTitle(topicPost)}`,
+		optionLabel: `Report image ${i + 1} in post`,
+	}))
 }
 
 // the page's url path, the post id the url names, and the post that loaded

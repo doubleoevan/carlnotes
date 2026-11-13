@@ -2,6 +2,7 @@
 import { dailyFrequencies, isAdminRole } from "@carlnotes/contracts/enums"
 import {
 	ADMIN_QUOTA,
+	MAX_TOPIC_POST_BODY_IMAGE_BYTES,
 	type OverageBillingAccess,
 	PLANS,
 	type Plan,
@@ -216,6 +217,21 @@ export async function loadTopicImageRegenerationQuota(userId: string): Promise<I
 	const used = usedRow?.used ?? 0
 	const limit = userAccess.isAdmin ? ADMIN_QUOTA : PLANS[userAccess.plan].imageRegenerationLimit
 	return { used, limit, remaining: Math.max(0, limit - used) }
+}
+
+// how many images one Topic Post's body may hold and the most bytes one body image file may hold
+export type TopicPostBodyImageLimits = { imageLimit: number; imageBytes: number }
+
+/**
+ * Returns the user's plan's body image limits. An admin has the admin quota of images at the largest plan's file size.
+ */
+export async function loadTopicPostBodyImageLimits(userId: string): Promise<TopicPostBodyImageLimits> {
+	const userAccess = await loadUserAccess(userId)
+	if (userAccess.isAdmin) {
+		return { imageLimit: ADMIN_QUOTA, imageBytes: MAX_TOPIC_POST_BODY_IMAGE_BYTES }
+	}
+	const { topicPostBodyImageLimit, topicPostBodyImageBytes } = PLANS[userAccess.plan]
+	return { imageLimit: topicPostBodyImageLimit, imageBytes: topicPostBodyImageBytes }
 }
 
 /**

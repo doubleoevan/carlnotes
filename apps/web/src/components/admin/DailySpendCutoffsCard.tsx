@@ -61,43 +61,49 @@ type DailySpendCutoffsCardProps = {
  * input loses focus, and an empty input clears it.
  */
 export function DailySpendCutoffsCard({ dailySpendCutoffs, onSaved }: DailySpendCutoffsCardProps) {
-	// the typed overrides, and the last saved draft, which a save compares against and builds on
-	const [savedDraft, setSavedDraft] = useState(() => toSpendControlDraft(dailySpendCutoffs))
-	const [draft, setDraft] = useState(savedDraft)
+	// the typed overrides, and the last saved spend control draft, which a save compares against and builds on
+	const [savedSpendControlDraft, setSavedSpendControlDraft] = useState(() => toSpendControlDraft(dailySpendCutoffs))
+	const [spendControlDraft, setSpendControlDraft] = useState(savedSpendControlDraft)
 
-	// the saves run one after another, each built on the draft the save before it stored
-	const savedDraftRef = useRef(savedDraft)
+	// the saves run one after another, each built on the spend control draft the save before it stored
+	const savedSpendControlDraftRef = useRef(savedSpendControlDraft)
 	const saveQueueRef = useRef(Promise.resolve())
 
 	// whether a cutoff differs from its saved text, and whether every cutoff reads its default
-	const isCutoffChanged = JSON.stringify(draft.cutoffDollarTexts) !== JSON.stringify(savedDraft.cutoffDollarTexts)
-	const isEveryCutoffDefault = Object.values(draft.cutoffDollarTexts).every(
+	const isCutoffChanged =
+		JSON.stringify(spendControlDraft.cutoffDollarTexts) !== JSON.stringify(savedSpendControlDraft.cutoffDollarTexts)
+	const isEveryCutoffDefault = Object.values(spendControlDraft.cutoffDollarTexts).every(
 		(cutoffDollarText) => cutoffDollarText === "",
 	)
 
 	// each cutoff at its typed value, passed once the day's free-plan spend reaches it, with its copy
 	const meterCutoffs = dailySpendCutoffs.cutoffs.map((cutoff) => {
-		const draftCutoffCents = toDraftCutoffCents(cutoff, draft.cutoffDollarTexts[cutoff.kind])
+		const draftCutoffCents = toDraftCutoffCents(cutoff, spendControlDraft.cutoffDollarTexts[cutoff.kind])
 		const isPassed = dailySpendCutoffs.freePlanSpendCents >= draftCutoffCents
 		return { ...cutoff, ...CUTOFF_COPY[cutoff.kind], value: draftCutoffCents, isPassed }
 	})
 
 	// set one cutoff's typed text
 	function handleCutoffTextChange(kind: DailySpendCutoffKind, text: string): void {
-		setDraft((current) => ({ ...current, cutoffDollarTexts: { ...current.cutoffDollarTexts, [kind]: text } }))
+		setSpendControlDraft((current) => ({
+			...current,
+			cutoffDollarTexts: { ...current.cutoffDollarTexts, [kind]: text },
+		}))
 	}
 
 	// queue a save of only the given fields, so every other setting keeps its saved value
 	function handleSave(changedFields: Partial<SpendControlDraft>): void {
-		saveQueueRef.current = saveQueueRef.current.then(() => saveDraft({ ...savedDraftRef.current, ...changedFields }))
+		saveQueueRef.current = saveQueueRef.current.then(() =>
+			saveSpendControlDraft({ ...savedSpendControlDraftRef.current, ...changedFields }),
+		)
 	}
 
-	// send the draft if it changed, or stop on a value the api would reject, then reload the console
-	async function saveDraft(nextDraft: SpendControlDraft): Promise<void> {
-		if (JSON.stringify(nextDraft) === JSON.stringify(savedDraftRef.current)) {
+	// send the spend control draft if it changed, or stop on a value the api would reject, then reload the console
+	async function saveSpendControlDraft(nextSpendControlDraft: SpendControlDraft): Promise<void> {
+		if (JSON.stringify(nextSpendControlDraft) === JSON.stringify(savedSpendControlDraftRef.current)) {
 			return
 		}
-		const payload = toSpendControlSettingsPayload(nextDraft)
+		const payload = toSpendControlSettingsPayload(nextSpendControlDraft)
 		if (!payload) {
 			toast.error(
 				"Cutoffs must be $0.01 to $1,000,000, the first scan limit 0 to 10,000, and the signup alert 1 to 1,000,000.",
@@ -105,11 +111,11 @@ export function DailySpendCutoffsCard({ dailySpendCutoffs, onSaved }: DailySpend
 			return
 		}
 
-		// save, keep the saved draft, then reload the console
+		// save, keep the saved spend control draft, then reload the console
 		try {
 			await sendSpendControlSettings(payload)
-			savedDraftRef.current = nextDraft
-			setSavedDraft(nextDraft)
+			savedSpendControlDraftRef.current = nextSpendControlDraft
+			setSavedSpendControlDraft(nextSpendControlDraft)
 			onSaved()
 		} catch (error) {
 			console.error("spend control settings failed", error)
@@ -119,7 +125,7 @@ export function DailySpendCutoffsCard({ dailySpendCutoffs, onSaved }: DailySpend
 
 	// flip the switch and save it at once. allowing unverified signups to scan turns their first scan limit off
 	function handleUnverifiedSignupScanChange(isAllowed: boolean): void {
-		setDraft((current) => ({ ...current, isUnverifiedFirstScanLimitOn: !isAllowed }))
+		setSpendControlDraft((current) => ({ ...current, isUnverifiedFirstScanLimitOn: !isAllowed }))
 		handleSave({ isUnverifiedFirstScanLimitOn: !isAllowed })
 	}
 
@@ -136,7 +142,7 @@ export function DailySpendCutoffsCard({ dailySpendCutoffs, onSaved }: DailySpend
 							ariaLabel={CUTOFF_COPY[cutoff.kind].label}
 							placeholder={toWholeDollarLabel(cutoff.defaultValue)}
 							step={0.01}
-							value={draft.cutoffDollarTexts[cutoff.kind]}
+							value={spendControlDraft.cutoffDollarTexts[cutoff.kind]}
 							onChange={(text) => handleCutoffTextChange(cutoff.kind, text)}
 						/>
 					)}
@@ -147,9 +153,16 @@ export function DailySpendCutoffsCard({ dailySpendCutoffs, onSaved }: DailySpend
 					isCutoffChanged={isCutoffChanged}
 					isEveryCutoffDefault={isEveryCutoffDefault}
 					onCutoffChange={(kind, dollars) => handleCutoffTextChange(kind, String(dollars))}
-					onCutoffSave={() => handleSave({ cutoffDollarTexts: draft.cutoffDollarTexts })}
-					onCutoffReset={() => setDraft((current) => ({ ...current, cutoffDollarTexts: savedDraft.cutoffDollarTexts }))}
-					onCutoffDefaults={() => setDraft((current) => ({ ...current, cutoffDollarTexts: EMPTY_CUTOFF_DOLLAR_TEXTS }))}
+					onCutoffSave={() => handleSave({ cutoffDollarTexts: spendControlDraft.cutoffDollarTexts })}
+					onCutoffReset={() =>
+						setSpendControlDraft((current) => ({
+							...current,
+							cutoffDollarTexts: savedSpendControlDraft.cutoffDollarTexts,
+						}))
+					}
+					onCutoffDefaults={() =>
+						setSpendControlDraft((current) => ({ ...current, cutoffDollarTexts: EMPTY_CUTOFF_DOLLAR_TEXTS }))
+					}
 				/>
 			</section>
 			{/* the waiting first scans against the first scan dispatch limit */}
@@ -165,9 +178,9 @@ export function DailySpendCutoffsCard({ dailySpendCutoffs, onSaved }: DailySpend
 						unitLabel="first scans each sweep can start"
 						placeholder={String(dailySpendCutoffs.firstScanDispatchLimit.defaultValue)}
 						step={1}
-						value={draft.dispatchLimitText}
-						onChange={(text) => setDraft((current) => ({ ...current, dispatchLimitText: text }))}
-						onBlur={() => handleSave({ dispatchLimitText: draft.dispatchLimitText })}
+						value={spendControlDraft.dispatchLimitText}
+						onChange={(text) => setSpendControlDraft((current) => ({ ...current, dispatchLimitText: text }))}
+						onBlur={() => handleSave({ dispatchLimitText: spendControlDraft.dispatchLimitText })}
 					/>
 				</CountMeter>
 			</section>
@@ -184,9 +197,9 @@ export function DailySpendCutoffsCard({ dailySpendCutoffs, onSaved }: DailySpend
 						unitLabel="signups per hour"
 						placeholder={String(dailySpendCutoffs.hourlySignupAlertCount.defaultValue)}
 						step={1}
-						value={draft.signupAlertText}
-						onChange={(text) => setDraft((current) => ({ ...current, signupAlertText: text }))}
-						onBlur={() => handleSave({ signupAlertText: draft.signupAlertText })}
+						value={spendControlDraft.signupAlertText}
+						onChange={(text) => setSpendControlDraft((current) => ({ ...current, signupAlertText: text }))}
+						onBlur={() => handleSave({ signupAlertText: spendControlDraft.signupAlertText })}
 					/>
 				</CountMeter>
 			</section>
@@ -194,7 +207,7 @@ export function DailySpendCutoffsCard({ dailySpendCutoffs, onSaved }: DailySpend
 			<div className={cn(DIVIDED_SECTION_CLASS, "flex items-center gap-3")}>
 				<Switch
 					id="unverified-signup-scans"
-					checked={!draft.isUnverifiedFirstScanLimitOn}
+					checked={!spendControlDraft.isUnverifiedFirstScanLimitOn}
 					onCheckedChange={handleUnverifiedSignupScanChange}
 				/>
 				<Label htmlFor="unverified-signup-scans">Allow unverified email sign-ups to scan</Label>

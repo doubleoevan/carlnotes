@@ -26,12 +26,6 @@ test("any other failure is thrown as it is, for another attempt", async () => {
 	expect(await writeTopicPostSummary("post-1").catch((error: unknown) => error)).toBe(modelError)
 })
 
-test("the summary activity returns the version the summary was written from, and passes on the version to skip", async () => {
-	const writeSpy = spyOn(topicPostSummaries, "writeStoredTopicPostSummary").mockResolvedValue(5)
-	expect(await writeTopicPostSummary("post-1", 4)).toBe(5)
-	expect(writeSpy).toHaveBeenCalledWith("post-1", 4)
-})
-
 test("the first discussion starts for the post, and a post that starts none still succeeds", async () => {
 	const startSpy = spyOn(topicPostDiscussions, "startTopicPostPublishDiscussion").mockResolvedValue(null)
 	await startTopicPostPublishDiscussionActivity("post-1")

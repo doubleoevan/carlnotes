@@ -84,7 +84,7 @@ import { topicsRoute } from "./topic/topicsRoute"
 import { updatesRoute } from "./topic/updatesRoute"
 import { topicPostDiscussionsRoute } from "./topicPost/topicPostDiscussionsRoute"
 import { topicPostHomeOrderRoute } from "./topicPost/topicPostHomeOrder"
-import { topicPostImagesRoute } from "./topicPost/topicPostImagesRoute"
+import { TOPIC_POST_BODY_IMAGE_UPLOAD_PATH, topicPostImagesRoute } from "./topicPost/topicPostImagesRoute"
 import { TOPIC_POST_PATH, topicPostsRoute } from "./topicPost/topicPostsRoute"
 import {
 	confirmUnsubscribePage,
@@ -123,6 +123,7 @@ const OWN_BODY_LIMIT_PATHS = [
 	TOPIC_ATTACHMENT_UPLOAD_PATH,
 	NOTE_BODY_PATH,
 	TOPIC_POST_PATH,
+	TOPIC_POST_BODY_IMAGE_UPLOAD_PATH,
 	PERSONAL_SOURCES_IMPORT_PATH,
 ].map((routePath) => `${API_BASE_PATH}${routePath}`)
 

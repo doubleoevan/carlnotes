@@ -20,7 +20,7 @@ import { toUprightImageSize } from "../uprightImageSize"
 
 // the jpeg quality of a stored original and the webp quality of a derived file
 const ORIGINAL_JPEG_QUALITY = 90
-const DERIVED_WEBP_QUALITY = 82
+export const DERIVED_WEBP_QUALITY = 82
 
 // the file name of the stored original
 const ORIGINAL_FILE_NAME = "original.jpg"
@@ -74,7 +74,7 @@ export function toTopicImageUploadType(imageBytes: Uint8Array): (typeof TOPIC_IM
 
 // the most pixels an upload or a render may decode to: a 40 megapixel photo passes, and a small file that unpacks
 // to a huge bitmap is rejected before it costs memory
-const MAX_IMAGE_INPUT_PIXELS = 40_000_000
+export const MAX_IMAGE_INPUT_PIXELS = 40_000_000
 
 // the pixel sizes an original takes from a format: its own, and the larger jpeg's if the format keeps one
 type TopicImageOriginalSizes = Pick<TopicImageFormat, "width" | "height" | "largeOriginalWidth" | "largeOriginalHeight">

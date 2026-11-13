@@ -1,4 +1,4 @@
-import { type ComponentType, Fragment, type PropsWithChildren, type RefObject } from "react"
+import { type ComponentType, Fragment, type PropsWithChildren, type ReactNode, type RefObject } from "react"
 import {
 	NOTE_FORMAT_GROUPS,
 	type NoteEditorCommands,
@@ -28,6 +28,8 @@ export type NoteToolbarProps = {
 	formatState: NoteFormatState | null
 	selection: NoteSelection
 	activeLink: NoteLink | null
+	// the controls a Topic Post's toolbar adds after the link
+	children?: ReactNode
 }
 type NoteToolbarElements = {
 	Container: ComponentType<PropsWithChildren>
@@ -44,6 +46,7 @@ export function NoteToolbar({
 	formatState,
 	selection,
 	activeLink,
+	children,
 	elements,
 }: NoteToolbarProps & { elements: NoteToolbarElements }) {
 	const { Container, Divider, Button, LinkControl } = elements
@@ -74,6 +77,12 @@ export function NoteToolbar({
 				isLinkActive={formatState?.link?.isActive ?? false}
 				isLinkBlocked={formatState?.link?.isBlocking ?? false}
 			/>
+			{children && (
+				<>
+					<Divider />
+					{children}
+				</>
+			)}
 		</Container>
 	)
 }

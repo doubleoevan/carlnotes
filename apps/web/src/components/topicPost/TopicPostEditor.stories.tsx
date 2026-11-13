@@ -40,12 +40,13 @@ export const ReadyDraft: Story = {
 	},
 }
 
-// a save that lost to a newer version: a keystroke schedules a save, the api returns a conflict, and the notice
-// keeps the words and offers a reload
-export const Conflict: Story = {
+// a save that lost to a newer version from the author's other tab is sent again at that version, with no notice
+export const NewerVersion: Story = {
 	args: { topicPost: TOPIC_POST_READY_DRAFT_STORY },
 	beforeEach: () => {
-		mocked(saveTopicPost).mockResolvedValue({ status: "conflict", version: 5 })
+		mocked(saveTopicPost)
+			.mockResolvedValueOnce({ status: "conflict", version: 5 })
+			.mockResolvedValue({ status: "saved", version: 6 })
 	},
 	play: async ({ canvasElement }) => {
 		// type into the editor once it has mounted
@@ -57,9 +58,15 @@ export const Conflict: Story = {
 		await userEvent.click(editorElement)
 		await userEvent.keyboard(" and more")
 
-		// the notice says where the newer version came from, and Publish waits for the reload
-		const canvas = within(canvasElement)
-		await waitFor(() => expect(canvas.getByRole("alert")).toHaveTextContent("another window"), { timeout: 4000 })
-		await expect(canvas.getByRole("button", { name: "Publish" })).toBeDisabled()
+		// the second save goes out at the newer version, and the editor shows no alert
+		await waitFor(
+			() =>
+				expect(mocked(saveTopicPost)).toHaveBeenLastCalledWith(
+					expect.anything(),
+					expect.objectContaining({ version: 5 }),
+				),
+			{ timeout: 4000 },
+		)
+		await expect(within(canvasElement).queryByRole("alert")).toBeNull()
 	},
 }

@@ -1,6 +1,7 @@
-// Topic Post image report tests: a reporter no longer sees the image they reported until it changes, and the report
-// names the post's title and page
+// Topic Post image report tests: a reporter no longer sees the image they reported until it changes, a body image they
+// reported leaves the body they read, and the report names the post's title and page
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
+import { toTopicPostBodyImagePath } from "@carlnotes/contracts/topicPostBodyImages"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import { toReportedSubject } from "../report/reportSubjects"
 import type { TopicPostRow } from "./topicPosts"
@@ -85,4 +86,51 @@ test("a report of a post's image names the post's title, its page, and its autho
 	const draftRow = { ...TOPIC_POST_ROW, topicPost: { ...TOPIC_POST_ROW.topicPost, publishedAt: null } }
 	spyOn(topicPosts, "loadTopicPostRow").mockResolvedValue(draftRow)
 	expect(await toReportedSubject("reader-1", { subjectKind: "topicPostImage", subjectId: "post-1" })).toBeNull()
+})
+
+// a published post whose body shows two images
+const TOPIC_POST_ID = "11111111-1111-4111-8111-111111111111"
+const [REPORTED_IMAGE_ID, KEPT_IMAGE_ID] = [crypto.randomUUID(), crypto.randomUUID()]
+const toImageHtml = (imageId: string): string =>
+	`<img src="${toTopicPostBodyImagePath({ topicPostId: TOPIC_POST_ID, imageId })}" alt="" width="4" height="3" />`
+const BODY_IMAGE_ROW = {
+	...TOPIC_POST_ROW,
+	topicPost: {
+		...TOPIC_POST_ROW.topicPost,
+		id: TOPIC_POST_ID,
+		html: `<p>Start light.</p>${toImageHtml(REPORTED_IMAGE_ID)}${toImageHtml(KEPT_IMAGE_ID)}`,
+	},
+} as TopicPostRow
+
+test("a reader who reported a body image reads the body without it, and its author still sees it", async () => {
+	// reader-1 reported one of the two images
+	stubConnectionPool(({ text, values }) =>
+		text.includes('from "reports"') && values.includes("reader-1") && values.includes("topicPostBodyImage")
+			? [[`${TOPIC_POST_ID}/${REPORTED_IMAGE_ID}`]]
+			: [],
+	)
+	const reporterHtml = (await toTopicPostResponse("reader-1", BODY_IMAGE_ROW)).html
+	expect(reporterHtml).not.toContain(REPORTED_IMAGE_ID)
+	expect(reporterHtml).toContain(KEPT_IMAGE_ID)
+	expect(reporterHtml).toContain("Start light.")
+
+	// another reader sees both
+	const readerHtml = (await toTopicPostResponse("reader-2", BODY_IMAGE_ROW)).html
+	expect(readerHtml).toContain(REPORTED_IMAGE_ID)
+})
+
+test("a report of a body image names its post, and an image the body no longer shows has nothing to report", async () => {
+	stubConnectionPool()
+	spyOn(topicPosts, "loadTopicPostRow").mockResolvedValue(BODY_IMAGE_ROW)
+	const subjectId = `${TOPIC_POST_ID}/${REPORTED_IMAGE_ID}`
+	expect(await toReportedSubject("reader-1", { subjectKind: "topicPostBodyImage", subjectId })).toMatchObject({
+		kind: "topicPostBodyImage",
+		id: subjectId,
+		label: "Dialing in",
+		authorUserId: "member-1",
+	})
+	const goneSubjectId = `${TOPIC_POST_ID}/${crypto.randomUUID()}`
+	expect(
+		await toReportedSubject("reader-1", { subjectKind: "topicPostBodyImage", subjectId: goneSubjectId }),
+	).toBeNull()
 })

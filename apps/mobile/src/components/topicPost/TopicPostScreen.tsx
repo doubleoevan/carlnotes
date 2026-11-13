@@ -7,7 +7,6 @@ import {
 	type TopicPostPageElements,
 } from "@carlnotes/core/components/TopicPostPage"
 import { useTopicPostView } from "@carlnotes/core/hooks/useTopicPostView"
-import { toNoteLinkUrl } from "@carlnotes/core/lib/noteFormats"
 import { PROFILE_RANK_OPTION_LABELS, toTopicPostRankedItem } from "@carlnotes/core/lib/rankDialog"
 import { EDIT_IMAGE_DIALOG_TITLES } from "@carlnotes/core/lib/topicImageEditor"
 import {
@@ -15,29 +14,29 @@ import {
 	isTopicPostPinnable,
 	TOPIC_POST_DELETE,
 	TOPIC_POST_LABELS,
+	type TopicPostBodyImageReport,
+	toTopicPostBodyImageReports,
 	toTopicPostDeleteDescription,
 	toTopicPostEditableImage,
 	toTopicPostImageReport,
 	toTopicPostShare,
 } from "@carlnotes/core/lib/topicPosts"
-import { useIsPodcastPlayerShown } from "@carlnotes/core/stores/podcastEpisodePlayerStore"
 import { registerChatTopicPost, useRegisterChatTopicPost } from "@carlnotes/core/stores/topicPostChatStore"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { router, useFocusEffect, useLocalSearchParams, usePathname } from "expo-router"
-import { NotebookPen, Pencil, Share as ShareIcon, Trash2, X } from "lucide-react-native"
+import { Flag, NotebookPen, Pencil, Share as ShareIcon, Trash2, X } from "lucide-react-native"
 import { type ReactNode, useCallback, useState } from "react"
-import { KeyboardAvoidingView, View } from "react-native"
-import { AnchorLink, openExternalLink } from "@/components/common/AnchorLink"
-import { ClassNameSafeAreaView } from "@/components/common/ClassNameSafeAreaView"
+import { View } from "react-native"
+import { AnchorLink } from "@/components/common/AnchorLink"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { DetailsLine } from "@/components/common/DetailsLine"
 import { LoadFailedNotice } from "@/components/common/LoadFailedNotice"
 import { ProfileRankDialog } from "@/components/common/RankDialog"
+import { ReportIssueDialog } from "@/components/common/ReportIssueDialog"
 import { ViewerCountLine } from "@/components/common/ViewerCountLine"
-import { Header } from "@/components/layout/Header"
 import { PageScreen } from "@/components/layout/PageScreen"
 import { PageSkeleton } from "@/components/layout/PageSkeleton"
-import { NoteReader } from "@/components/note/NoteViewer"
+import { NoteEditorScreen } from "@/components/note/NoteEditorScreen"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
@@ -49,8 +48,7 @@ import { SocialSection } from "@/components/social/SocialSection"
 import { EditImageDialog } from "@/components/topic/EditImageDialog"
 import { TopicByline } from "@/components/topic/TopicByline"
 import { TopicHeaderImage } from "@/components/topic/TopicImageButton"
-import { useFontScaledSize } from "@/hooks/useFontScaledSize"
-import { useIsKeyboardVisible } from "@/hooks/useIsKeyboardVisible"
+import { TopicPostBody } from "./TopicPostBody"
 import { TOPIC_POST_DISCUSSION_CARD_ELEMENTS } from "./TopicPostDiscussionCard"
 import { TopicPostEditor } from "./TopicPostEditor"
 import { TopicPostInfo } from "./TopicPostInfo"
@@ -130,6 +128,7 @@ export function TopicPostScreen() {
 	const [isImageDialogOpen, setIsImageDialogOpen] = useState(false)
 	const [isShareOpen, setIsShareOpen] = useState(false)
 	const [isProfileRankDialogOpen, setIsProfileRankDialogOpen] = useState(false)
+	const [openBodyImageReport, setOpenBodyImageReport] = useState<TopicPostBodyImageReport | null>(null)
 
 	// the count that the comment thread reports as it stands, for the details line
 	const [commentCount, setCommentCount] = useState<number | null>(null)
@@ -223,13 +222,16 @@ export function TopicPostScreen() {
 		return <TopicPostEditorScreen closePath={`/topics/${topicId}`}>{topicPostPage}</TopicPostEditorScreen>
 	}
 
-	// the actions menu, whose options open the share sheet, the editor, the rank sheet, and the delete confirmation
+	// the actions menu, whose options open the share sheet, the editor, the rank sheet, the delete confirmation, and
+	// each body image's report
 	const options = toTopicPostPageOptions({
 		topicPost,
+		bodyImageReports: toTopicPostBodyImageReports(topicPost, Boolean(session)),
 		onShare: () => setIsShareOpen(true),
 		onEdit: () => setIsEditing(true),
 		onRankProfile: () => setIsProfileRankDialogOpen(true),
 		onDelete: () => setIsDeleteOpen(true),
+		onReportBodyImage: setOpenBodyImageReport,
 	})
 
 	// delete the Topic Post and its thread, then open its topic's screen. a failed delete keeps the screen
@@ -268,6 +270,14 @@ export function TopicPostScreen() {
 					onClose={() => setIsProfileRankDialogOpen(false)}
 				/>
 			)}
+			{/* a body image's report, which reads the Topic Post again as it closes */}
+			<TopicPostBodyImageReportSheet
+				report={openBodyImageReport}
+				onClose={() => {
+					setOpenBodyImageReport(null)
+					void refetch()
+				}}
+			/>
 			{/* the confirmation of the actions menu's delete */}
 			{isDeleteOpen && (
 				<ConfirmDialog
@@ -284,25 +294,29 @@ export function TopicPostScreen() {
 	)
 }
 
-// the published Topic Post, and the calls that open its share sheet, its editor, its author's rank sheet, and its
-// delete confirmation
+// the published Topic Post, what a report of each body image names, and the calls that open its share sheet, its
+// editor, its author's rank sheet, its delete confirmation, and a body image's report
 type ToTopicPostPageOptionsOptions = {
 	topicPost: TopicPostResponse
+	bodyImageReports: TopicPostBodyImageReport[]
 	onShare: () => void
 	onEdit: () => void
 	onRankProfile: () => void
 	onDelete: () => void
+	onReportBodyImage: (report: TopicPostBodyImageReport) => void
 }
 
-// the actions menu: Share, which opens the Topic Post's share sheet as the info popup's Share does, Edit post for
-// its author, which says its limit past its edit time, Featured posts for the author of a published Topic Post of
-// a public topic, as on the web, and Delete post for whoever may delete it. Report image follows them
+// the actions menu: Share, which opens the Topic Post's share sheet as the info popup's Share does, Edit post for its
+// author, Featured posts for the author of a published Topic Post of a public topic, Delete post for whoever may delete
+// it, and a report of each body image. Report image follows them
 function toTopicPostPageOptions({
 	topicPost,
+	bodyImageReports,
 	onShare,
 	onEdit,
 	onRankProfile,
 	onDelete,
+	onReportBodyImage,
 }: ToTopicPostPageOptionsOptions): PageActionOption[] {
 	return [
 		{ label: TOPIC_POST_LABELS.share, icon: ShareIcon, onSelect: onShare },
@@ -312,13 +326,16 @@ function toTopicPostPageOptions({
 						label: TOPIC_POST_LABELS.edit,
 						icon: Pencil,
 						onSelect: onEdit,
-						isDisabled: !topicPost.isEditable,
-						disabledReason: TOPIC_POST_LABELS.lockedError,
 					},
 				]
 			: []),
 		...toProfileRankOptions(topicPost, onRankProfile),
 		...(topicPost.canDelete ? [{ label: TOPIC_POST_LABELS.delete, icon: Trash2, onSelect: onDelete }] : []),
+		...bodyImageReports.map((report) => ({
+			label: report.optionLabel,
+			icon: Flag,
+			onSelect: () => onReportBodyImage(report),
+		})),
 	]
 }
 
@@ -330,58 +347,41 @@ function toProfileRankOptions(topicPost: TopicPostResponse, onSelect: () => void
 		: []
 }
 
-// the editor's screen, as the note's: the header, the close control, and the editor in the keyboard-safe space
+// the editor's screen, as the note's, with the close control over the editor
 function TopicPostEditorScreen({ closePath, children }: { closePath: string; children: ReactNode }) {
-	const [headerHeight, setHeaderHeight] = useState(0)
-	const isKeyboardVisible = useIsKeyboardVisible()
-	const isPodcastPlayerShown = useIsPodcastPlayerShown()
-	const chatPillClearance = useFontScaledSize(44) + 24
 	return (
-		<View className="flex-1 bg-background">
-			<View onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}>
-				{!isKeyboardVisible && <Header />}
+		<NoteEditorScreen contentClassName="px-4 pt-4">
+			{/* return to the Topic Post's topic. the editor sends a waiting save as it closes */}
+			<View className="mb-2 flex-row items-center justify-end">
+				<AnchorLink href={closePath} shouldDismissTo accessibilityLabel="Close post" asChild>
+					<Button accessibilityLabel="Close post" variant="ghost" size="icon">
+						<Icon as={X} className="size-4 text-foreground" />
+					</Button>
+				</AnchorLink>
 			</View>
-			<ClassNameSafeAreaView
-				edges={isKeyboardVisible ? ["top", "left", "right", "bottom"] : ["left", "right", "bottom"]}
-				className="w-full max-w-3xl flex-1 self-center"
-			>
-				<KeyboardAvoidingView
-					className="flex-1"
-					enabled={!isPodcastPlayerShown}
-					keyboardVerticalOffset={headerHeight}
-					behavior="padding"
-				>
-					{/* reserve launcher space inside the keyboard-adjusted viewport */}
-					<View className="flex-1 px-4 pt-4" style={{ paddingBottom: isKeyboardVisible ? 0 : chatPillClearance }}>
-						{/* return to the Topic Post's topic. the editor sends a waiting save as it closes */}
-						<View className="mb-2 flex-row items-center justify-end">
-							<AnchorLink href={closePath} shouldDismissTo accessibilityLabel="Close post" asChild>
-								<Button accessibilityLabel="Close post" variant="ghost" size="icon">
-									<Icon as={X} className="size-4 text-foreground" />
-								</Button>
-							</AnchorLink>
-						</View>
-						{children}
-					</View>
-				</KeyboardAvoidingView>
-			</ClassNameSafeAreaView>
-		</View>
+			{children}
+		</NoteEditorScreen>
 	)
 }
 
-// the body on a card, with the note's typography and safe destination handling
-function TopicPostBody({ html }: { html: string }) {
-	// guard a stored destination even when the display library recognizes a link
-	const handleOpenLink = (url: string): void => {
-		const safeUrl = toNoteLinkUrl(url)
-		if (safeUrl) {
-			void openExternalLink(safeUrl)
-		}
+// the report sheet of the body image the actions menu chose
+function TopicPostBodyImageReportSheet({
+	report,
+	onClose,
+}: {
+	report: TopicPostBodyImageReport | null
+	onClose: () => void
+}) {
+	if (!report) {
+		return null
 	}
 	return (
-		<View className="my-3 rounded-lg border border-border bg-card px-4 py-4 shadow-raised">
-			<NoteReader html={html} onOpenLink={handleOpenLink} />
-		</View>
+		<ReportIssueDialog
+			subjectKind={report.subjectKind}
+			subjectId={report.subjectId}
+			subjectLabel={report.subjectLabel}
+			onClose={onClose}
+		/>
 	)
 }
 

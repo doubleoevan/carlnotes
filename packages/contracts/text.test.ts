@@ -12,6 +12,12 @@ test("toHtmlText returns an html body's readable text", () => {
 })
 
 // tabs, line breaks, and padding all collapse into one space between words
+test("toHtmlText reads a body with an image as the same text as the body without it", () => {
+	// the word count, the summary, the discussion, the card, and the retrieval all read this text
+	const imageHtml = '<img src="/api/topic-post-body-images/a/b/column.webp" alt="two words" width="4" height="3" />'
+	expect(toHtmlText(`<p>one</p>${imageHtml}<p>three</p>`)).toBe(toHtmlText("<p>one</p><p>three</p>"))
+})
+
 test("toOneLineText puts text on one line", () => {
 	expect(toOneLineText("  a\n b \t")).toBe("a b")
 	expect(toOneLineText(" \n ")).toBe("")
