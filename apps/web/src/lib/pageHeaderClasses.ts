@@ -42,7 +42,8 @@ export const PLAIN_TOPIC_HEADER_GRID_CLASS = toTopicHeaderGridClass({ hasTags: f
 export const TOPIC_HEADER_AREA_CLASSES = {
 	image: "float-left mr-4 mb-1.5 [grid-area:image] sm:float-none sm:mr-0 sm:mb-0",
 	title: "[grid-area:title] min-w-0",
-	tags: "[grid-area:tags] mt-1.5 min-w-0 sm:mt-0",
+	// on a phone each tag is inline, so the tags that no longer fit beside the image continue under it
+	tags: "[grid-area:tags] mt-0.5 min-w-0 *:mt-1 *:mr-1 sm:mt-0 sm:flex sm:flex-wrap sm:gap-1 sm:*:m-0",
 	bylineRow: "mt-1.5 flex items-center justify-between gap-3 max-sm:clear-left sm:contents",
 	byline: "[grid-area:byline] min-w-0",
 	actions: "[grid-area:actions] shrink-0 sm:self-end",

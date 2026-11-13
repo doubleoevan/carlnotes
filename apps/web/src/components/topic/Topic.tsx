@@ -88,7 +88,7 @@ export function Topic({ topic, index, className }: TopicProps) {
 				</h3>
 				{/* tags, lined up with the title. an untagged topic renders no row at all */}
 				{topic.tags.length > 0 && (
-					<div className={cn(TOPIC_HEADER_AREA_CLASSES.tags, "flex flex-wrap gap-1")}>
+					<div className={TOPIC_HEADER_AREA_CLASSES.tags}>
 						{topic.tags.map((tag) => (
 							<Badge key={tag} variant="secondary">
 								{tag}

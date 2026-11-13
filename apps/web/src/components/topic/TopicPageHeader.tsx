@@ -89,7 +89,7 @@ export function TopicHeader({
 				</h1>
 				{/* tags row, left out for an untagged topic */}
 				{topic.tags.length > 0 && (
-					<div className={cn(TOPIC_HEADER_AREA_CLASSES.tags, "flex flex-wrap gap-1")}>
+					<div className={TOPIC_HEADER_AREA_CLASSES.tags}>
 						{topic.tags.map((tag) => (
 							<Badge key={tag} variant="secondary">
 								{tag}
