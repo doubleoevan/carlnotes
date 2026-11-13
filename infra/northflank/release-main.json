@@ -14,7 +14,6 @@
 						"id": "build",
 						"type": "service",
 						"branch": "main",
-						"sha": "${args.sha}",
 						"reuseExistingBuilds": true,
 						"buildRuleFallThroughHandling": "fail"
 					},
@@ -98,7 +97,20 @@
 			]
 		}
 	},
-	"arguments": { "sha": "" },
+	"arguments": {},
 	"argumentOverrides": {},
-	"options": { "autorun": false, "concurrencyPolicy": "queue" }
+	"options": { "autorun": false, "concurrencyPolicy": "queue" },
+	"triggers": [
+		{
+			"kind": "vcs-push",
+			"spec": {
+				"vcs": {
+					"vcsService": "github",
+					"accountLogin": "doubleoevan",
+					"repoUrl": "https://github.com/doubleoevan/carlnotes"
+				},
+				"branchNamePatterns": ["main"]
+			}
+		}
+	]
 }

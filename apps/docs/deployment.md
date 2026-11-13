@@ -85,19 +85,14 @@ bun run smoke:image carlnotes-smoke:local
 
 ## Release jobs
 
-Migrations are a deploy job, not a start-up step. CI starts the release. On a push to `main`, once the gate and the
-image smoke pass, the `release` job in [ci.yml](../../.github/workflows/ci.yml) starts Northflank's `release-main` workflow
-through its api with that commit's SHA as the `sha` argument. It reads `NORTHFLANK_API_TOKEN` from the secrets of
-the `production` GitHub environment, whose deployment branch rule allows only `main`, so a pull request's run cannot
-read the token. The token needs the Northflank permission Project > Workflows > Runs > Start. The job reads
-`NORTHFLANK_WORKFLOW_ID` (`release-main`) from the repository variables and skips while it is unset. The workflow builds
-that commit once and runs the migration job against it. Only then does it deploy `app`, purge the edge, deploy
-`temporal-worker`, and finish with the docs embed. So new code never meets an old schema. Each deploy step waits up to
-ten minutes for its replicas to run, and a rollout that never runs fails the workflow before the next step. The
-workflow's definition is
-[infra/northflank/release-main.json](../../infra/northflank/release-main.json), which has no git trigger. In an emergency, run
-`release-main` from the Northflank console with the commit's full SHA as `sha`. That skips CI, so it is for a commit
-that already passed it.
+Migrations are a deploy job, not a start-up step. A push to `main` starts Northflank's `release-main` workflow through
+its GitHub push trigger, without waiting for CI, so a failing or slow check never holds a release back. The workflow
+builds the newest commit on `main` once and runs the migration job against it. Only then does it deploy `app`, purge
+the edge, deploy `temporal-worker`, and finish with the docs embed. So new code never meets an old schema. Each deploy
+step waits up to ten minutes for its replicas to run, and a rollout that never runs fails the workflow before the next
+step. The workflow's definition is
+[infra/northflank/release-main.json](../../infra/northflank/release-main.json). To redeploy `main` by hand, run
+`release-main` from the Northflank console.
 
 The `app` service's startup, readiness, and liveness checks are
 [infra/northflank/app-health-checks.json](../../infra/northflank/app-health-checks.json), the `healthChecks` body of
@@ -105,7 +100,7 @@ Northflank's `PATCH /v1/projects/carlnotes-prd/services/deployment/app`. Startup
 for up to two minutes. Readiness polls `/api/health/ready` every 10 seconds and takes a replica out of traffic after
 three misses. Liveness restarts a replica after six missed `/api/health` polls. Both Northflank files are applied by
 hand, with the Northflank CLI or console. Apply `release-main.json` with `northflank create workflow`, which upserts
-(`update workflow` returns HTTP 500). Do it before setting `NORTHFLANK_WORKFLOW_ID`, so a push never deploys twice.
+(`update workflow` returns HTTP 500).
 
 The migration job runs:
 

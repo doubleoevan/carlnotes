@@ -267,22 +267,6 @@ the four responds with a status other than 200.
 - **WHEN** the image builds and starts
 - **THEN** the home page, the plans page, liveness, and readiness each respond 200, and the job passes
 
-### Requirement: A release deploys only a commit that CI passed
-
-The `release-main` release flow SHALL have no git push trigger. A CI job SHALL start it through the Northflank API on
-a push to main, only after the gate and the image smoke job pass, and the run SHALL build the commit that CI tested. A
-run started by hand in the Northflank console SHALL remain possible.
-
-#### Scenario: A failed gate deploys nothing
-
-- **WHEN** a push to main fails the image smoke job
-- **THEN** no release run starts, and the deployed replicas keep serving the previous build
-
-#### Scenario: A later push does not change what deploys
-
-- **WHEN** CI passes commit A while commit B has already reached main
-- **THEN** the release run started for A builds and deploys A
-
 ### Requirement: The release waits for readiness before its next step
 
 The `release-main` deploy step for `app` SHALL complete only after the new replicas pass readiness. A rollout whose
@@ -292,3 +276,19 @@ replicas never become ready SHALL fail the run before the edge purge, the worker
 
 - **WHEN** the new `app` replicas never pass readiness
 - **THEN** the run fails at the deploy step, and the edge is not purged
+
+### Requirement: A push to main starts the release
+
+The `release-main` release flow SHALL have a GitHub push trigger on `main`, and each run SHALL build the newest commit
+on `main`. No CI job SHALL start or hold back the release. A run started by hand in the Northflank console SHALL remain
+possible.
+
+#### Scenario: A push releases without waiting for CI
+
+- **WHEN** a commit reaches main
+- **THEN** a release run starts at once and deploys that commit, whatever CI's result
+
+#### Scenario: A hand-started run deploys main
+
+- **WHEN** someone runs `release-main` from the Northflank console
+- **THEN** the run builds and deploys the newest commit on `main`
