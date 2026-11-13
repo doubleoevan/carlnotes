@@ -8,7 +8,7 @@ import { podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { findings } from "@carlnotes/db/schema/scans"
 import { topicPosts } from "@carlnotes/db/schema/topicPosts"
 import { topics } from "@carlnotes/db/schema/topics"
-import { and, eq, gte, inArray, isNull } from "drizzle-orm"
+import { and, eq, gte, inArray } from "drizzle-orm"
 import { union } from "drizzle-orm/pg-core"
 
 /**
@@ -35,17 +35,15 @@ export async function listDashboardSubjects(firstDay: string): Promise<Dashboard
 			.where(and(eq(dailyViewCounts.itemKind, "topicPost"), gte(dailyViewCounts.day, firstDay))),
 	)
 
-	// the owners of the viewed personal topics, and the teams of the viewed team topics
+	// the owners of the viewed topics, and the teams of the viewed team topics
 	const viewedTopics = await db
 		.selectDistinct({ ownerId: topics.ownerId, teamId: topics.teamId })
 		.from(topics)
 		.where(inArray(topics.id, viewedTopicIds))
-	const topicSubjects = viewedTopics.map(
-		({ ownerId, teamId }): DashboardSubject =>
-			teamId
-				? { dashboardKind: "teamDashboard", subjectId: teamId }
-				: { dashboardKind: "topicDashboard", subjectId: ownerId },
-	)
+	const topicSubjects = viewedTopics.flatMap(({ ownerId, teamId }): DashboardSubject[] => [
+		{ dashboardKind: "topicDashboard", subjectId: ownerId },
+		...(teamId ? [{ dashboardKind: "teamDashboard" as const, subjectId: teamId }] : []),
+	])
 
 	// the topics whose podcast episodes were played since the first day
 	const playedTopicIds = db
@@ -54,11 +52,11 @@ export async function listDashboardSubjects(firstDay: string): Promise<Dashboard
 		.innerJoin(podcastEpisodes, eq(podcastEpisodes.id, dailyPlayCounts.podcastEpisodeId))
 		.where(gte(dailyPlayCounts.day, firstDay))
 
-	// each of those topics' owner, for the topics on no team
+	// each of those topics' owner
 	const playedTopicOwners = await db
 		.selectDistinct({ ownerId: topics.ownerId })
 		.from(topics)
-		.where(and(inArray(topics.id, playedTopicIds), isNull(topics.teamId)))
+		.where(inArray(topics.id, playedTopicIds))
 	const podcastSubjects = playedTopicOwners.map(
 		({ ownerId }): DashboardSubject => ({ dashboardKind: "podcastDashboard", subjectId: ownerId }),
 	)

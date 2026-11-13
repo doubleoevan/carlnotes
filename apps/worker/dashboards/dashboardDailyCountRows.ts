@@ -18,7 +18,7 @@ import { podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { findings, resources } from "@carlnotes/db/schema/scans"
 import { topicPosts } from "@carlnotes/db/schema/topicPosts"
 import { topics } from "@carlnotes/db/schema/topics"
-import { and, between, eq, inArray, isNotNull, isNull, ne, or, type SQL } from "drizzle-orm"
+import { and, between, eq, inArray, isNotNull, ne, or, type SQL } from "drizzle-orm"
 
 // the longest title a chart shows
 const TITLE_MAX_LENGTH = 120
@@ -43,7 +43,7 @@ export type DashboardDailyCountRow = {
 type LoadDailyCountRowsOptions = { subject: DashboardSubject; firstDay: string; lastDay: string }
 
 /**
- * Returns the subject's topics as a filter. A person's Dashboard reads their own topics outside any team. A team's
+ * Returns the subject's topics as a filter. A person's Dashboard reads every topic they own, on a team or not. A team's
  * Dashboard reads the team's topics and leaves out a private topic whose legacy Personal sources text is not converted
  * yet, as the topic view rule does for members.
  */
@@ -53,7 +53,7 @@ export function toSubjectTopicFilter(subject: DashboardSubject): SQL | undefined
 				eq(topics.teamId, subject.subjectId),
 				or(ne(topics.visibility, "private"), toConvertedPersonalSourcesFilter()),
 			)
-		: and(eq(topics.ownerId, subject.subjectId), isNull(topics.teamId))
+		: eq(topics.ownerId, subject.subjectId)
 }
 
 /**

@@ -20,13 +20,14 @@ import { startDashboardRebuildWorkflow } from "./temporalClient"
 type DashboardTopic = { ownerId: string; teamId: string | null }
 
 /**
- * Rebuilds the Dashboards of the topics, as they were and as they are: a personal topic's owner's Topic and Podcast
- * Dashboards, and a team topic's Team Dashboard.
+ * Rebuilds the Dashboards of the topics, as they were and as they are: the owner's Topic and Podcast Dashboards, and a
+ * team topic's Team Dashboard.
  */
 export async function rebuildTopicDashboards(...dashboardTopics: DashboardTopic[]): Promise<void> {
-	const subjects = dashboardTopics.flatMap(({ ownerId, teamId }): DashboardSubject[] =>
-		teamId ? [{ dashboardKind: "teamDashboard", subjectId: teamId }] : toPersonalDashboardSubjects(ownerId),
-	)
+	const subjects = dashboardTopics.flatMap(({ ownerId, teamId }): DashboardSubject[] => [
+		...(teamId ? [{ dashboardKind: "teamDashboard" as const, subjectId: teamId }] : []),
+		...toPersonalDashboardSubjects(ownerId),
+	])
 	await rebuildDashboards(subjects)
 }
 

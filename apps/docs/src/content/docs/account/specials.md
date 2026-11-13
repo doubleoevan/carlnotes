@@ -11,8 +11,10 @@ The Daily Specials Board shows who visits your topics, findings, and posts, and 
 charts count by day and by place, and Carl writes a paragraph about the numbers once a day. The board has three pages,
 each headed Daily Specials:
 
-- **Topic Specials** counts the visits to a person's topics, findings, and Open Mic posts.
-- **Podcast Specials** counts the plays of a person's podcast episodes and films.
+- **Topic Specials** counts the visits to a person's topics, findings, and Open Mic posts, across all of their teams
+  and their topics on no team.
+- **Podcast Specials** counts the plays of a person's podcast episodes and films, across all of their teams and their
+  topics on no team.
 - **Team Specials** counts the visits to a team's topics, findings, and posts.
 
 A visit is one person opening a topic, a finding, or a post. It counts once per person, item, and day, signed in or

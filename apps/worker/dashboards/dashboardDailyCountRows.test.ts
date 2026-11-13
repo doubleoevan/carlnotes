@@ -1,5 +1,5 @@
 // dashboard daily count row tests: a team's Dashboard leaves out a private topic whose legacy Personal sources text is
-// not converted yet, and a person's Dashboard reads their own topics outside any team
+// not converted yet, and a person's Dashboards read every topic they own
 import { expect, test } from "bun:test"
 import type { DashboardSubject } from "@carlnotes/contracts/dashboards"
 import { db } from "@carlnotes/db"
@@ -21,8 +21,11 @@ test("a team's Dashboard leaves out a private topic whose Personal sources text 
 	expect(params).toEqual(["team-1", "private", 0])
 })
 
-test("a person's Dashboard reads their own topics outside any team", () => {
-	const { sql, params } = toSubjectTopicQuery({ dashboardKind: "topicDashboard", subjectId: "user-1" })
-	expect(sql).toContain('("topics"."owner_id" = $1 and "topics"."team_id" is null)')
-	expect(params).toEqual(["user-1"])
+test("a person's Topic and Podcast Dashboards read every topic they own, on a team or not", () => {
+	for (const dashboardKind of ["topicDashboard", "podcastDashboard"] as const) {
+		const { sql, params } = toSubjectTopicQuery({ dashboardKind, subjectId: "user-1" })
+		expect(sql).toContain('where "topics"."owner_id" = $1')
+		expect(sql).not.toContain("team_id")
+		expect(params).toEqual(["user-1"])
+	}
 })

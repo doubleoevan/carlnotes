@@ -30,12 +30,14 @@ test("a personal topic's change deletes, purges, and rebuilds its owner's Topic 
 	])
 })
 
-test("a team topic's change rebuilds the team's Team Dashboard, and a failed start fails nothing", async () => {
+test("a team topic's change rebuilds its Team Dashboard and its owner's, and a failed start fails nothing", async () => {
 	stubConnectionPool()
 	spyOn(edgePurge, "purgeEdgeCacheTagAfterDeletion").mockResolvedValue()
 	const startSpy = spyOn(temporalClient, "startDashboardRebuildWorkflow").mockRejectedValue(new Error("down"))
 	await rebuildTopicDashboards({ ownerId: "user-1", teamId: "team-1" })
 	expect(startSpy.mock.calls.map(([subject]) => subject)).toEqual([
 		{ dashboardKind: "teamDashboard", subjectId: "team-1" },
+		{ dashboardKind: "topicDashboard", subjectId: "user-1" },
+		{ dashboardKind: "podcastDashboard", subjectId: "user-1" },
 	])
 })
