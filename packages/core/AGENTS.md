@@ -37,7 +37,8 @@ the in-place section fixtures. Personal sources stay outside the fetched Source 
   which `hooks/useTopicNote.ts` loads once the note opens. `UserBlocksSection` lists the
   people the user blocked with their confirmed Unblock, over `UserBlocksCard`, which the stories render from a fixture
   list. `DetailsLine` is the muted details line under a page's byline, which wraps between details, each with its
-  middle dot at its own end, and is absent with no detail. `lib/detailsLine.ts` builds its details: `toCountDetails`
+  middle dot at its own end, and is absent with no detail. `DotSeparatedTexts` is a row's details texts, each its own
+  element with a dot before every text after the first, so a row's line wraps one text at a time. `lib/detailsLine.ts` builds its details: `toCountDetails`
   (counts in order, a zero left out), `toTopicDetails` (the counts of a topic page's sections), and
   `toTopicCountsDetails` (a topic's viewers and followers under its name in the Topic Post popup). A Topic Post's
   page builds its line with `toTopicPostDetails`, and a team's page with `toTeamDetails`. `ProfileSummaryLine` is the

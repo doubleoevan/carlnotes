@@ -8,6 +8,7 @@ import {
 import { cn } from "@carlnotes/nightshift/classNames"
 import type * as React from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { DOT_SEPARATED_TEXTS_ELEMENTS } from "@/components/common/DotSeparatedTexts"
 import { HostFavicon } from "@/components/common/HostFavicon"
 import { PopoverTrigger } from "@/components/primitives/popover"
 import { ROW_METADATA_LINE_CLASS } from "@/lib/styleClasses"
@@ -66,8 +67,8 @@ export function ResourceMetadata({ resource }: { resource: TopicFinding }) {
 	return <SharedResourceMetadata resource={resource} components={RESOURCE_METADATA_COMPONENTS} />
 }
 
-// retain inline browser text and the existing favicon renderer
+// the favicon, and each text wrapping on its own
 const RESOURCE_METADATA_COMPONENTS: ResourceMetadataComponents = {
 	Favicon: HostFavicon,
-	Text: ({ children }) => <>{children}</>,
+	Text: DOT_SEPARATED_TEXTS_ELEMENTS.Text,
 }

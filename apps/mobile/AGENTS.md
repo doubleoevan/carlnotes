@@ -331,7 +331,8 @@ Google Maps on Android and on iOS if the build has `GOOGLE_MAPS_IOS_API_KEY`, el
 it. `components/common/DetailsLine.tsx` adapts core's details
 line, a wrapping row of small muted text: the counts under a topic's byline and reactions, a Topic Post's date,
 reading time, and comment count under its byline's row, the profile's and the team screen's summary line, and the
-Topic's viewers and followers in the Topic Post sheet. `components/common/RankDialog.tsx` adapts core's
+Topic's viewers and followers in the Topic Post sheet. `components/common/DotSeparatedTexts.tsx` adapts core's row
+details texts, which the news, search, and finding rows draw on their details lines. `components/common/RankDialog.tsx` adapts core's
 `RankDialog` in a `Sheet`, where step buttons replace the web's drag, for the topics, films, podcast episodes, and
 Topic Posts pinned on a person's own profile, opened from the profile and from the screen of one of their topics,
 podcast episodes, or Topic Posts.

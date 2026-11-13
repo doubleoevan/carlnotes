@@ -2,7 +2,7 @@ import { toAvatarImagePath, toTeamAvatarImagePath } from "@carlnotes/contracts/a
 import type { PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
 import type { FindingSearchRow, SearchResultsPage, SearchRow } from "@carlnotes/contracts/search"
 import { SITE_URL } from "@carlnotes/contracts/site"
-import { toCountLabel, toDotSeparatedText } from "@carlnotes/contracts/text"
+import { toCountLabel } from "@carlnotes/contracts/text"
 import type { TopicImageUrls } from "@carlnotes/contracts/topicImages"
 import type { TopicFindingActions } from "@carlnotes/core/hooks/useTopicFindingActions"
 import { toAgoLabel } from "@carlnotes/core/lib/labels"
@@ -11,9 +11,9 @@ import { toPodcastEpisodeVideoPill } from "@carlnotes/core/lib/topicPodcastEpiso
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Coffee, type LucideIcon, Mic, NotebookPen } from "lucide-react-native"
 import { type ComponentProps, type ReactNode, useState } from "react"
-import { View } from "react-native"
 import { Avatar } from "@/components/branding/Avatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { DotSeparatedTexts } from "@/components/common/DotSeparatedTexts"
 import { PodcastEpisodeNumberPill } from "@/components/podcast/PodcastEpisodePill"
 import { PodcastEpisodeVideoButton } from "@/components/podcast/PodcastEpisodeVideoButton"
 import { toTouchTargetHitSlop } from "@/components/primitives/button"
@@ -217,13 +217,9 @@ function SearchRowDetails({ searchRow }: { searchRow: LinkedSearchRow }) {
 		case "podcastEpisode":
 			return (
 				<>
-					<Text className="text-xs text-muted-foreground">
-						{toDotSeparatedText([
-							"Podcast",
-							toAgoLabel(searchRow.date),
-							toCountLabel(searchRow.count ?? 0, "listener"),
-						])}
-					</Text>
+					<DotSeparatedTexts
+						texts={["Podcast", toAgoLabel(searchRow.date), toCountLabel(searchRow.count ?? 0, "listener")]}
+					/>
 					<SearchRowTopicLink topic={searchRow.topic} />
 					<PodcastEpisodePills podcastEpisode={searchRow.podcastEpisode} />
 				</>
@@ -231,35 +227,29 @@ function SearchRowDetails({ searchRow }: { searchRow: LinkedSearchRow }) {
 		case "topicPost":
 			return (
 				<>
-					<Text className="text-xs text-muted-foreground">
-						{toDotSeparatedText(["Post", toAgoLabel(searchRow.date)])}
-					</Text>
+					<DotSeparatedTexts texts={["Post", toAgoLabel(searchRow.date)]} />
 					<SearchRowTopicLink topic={searchRow.topic} />
 				</>
 			)
 		case "team":
 			return (
-				<Text className="text-xs text-muted-foreground">
-					{toDotSeparatedText([
-						"Team",
-						toCountLabel(searchRow.topicCount, "topic"),
-						toCountLabel(searchRow.memberCount, "member"),
-					])}
-				</Text>
+				<DotSeparatedTexts
+					texts={["Team", toCountLabel(searchRow.topicCount, "topic"), toCountLabel(searchRow.memberCount, "member")]}
+				/>
 			)
 		case "user":
 			return <Text className="text-xs text-muted-foreground">Café</Text>
 	}
 }
 
-// a podcast episode's play pill, with its film's Video pill before it, as on a news row. the two wrap together
+// a podcast episode's film's Video pill, then its play pill, which wraps first, as on a news row
 function PodcastEpisodePills({ podcastEpisode }: { podcastEpisode: PodcastEpisodeSummary }) {
 	const videoPill = toPodcastEpisodeVideoPill(podcastEpisode, "search")
 	return (
-		<View className="flex-row items-center gap-1.5">
+		<>
 			{videoPill && <PodcastEpisodeVideoButton {...videoPill} />}
 			<PodcastEpisodeNumberPill podcastEpisode={podcastEpisode} />
-		</View>
+		</>
 	)
 }
 

@@ -152,8 +152,12 @@ function HostFavicon({ faviconPath }: { faviconPath: string | null }) {
 // use native text and image fallbacks around the shared source and publication metadata
 const RESOURCE_METADATA_COMPONENTS: ResourceMetadataComponents = {
 	Favicon: HostFavicon,
-	Text: ({ children }) => (
-		<Text style={toTypeRoleStyle("caption")} className="shrink text-muted-foreground" numberOfLines={1}>
+	Text: ({ children, isAfterDot }) => (
+		<Text
+			style={toTypeRoleStyle("caption")}
+			className={cn("text-muted-foreground", isAfterDot ? "-ml-0.5" : "shrink")}
+			numberOfLines={1}
+		>
 			{children}
 		</Text>
 	),

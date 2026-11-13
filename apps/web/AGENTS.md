@@ -172,6 +172,8 @@ the browser bundle and renders pages through the server build, behind its own ro
   `components/common/DetailsLine.tsx` adapts core's details line, which `TopicPageHeader.tsx` draws under the byline
   and reactions with the counts of the page's sections, the Topic Post page under its byline's row, the profile's
   summary line and the team header as their counts, and the Topic Post popup under its Topic's name.
+  `components/common/DotSeparatedTexts.tsx` adapts core's row details texts, which the news, search, and finding rows
+  draw on their details lines.
   `saveTopic.ts` is the modal's save flow: the create or update, the podcast switch, the attachment uploads, edits, and
   removals, then the invites and the team change, with `MISSING_FIELD_NOTES` and `showSaveError` beside it;
   `EditTopicModal.test.tsx` covers both modules. `TopicSourceEditor.tsx` is the modal's sources field, with its source

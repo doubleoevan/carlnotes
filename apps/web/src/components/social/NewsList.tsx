@@ -10,6 +10,7 @@ import { cn } from "@carlnotes/nightshift/classNames"
 import { ChevronRight, Coffee, FileText, Heart, type LucideIcon, MessageCircle, Mic, PenLine } from "lucide-react"
 import { type ComponentProps, useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { DotSeparatedTexts } from "@/components/common/DotSeparatedTexts"
 import { Pagination } from "@/components/common/Pagination"
 import { FindingChapterPill, PodcastEpisodeNumberPill } from "@/components/podcast/PodcastEpisodePill"
 import { PodcastEpisodeVideoButton } from "@/components/podcast/PodcastEpisodeVideoButton"
@@ -161,14 +162,7 @@ export function NewsEventRow({
 			details={
 				<>
 					<NewsEventImage newsEvent={newsEvent} />
-					{/* each text wraps on its own, the dot staying with the text after it. the server and the browser render a
-					    minute apart at most, so the time may differ on hydration */}
-					{detailsTexts.map((detailText, i) => (
-						<span key={detailText} suppressHydrationWarning className={cn(i > 0 && "-ml-0.5 whitespace-nowrap")}>
-							{i > 0 && "· "}
-							{detailText}
-						</span>
-					))}
+					<DotSeparatedTexts texts={detailsTexts} />
 					{/* a Podcast Episode's Topic, linked as its search result links it */}
 					{newsEvent.kind === "podcastEpisode" && (
 						<SearchRowTopicDetail topic={{ id: newsEvent.topicId, name: newsEvent.topicName }} />

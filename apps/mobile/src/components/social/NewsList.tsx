@@ -20,6 +20,7 @@ import {
 import { type ComponentProps, useState } from "react"
 import { Pressable, View } from "react-native"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { DotSeparatedTexts } from "@/components/common/DotSeparatedTexts"
 import { Pagination } from "@/components/common/Pagination"
 import { SkeletonPulse } from "@/components/common/SkeletonPulse"
 import { FindingChapterPill, PodcastEpisodeNumberPill } from "@/components/podcast/PodcastEpisodePill"
@@ -161,13 +162,7 @@ function NewsEventRow({
 			details={
 				<>
 					<NewsEventImage newsEvent={newsEvent} />
-					{/* each text wraps on its own, the dot staying with the text after it */}
-					{detailsTexts.map((detailText, i) => (
-						<Text key={detailText} className={cn("text-xs text-muted-foreground", i === 0 ? "shrink" : "-ml-0.5")}>
-							{i > 0 && "· "}
-							{detailText}
-						</Text>
-					))}
+					<DotSeparatedTexts texts={detailsTexts} />
 					{/* a Podcast Episode's Topic, linked as its search result links it */}
 					{newsEvent.kind === "podcastEpisode" && (
 						<SearchRowTopicLink topic={{ id: newsEvent.topicId, name: newsEvent.topicName }} />

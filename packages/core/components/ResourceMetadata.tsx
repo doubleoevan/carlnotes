@@ -1,12 +1,12 @@
 import type { TopicFinding } from "@carlnotes/contracts/findings"
-import { toDotSeparatedText } from "@carlnotes/contracts/text"
-import type { ComponentType, ReactNode } from "react"
+import type { ComponentType } from "react"
 import { toAgeLabel } from "../lib/labels"
+import { DotSeparatedTexts, type DotSeparatedTextsElements } from "./DotSeparatedTexts"
 
 // platform elements draw the source icon and the same publication metadata
 export type ResourceMetadataComponents = {
 	Favicon: ComponentType<{ faviconPath: string | null }>
-	Text: ComponentType<{ children: ReactNode }>
+	Text: DotSeparatedTextsElements["Text"]
 }
 
 /**
@@ -22,7 +22,7 @@ export function ResourceMetadata({
 	return (
 		<>
 			{resource.source ? <Favicon faviconPath={resource.faviconPath} /> : null}
-			<Text>{toDotSeparatedText([resource.source, toAgeLabel(resource.publishedAt)])}</Text>
+			<DotSeparatedTexts texts={[resource.source, toAgeLabel(resource.publishedAt)]} elements={{ Text }} />
 		</>
 	)
 }

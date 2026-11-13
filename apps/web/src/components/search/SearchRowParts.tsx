@@ -2,7 +2,7 @@
 import { isPublishedPodcastEpisode, type PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
 import type { FindingSearchRow, SearchRow } from "@carlnotes/contracts/search"
 import { toTopicPath } from "@carlnotes/contracts/seo"
-import { toCountLabel, toDotSeparatedText } from "@carlnotes/contracts/text"
+import { toCountLabel } from "@carlnotes/contracts/text"
 import type { TopicImageUrls } from "@carlnotes/contracts/topicImages"
 import { toAgoLabel } from "@carlnotes/core/lib/labels"
 import { toPodcastEpisodeVideoPill } from "@carlnotes/core/lib/topicPodcastEpisodeVideoDisplay"
@@ -10,6 +10,7 @@ import type { LucideIcon } from "lucide-react"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"
 import { UserAvatar } from "@/components/branding/UserAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { DotSeparatedTexts } from "@/components/common/DotSeparatedTexts"
 import { PodcastEpisodeNumberPill } from "@/components/podcast/PodcastEpisodePill"
 import { PodcastEpisodeVideoButton } from "@/components/podcast/PodcastEpisodeVideoButton"
 import { TopicImageLink } from "@/components/topic/TopicImageLink"
@@ -119,7 +120,9 @@ function SearchRowDetails({ searchRow, isVideoShown }: Required<SearchRowLinePro
 		case "podcastEpisode":
 			return (
 				<>
-					{toDotSeparatedText(["Podcast", toAgoLabel(searchRow.date), toCountLabel(searchRow.count ?? 0, "listener")])}
+					<DotSeparatedTexts
+						texts={["Podcast", toAgoLabel(searchRow.date), toCountLabel(searchRow.count ?? 0, "listener")]}
+					/>
 					<SearchRowTopicDetail topic={searchRow.topic} />
 					<PodcastEpisodePills podcastEpisode={searchRow.podcastEpisode} isVideoShown={isVideoShown} />
 				</>
@@ -128,20 +131,16 @@ function SearchRowDetails({ searchRow, isVideoShown }: Required<SearchRowLinePro
 		case "topicPost":
 			return (
 				<>
-					{toDotSeparatedText(["Post", toAgoLabel(searchRow.date)])}
+					<DotSeparatedTexts texts={["Post", toAgoLabel(searchRow.date)]} />
 					<SearchRowTopicDetail topic={searchRow.topic} />
 				</>
 			)
 		// a team, how many topics it holds, and how many members it has
 		case "team":
 			return (
-				<>
-					{toDotSeparatedText([
-						"Team",
-						toCountLabel(searchRow.topicCount, "topic"),
-						toCountLabel(searchRow.memberCount, "member"),
-					])}
-				</>
+				<DotSeparatedTexts
+					texts={["Team", toCountLabel(searchRow.topicCount, "topic"), toCountLabel(searchRow.memberCount, "member")]}
+				/>
 			)
 		// a profile names its kind alone
 		case "user":
@@ -170,8 +169,7 @@ export function SearchRowTopicDetail({ topic }: { topic: { id: string; name: str
 	)
 }
 
-// a published podcast episode's play pill, with its film's Video pill before it, or nothing for none. the two wrap
-// together, as on a news row
+// a published podcast episode's film's Video pill, then its play pill, which wraps first, or nothing for none
 function PodcastEpisodePills({
 	podcastEpisode,
 	isVideoShown,
@@ -184,10 +182,10 @@ function PodcastEpisodePills({
 	}
 	const videoPill = isVideoShown ? toPodcastEpisodeVideoPill(podcastEpisode, "search") : null
 	return (
-		<span className="inline-flex items-center gap-1.5">
+		<>
 			{videoPill && <PodcastEpisodeVideoButton {...videoPill} />}
 			<PodcastEpisodeNumberPill podcastEpisode={podcastEpisode} />
-		</span>
+		</>
 	)
 }
 

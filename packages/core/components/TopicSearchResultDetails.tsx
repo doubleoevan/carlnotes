@@ -1,6 +1,7 @@
 import { isPublishedPodcastEpisode, type PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
-import { toCountLabel, toDotSeparatedText } from "@carlnotes/contracts/text"
-import type { ComponentType, ReactNode } from "react"
+import { toCountLabel } from "@carlnotes/contracts/text"
+import type { ComponentType } from "react"
+import { DotSeparatedTexts, type DotSeparatedTextsElements } from "./DotSeparatedTexts"
 
 export type TopicSearchResultDetailsProps = {
 	viewerCount?: number | null
@@ -8,7 +9,7 @@ export type TopicSearchResultDetailsProps = {
 	latestPodcastEpisode?: PodcastEpisodeSummary | null
 }
 export type TopicSearchResultDetailsElements = {
-	Text: ComponentType<{ children: ReactNode }>
+	Text: DotSeparatedTextsElements["Text"]
 	PodcastPill: ComponentType<{ podcastEpisode: PodcastEpisodeSummary }>
 }
 
@@ -24,13 +25,14 @@ export function TopicSearchResultDetails({
 	return (
 		<>
 			{/* only supplied counts are displayed, including zero */}
-			<Text>
-				{toDotSeparatedText([
+			<DotSeparatedTexts
+				texts={[
 					"Topic",
-					...(viewerCount == null ? [] : [toCountLabel(viewerCount, "visitor")]),
-					...(subscriberCount == null ? [] : [toCountLabel(subscriberCount, "follower")]),
-				])}
-			</Text>
+					viewerCount == null ? null : toCountLabel(viewerCount, "visitor"),
+					subscriberCount == null ? null : toCountLabel(subscriberCount, "follower"),
+				]}
+				elements={{ Text }}
+			/>
 			{latestPodcastEpisode && isPublishedPodcastEpisode(latestPodcastEpisode) && (
 				<PodcastPill podcastEpisode={latestPodcastEpisode} />
 			)}

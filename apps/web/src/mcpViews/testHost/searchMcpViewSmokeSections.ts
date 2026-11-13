@@ -87,7 +87,7 @@ test("a Topic Post in the search table links to its page and names its Topic", a
 		// the title is the link, and the line names the kind and the Topic
 		await topicPostRow.getByRole("link", { name: "What the evals missed" }).waitFor()
 		await topicPostRow.getByRole("link", { name: "LLM tooling" }).waitFor()
-		expect(await topicPostRow.getByText("Post ·").count()).toBe(1)
+		expect(await topicPostRow.getByText("Post", { exact: true }).count()).toBe(1)
 	})
 })
 

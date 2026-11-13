@@ -3,11 +3,11 @@ import {
 	type TopicSearchResultDetailsElements,
 	type TopicSearchResultDetailsProps,
 } from "@carlnotes/core/components/TopicSearchResultDetails"
+import { DOT_SEPARATED_TEXTS_ELEMENTS } from "@/components/common/DotSeparatedTexts"
 import { PodcastEpisodeNumberPill } from "@/components/podcast/PodcastEpisodePill"
-import { Text } from "@/components/primitives/text"
 
 const elements: TopicSearchResultDetailsElements = {
-	Text: ({ children }) => <Text className="text-xs text-muted-foreground">{children}</Text>,
+	Text: DOT_SEPARATED_TEXTS_ELEMENTS.Text,
 	PodcastPill: PodcastEpisodeNumberPill,
 }
 
