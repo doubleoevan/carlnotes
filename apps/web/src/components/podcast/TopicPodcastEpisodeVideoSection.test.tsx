@@ -1,7 +1,7 @@
 // the topic page's film section: open or collapsed as the topic read resolved it, headed "Coffee Break Cinema" with
 // the theme song's credits right after the title, with the film player in a card and its skips and speed showing
-// before the film plays, with the rendering card in the player's place while the topic's only film renders, and
-// absent for a topic with no film
+// before the film plays, with the rendering card in the player's place while the topic's only film renders, the
+// filming line under the controls while a newer film renders, and absent for a topic with no film
 import { expect, test } from "bun:test"
 import { toPodcastEpisodeFixture, toTopicPodcastFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import { toTestTopicResponse } from "@carlnotes/contracts/topicFeedTestFixtures"
@@ -94,4 +94,17 @@ test("a failed film on a topic with no ready film renders no film section", asyn
 		latestPodcastEpisode: toPodcastEpisodeFixture({ title: "Better beans", isVideoRendering: false }),
 	}
 	expect(await renderFilmSection(failedFilmTopic)).toBe("")
+})
+
+test("the film card says a newer film is filming under the controls, and says nothing for the shown film", async () => {
+	// the latest film, with a newer podcast episode whose film is rendering
+	const newerPodcastEpisode = toPodcastEpisodeFixture({ id: "episode-2", isVideoRendering: true })
+	const html = await renderFilmSection({ ...toFilmTopic(true), latestPodcastEpisode: newerPodcastEpisode })
+	expect(html).toContain('src="/api/topic-podcast-episode-video-images/episode-1/hash/poster.jpg"')
+	expect(html.indexOf("Carl and Vienna are filming...")).toBeGreaterThan(html.indexOf('aria-label="Mute"'))
+
+	// the shown film's own podcast episode adds no line
+	const shownPodcastEpisode = { ...filmPodcastEpisode, isVideoRendering: true }
+	const shownHtml = await renderFilmSection({ ...toFilmTopic(true), latestPodcastEpisode: shownPodcastEpisode })
+	expect(shownHtml).not.toContain("Carl and Vienna are filming...")
 })

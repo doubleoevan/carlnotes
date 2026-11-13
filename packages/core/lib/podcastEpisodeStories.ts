@@ -84,6 +84,12 @@ export const PODCAST_STORY_VIDEO_RENDERING_TOPIC = toTestTopicResponse({
 	latestPodcastEpisode: { ...PODCAST_STORY_EPISODE, isVideoRendering: true },
 })
 
+// a topic whose latest film plays while its newer podcast episode's film is rendering
+export const PODCAST_STORY_NEWER_VIDEO_RENDERING_TOPIC = {
+	...PODCAST_STORY_FILM_TOPIC,
+	latestPodcastEpisode: { ...PODCAST_STORY_EPISODE, id: "story-newer-podcast-episode", isVideoRendering: true },
+}
+
 // a podcast episode title and chapter titles long enough to run past a phone's width
 export const PODCAST_STORY_LONG_TITLE_EPISODE: PodcastEpisode = {
 	...PODCAST_STORY_EPISODE,

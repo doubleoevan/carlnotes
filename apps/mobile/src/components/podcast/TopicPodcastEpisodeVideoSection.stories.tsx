@@ -2,6 +2,7 @@ import type { TopicResponse } from "@carlnotes/contracts/topics"
 import {
 	PODCAST_STORY_FILM_EPISODE,
 	PODCAST_STORY_FILM_TOPIC,
+	PODCAST_STORY_NEWER_VIDEO_RENDERING_TOPIC,
 	PODCAST_STORY_VIDEO_RENDERING_TOPIC,
 	PodcastEpisodeStory,
 } from "@carlnotes/core/lib/podcastEpisodeStories"
@@ -33,3 +34,4 @@ type Story = StoryObj<typeof meta>
 
 export const Open: Story = {}
 export const VideoRendering: Story = { args: { topic: PODCAST_STORY_VIDEO_RENDERING_TOPIC } }
+export const NewerVideoRendering: Story = { args: { topic: PODCAST_STORY_NEWER_VIDEO_RENDERING_TOPIC } }

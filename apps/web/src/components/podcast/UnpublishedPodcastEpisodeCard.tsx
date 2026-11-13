@@ -7,7 +7,7 @@ import { cn } from "@carlnotes/nightshift/classNames"
 import { COVER_RECORDING_CLASS, INFO_CARD_CLASS } from "@/lib/styleClasses"
 import { PodcastEpisodeCover } from "./PodcastEpisodeCover"
 
-const elements: UnpublishedPodcastEpisodeCardElements = {
+export const UNPUBLISHED_PODCAST_EPISODE_CARD_ELEMENTS: UnpublishedPodcastEpisodeCardElements = {
 	Frame: ({ children }) => <div className={cn(INFO_CARD_CLASS, "flex items-center gap-4")}>{children}</div>,
 	Group: ({ children, className }) => <div className={className}>{children}</div>,
 	Text: ({ children, className }) => <div className={className}>{children}</div>,
@@ -31,5 +31,5 @@ const elements: UnpublishedPodcastEpisodeCardElements = {
  * Adapts the shared unpublished episode card to browser cover and shimmer rendering.
  */
 export function UnpublishedPodcastEpisodeCard(props: UnpublishedPodcastEpisodeCardProps) {
-	return <SharedUnpublishedPodcastEpisodeCard {...props} elements={elements} />
+	return <SharedUnpublishedPodcastEpisodeCard {...props} elements={UNPUBLISHED_PODCAST_EPISODE_CARD_ELEMENTS} />
 }

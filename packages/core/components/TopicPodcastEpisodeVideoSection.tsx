@@ -5,7 +5,11 @@ import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import type { ComponentType, ReactNode } from "react"
 import { useTopicPodcastEpisodeVideoRenderingPoll } from "../hooks/useTopicPodcastEpisodeVideoRenderingPoll"
-import { TOPIC_PODCAST_EPISODE_VIDEO_SECTION_TITLE } from "../lib/podcastEpisodeCopy"
+import {
+	type PodcastEpisodeProgressLine,
+	TOPIC_PODCAST_EPISODE_VIDEO_RENDERING_LINE,
+	TOPIC_PODCAST_EPISODE_VIDEO_SECTION_TITLE,
+} from "../lib/podcastEpisodeCopy"
 import {
 	toTopicPagePodcastEpisodeVideoSection,
 	toTopicPodcastEpisodeVideoDisplay,
@@ -28,9 +32,11 @@ export type TopicPodcastEpisodeVideoSectionElements = {
 		children: ReactNode
 	}>
 	// the film player, which the section shows in a card
-	Player: ComponentType<{ podcastEpisode: PodcastEpisode; isCard?: boolean }>
+	Player: ComponentType<{ podcastEpisode: PodcastEpisode; isCard?: boolean; cardFooter?: ReactNode }>
 	// the card that says the film is rendering, in the film player's place
 	RenderingCard: ComponentType<{ podcastEpisode: PodcastEpisode }>
+	// the shimmering line after its emoji
+	ProgressLine: ComponentType<PodcastEpisodeProgressLine>
 }
 
 // the topic, the report of a user's toggle, the read of the topic's page again while a film renders, and the app's
@@ -59,6 +65,7 @@ export function TopicPodcastEpisodeVideoSection({
 	return (
 		<TopicCinema
 			topicId={topic.id}
+			latestPodcastEpisode={topic.latestPodcastEpisode}
 			topicPodcastEpisodeVideoSection={topicPodcastEpisodeVideoSection}
 			onToggled={onToggled}
 			onVideoRenderingPoll={onVideoRenderingPoll}
@@ -71,12 +78,14 @@ export function TopicPodcastEpisodeVideoSection({
 // into it
 function TopicCinema({
 	topicId,
+	latestPodcastEpisode,
 	topicPodcastEpisodeVideoSection,
 	onToggled,
 	onVideoRenderingPoll,
-	elements: { Section, Player, RenderingCard },
+	elements: { Section, Player, RenderingCard, ProgressLine },
 }: {
 	topicId: string
+	latestPodcastEpisode: TopicResponse["latestPodcastEpisode"]
 	topicPodcastEpisodeVideoSection: TopicPodcastEpisodeVideoSectionRead
 	onToggled: (isOpen: boolean) => void
 	onVideoRenderingPoll: () => void | Promise<void>
@@ -91,6 +100,10 @@ function TopicCinema({
 	// read the topic's page again while the shown film renders
 	const isVideoRendering = toTopicPodcastEpisodeVideoDisplay(podcastEpisode) === "rendering"
 	useTopicPodcastEpisodeVideoRenderingPoll({ isVideoRendering, onPoll: onVideoRenderingPoll })
+
+	// the topic's newer film, still rendering while an older one plays here
+	const isNewerVideoRendering =
+		latestPodcastEpisode?.isVideoRendering === true && latestPodcastEpisode.id !== podcastEpisode.id
 	return (
 		<Section
 			title={TOPIC_PODCAST_EPISODE_VIDEO_SECTION_TITLE}
@@ -105,7 +118,11 @@ function TopicCinema({
 			{isVideoRendering ? (
 				<RenderingCard podcastEpisode={podcastEpisode} />
 			) : (
-				<Player podcastEpisode={podcastEpisode} isCard />
+				<Player
+					podcastEpisode={podcastEpisode}
+					isCard
+					cardFooter={isNewerVideoRendering && <ProgressLine {...TOPIC_PODCAST_EPISODE_VIDEO_RENDERING_LINE} />}
+				/>
 			)}
 		</Section>
 	)

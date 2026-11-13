@@ -8,7 +8,7 @@ import { ShimmerText } from "@/components/common/ShimmerText"
 import { Text } from "@/components/primitives/text"
 import { PodcastEpisodeCover } from "./PodcastEpisodeCover"
 
-const elements: UnpublishedPodcastEpisodeCardElements = {
+export const UNPUBLISHED_PODCAST_EPISODE_CARD_ELEMENTS: UnpublishedPodcastEpisodeCardElements = {
 	Frame: ({ children }) => (
 		<View className="flex-row items-center gap-4 rounded-lg border border-separator bg-card p-5 shadow-raised">
 			{children}
@@ -31,5 +31,5 @@ const elements: UnpublishedPodcastEpisodeCardElements = {
  * Adapts the shared unpublished episode card to platform image and text controls.
  */
 export function UnpublishedPodcastEpisodeCard(props: UnpublishedPodcastEpisodeCardProps) {
-	return <SharedUnpublishedPodcastEpisodeCard {...props} elements={elements} />
+	return <SharedUnpublishedPodcastEpisodeCard {...props} elements={UNPUBLISHED_PODCAST_EPISODE_CARD_ELEMENTS} />
 }

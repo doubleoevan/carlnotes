@@ -61,10 +61,11 @@ const NO_SURFACE_CONTROLS: TopicPodcastEpisodeVideoSurfaceControls = {
 	enterPictureInPicture: null,
 }
 
-// the podcast episode with a film, and whether a card holds the player
+// the podcast episode with a film, whether a card holds the player, and what the card shows under the controls
 export type TopicPodcastEpisodeVideoPlayerProps = {
 	podcastEpisode: PodcastEpisode
 	isCard?: boolean
+	cardFooter?: ReactNode
 }
 
 /**
@@ -73,6 +74,7 @@ export type TopicPodcastEpisodeVideoPlayerProps = {
 export function TopicPodcastEpisodeVideoPlayer({
 	podcastEpisode,
 	isCard = false,
+	cardFooter,
 	elements: { Group, Card, Surface, PlayButton, Controls, SeekBar, ControlButton, Feedback },
 }: TopicPodcastEpisodeVideoPlayerProps & { elements: TopicPodcastEpisodeVideoPlayerElements }) {
 	// whether this podcast episode is loaded, whether it is loaded as the film, and the controls the frame supports
@@ -166,7 +168,12 @@ export function TopicPodcastEpisodeVideoPlayer({
 
 	// a page's card, or the column inside the Video dialog's own frame
 	if (isCard) {
-		return <Card>{topicPodcastEpisodeVideoPlayer}</Card>
+		return (
+			<Card>
+				{topicPodcastEpisodeVideoPlayer}
+				{cardFooter}
+			</Card>
+		)
 	}
 	return <Group className="flex flex-col gap-3">{topicPodcastEpisodeVideoPlayer}</Group>
 }

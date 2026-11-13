@@ -10,7 +10,10 @@ import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
 import { captureFilmVisitEvent } from "@/visitAnalytics"
 import { PodcastThemeSongNote } from "./PodcastThemeSongNote"
 import { TopicPodcastEpisodeVideoPlayer } from "./TopicPodcastEpisodeVideoPlayer"
-import { UnpublishedPodcastEpisodeCard } from "./UnpublishedPodcastEpisodeCard"
+import {
+	UNPUBLISHED_PODCAST_EPISODE_CARD_ELEMENTS,
+	UnpublishedPodcastEpisodeCard,
+} from "./UnpublishedPodcastEpisodeCard"
 
 // the topic screen's scroll view, which a row's play scrolls to the section
 type TopicScrollViewRef = RefObject<ComponentRef<typeof ScrollView> | null>
@@ -41,6 +44,7 @@ export function TopicPodcastEpisodeVideoSection({
 			Section: (sectionProps) => <TopicCinemaSection {...sectionProps} scrollViewRef={scrollViewRef} />,
 			Player: TopicPodcastEpisodeVideoPlayer,
 			RenderingCard: TopicPodcastEpisodeVideoRenderingCard,
+			ProgressLine: UNPUBLISHED_PODCAST_EPISODE_CARD_ELEMENTS.ProgressLine,
 		}),
 		[scrollViewRef],
 	)

@@ -9,7 +9,10 @@ import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
 import { captureFilmVisitEvent } from "@/lib/visitAnalytics"
 import { PodcastThemeSongNote } from "./PodcastThemeSongNote"
 import { TopicPodcastEpisodeVideoPlayer } from "./TopicPodcastEpisodeVideoPlayer"
-import { UnpublishedPodcastEpisodeCard } from "./UnpublishedPodcastEpisodeCard"
+import {
+	UNPUBLISHED_PODCAST_EPISODE_CARD_ELEMENTS,
+	UnpublishedPodcastEpisodeCard,
+} from "./UnpublishedPodcastEpisodeCard"
 
 const elements: TopicPodcastEpisodeVideoSectionElements = {
 	Section: TopicCinemaSection,
@@ -17,6 +20,7 @@ const elements: TopicPodcastEpisodeVideoSectionElements = {
 	RenderingCard: ({ podcastEpisode }) => (
 		<UnpublishedPodcastEpisodeCard podcastEpisode={podcastEpisode} isVideoRendering />
 	),
+	ProgressLine: UNPUBLISHED_PODCAST_EPISODE_CARD_ELEMENTS.ProgressLine,
 }
 
 // the topic, and the read of its page again while its film renders
