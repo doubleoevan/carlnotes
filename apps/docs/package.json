@@ -9,14 +9,14 @@
 	},
 	"dependencies": {
 		"@carlnotes/contracts": "workspace:*",
-		"simple-icons": "^16.36.0"
+		"simple-icons": "^16.37.0"
 	},
 	"devDependencies": {
-		"@astrojs/markdown-satteri": "^0.4.6",
-		"@astrojs/starlight": "^0.42.8",
+		"@astrojs/markdown-satteri": "^0.4.7",
+		"@astrojs/starlight": "^0.42.10",
 		"@types/hast": "^3.0.5",
-		"astro": "^7.4.5",
-		"satteri": "^0.11.6",
+		"astro": "^7.4.8",
+		"satteri": "^0.11.7",
 		"sharp": "^0.35.5"
 	}
 }
