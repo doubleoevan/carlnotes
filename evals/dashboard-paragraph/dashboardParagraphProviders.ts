@@ -22,24 +22,24 @@ async function writeCaseParagraph(_renderedPrompt: string, context?: CallApiCont
 }
 
 /**
- * Returns a case's series: a year trend with each period's count on its last day, and a pin per country, most people
+ * Returns a case's series: a year trend with each period's count on its last day, and a pin per place, most people
  * first.
  */
 export function toCaseSeries({
 	lastPeriodCount,
 	priorPeriodCount,
-	countries,
+	places,
 }: Omit<DashboardParagraphVariables, "summary">): DashboardSeries {
 	const counts = Array.from({ length: 60 }, (_, i) => (i === 29 ? priorPeriodCount : i === 59 ? lastPeriodCount : 0))
-	const pins = countries.map((country, i) => ({
-		placeLevel: "country" as const,
+	const pins = places.map(({ country, region, city }, i) => ({
+		placeLevel: city ? ("city" as const) : ("country" as const),
 		country,
-		region: null,
-		city: null,
+		region: region ?? null,
+		city: city ?? null,
 		latitude: null,
 		longitude: null,
-		peopleCount: countries.length - i,
-		count: countries.length - i,
+		peopleCount: places.length - i,
+		count: places.length - i,
 		items: [],
 	}))
 	return {

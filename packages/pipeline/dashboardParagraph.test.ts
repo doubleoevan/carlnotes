@@ -1,9 +1,13 @@
-// the dashboard paragraph prompt holds the counts, the two periods, and the country names, and never a title, and one
+// the dashboard paragraph prompt holds the counts, the two periods, and the place names, and never a title, and one
 // Dashboard's paragraphs stop at its own daily allowance while the others' go on
 import { afterEach, expect, test } from "bun:test"
-import type { DashboardSeries } from "@carlnotes/contracts/dashboards"
+import type { DashboardPin, DashboardSeries } from "@carlnotes/contracts/dashboards"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
-import { buildDashboardParagraphPrompt, takeDashboardParagraphAllowance } from "./dashboardParagraph"
+import {
+	buildDashboardParagraphPrompt,
+	takeDashboardParagraphAllowance,
+	toDashboardParagraphLines,
+} from "./dashboardParagraph"
 
 afterEach(() => {
 	restoreRedisClient()
@@ -38,7 +42,7 @@ function toHostileSeries(): DashboardSeries {
 	}
 }
 
-test("the prompt holds the counts, the periods, and the countries, and no title", async () => {
+test("the prompt holds the counts, the periods, and the places, and no title", async () => {
 	// a person's Topic Dashboard with one topic
 	const summary = {
 		dashboardKind: "topicDashboard",
@@ -49,19 +53,58 @@ test("the prompt holds the counts, the periods, and the countries, and no title"
 	} as const
 	const { prompt, name } = await buildDashboardParagraphPrompt({ summary, series: toHostileSeries() })
 
-	// the numbers and the country reach the model, and the title and the city never do
+	// the numbers and the city with its region and country reach the model
 	expect(name).toBe("write-dashboard-paragraph")
 	expect(prompt).toContain("Topic Specials")
 	expect(prompt).toContain("- Findings: 4")
 	expect(prompt).toContain("- Visits in the last 30 days: 12")
 	expect(prompt).toContain("- Visits in the 30 days before that: 0")
-	expect(prompt).toContain("- Switzerland")
+	expect(prompt).toContain("- Zürich, Zurich, Switzerland")
 
-	// the hostile title, its words, and the city never reach it
+	// the hostile title and its words never reach it
 	expect(prompt).not.toContain(HOSTILE_TITLE)
 	expect(prompt).not.toContain("ignore")
-	expect(prompt).not.toContain("Zürich")
 	expect(prompt).not.toContain("{{")
+})
+
+test("a city's postal codes count as one place, and a pin with no city names its country", () => {
+	// two postal codes in Bend, one in Portland, and a visitor known only by country
+	const toPin = (
+		place: { region: string | null; city: string | null; postalCode: string | null },
+		peopleCount: number,
+	): DashboardPin => ({
+		placeLevel: place.city ? "city" : "country",
+		country: "US",
+		...place,
+		latitude: null,
+		longitude: null,
+		peopleCount,
+		count: peopleCount,
+		items: [],
+	})
+	const series = {
+		...toHostileSeries(),
+		pins: [
+			toPin({ region: "Oregon", city: "Portland", postalCode: "97201" }, 3),
+			toPin({ region: "Oregon", city: "Bend", postalCode: "97701" }, 2),
+			toPin({ region: "Oregon", city: "Bend", postalCode: "97702" }, 2),
+			toPin({ region: null, city: null, postalCode: null }, 1),
+		],
+	}
+	const summary = {
+		dashboardKind: "topicDashboard",
+		topicCount: 1,
+		findingCount: 1,
+		topicPostCount: 0,
+		viewerCount: 8,
+	} as const
+
+	// Bend's four people first, then Portland, then the country
+	expect(toDashboardParagraphLines({ summary, series }).placeLines).toEqual([
+		"- Bend, Oregon, United States",
+		"- Portland, Oregon, United States",
+		"- United States",
+	])
 })
 
 test("a podcast page counts plays, and a page with no pins names no place", async () => {

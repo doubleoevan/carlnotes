@@ -13,7 +13,7 @@ export const MATERIAL_LABEL = "The page's numbers and places, as the paragraph's
 
 // the rubric that fails a paragraph that invents or misreads a number, or says the numbers are the reader's
 export const FAITHFUL_RUBRIC = [
-	"The paragraph uses only the numbers and countries it was given.",
+	"The paragraph uses only the numbers and places it was given.",
 	"Fail the output if it gives a number, a place, a date, or a reason that the material does not hold, or misstates a number.",
 	"Fail the output if it says the numbers belong to the reader, as in your topics or you have, since the reader may be anyone.",
 	"Never fail the output for rounding a number in a way that keeps its meaning.",

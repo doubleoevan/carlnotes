@@ -1,11 +1,12 @@
 // carl's paragraph above a Dashboard's charts, written nightly on the platform's key from the summary strip's counts,
-// the last 30 days against the 30 before, and the country names of the map's pins
+// the last 30 days against the 30 before, and the cities and countries of the map's pins
 
 import { toCountryName } from "@carlnotes/contracts/countryNames"
 import {
 	DASHBOARD_PAGE_NAMES,
 	DASHBOARD_PARAGRAPH_MAX_CHARS,
 	type DashboardKind,
+	type DashboardPin,
 	type DashboardSeries,
 	type DashboardSubject,
 	type DashboardSummary,
@@ -42,8 +43,8 @@ const DASHBOARD_PARAGRAPH_DAILY_LIMIT = 6
 // how long the paragraph's model call may take before it aborts
 const PARAGRAPH_TIMEOUT_MS = 30_000
 
-// how many countries the paragraph is given, and how many days each period counts
-const MAX_PARAGRAPH_COUNTRIES = 3
+// how many places the paragraph is given, and how many days each period counts
+const MAX_PARAGRAPH_PLACES = 3
 const PERIOD_DAYS = 30
 
 // what each page's audience came to
@@ -73,7 +74,7 @@ export type DashboardParagraphInput = { summary: DashboardSummary; series: Dashb
 type DashboardParagraphAllowance = "taken" | "dashboardLimitReached" | "platformLimitReached"
 
 /**
- * Builds the paragraph prompt from counts and country names alone. Every value is the app's own.
+ * Builds the paragraph prompt from counts and place names alone. Every value is the app's own.
  */
 export async function buildDashboardParagraphPrompt({
 	summary,
@@ -99,16 +100,16 @@ export async function buildDashboardParagraphPrompt({
 }
 
 /**
- * Returns the lines of numbers and the lines of countries, most people first, that a paragraph is written from.
+ * Returns the lines of numbers and the lines of places, most people first, that a paragraph is written from.
  */
 export function toDashboardParagraphLines({ summary, series }: DashboardParagraphInput): {
 	numberLines: string[]
 	placeLines: string[]
 } {
-	const countries = toCountryNames(series)
+	const placeNames = toPlaceNames(series)
 	return {
 		numberLines: toNumberLines(summary, series),
-		placeLines: countries.length > 0 ? countries.map((country) => `- ${country}`) : ["- none known"],
+		placeLines: placeNames.length > 0 ? placeNames.map((placeName) => `- ${placeName}`) : ["- none known"],
 	}
 }
 
@@ -196,16 +197,29 @@ function sumCounts(counts: number[]): number {
 	return counts.reduce((sum, count) => sum + count, 0)
 }
 
-// the countries of the map's pins, by name, the most people first
-function toCountryNames(series: DashboardSeries | null): string[] {
-	const peopleByCountry = new Map<string, number>()
-	for (const { country, peopleCount } of series?.pins ?? []) {
-		peopleByCountry.set(country, (peopleByCountry.get(country) ?? 0) + peopleCount)
+// the places of the map's pins, the most people first: a city with its region and country, or a country alone for a
+// pin with no city. a city's postal codes count as one place
+function toPlaceNames(series: DashboardSeries | null): string[] {
+	const peopleByPlaceName = new Map<string, number>()
+	for (const pin of series?.pins ?? []) {
+		const placeName = toPlaceName(pin)
+		if (placeName) {
+			peopleByPlaceName.set(placeName, (peopleByPlaceName.get(placeName) ?? 0) + pin.peopleCount)
+		}
 	}
-
-	// name each country in English, leaving out a code with no name
-	return [...peopleByCountry]
+	return [...peopleByPlaceName]
 		.sort((first, second) => second[1] - first[1])
-		.flatMap(([country]) => toCountryName(country) ?? [])
-		.slice(0, MAX_PARAGRAPH_COUNTRIES)
+		.map(([placeName]) => placeName)
+		.slice(0, MAX_PARAGRAPH_PLACES)
+}
+
+// a pin's place in English, as "City, Region, Country", leaving out a region that repeats the city, or null for a
+// country code with no name
+function toPlaceName({ city, region, country }: DashboardPin): string | null {
+	const countryName = toCountryName(country)
+	if (!countryName) {
+		return null
+	}
+	const regionName = region === city ? null : region
+	return [city, regionName, countryName].filter(Boolean).join(", ")
 }
