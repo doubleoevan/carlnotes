@@ -1,4 +1,4 @@
-// the mobile TopicImage: each size's box, with the web stories' names. the ground shows in every story, since a
+// the mobile TopicImage: each size's box, with the web stories' names. the coffee mug shows in every story, since a
 // story has no api to load a file from
 import { topicImageSizes } from "@carlnotes/contracts/enums"
 import type { Meta, StoryObj } from "@storybook/react-native"
@@ -30,5 +30,11 @@ export const List: Story = { args: { size: "list" } }
 // the thumbnail, beside a search result
 export const Thumbnail: Story = { args: { size: "thumbnail" } }
 
-// a topic whose render has not landed shows the muted ground at the size's box
+// a topic with no image to show draws the coffee mug on the muted background at the size's box
 export const NoImage: Story = { args: { image: null } }
+
+// the coffee mug at the list size
+export const NoImageList: Story = { args: { image: null, size: "list" } }
+
+// the coffee mug at the thumbnail size
+export const NoImageThumbnail: Story = { args: { image: null, size: "thumbnail" } }

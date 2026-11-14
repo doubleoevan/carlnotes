@@ -17,6 +17,7 @@ import { toObjectionableContentResponse } from "../moderation"
 import { socialReadRateLimiter, toolCallerRateLimiter } from "../rateLimit"
 import { toTermsOutdatedRejection } from "../termsAcceptance"
 import { removeTopicSource } from "../tool/topicSourceTools"
+import { overlayUncheckedTopicImage } from "../uncheckedImageOverlays"
 import { loadViewableTopic } from "./accessibleFindings"
 import { deleteTopic } from "./deleteTopic"
 import { TOPIC_PAGE_KEY_PREFIX } from "./feedCaches"
@@ -117,7 +118,11 @@ export const topicsRoute = new Hono<AppEnv>()
 		// page always holds them
 		const isRelatedTopicsSeparate = related === "separate" && userId !== null
 		const loadTracedTopicPage = (): Promise<TopicResponse | null> =>
-			traceRequestStage("topic_page.load", () => loadTopicPage(userId, topicId, { isPoll, isRelatedTopicsSeparate }))
+			traceRequestStage("topic_page.load", async () => {
+				// the page, with a signed-in editor's unchecked upload in the topic's image's place
+				const topicPage = await loadTopicPage(userId, topicId, { isPoll, isRelatedTopicsSeparate })
+				return topicPage ? overlayUncheckedTopicImage(topicPage, userId) : null
+			})
 
 		// read the page, then respond with it if it is visible
 		let topicPage: TopicResponse | null

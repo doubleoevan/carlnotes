@@ -39,18 +39,28 @@ the address and the user agent through `hmac.ts`, never stored. `voiceChat.ts` r
 model from `CHAT_TRANSCRIPTION_MODEL` and says whether voice chat is on, which needs that model and the podcast speech
 model. `podcastEpisodeSettings.ts` reads `PODCAST_SPEECH_MODEL`, which defaults to `gemini-3.8-flash-tts`, and Podcast
 Episodes are off if it is set empty. It also reads the film settings: `TOPIC_PODCAST_EPISODE_VIDEO_CONCURRENCY` and
-`TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_CONCURRENCY`, both 1 by default, and the generated image setting,
-`TOPIC_PODCAST_EPISODE_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT`, the 40 generated images one film draws at most, where 0
-turns them off. `podcastCoverPaths.ts` signs a cover's key through `hmac.ts` with
+`TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_CONCURRENCY`, both 1 by default. A film concurrency of 0 turns films off, and
+a backfill concurrency of 0 turns the backfill off, which `isTopicPodcastEpisodeVideoBackfillEnabled` returns. The
+generated image setting, `TOPIC_PODCAST_EPISODE_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT`, is the default of the spend
+control settings' limit: the 40 generated images one film draws at most, where 0 turns them off. `scanSettings.ts`
+reads `SCAN_DISPATCH_LIMIT`, the 100 Scans one sweep may hand to Temporal, where 0 starts none.
+`podcastCoverPaths.ts` signs a cover's key through `hmac.ts` with
 `toPodcastCoverKey` and builds its path with `toPodcastCoverPath`, over the sizes and the `PodcastCover` shape in
 `@carlnotes/contracts/podcastEpisodes`. `toLatestPodcastCoverPath` signs the kind and id alone, so the summary email's
 cover keeps loading after the podcast episode publishes. `docsContent.ts` names the docs markdown folder that the api's documents and
 the worker's docs embed read, and `sourceFileTestFixtures.ts` lists the source files under repo folders for the tests
 that scan them.
 
+`dataUrl.ts` returns bytes as a base64 data url of their content type, which the image moderation, an attachment's
+image context, and the cards and covers read.
+
 `concurrency.ts` runs tasks a few at a time for the review's scoring, the sweep's reads of each owner's daily Topics,
-key budget, and daily scans cutoff, the stored object deletes, and the reset's replacements, and its
-`createConcurrencyLimiter` limits work across every caller in a process, as a Topic Post body image's encode. `retry.ts` tries a failed
+key budget, and daily scans cutoff, the stored object deletes, and the reset's replacements. Its `createWeightLimiter`
+limits the weight taken at once across every caller in a process, as the bytes of the chat bodies in progress, with
+a signal that takes a waiting caller out of the wait. `createConcurrencyLimiter` is that limit at a weight of one a
+task, as a Topic Post body image's encode, and `createTurnTaker` runs the work of one key one at a time, as a user's
+large chat bodies. `retry.ts`
+tries a failed
 attempt again after a fixed wait, or after one chosen from the failure, which can also end the retries. Its callers are
 the worker's first Temporal connection, a podcast episode's publish, a film's images, the podcast episode smoke's
 chapters, and the model call runner in `@carlnotes/models/modelCallRetry`. Every fetch of a user-supplied url goes

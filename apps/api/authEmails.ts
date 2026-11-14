@@ -4,7 +4,7 @@
 import { db, schema } from "@carlnotes/db"
 import { deleteRedisKeys } from "@carlnotes/db/redis"
 import { renderAuthEmail, renderAuthEmailText } from "@carlnotes/emails/auth-email"
-import { sendEmail } from "@carlnotes/emails/email"
+import { sendAccountEmail } from "@carlnotes/emails/email"
 import { appBaseUrl } from "@carlnotes/server/appUrl"
 import { and, eq, like } from "drizzle-orm"
 
@@ -37,7 +37,7 @@ export async function sendResetPasswordEmail(email: string, url: string): Promis
 		linkNote: "The link works once and expires in an hour.",
 		appUrl: appBaseUrl(),
 	}
-	await sendEmail({
+	await sendAccountEmail({
 		to: email,
 		subject: "Reset your password",
 		emailContent: await renderAuthEmail(emailProps),
@@ -62,7 +62,7 @@ export async function sendChangeEmailConfirmationEmail(
 		linkNote: "Nothing changes until you confirm.",
 		appUrl: appBaseUrl(),
 	}
-	await sendEmail({
+	await sendAccountEmail({
 		to: currentEmail,
 		subject: "Confirm your new email",
 		emailContent: await renderAuthEmail(emailProps),
@@ -82,7 +82,7 @@ export async function sendVerificationEmail(email: string, url: string): Promise
 		url,
 		appUrl: appBaseUrl(),
 	}
-	await sendEmail({
+	await sendAccountEmail({
 		to: email,
 		subject: "Confirm your email",
 		emailContent: await renderAuthEmail(emailProps),

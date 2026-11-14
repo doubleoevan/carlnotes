@@ -26,15 +26,18 @@ import {
 import { PAGE_BUTTON_ROW_CLASS, PLAIN_PAGE_BUTTON_CLASS, PLAIN_PAGE_BUTTON_ICON_CLASS } from "@/lib/styleClasses"
 import { JoinTeamButton } from "./JoinTeamButton"
 
-// the leader's avatar picker in the header, uploading a chosen or dropped image at once
+// the leader's avatar picker in the header, uploading a chosen or dropped image at once. an upload shown to this
+// leader alone shows in the team's avatar's place, with its line under it
 function TeamHeaderAvatar({
 	team,
 	onChanged,
 }: {
-	team: { teamId: string; name: string; avatarVersion: string | null }
+	team: Pick<TeamPageResponse, "teamId" | "name" | "avatarVersion" | "uncheckedAvatarVersion">
 	onChanged: () => void
 }) {
+	// whether an upload is under way, and the avatar this leader sees: the upload shown to them alone, or the team's
 	const [isUploading, setIsUploading] = useState(false)
+	const shownAvatarVersion = team.uncheckedAvatarVersion ?? team.avatarVersion
 
 	// upload at once. success reloads the team with its new version, and a rejection shows a toast
 	const handleAvatarChange = async (avatarFile: File): Promise<void> => {
@@ -49,7 +52,8 @@ function TeamHeaderAvatar({
 
 	return (
 		<TeamAvatarPicker
-			team={team}
+			team={{ ...team, avatarVersion: shownAvatarVersion }}
+			isAvatarUnchecked={Boolean(team.uncheckedAvatarVersion)}
 			onAvatarChange={(avatarFile) => void handleAvatarChange(avatarFile)}
 			isDisabled={isUploading}
 			className={PAGE_AVATAR_CLASS}

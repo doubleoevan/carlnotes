@@ -17,19 +17,23 @@ Entries: `temporal.ts` (the worker, run as `bun run temporal` in production and 
 with its scan concurrency set by `SCAN_CONCURRENCY`, the concurrency of each of its attachment and Source screening
 Workers by `SCREEN_CONCURRENCY`, and a Worker of its own for the `scan-closing` queue that records a scan's outcome
 apart from the scan slots. A failure that stops it is reported in the `startup` stage before its Workers poll and in
-`worker` after, and the process exits once the report sends), `schedule.ts` (the sweep, `bun run schedule`, or `bun run
+`worker` after, and the process exits once the report sends. It starts only as the process's entry, so a test imports
+it without starting a worker), `schedule.ts` (the sweep, `bun run schedule`, or `bun run
 dev:worker` on a minute's interval: it reads the daily spend cutoffs once through `@carlnotes/db/dailySpendCutoffs`,
 starts as many scheduled scans as the backlog allows, a daily topic past its owner's daily scans cutoff once a week, and
 no scheduled scan of a free owner past the scheduled scans cutoff or of a Topic whose first scan still waits, then
 copies the viewer and listener counts through `syncViewerCounts.ts`, retries the pending object deletions through
-`retryPendingObjectDeletions.ts`, mails the support inbox one reminder for each content report open past twelve hours
-through `reportReminders.ts`, sends the day's notifications emails through `notificationsEmails.ts`, and reports the
-day's spend across every user through `dailySpend.ts`, which warns past `GLOBAL_DAILY_SPEND_ALERT_USD` and warns once
-the past hour's signups reach the `hourly-signups` threshold from the spend control settings), `scanQueue.ts` (the
+`retryPendingObjectDeletions.ts`, checks the unchecked images again through `checkUncheckedImages` in
+`@carlnotes/pipeline/uncheckedImageChecks` for two minutes a sweep, mails the support inbox one reminder for each
+content report open past twelve hours through `reportReminders.ts`, sends the day's notifications emails through
+`notificationsEmails.ts`, and reports the day's spend across every user through `dailySpend.ts`, which warns past
+`GLOBAL_DAILY_SPEND_ALERT_USD` and warns once the past hour's signups reach the `hourly-signups` threshold from the
+spend control settings), `scanQueue.ts` (the
 sweep's view of the scan queue: the start of the rows a dying caller never dispatched with the trigger it would have
 used, oldest first up to the sweep's dispatch count with the rest left for the next sweep, the waiting scans started
 oldest first up to the first scan dispatch limit with no key budget read, the queue's report, and how many Scans a sweep
-may start, `SCAN_DISPATCH_LIMIT` minus the backlog, which the waiting scans do not count against),
+may start, `SCAN_DISPATCH_LIMIT` minus the backlog, which the waiting scans do not count against. It reads the limit
+each sweep through `scanDispatchLimit` in `@carlnotes/server/scanSettings`, and 0 starts no scheduled Scan),
 `scheduledTopicFilter.ts` (the filter that selects the scheduled Topics, and the frequency window between their Scans),
 `scheduledTopicLimits.ts` (the limits that the sweep reads once per owner inside one request memo: the daily topic
 limit, the daily topics that scan weekly past the daily scans cutoff, with each owner's cutoff cached in Redis for an
@@ -81,8 +85,9 @@ quotes for a question about the app; a section whose hash is unchanged is not em
   before the send, and a rejected send deletes it for the next sweep. It makes no model call.
 -  `retryPendingObjectDeletions.ts` retries the pending keys in `pending_object_deletions` after the leased sweep,
   outside its lease, with a doubling backoff up to a day, and reports a key pending for over a day once, deleting each
-  through `deleteStoredObject` in `@carlnotes/db/store`. Before the sweep starts a Scan row that was opened and never
-  dispatched, the sweep reads the row owner's key budget and marks the row failed with the budget reason if that budget
+  through `deleteStoredObject` in `@carlnotes/db/store`. It reads each key's row again right before the delete, so a
+  key that a save cleared since the batch was read keeps its object. Before the sweep starts a Scan row that was
+  opened and never dispatched, the sweep reads the row owner's key budget and marks the row failed with the budget reason if that budget
   is spent. A Scan that a user started by hand, and a waiting scan, starts without the budget read. A waiting scan has
   no dispatch time, so the close-out never fails it. The sweep closes out a picked-up Scan
   that runs past its stages' total timeouts, and a Scan still waiting for a worker past the ingest and finish stages'
@@ -90,7 +95,10 @@ quotes for a question about the app; a section whose hash is unchanged is not em
   every Source still waiting on one through `@carlnotes/pipeline/screen`.
 -  `workflows/` — the Temporal workflows and their activities, one pair of files per workflow: `runTopicScan.ts` (the
   durable Scan, which runs the pipeline's three stages as activities and names the `scan-closing` queue),
-  `processAttachment.ts` (a topic attachment's extraction and summaries), `screenSource.ts` (a url Source's screen that
+  `processAttachment.ts` (a topic attachment's extraction and summaries. The extraction runs in a child process under
+  a memory limit, through `@carlnotes/pipeline/attachExtraction`. One attempt has 4.5 minutes, its wait included, and
+  a file that is itself at fault, or whose read ran past its time or its memory limit, fails without another
+  attempt), `screenSource.ts` (a url Source's screen that
   its page can be read), `sendScanEmail.ts`, `sendPushNotifications.ts`, and `recordPodcastEpisode.ts`, with
   `deliveryRetryPolicy.ts` holding the send retry policy that the email and push workflows share. Temporal bundles a
   workflow file with webpack, so a workflow file imports only `@carlnotes/contracts/scanFailure`,
@@ -136,7 +144,8 @@ quotes for a question about the app; a section whose hash is unchanged is not em
   `PODCAST_RECORDING_CONCURRENCY`. The scan workflow starts it as a child workflow that outlives the Scan's own, after
   the email workflow, and the podcast episode workflow signals the Scan's email workflow once its outline is settled, so
   the email can name the Podcast Episode. No audio passes between activities except through object storage. The steps
-  are in `@carlnotes/pipeline/podcast/`.
+  are in `@carlnotes/pipeline/podcast/`. The plan records no new podcast episode while the spend control settings
+  pause new podcast episodes, and a recording under way finishes.
 - A published podcast episode's film renders in `workflows/renderTopicPodcastEpisodeVideo.ts` on the `episode-videos`
   queue, whose Worker's concurrency is `TOPIC_PODCAST_EPISODE_VIDEO_CONCURRENCY`, default 1. The recording workflow
   starts the render as an abandoned child after the image step, behind the `topic-podcast-episode-video` patch, and the
@@ -151,11 +160,16 @@ quotes for a question about the app; a section whose hash is unchanged is not em
   below the current render version renders it again while it keeps playing, then swaps its files in one update, and a
   failure leaves the film that plays. An editor's regeneration of the film's own image runs as a `renderTopicImage`
   workflow on the `topic-images` queue, whose render row names the film, and its store starts the film's rebuild. A
-  concurrency of 0 turns films off: no film Worker polls, and no recording or backfill starts a film.
+  concurrency of 0 turns films off: no film Worker polls, and no recording or backfill starts a film. The api still
+  queues a rebuild on the `episode-videos` queue, which waits until a Worker polls it again.
+  `isTopicPodcastEpisodeVideoEnabled` in `workflows/recordPodcastEpisodeActivities.ts` is false at a concurrency of 0
+  and while the spend control settings pause new films. The backfill and the rebuild never ask it.
 - `workflows/backfillTopicPodcastEpisodeVideos.ts` gives each Topic's latest published podcast episode a film, and of
   the podcast episodes with no film only that one, then re-renders every ready film below the current render version,
   all on the platform's bill. It runs under the fixed id `episode-video-backfill` on the `episode-video-backfill`
-  queue at `TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_CONCURRENCY`, default 1, public Topics first, 100 a page with
+  queue at `TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_CONCURRENCY`, default 1, where 0 creates no backfill Worker and
+  starts no backfill, which `readTopicPodcastEpisodeVideoStartup` in `temporal.ts` decides at the worker's boot,
+  public Topics first, 100 a page with
   `continueAsNew`, each page listed by `workflows/backfillTopicPodcastEpisodeVideosActivities.ts`: the Topics with no
   film first, then the films to render again, without a film whose re-render failed at this version. It logs the
   counts so far and the films left after each batch. `temporal.ts` starts or joins it once the Workers poll, without

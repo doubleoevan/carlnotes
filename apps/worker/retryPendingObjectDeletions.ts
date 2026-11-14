@@ -16,7 +16,8 @@ export type PendingObjectDeletionRetrySummary = { deletedCount: number; failedCo
 
 /**
  * Retries the pending object deletions whose try time has passed, oldest first, up to one run's batch,
- * and reports a key that has been pending for over a day once, on the retry that fails.
+ * and reports a key that has been pending for over a day once, on the retry that fails. A key that a save cleared
+ * after the batch was read keeps its object.
  */
 export async function retryPendingObjectDeletions(): Promise<PendingObjectDeletionRetrySummary> {
 	// read the oldest batch of keys whose try time has passed
@@ -36,6 +37,11 @@ export async function retryPendingObjectDeletions(): Promise<PendingObjectDeleti
 	// delete each one, and report a stale key that failed again
 	const pendingObjectDeletionRetrySummary = { deletedCount: 0, failedCount: 0 }
 	for (const pendingObjectDeletionRow of pendingObjectDeletionRows) {
+		// a key that a save named since the read is no longer pending, and its object stays
+		if (!(await isObjectDeletionPending(pendingObjectDeletionRow.objectKey))) {
+			continue
+		}
+
 		// count a success
 		if (await deleteStoredObject(pendingObjectDeletionRow.objectKey)) {
 			pendingObjectDeletionRetrySummary.deletedCount += 1
@@ -54,6 +60,15 @@ export async function retryPendingObjectDeletions(): Promise<PendingObjectDeleti
 		)
 	}
 	return pendingObjectDeletionRetrySummary
+}
+
+// whether a key is still pending deletion
+async function isObjectDeletionPending(objectKey: string): Promise<boolean> {
+	const [pendingKeyRow] = await db
+		.select({ objectKey: pendingObjectDeletions.objectKey })
+		.from(pendingObjectDeletions)
+		.where(eq(pendingObjectDeletions.objectKey, objectKey))
+	return pendingKeyRow !== undefined
 }
 
 // one pending key as the retry reads it

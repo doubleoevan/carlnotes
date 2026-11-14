@@ -55,7 +55,7 @@ export function toTopicPreviewKey(topicPreview: TopicPreview): string {
  */
 export async function toTopicPreviewPng(card: TopicPreview): Promise<Uint8Array> {
 	// the user's avatar bytes, only fetched here. the card's key names the avatar instead, so a stored card loads nothing
-	const ownerImage = await toOwnerImageDataUri(card.ownerAvatar)
+	const ownerImage = await toOwnerImageDataUri(card.ownerAvatar, AVATAR_SIZE)
 	const footer = toTopicFooter(card, ownerImage)
 	if (!card.imageHash) {
 		return toCardPng([toBrandIcon(), toTopicTitle(card.title), footer])

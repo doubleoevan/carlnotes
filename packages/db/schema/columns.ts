@@ -34,6 +34,7 @@ import {
 	topicPodcastEpisodeVideoStatuses,
 	topicPostDiscussionKinds,
 	topicPostDiscussionStatuses,
+	uncheckedImageSubjectKinds,
 	visibilities,
 } from "@carlnotes/contracts/enums"
 import { podcastEpisodeFormats } from "@carlnotes/contracts/podcast"
@@ -69,6 +70,8 @@ export const chatAttachmentKind = pgEnum("chat_attachment_kind", chatAttachmentK
 export const chatTurnKind = pgEnum("chat_turn_kind", chatTurnKinds)
 // where a user's public avatar image comes from. only oauth and upload have a stored object
 export const avatarSource = pgEnum("avatar_source", avatarSources)
+// what an unchecked image is for
+export const uncheckedImageSubjectKind = pgEnum("unchecked_image_subject_kind", uncheckedImageSubjectKinds)
 // a member's team role, and who may address an invite to a user
 export const teamRole = pgEnum("team_role", teamRoles)
 export const inviteAccess = pgEnum("invite_access", inviteAccesses)

@@ -169,13 +169,6 @@ async function isExistingTopic(topicId: string): Promise<void> {
 	}
 }
 
-/**
- * Stored image bytes as the data url for the model to read.
- */
-export function toDataUrl(contentType: string, bytes: Uint8Array): string {
-	return `data:${contentType};base64,${Buffer.from(bytes).toString("base64")}`
-}
-
 // build the context-generation prompt over attach-context.md, limited so a huge document can't blow the token budget
 export async function buildContextPrompt(text: string): Promise<BuiltPrompt> {
 	// fetch the registry version first, then limit the document length to bound the token spend

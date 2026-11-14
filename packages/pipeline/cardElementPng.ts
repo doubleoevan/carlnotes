@@ -38,10 +38,3 @@ export async function toCardElementPng({ cardElement, width, height }: ToCardEle
 	const renderedImage = await renderAsync(cardSvg, { fitTo: { mode: "width", value: width } })
 	return renderedImage.asPng()
 }
-
-/**
- * Returns an image's bytes as a data uri that satori can draw.
- */
-export function toImageDataUri(bytes: Uint8Array, contentType: string): string {
-	return `data:${contentType};base64,${Buffer.from(bytes).toString("base64")}`
-}

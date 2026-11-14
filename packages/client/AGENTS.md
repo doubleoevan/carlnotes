@@ -110,7 +110,8 @@ signal, and `fetchApi` checks cancellation after asynchronous session headers, b
 `fetchPersonalSourcesEmailSetup` is the read-only mailbox response used by the empty Personal sources hint. It creates no Source and has no setup UI.
 
 `homeClient.ts` reads the home payload, and `topicImageClient.ts` is the editor's image block: the regenerate, the
-render poll, and the upload of a multipart body.
+render poll, and the upload of a multipart body. The four image uploads return `isImageUnchecked` with the image or the
+poster.
 
 `topicPostClient.ts` also starts a regenerate of a post's discussion. `chatClient.ts` lets a topic's chat page name
 the Topic Post whose page it is open on, and sends the post's id with each question. `podcastEpisodeClient.ts` reads a

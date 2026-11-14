@@ -1,6 +1,7 @@
 // podcast episode plan tests: which Findings are planned, their order, whether the podcast episode is short, the
-// checks that stop a new podcast episode before it spends, and one read of the month's spend for a plan's two checks
-import { afterEach, expect, mock, spyOn, test } from "bun:test"
+// checks that stop a new podcast episode before it spends, one read of the month's spend for a plan's two checks, the
+// empty speech model, and the pause on new podcast episodes
+import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import { FULL_PODCAST_EPISODE_FINDINGS, SHORT_PODCAST_EPISODE_FINDINGS } from "@carlnotes/contracts/podcastEpisodes"
 import {
 	PLUS_USER_ACCESS_ROW,
@@ -9,9 +10,12 @@ import {
 	toTableRow,
 } from "@carlnotes/db/connectionPoolStub"
 import * as dailySpendCutoffs from "@carlnotes/db/dailySpendCutoffs"
+import { DEFAULT_SPEND_CONTROL_SETTINGS } from "@carlnotes/db/dailySpendCutoffTestFixtures"
 import * as monthlyBudgetCutoffs from "@carlnotes/db/monthlyBudgetCutoffs"
 import * as quotas from "@carlnotes/db/quotas"
+import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
 import { topics } from "@carlnotes/db/schema/topics"
+import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import {
 	isShortPodcastEpisodePlanned,
@@ -140,11 +144,18 @@ test("toPlannedFindings picks by score with bonuses, and a new Finding wins a ti
 	expect(toPlannedFindingNames(topicFindingRows)).toEqual([...newFindingNames, "liked-source"])
 })
 
-// put the spied quota checks, the connection pool's own query, and the speech model setting back after each test
+// each test reads the spend control settings through an empty in-memory Redis
+beforeEach(() => {
+	stubRedisClient()
+})
+
+// put the spied checks, the connection pool's own query, the Redis client, and the speech model setting back after
+// each test
 const restoreEnvSettings = saveEnvSettings(["PODCAST_SPEECH_MODEL"])
 afterEach(() => {
 	mock.restore()
 	restoreConnectionPool()
+	restoreRedisClient()
 	restoreEnvSettings()
 })
 
@@ -251,38 +262,122 @@ test("a new short podcast episode stops while the topic's short one is still rec
 	expect(isMonthlyBudgetCutoffPassedSpy).not.toHaveBeenCalled()
 })
 
+// the rows a recordable plan reads, by the text part its query includes: a succeeded scan of a plus owner's topic with
+// its podcast on, one new Finding, no spend, and no earlier row
+const RECORDABLE_PLAN_QUERY_ROWS: [string, unknown[]][] = [
+	["insert into", ["podcast-episode-1"]],
+	["sum(", ["0"]],
+	['from "users"', PLUS_USER_ACCESS_ROW],
+	['from "topics"', toTableRow(topics, { id: "topic-1", ownerId: "owner-1", isPodcastEnabled: true })],
+	['from "findings"', ["finding-1", "resource-1", "https://a.com/1", "scan-1", 0.5, null, false]],
+	['from "scans"', ["succeeded"]],
+]
+
+// the recordable plan's Scan, Topic, and billed user, and the plan that records its podcast episode
+const RECORDABLE_PLAN_OPTIONS = { scanId: "scan-1", topicId: "topic-1", billedUserId: "owner-1" }
+const RECORDED_PODCAST_EPISODE_PLAN = {
+	podcastEpisodeId: "podcast-episode-1",
+	plannedFindings: [{ findingId: "finding-1", resourceId: "resource-1", sourceUrl: "https://a.com/1" }],
+}
+
+// the spend control settings with new podcast episodes paused
+const PAUSED_SPEND_CONTROL_SETTINGS = { ...DEFAULT_SPEND_CONTROL_SETTINGS, isPodcastEpisodeRecordingPaused: true }
+
+// the recordable plan's row of the first text part that the query includes, and no rows for any other query
+function toRecordablePlanQueryRows(queryText: string): unknown[][] {
+	const queryRow = RECORDABLE_PLAN_QUERY_ROWS.find(([queryTextPart]) => queryText.includes(queryTextPart))?.[1]
+	return queryRow ? [queryRow] : []
+}
+
 // a plan reads the full podcast episodes cutoff and then the podcast episodes cutoff for the same billed user, and the
 // two checks share one read of that user's month spend
 test("one plan sums the billed user's month spend once", async () => {
-	// a succeeded scan of a plus owner's topic with its podcast on, one new Finding, no spend, and no earlier row
+	// a succeeded Scan that would record, with a speech model set
 	Bun.env.PODCAST_SPEECH_MODEL = "speech-model"
-	const topicRow = toTableRow(topics, { id: "topic-1", ownerId: "owner-1", isPodcastEnabled: true })
-	const findingRow = ["finding-1", "resource-1", "https://a.com/1", "scan-1", 0.5, null, false]
-	const queryRowByQueryTextPart: [string, unknown[]][] = [
-		["insert into", ["podcast-episode-1"]],
-		["sum(", ["0"]],
-		['from "users"', PLUS_USER_ACCESS_ROW],
-		['from "topics"', topicRow],
-		['from "findings"', findingRow],
-		['from "scans"', ["succeeded"]],
-	]
-
-	// return the row of the first text part that the query includes, and no rows for any other query
-	const sentQueries = stubConnectionPool(({ text }) => {
-		const queryRow = queryRowByQueryTextPart.find(([queryTextPart]) => text.includes(queryTextPart))?.[1]
-		return queryRow ? [queryRow] : []
-	})
+	const sentQueries = stubConnectionPool(({ text }) => toRecordablePlanQueryRows(text))
 
 	// the plan creates a full podcast episode's row, and its two cutoff checks sent one set of month sums
-	const podcastEpisodePlan = await planPodcastEpisode({ scanId: "scan-1", topicId: "topic-1", billedUserId: "owner-1" })
-	expect(podcastEpisodePlan).toEqual({
-		podcastEpisodeId: "podcast-episode-1",
-		plannedFindings: [{ findingId: "finding-1", resourceId: "resource-1", sourceUrl: "https://a.com/1" }],
-	})
+	expect(await planPodcastEpisode(RECORDABLE_PLAN_OPTIONS)).toEqual(RECORDED_PODCAST_EPISODE_PLAN)
 	expect(sentQueries.filter((sentQuery) => sentQuery.text.includes("sum("))).toHaveLength(7)
 
 	// the Scan's own Findings are the ones it first found, so the read selects the found scan, never the latest review's
 	const findingsQuery = sentQueries.find((sentQuery) => sentQuery.text.includes('from "findings"'))
 	expect(findingsQuery?.text).toContain('"findings"."found_scan_id"')
 	expect(findingsQuery?.text).not.toContain('"findings"."scan_id"')
+})
+
+// PODCAST_SPEECH_MODEL set empty stops the plan before it reads anything
+test("an empty speech model records no podcast episode and writes no row", async () => {
+	Bun.env.PODCAST_SPEECH_MODEL = ""
+	const sentQueries = stubConnectionPool(({ text }) => toRecordablePlanQueryRows(text))
+	expect(await planPodcastEpisode(RECORDABLE_PLAN_OPTIONS)).toBeNull()
+	expect(sentQueries).toEqual([])
+})
+
+// the pause stops a paid owner's new podcast episode, which no daily spend cutoff stops, and the Scan and its Findings
+// are left as they are
+test("a paused Scan of a paid owner keeps its Findings and writes no podcast episode row", async () => {
+	// new podcast episodes paused, for a succeeded Scan that would record, with a quiet console
+	Bun.env.PODCAST_SPEECH_MODEL = "speech-model"
+	spyOn(dailySpendCutoffs, "loadSpendControlSettings").mockResolvedValue(PAUSED_SPEND_CONTROL_SETTINGS)
+	const consoleLogSpy = spyOn(console, "log").mockImplementation(() => {})
+	const sentQueries = stubConnectionPool(({ text }) => toRecordablePlanQueryRows(text))
+
+	// the plan records nothing because of the pause, and it sent reads alone
+	expect(await planPodcastEpisode(RECORDABLE_PLAN_OPTIONS)).toBeNull()
+	expect(consoleLogSpy.mock.calls.at(-1)?.[0]).toContain("new podcast episodes are paused")
+	expect(sentQueries.length).toBeGreaterThan(0)
+	expect(sentQueries.filter((sentQuery) => !sentQuery.text.startsWith("select"))).toEqual([])
+})
+
+// a retried plan finds the row its earlier attempt created, and that recording goes on
+test("a podcast episode that is already recording goes on while new podcast episodes are paused", async () => {
+	// new podcast episodes paused, and the Scan's own row still recording
+	Bun.env.PODCAST_SPEECH_MODEL = "speech-model"
+	spyOn(dailySpendCutoffs, "loadSpendControlSettings").mockResolvedValue(PAUSED_SPEND_CONTROL_SETTINGS)
+	const sentQueries = stubConnectionPool(({ text }) =>
+		text.includes('from "episodes"') ? [["podcast-episode-0", "recording", false]] : toRecordablePlanQueryRows(text),
+	)
+
+	// the plan returns the recording row, and creates no other
+	expect(await planPodcastEpisode(RECORDABLE_PLAN_OPTIONS)).toEqual({
+		...RECORDED_PODCAST_EPISODE_PLAN,
+		podcastEpisodeId: "podcast-episode-0",
+	})
+	expect(sentQueries.some((sentQuery) => sentQuery.text.startsWith("insert"))).toBe(false)
+})
+
+// the plan reads the pause on every Scan, so a pause turned off is off for the next Scan in the same process
+test("turning the pause off records the next Scan's podcast episode", async () => {
+	// a paused plan records nothing
+	Bun.env.PODCAST_SPEECH_MODEL = "speech-model"
+	spyOn(console, "log").mockImplementation(() => {})
+	stubConnectionPool(({ text }) => toRecordablePlanQueryRows(text))
+	const loadSpendControlSettingsSpy = spyOn(dailySpendCutoffs, "loadSpendControlSettings").mockResolvedValue(
+		PAUSED_SPEND_CONTROL_SETTINGS,
+	)
+	expect(await planPodcastEpisode(RECORDABLE_PLAN_OPTIONS)).toBeNull()
+
+	// the next plan after the pause is turned off records
+	loadSpendControlSettingsSpy.mockResolvedValue(DEFAULT_SPEND_CONTROL_SETTINGS)
+	expect(await planPodcastEpisode(RECORDABLE_PLAN_OPTIONS)).toEqual(RECORDED_PODCAST_EPISODE_PLAN)
+})
+
+// a settings read that fails reads every switch as off, so the podcast episode records and the failure is reported
+test("a failed settings read pauses nothing, and the podcast episode records", async () => {
+	// the spend control settings cannot be read, for a succeeded Scan that would record
+	Bun.env.PODCAST_SPEECH_MODEL = "speech-model"
+	const reportErrorSpy = quietErrorReports()
+	stubConnectionPool(({ text }) => {
+		if (text.includes('from "spend_control_settings"')) {
+			throw new Error("database unreachable")
+		}
+		return toRecordablePlanQueryRows(text)
+	})
+
+	// the plan records, and the failed read is reported once
+	expect(await planPodcastEpisode(RECORDABLE_PLAN_OPTIONS)).toEqual(RECORDED_PODCAST_EPISODE_PLAN)
+	expect(reportErrorSpy.mock.calls.map((reportErrorCall) => reportErrorCall.slice(1))).toEqual([
+		["database", { read: dailySpendCutoffs.SPEND_CONTROL_SETTINGS_KEY }],
+	])
 })

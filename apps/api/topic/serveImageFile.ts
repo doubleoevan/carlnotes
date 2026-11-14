@@ -1,7 +1,8 @@
-// the response that serves one file of a topic's, a podcast episode's, or a film's image, gated by the topic's
-// visibility
+// the response that serves one file of a topic's, a podcast episode's, a Topic Post's, or a film's image, gated by the
+// topic's visibility, and the check that lets an unchecked image's files go to its uploader alone
 
 import { attachmentStream } from "@carlnotes/db/store"
+import { loadUncheckedImageForUploader, type UncheckedImageSubject } from "@carlnotes/db/uncheckedImages"
 import { toTopicImageCacheTag } from "@carlnotes/server/edgePurge"
 import type { Context } from "hono"
 import { stream } from "hono/streaming"
@@ -24,6 +25,36 @@ export type ServeImageFileOptions = {
 	contentType?: string
 	isUrlVersioned?: boolean
 	checkedReadAccess?: "public" | "private"
+}
+
+// a file of the image a url names by its hash: the file to serve, the hash the url names, the hash of the subject's
+// current image, and the subject whose unchecked image the hash may name
+export type ServeCurrentOrUncheckedImageFileOptions = {
+	imageFile: Pick<ServeImageFileOptions, "topic" | "objectKey" | "contentType">
+	hash: string
+	currentImageHash: string | null | undefined
+	uncheckedImageSubject: UncheckedImageSubject
+}
+
+/**
+ * Serves one file of the image a url names by its hash. The subject's current image goes to anyone who may see its
+ * topic, and an unchecked upload of the signed-in user goes to them alone, with the headers of a file that never
+ * reaches the edge. Any other hash is not found, and a visitor reads no unchecked image.
+ */
+export async function serveCurrentOrUncheckedImageFile(
+	context: Context<AppEnv>,
+	{ imageFile, hash, currentImageHash, uncheckedImageSubject }: ServeCurrentOrUncheckedImageFileOptions,
+): Promise<Response> {
+	if (currentImageHash === hash) {
+		return serveImageFile(context, imageFile)
+	}
+
+	// the subject's unchecked image under this hash, which only its uploader reads
+	const userId = currentUser(context)
+	const uncheckedImage = userId ? await loadUncheckedImageForUploader(uncheckedImageSubject, userId) : null
+	return uncheckedImage?.imageHash === hash
+		? serveImageFile(context, { ...imageFile, checkedReadAccess: "private" })
+		: context.json({ error: "not found" }, 404)
 }
 
 /**

@@ -4,7 +4,7 @@
 # pins, the locked dependencies, and the repo. every web capture runs in the container, in CI and on a laptop, so the
 # same pixels come out everywhere.
 # build it from the repo root: docker build --platform linux/amd64 -f ui-tests/Dockerfile .
-FROM oven/bun:1.4.3@sha256:ec06c3b6cea04192ae6770c434f668ca41d343ad19fa6472216c7b48be39c598 AS bun
+FROM oven/bun:1.4.4@sha256:1d22548f177f4ff38e0c15baa3c2c46c6c2060ba2d1bc573bb4720b407548f1d AS bun
 FROM mcr.microsoft.com/playwright:v1.64.1-noble@sha256:47b510dd9230bf0b9bfc9b20102241e577ea7a99334ab4c3ca19f19770e9b8ea
 
 # the base image every image capture's environment id names. it repeats the FROM line above, and a unit test checks they

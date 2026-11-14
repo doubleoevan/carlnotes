@@ -1,5 +1,6 @@
 // pending object deletion retry tests: the keys ready to retry are deleted through deleteStoredObject, a key that
-// fails again after a day is reported once, and a run with nothing to retry does nothing
+// fails again after a day is reported once, a key that a save cleared keeps its object, and a run with nothing to
+// retry does nothing
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { DAY_MS } from "@carlnotes/contracts/time"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
@@ -57,6 +58,18 @@ test("a reported key and a young key are not reported", async () => {
 	// both fail, and neither is reported
 	expect(await retryPendingObjectDeletions()).toEqual({ deletedCount: 0, failedCount: 2 })
 	expect(reportErrorSpy).not.toHaveBeenCalled()
+})
+
+// a save that names a key after the batch was read clears its row, and the object it saved stays
+test("a key that a save cleared after the batch was read keeps its object", async () => {
+	// one key in the batch, whose row is gone by the read before its delete
+	stubConnectionPool(({ text }) => (text.includes("order by") ? [["a", TWO_DAYS_AGO, 0, null]] : []))
+	const deleteStoredObjectSpy = spyOn(store, "deleteStoredObject")
+	spyOn(console, "log").mockImplementation(() => {})
+
+	// nothing is deleted, and nothing counts as failed
+	expect(await retryPendingObjectDeletions()).toEqual({ deletedCount: 0, failedCount: 0 })
+	expect(deleteStoredObjectSpy).not.toHaveBeenCalled()
 })
 
 // a run with nothing to retry sends the one select and logs nothing

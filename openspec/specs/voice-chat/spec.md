@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change talk-to-carl. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Voice is on only with a transcription model and a speech model
 `CHAT_TRANSCRIPTION_MODEL` SHALL name Google's model that transcribes a recording, defaulting to
 `gemini-3.5-transcribe`, and set empty SHALL turn voice off. Voice SHALL be on only if that model and
@@ -149,8 +151,9 @@ only the containers a browser records (`matroska`, `webm`, `mov`, `mp4`, `m4a`, 
 `aac`, `vorbis`), writing at most 61 seconds, and stopping the transcode after 10 seconds; a recording ffmpeg rejects
 SHALL answer 422. It SHALL transcribe the WAV with the transcription model through Google's Interactions API on
 LiteLLM's Gemini pass-through on the user's virtual key, with `store` set to false so Google saves no interaction in
-the project. It SHALL record the call's cost from the response's token usage as a chat spend row, which is the only
-meter of a transcription, since the pass-through charges the key nothing for it, and return the transcript. A WAV with
+the project. It SHALL record the call's cost from the response's token usage as a chat spend row, which is what
+the app's budget and cutoffs read for a transcription, while the pass-through charges the key for the same call, and
+return the transcript. A WAV with
 no samples SHALL call no model, write no spend row, and return an empty transcript. CarlNotes SHALL keep the audio only
 in memory for the request. An empty transcript SHALL send nothing and SHALL toast "Carl didn't catch that. Please try
 again." A failed transcription SHALL toast "Carl lost his train of thought. Please try again.", while the chat's own
@@ -314,4 +317,3 @@ a spoken message always reaches Carl.
 - **WHEN** a visitor opens the Privacy page
 - **THEN** the Google Gemini row names the spoken question's recording and the read-aloud reply text, says CarlNotes
   never keeps a recording, and states Google's training and abuse logging terms
-

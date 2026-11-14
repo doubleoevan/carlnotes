@@ -55,8 +55,9 @@ export type PreparedChatRoomAttachment = {
 	contentType: string | null
 }
 
-// one shared attachment file to prepare: the file, and the post's deadline from toExtractionDeadline
-type PrepareChatRoomAttachmentOptions = { attachment: ChatAttachment; deadline: number }
+// one shared attachment file to prepare: the file, the post's deadline from toExtractionDeadline, and the user who
+// shared it
+type PrepareChatRoomAttachmentOptions = { attachment: ChatAttachment; deadline: number; userId: string }
 
 /**
  * Reads every attachment file a chat message shares, returning null if any one of them is rejected, or
@@ -95,7 +96,7 @@ export async function prepareChatRoomAttachments(
 	const deadline = toExtractionDeadline()
 	for (const attachment of attachments) {
 		// a rejected file stops the post with why
-		const preparedAttachment = await prepareChatRoomAttachment({ attachment, deadline })
+		const preparedAttachment = await prepareChatRoomAttachment({ attachment, deadline, userId })
 		if (preparedAttachment === null || typeof preparedAttachment === "string") {
 			return preparedAttachment
 		}
@@ -110,6 +111,7 @@ export async function prepareChatRoomAttachments(
 async function prepareChatRoomAttachment({
 	attachment,
 	deadline,
+	userId,
 }: PrepareChatRoomAttachmentOptions): Promise<PreparedChatRoomAttachment | PastDeadlineRejection | null> {
 	// shared text stores its own words, clipped like a kept attachment's
 	if (attachment.kind === "text") {
@@ -130,7 +132,7 @@ async function prepareChatRoomAttachment({
 	}
 	// a pdf, word file, or workbook has words to pull out, and the room picker offers all three
 	if (attachment.kind === "pdf" || attachment.kind === "document") {
-		return prepareExtractableChatRoomAttachment({ attachment, deadline, bytes })
+		return prepareExtractableChatRoomAttachment({ attachment, deadline, userId, bytes })
 	}
 	// an image stores as-is, and its description is written after the post
 	return { attachment, contextText: "", bytes, contentType: contentTypeFromDataUrl(attachment.dataUrl) }
@@ -141,14 +143,14 @@ async function prepareChatRoomAttachment({
 async function prepareExtractableChatRoomAttachment({
 	attachment,
 	deadline,
+	userId,
 	bytes,
 }: PrepareChatRoomAttachmentOptions & {
 	attachment: ExtractableChatAttachment
 	bytes: Uint8Array
 }): Promise<PreparedChatRoomAttachment | PastDeadlineRejection | null> {
-	// a file that cannot be read rejects the post with why, so nothing half-read ever stores. the worker thread takes a
-	// copy, since the bytes store after the post
-	const chatAttachmentText = await readChatAttachmentText({ attachment, bytes: new Uint8Array(bytes), deadline })
+	// a file that cannot be read rejects the post with why, so nothing half-read ever stores
+	const chatAttachmentText = await readChatAttachmentText({ attachment, bytes, deadline, userId })
 	if ("rejection" in chatAttachmentText) {
 		return chatAttachmentText.rejection === "attachmentUnreadable" ? null : chatAttachmentText.rejection
 	}

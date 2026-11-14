@@ -9,7 +9,10 @@ import { loadTopicPostBodyImageLimits } from "@carlnotes/db/quotas"
 import { topics } from "@carlnotes/db/schema/topics"
 import { countSocialWriteToday } from "@carlnotes/db/socialLimits"
 import { namedTopicColumns } from "@carlnotes/db/topicPermissions"
-import { rebuildTopicDashboardsById } from "@carlnotes/pipeline/dashboardRebuild"
+import {
+	rebuildTopicDashboardsAfterPublication,
+	rebuildTopicDashboardsById,
+} from "@carlnotes/pipeline/dashboardRebuild"
 import { startTopicPostPublishWorkflow, startTopicPostSummaryWorkflow } from "@carlnotes/pipeline/temporalClient"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { reportError } from "@carlnotes/server/monitoring"
@@ -27,6 +30,7 @@ import { loadTopicPostPreview, toCachedTopicPostPreviewPng, toPreviewPngResponse
 import { toTermsOutdatedResponse } from "../termsAcceptance"
 import { clearVisitorTopicPages } from "../topic/feedCaches"
 import { clearHomeCaches } from "../topic/homeOrder"
+import { overlayUncheckedTopicPostImage } from "../uncheckedImageOverlays"
 import { loadHtmlWithoutRemovedBodyImages, purgeTopicPostBodyImagesAtEdge } from "./topicPostBodyImages"
 import { toObjectionableTopicPostCategory, toTopicPostModerationTexts } from "./topicPostModeration"
 import {
@@ -130,7 +134,10 @@ export const topicPostsRoute = new Hono<AppEnv>()
 		if (!topicPostRow || !(await canReadTopicPost(userId, topicPostRow))) {
 			return context.json({ error: "not found" }, 404)
 		}
-		return context.json(await toTopicPostResponse(userId, topicPostRow, { isCommentThreadIncluded: true }))
+
+		// the page, with the unchecked upload of whoever may change the image in the post's image's place
+		const topicPostResponse = await toTopicPostResponse(userId, topicPostRow, { isCommentThreadIncluded: true })
+		return context.json(await overlayUncheckedTopicPostImage(topicPostResponse, userId))
 	})
 	// the link-preview card that a social platform fetches for a published Topic Post of any topic
 	.get(`${TOPIC_POST_PATH}/preview.png`, async (context) => {
@@ -269,9 +276,9 @@ export const topicPostsRoute = new Hono<AppEnv>()
 				await clearHomeCaches()
 				await purgeProfileAtEdge(userId)
 			}
-			// clear the topic page's caches and rebuild the topic's Dashboards
+			// clear the topic page's caches and rebuild the topic's Dashboards, whose snapshots stay until the rebuild writes
 			await clearVisitorTopicPages(topicPost.topicId)
-			await rebuildTopicDashboardsById(topicPost.topicId)
+			await rebuildTopicDashboardsAfterPublication(topicPost.topicId)
 		}
 		// return the post as it now reads
 		const publishedRow = await loadTopicPostRow(topicPost.id)

@@ -54,6 +54,9 @@ export type TeamMember = z.infer<typeof teamMember>
 export const teamPageResponse = teamIdentity.extend({
 	description: z.string().nullable(),
 	isPublic: z.boolean(),
+	// the version of the avatar this leader uploaded, shown to them alone until its image moderation can run. absent
+	// with none unchecked, and from an api older than the field. avatarVersion stays the avatar everyone else sees
+	uncheckedAvatarVersion: z.string().optional(),
 	// what the user is to this team, which decides the leader controls and the full team
 	role: z.enum(teamRoles).nullable(),
 	// whether the user has asked to join, which flips the join button to a withdraw

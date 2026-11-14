@@ -3,10 +3,10 @@
 // podcast episode's image
 
 import type { TopicImageOrigin } from "@carlnotes/contracts/enums"
-import { db } from "@carlnotes/db"
+import { type DbTransaction, db } from "@carlnotes/db"
 import { podcastEpisodes, topicPodcastEpisodeVideos } from "@carlnotes/db/schema/podcast"
 import { topics } from "@carlnotes/db/schema/topics"
-import { deleteStoredObjects, uploadAttachment } from "@carlnotes/db/store"
+import { deleteStoredObjects, recordPendingObjectDeletions, uploadAttachment } from "@carlnotes/db/store"
 import {
 	toTopicPodcastEpisodeVideoImageKey,
 	toTopicPodcastEpisodeVideoImageLargeOriginalKey,
@@ -104,7 +104,7 @@ export async function generateTopicPodcastEpisodeVideoImage({
 
 	// no row changed, so this image generation's files go
 	if (updatedRows.length === 0) {
-		await deleteStoredObjects(toImageObjectKeys(podcastEpisodeId, imageHash))
+		await deleteStoredObjects(toTopicPodcastEpisodeVideoImageObjectKeys(podcastEpisodeId, imageHash))
 		return null
 	}
 	return imageHash
@@ -179,10 +179,7 @@ export type ReplaceTopicPodcastEpisodeVideoImageOptions = {
 export async function replaceTopicPodcastEpisodeVideoImage({
 	topicPodcastEpisodeVideoId,
 	original,
-	renderId,
-	origin,
-	imagePrompt,
-	costDollars,
+	...publishedImage
 }: ReplaceTopicPodcastEpisodeVideoImageOptions): Promise<string | null> {
 	// the film's podcast episode, which names the image's key
 	const podcastEpisodeId = await loadTopicPodcastEpisodeVideoPodcastEpisodeId(topicPodcastEpisodeVideoId)
@@ -192,6 +189,38 @@ export async function replaceTopicPodcastEpisodeVideoImage({
 
 	// the file under its hash, then the row that makes it current
 	const imageHash = await storeTopicPodcastEpisodeVideoImage(podcastEpisodeId, original)
+	await publishTopicPodcastEpisodeVideoImage({
+		topicPodcastEpisodeVideoId,
+		podcastEpisodeId,
+		imageHash,
+		...publishedImage,
+	})
+	return imageHash
+}
+
+// a stored image to make a film's current one: the film and its podcast episode, the image's hash, the render that
+// generated it or null for an upload, its origin, the editor's image prompt, and what the render cost
+export type PublishTopicPodcastEpisodeVideoImageOptions = Omit<
+	ReplaceTopicPodcastEpisodeVideoImageOptions,
+	"original"
+> & {
+	podcastEpisodeId: string
+	imageHash: string
+}
+
+/**
+ * Makes a stored image the film's current one, schedules the replaced image for deletion after a grace, closes the
+ * render row as succeeded with its cost, and starts the rebuild of the film's intro and sign-off.
+ */
+export async function publishTopicPodcastEpisodeVideoImage({
+	topicPodcastEpisodeVideoId,
+	podcastEpisodeId,
+	imageHash,
+	renderId,
+	origin,
+	imagePrompt,
+	costDollars,
+}: PublishTopicPodcastEpisodeVideoImageOptions): Promise<void> {
 	const replacedImage = await db.transaction(async (transaction) => {
 		// the image this one replaces, and the topic whose visibility decides the edge purge
 		const [topicPodcastEpisodeVideo] = await transaction
@@ -210,7 +239,10 @@ export async function replaceTopicPodcastEpisodeVideoImage({
 
 		// the replaced image goes after the grace, unless the same bytes came back under the same hash
 		if (topicPodcastEpisodeVideo?.previousHash && topicPodcastEpisodeVideo.previousHash !== imageHash) {
-			const replacedImageKeys = toImageObjectKeys(podcastEpisodeId, topicPodcastEpisodeVideo.previousHash)
+			const replacedImageKeys = toTopicPodcastEpisodeVideoImageObjectKeys(
+				podcastEpisodeId,
+				topicPodcastEpisodeVideo.previousHash,
+			)
 			await recordReplacedImageDeletions(transaction, replacedImageKeys)
 		}
 
@@ -229,18 +261,75 @@ export async function replaceTopicPodcastEpisodeVideoImage({
 	await startTopicPodcastEpisodeVideoRebuild(podcastEpisodeId).catch((error: unknown) => {
 		reportError(error, "topic-podcast-episode-video", { podcastEpisodeId, step: "rebuild" })
 	})
-	return imageHash
 }
 
-// store a film image's jpeg at the film's size under its content hash, with its larger original beside it if it has
-// one, and return the hash
-async function storeTopicPodcastEpisodeVideoImage(
+/**
+ * Clears a film's current image on the caller's transaction, by the film's one podcast episode, and keeps the image's
+ * files.
+ */
+export async function clearTopicPodcastEpisodeVideoImage(
+	transaction: DbTransaction,
+	podcastEpisodeId: string,
+): Promise<void> {
+	await transaction
+		.update(topicPodcastEpisodeVideos)
+		.set({ imageHash: null, imageOrigin: null, imagePrompt: null })
+		.where(eq(topicPodcastEpisodeVideos.podcastEpisodeId, podcastEpisodeId))
+}
+
+/**
+ * Deletes a film's uploaded image, its hash and its files, so the poster shows the podcast episode's image until the
+ * next render lands. Returns the film's id if its current image was an upload, or null.
+ */
+export async function removeTopicPodcastEpisodeVideoImageUpload(podcastEpisodeId: string): Promise<string | null> {
+	const removedUpload = await db.transaction(async (transaction) => {
+		// the film's current image, which has to be an upload, and the topic whose visibility decides the edge purge
+		const [topicPodcastEpisodeVideo] = await transaction
+			.select({
+				id: topicPodcastEpisodeVideos.id,
+				imageHash: topicPodcastEpisodeVideos.imageHash,
+				imageOrigin: topicPodcastEpisodeVideos.imageOrigin,
+				topicId: topics.id,
+				visibility: topics.visibility,
+			})
+			.from(topicPodcastEpisodeVideos)
+			.innerJoin(podcastEpisodes, eq(podcastEpisodes.id, topicPodcastEpisodeVideos.podcastEpisodeId))
+			.leftJoin(topics, eq(topics.id, podcastEpisodes.topicId))
+			.where(eq(topicPodcastEpisodeVideos.podcastEpisodeId, podcastEpisodeId))
+			.for("no key update", { of: topicPodcastEpisodeVideos })
+
+		// a film with no image of its own, or a generated one, has no upload to remove
+		if (!topicPodcastEpisodeVideo?.imageHash || topicPodcastEpisodeVideo.imageOrigin !== "uploaded") {
+			return null
+		}
+
+		// the hash goes with its files
+		await clearTopicPodcastEpisodeVideoImage(transaction, podcastEpisodeId)
+		await recordPendingObjectDeletions({
+			handle: transaction,
+			objectKeys: toTopicPodcastEpisodeVideoImageObjectKeys(podcastEpisodeId, topicPodcastEpisodeVideo.imageHash),
+		})
+		return topicPodcastEpisodeVideo
+	})
+
+	// a public topic's removed image leaves the edge
+	if (removedUpload) {
+		await purgePublicImageFiles(removedUpload)
+	}
+	return removedUpload?.id ?? null
+}
+
+/**
+ * Stores a film image's jpeg at the film's size under its content hash, with its larger original beside it if it has
+ * one, and returns the hash.
+ */
+export async function storeTopicPodcastEpisodeVideoImage(
 	podcastEpisodeId: string,
 	original: TopicImageOriginal,
 ): Promise<string> {
 	// the jpeg the poster shows, which names the image
 	const imageHash = toTopicImageHash(original.jpegBytes)
-	const [imageKey, imageOriginalKey] = toImageObjectKeys(podcastEpisodeId, imageHash)
+	const [imageKey, imageOriginalKey] = toTopicPodcastEpisodeVideoImageObjectKeys(podcastEpisodeId, imageHash)
 	await uploadAttachment(imageKey, original.jpegBytes, "image/jpeg")
 
 	// the larger original that the intro and the sign-off zoom into
@@ -250,8 +339,13 @@ async function storeTopicPodcastEpisodeVideoImage(
 	return imageHash
 }
 
-// the keys of a film image's two files: the jpeg at the film's size, then its larger original
-function toImageObjectKeys(podcastEpisodeId: string, imageHash: string): [string, string] {
+/**
+ * Returns the keys of a film image's two files: the jpeg at the film's size, then its larger original.
+ */
+export function toTopicPodcastEpisodeVideoImageObjectKeys(
+	podcastEpisodeId: string,
+	imageHash: string,
+): [string, string] {
 	return [
 		toTopicPodcastEpisodeVideoImageKey(podcastEpisodeId, imageHash),
 		toTopicPodcastEpisodeVideoImageLargeOriginalKey(podcastEpisodeId, imageHash),

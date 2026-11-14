@@ -1,7 +1,8 @@
-// the editor's image block: a generated image with regenerations left, an upload, the month's limit reached, and a
-// film's own image, in the same layout at the film's 16:9 frame
+// the editor's image block: a generated image with regenerations left, an upload, an upload shown to the editor alone
+// with its line, the month's limit reached, and a film's own image, in the same layout at the film's 16:9 frame
 import { sendTopicPodcastEpisodeVideoImageRegeneration } from "@carlnotes/client/podcastEpisodeClient"
 import { fetchTopicImageRender, sendTopicImageRegeneration } from "@carlnotes/client/topicImageClient"
+import { UNCHECKED_IMAGE_TEXT } from "@carlnotes/core/lib/uncheckedImageCopy"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { expect, fn, mocked, userEvent } from "storybook/test"
 import { SAMPLE_TOPIC_IMAGE } from "../../../.storybook/fixtures/topics"
@@ -62,6 +63,22 @@ export const Uploaded: Story = {
 	},
 }
 
+// an upload shown to the editor alone until its check passes: the line sits right under the image, above the image
+// prompt
+export const UncheckedUpload: Story = {
+	args: { editableImage: { ...TOPIC, imageOrigin: "uploaded", imagePrompt: null, isImageUnchecked: true } },
+	play: async ({ canvas }) => {
+		const uncheckedLine = canvas.getByText(UNCHECKED_IMAGE_TEXT)
+		await expect(uncheckedLine).toBeVisible()
+		const uploadBox = canvas.getByRole("button", { name: "Upload an image" }).getBoundingClientRect()
+		const uncheckedLineBox = uncheckedLine.getBoundingClientRect()
+		await expect(uncheckedLineBox.top).toBeGreaterThanOrEqual(uploadBox.bottom)
+		await expect(uncheckedLineBox.bottom).toBeLessThanOrEqual(
+			canvas.getByLabelText("Image prompt").getBoundingClientRect().top,
+		)
+	},
+}
+
 // the month's limit reached: Regenerate is gone, and the count line says so
 export const LimitReached: Story = {
 	args: { editableImage: { ...TOPIC, imageRegenerationQuota: { used: 15, limit: 15 } } },
@@ -116,5 +133,23 @@ export const TopicPodcastEpisodeVideoLimitReached: Story = {
 		await expect(canvas.queryByLabelText("Image prompt")).toBeNull()
 		await expect(canvas.queryByRole("button", { name: "Regenerate" })).toBeNull()
 		await expect(canvas.getByRole("button", { name: "Upload an image" })).toBeVisible()
+	},
+}
+
+// a film's own image shown to the editor alone: the same line under the image at the film's frame
+export const TopicPodcastEpisodeVideoUncheckedUpload: Story = {
+	args: {
+		editableImage: {
+			...TOPIC_PODCAST_EPISODE_VIDEO,
+			imageOrigin: "uploaded",
+			imagePrompt: null,
+			isImageUnchecked: true,
+		},
+	},
+	play: async ({ canvas }) => {
+		const uncheckedLine = canvas.getByText(UNCHECKED_IMAGE_TEXT)
+		await expect(uncheckedLine).toBeVisible()
+		const uploadBox = canvas.getByRole("button", { name: "Upload an image" }).getBoundingClientRect()
+		await expect(uncheckedLine.getBoundingClientRect().top).toBeGreaterThanOrEqual(uploadBox.bottom)
 	},
 }

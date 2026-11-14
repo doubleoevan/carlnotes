@@ -84,7 +84,7 @@ export function ProfileFields({
 	return (
 		<SharedProfileFields
 			elements={PROFILE_FIELD_ELEMENTS}
-			avatar={<UserAvatarPicker userId={userId} username={username} />}
+			avatar={<UserAvatarPicker userId={userId} username={username} hasUncheckedLine={false} />}
 			username={username}
 			className={className}
 			usernameChange={usernameChange}

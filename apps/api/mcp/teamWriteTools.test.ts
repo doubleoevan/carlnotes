@@ -2,7 +2,7 @@
 // nothing, an accept on a full team joins nothing, a decline answers the invite, and a room post rejects a non-member,
 // an objectionable message, and a message to Carl past the daily spend cutoff
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
-import { CHAT_PAUSED_LINE } from "@carlnotes/contracts/chat"
+import { CHAT_PAUSED_LINE, EMAIL_UNVERIFIED_LINE } from "@carlnotes/contracts/chat"
 import { toModerationRejectionMessage } from "@carlnotes/contracts/moderation"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as dailySpendCutoffs from "@carlnotes/db/dailySpendCutoffs"
@@ -98,5 +98,16 @@ test("a message to Carl past the daily spend cutoff posts nothing and says why",
 	const sentQueries = stubConnectionPool()
 	const toolResult = await toToolHandler("post_to_team_room")({ team_id: "team-1", message: "@carl who is hiring?" })
 	expect(toResultText(toolResult)).toBe(`Nothing was posted. ${CHAT_PAUSED_LINE}`)
+	expect(toWriteQueries(sentQueries)).toHaveLength(0)
+})
+
+test("a message to Carl from an unverified account, while the switch is on, posts nothing and says to verify", async () => {
+	// a member whose email is unverified while the unverified accounts switch is on, with words the moderation passes
+	spyOn(roomAccess, "loadChatRoom").mockResolvedValue({ topic: null, teamId: "team-1" })
+	spyOn(moderation, "toObjectionableCategory").mockResolvedValue(null)
+	spyOn(dailySpendCutoffs, "isUnverifiedAccountLimited").mockResolvedValue(true)
+	const sentQueries = stubConnectionPool()
+	const toolResult = await toToolHandler("post_to_team_room")({ team_id: "team-1", message: "@carl who is hiring?" })
+	expect(toResultText(toolResult)).toBe(`Nothing was posted. ${EMAIL_UNVERIFIED_LINE}`)
 	expect(toWriteQueries(sentQueries)).toHaveLength(0)
 })

@@ -19,20 +19,16 @@ import {
 	type ScanTrigger,
 	toScanBacklogCrossing,
 } from "@carlnotes/pipeline/scanWorkflowClient"
-import { toPositiveInteger } from "@carlnotes/server/envSettings"
 import { reportError, reportThresholdCrossing } from "@carlnotes/server/monitoring"
+import { scanDispatchLimit } from "@carlnotes/server/scanSettings"
 import { and, asc, eq, getTableColumns, isNotNull, isNull, sql } from "drizzle-orm"
 
-// how many Scans one sweep may hand to Temporal, less the scan queue's current backlog, from SCAN_DISPATCH_LIMIT or the
-// default
-const DEFAULT_SCAN_DISPATCH_LIMIT = 100
-const SCAN_DISPATCH_LIMIT = toPositiveInteger(Bun.env.SCAN_DISPATCH_LIMIT, DEFAULT_SCAN_DISPATCH_LIMIT)
-
 /**
- * Returns how many Scans one sweep may start: the dispatch limit minus the backlog, or the whole limit for an unread queue.
+ * Returns how many Scans one sweep may start: the scan dispatch limit minus the backlog, or the whole limit for an
+ * unread queue. A limit of zero starts none.
  */
 export function toDispatchableScanCount(scanQueueDescription: ScanQueueDescription | null): number {
-	return Math.max(0, SCAN_DISPATCH_LIMIT - (scanQueueDescription?.backlogCount ?? 0))
+	return Math.max(0, scanDispatchLimit() - (scanQueueDescription?.backlogCount ?? 0))
 }
 
 // the cutoff state the sweep read, and how many rows that are not waiting the sweep may start

@@ -4,6 +4,7 @@ import {
 	CHAT_PAUSED_ERROR,
 	type ChatAttachmentRejection,
 	type ChatConversation,
+	EMAIL_UNVERIFIED_ERROR,
 } from "@carlnotes/contracts/chat"
 import {
 	CHAT_HISTORY_TURNS,
@@ -20,8 +21,15 @@ import type { TopicDraft, TopicDraftTeam } from "@carlnotes/contracts/topicPaylo
 import { fetchApi, readApiErrorMessage, readApiResponse } from "./apiClient"
 
 // why a chat turn was rejected, kept apart so that the panel can prompt an upgrade, say the chat is paused until the
-// day turns, or name a file it could not read instead of a generic error
-export type ChatRejection = "budget" | "chatPaused" | "forbidden" | "failed" | "rateLimited" | ChatAttachmentRejection
+// day turns, ask the user to verify their email, or name a file it could not read instead of a generic error
+export type ChatRejection =
+	| "budget"
+	| "chatPaused"
+	| "emailUnverified"
+	| "forbidden"
+	| "failed"
+	| "rateLimited"
+	| ChatAttachmentRejection
 
 // how a chat turn ended: answered, rejected for a reason, or stopped by the user mid-stream
 export type ChatSendResult = ChatRejection | "stopped" | null
@@ -110,7 +118,7 @@ export async function sendChatTurn({
 			signal,
 		})
 		if (!response.ok || !response.body) {
-			const errorMessage = [429, 503].includes(response.status) ? await readApiErrorMessage(response) : undefined
+			const errorMessage = [403, 429, 503].includes(response.status) ? await readApiErrorMessage(response) : undefined
 			return toChatTurnRejection(response.status, errorMessage)
 		}
 
@@ -292,6 +300,11 @@ export function toChatRejection(status: number, errorMessage?: string): ChatReje
 	// a 429 that names the chat cutoff reads as paused, and any other asks a user past the per-minute limit to wait
 	if (status === 429) {
 		return errorMessage === CHAT_PAUSED_ERROR ? "chatPaused" : "rateLimited"
+	}
+
+	// a 403 that names an unverified email asks the user to verify it
+	if (status === 403 && errorMessage === EMAIL_UNVERIFIED_ERROR) {
+		return "emailUnverified"
 	}
 
 	// a sign-in or visibility rejection reads as forbidden, and anything else is a genuine failure

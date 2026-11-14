@@ -4,11 +4,12 @@
 import { FULL_PODCAST_COVER_SIZE, type PodcastCover } from "@carlnotes/contracts/podcastEpisodes"
 import { getAttachmentBytes } from "@carlnotes/db/store"
 import { latte } from "@carlnotes/nightshift/colors"
-import { type CardElement, toImageDataUri } from "@carlnotes/pipeline/cardElementPng"
+import type { CardElement } from "@carlnotes/pipeline/cardElementPng"
 import {
 	toPodcastEpisodeImageOriginalKey,
 	toTopicImageOriginalKey,
 } from "@carlnotes/pipeline/topicImages/topicImageFiles"
+import { toDataUrl } from "@carlnotes/server/dataUrl"
 
 // a podcast episode's cover, the episode kind of a cover
 export type PodcastEpisodeCover = Extract<PodcastCover, { kind: "episode" }>
@@ -123,5 +124,5 @@ export async function loadPodcastEpisodeImageDataUri({
 
 	// the original's bytes from storage
 	const originalJpeg = await getAttachmentBytes(originalKey)
-	return toImageDataUri(originalJpeg, "image/jpeg")
+	return toDataUrl("image/jpeg", originalJpeg)
 }

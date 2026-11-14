@@ -19,13 +19,18 @@ auth, invite, and unsubscribe mail, and `@carlnotes/pipeline` for a Scan's topic
 - Colors and sizes: every color and font size a template writes comes from `@carlnotes/nightshift/email`: a Latte token
   from `emailColors`, `EMAIL_FONT_STACK`, and `toEmailFontSize` for a type role. `templateValues.test.ts`
   fails on a hex color or a pixel font size in a template. Line heights, weights, and spacing stay written in the style.
-- `email.ts` — `sendEmail` sends one message through Resend, `sendEmailBatches` sends many, and `sendScanEmailCall`
-  sends one Scan's batch and returns the accepted sends or the Resend failure. Every call from the api or the worker
-  first takes a rate limit slot shared with inbound retrieval (`waitForResendSlot` in `@carlnotes/db/resendRateLimit`), which one call
-  holds for 200 milliseconds, so calls leave evenly spaced at five a second. A call that would wait past ten seconds for
-  the slot goes ahead without it, and each wait adds a little jitter, so waiters that woke together do not ask in
-  lockstep. `EmailMessage` is the message shape, `isSendableAddress` says whether an address parses as an email, and
-  `reportDroppedAddresses` reports the ones dropped by count, never by address.
+- `email.ts` — `sendEmail` sends one message through Resend, and `sendScanEmailCall` sends one Scan's batch and
+  returns the accepted sends or the Resend failure. `sendAccountEmail` sends one account email (verification,
+  password reset, change of address, invitation) for up to six attempts under one idempotency key: a rate limit
+  after the wait Resend names, and any other retryable failure on a backoff that doubles from five seconds. It
+  reports by its kind a send that no attempt delivers. Every call from the api or the worker first takes a rate limit
+  slot. An account email takes its slot from the account emails' own limit (`waitForAccountEmailSlot` in
+  `@carlnotes/db/resendRateLimit`, one call in 250 milliseconds), and every other call from the limit shared with
+  inbound retrieval (`waitForResendSlot`, one call in 200 milliseconds), so an account email never waits behind a
+  bulk send. A call that would wait past ten seconds for its slot goes ahead without it, and each wait adds a little
+  jitter, so waiters that woke together do not ask in lockstep. `EmailMessage` is the message shape,
+  `isSendableAddress` says whether an address parses as an email, and `reportDroppedAddresses` reports the ones
+  dropped by count, never by address.
 - `unlinkedText.ts` — `toUnlinkedText` writes each url and domain in a user's text with bracketed dots so no mail
   client links it, and `toEmailQuote` cuts a quote to a length first. The report and notifications emails use them.
 - `unsubscribe.ts` — the one-click unsubscribe tokens of the topic scan email and the notifications email:

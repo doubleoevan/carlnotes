@@ -15,7 +15,8 @@ lock order. It also reads and dismisses the latest consent nudge without importi
 
 `personalSourcesEmailSetup.ts` returns shared-address manual-forwarding guidance and receiving entitlement.
 `personalSourcesEmailConfirmations.ts` stores ID-only durable handoffs, bounded retries, terminal refusals, and sweep
-recovery. `resendRateLimit.ts` shares one provider slot between inbound retrieval and the existing outbound email sends.
+recovery. `resendRateLimit.ts` holds the two Resend limits, each a Redis slot: the account emails' own, and the one
+that inbound retrieval and every other outbound send share.
 
 `personalSourcesImports.ts` revalidates selected transcripts and commits an entire batch with permanent content
 fingerprints. `personalSourcesContext.ts` reads bounded live excerpts and commits encrypted summaries only for the
@@ -55,8 +56,13 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   `podcast.ts`, `billing.ts` (each user's one billing subscription and the provider that bills it), `releases.ts`,
   `jobLeases.ts` (each job's lease row), `storage.ts` (favicons and the pending object deletions),
   `mobileMinimumVersions.ts` (the minimum app version of each platform), `spendControlSettings.ts` (the one row of
-  admin overrides on the daily spend cutoffs, the first scan dispatch limit, the hourly signup alert, and the unverified
-  accounts switch), `reports.ts` (content reports), `userBlocks.ts`
+  admin overrides on the daily spend cutoffs, the first scan dispatch limit, the hourly signup alert, and a film's
+  generated image limit, with the switches: the unverified accounts switch, the pauses on new podcast episodes and on
+  new films, and the home that shows pinned items only), `uncheckedImages.ts` (the unchecked images: one row for each
+  upload whose image moderation could not run, by subject kind and subject id, with the avatar key or the image hash,
+  the uploader, whether the image is already published, and when it was uploaded and reported), `reports.ts` (content
+  reports),
+  `userBlocks.ts`
   (the users a user blocked), `social.ts` (reactions, comments, the users a comment mentions, and the links of a comment
   shared with the podcast, each row on exactly one social target), `notificationsEmailSends.ts` (one row per user per
   UTC day that a notifications email went out), `pushDevices.ts` (each phone's Expo push token, bound to the session
@@ -93,7 +99,10 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   `pending_object_deletions`, and a failed delete writes its failure to that row with the next try pushed back. A write
   that deletes or fails the row naming an object records the key with `recordPendingObjectDeletions` in the same
   transaction, and an upload records its key first with `recordPendingObjectDeletionBeforeUpload`, with a grace period,
-  and clears it with `clearPendingObjectDeletion` in the row insert's transaction.
+  and clears it with `clearPendingObjectDeletion` in the row insert's transaction. `clearPendingObjectDeletions`
+  returns how many keys were pending. `deletePendingStoredObjects` deletes only the keys still pending, the first key
+  before the others, and records each deleted key again for the upload grace period, so a save that clears one of those
+  rows can tell that its objects may be gone.
   `apps/worker/retryPendingObjectDeletions.ts` retries the pending keys after the sweep. Resource content deletes
   through `deleteStoredObject` with no pending row. Its key is fixed per Resource, and the next fetch rewrites it. A
   Resource Image sits beside it at `toResourceImageKey`, `resources/<id>/images/<position>.jpg`.
@@ -174,10 +183,44 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   `isDailySpendCutoffPassed` compares the spend with the podcast episodes, scheduled scans, or chat cutoff.
   `toFirstScanFilter` and `toWaitingScanFilter` derive a Topic's first scan and the waiting scans from the rows, and
   `isFirstScanWaiting`, `isManualScanWaiting`, and `isTopicFirstScanWaiting` return whether one owner's or Topic's Scan
-  waits, and `isUserPastDailySpendCutoff` returns whether a free user is past a cutoff. Each setting defaults from
+  waits, and `isUserPastDailySpendCutoff` returns whether a free user is past a cutoff. While the unverified accounts
+  switch is on, a free account that signed up with a password and has not verified its email waits for its first and
+  manual scans, and `isUnverifiedAccountLimited` returns whether chat and voice reject it. Each setting defaults from
   Doppler (`PODCAST_EPISODES_DAILY_SPEND_CUTOFF_USD`, `SCHEDULED_SCANS_DAILY_SPEND_CUTOFF_USD`,
-  `CHAT_DAILY_SPEND_CUTOFF_USD`, `FIRST_SCAN_DISPATCH_LIMIT`, `HOURLY_SIGNUP_ALERT_COUNT`). `countHourlySignups` counts
-  the accounts the past hour created, for the worker's signup alert and the admin console's signups meter.
+  `CHAT_DAILY_SPEND_CUTOFF_USD`, `FIRST_SCAN_DISPATCH_LIMIT`, `HOURLY_SIGNUP_ALERT_COUNT`, and
+  `TOPIC_PODCAST_EPISODE_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT` for a film's generated image limit).
+  `loadSpendControlSettings` returns the settings with the switches, which an activity or a route reads: the pause on
+  new podcast episodes, the pause on new films, and the home that shows pinned items only. A failed read is reported
+  and reads every switch as off, and a cached value from before a switch existed reads that switch as off.
+  `countHourlySignups` counts the accounts the past hour created, for the worker's signup alert and the admin
+  console's signups meter.
+- `uncheckedImages.ts` — the unchecked images' rows. `saveUncheckedImage` writes a subject's unchecked image in the
+  caller's transaction under a lock on the subject, and returns the unchecked image it replaces.
+  `loadUncheckedImageForUploader` returns an unchecked image to its uploader alone, and never a published one, and
+  `loadUncheckedImageHashesForUploader` returns the hashes of several kinds under one subject id the same way.
+  `lockUncheckedImageSubject` and `withUncheckedImageSubjectLock` take a subject's lock and `lockTopicImageVisibility` a
+  Topic's image visibility lock. `runUncheckedImageSubjectTransaction` runs the transactions that take a subject's lock
+  one at a time in a process, because a publish inside one writes on a second connection.
+  `loadTopicPublishedUncheckedImages` returns the published unchecked images under a Topic, and
+  `saveUncheckedImageUnpublished` unpublishes one. `loadUncheckedImagesToCheck` returns the sweep's next page,
+  `isUncheckedImageStillStored` and `deleteUncheckedImageById` match an unchecked image by its id and upload time,
+  `countFailedUncheckedImageCheck` raises an image's attempt count, `saveUncheckedImageReported` records that an image
+  unchecked for over a day was reported, and `deleteUncheckedImage` drops an unchecked image. `publishUncheckedAvatar`
+  in `avatars.ts` publishes an unchecked avatar only if it is still the one that was read.
+- `avatars.ts` — the avatar writes the api and the worker share. `replaceAvatar` publishes a user's avatar, clears
+  the unchecked one, deletes the objects it replaces, and refreshes the user's sessions. `saveUncheckedAvatar` names an
+  upload on `users.unchecked_avatar_key`, which the session returns to its user alone, and leaves the published avatar.
+  `replaceTeamAvatar` and `saveUncheckedTeamAvatar` do the same for a team, whose unchecked avatar is its
+  `unchecked_images` row. `deleteUncheckedAvatar` deletes an unchecked avatar that will never be published. A save of an
+  unchecked avatar clears the upload's pending deletion in its own transaction, so the upload's grace period never
+  deletes an unchecked avatar.
+- `sessions.ts` — the keys that Better Auth owns, written where the app changes a user outside Better Auth's routes:
+  `refreshSessionUser` after a direct write to the plan, role, username, avatar, or invite access,
+  `revokeUserSessions` from the Postgres tokens before an account's row is deleted, and `cacheSession` from the
+  session update hook, so a session missing from Redis is stored at its next daily refresh. A revocation marks the
+  user's sessions as revoked for an hour first, and `cacheSession` deletes what it stored for a marked user, so no
+  session is cached again while an account closes. The worker reaches `refreshSessionUser` through `avatars.ts` if
+  the sweep publishes or deletes an unchecked avatar.
 - `worstCaseMonthlySpend.ts` — `loadWorstCaseMonthlySpend`, the parts of the admin console's worst case free-plan spend:
   the sum of the monthly budgets of the free users who are not admins, each override in place of the plan's, and the
   signups of each of the past 30 days from one grouped query.
@@ -198,7 +241,8 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   `redisFakeDailyCounts.ts` holds its scripts for the Redis test fake.
 - `dashboardSnapshotRows.ts` — deletes whole Dashboards' snapshots, which a rebuild, a closed account, and a deleted
   team share, since a snapshot's subject has no foreign key. Each delete first starts a new snapshot generation in
-  Redis, and a build that read the old generation before it loaded the daily counts writes nothing.
+  Redis, and a build that read the old generation before it loaded the daily counts writes nothing. A publication's
+  rebuild starts a generation through `startDashboardSnapshotGeneration` with no delete.
 - `teamMembers.ts` — counts a team's active members, which the api and the worker share.
 - `redisFakeServer.ts` — the fake Redis server behind `redis.test.ts`, `redisRateLimits.test.ts`, and
   `redisGauges.test.ts`: in-memory clients that connect, drop, subscribe, and deliver published messages, with the

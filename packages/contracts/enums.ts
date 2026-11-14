@@ -179,6 +179,17 @@ export const billingIntervals = ["monthly", "yearly"] as const
 export const billingProviders = ["stripe", "app_store", "play_store"] as const
 // where a user's public avatar comes from. generated uses the username initials
 export const avatarSources = ["generated", "oauth", "upload"] as const
+// what an unchecked image is for: a user's or a team's avatar, or the image of a Topic, a Podcast Episode, a Topic
+// Post, or a film biome-ignore format: one line keeps the kinds under the comment-density hook's limit
+export const uncheckedImageSubjectKinds = [
+	"userAvatar",
+	"teamAvatar",
+	"topicImage",
+	"podcastEpisodeImage",
+	"topicPostImage",
+	"topicPodcastEpisodeVideoImage",
+] as const
+export type UncheckedImageSubjectKind = (typeof uncheckedImageSubjectKinds)[number]
 // the sizes a topic image is derived into: the page and the cards, a directory row, and a search result
 export const topicImageSizes = ["page", "list", "thumbnail"] as const
 export type TopicImageSize = (typeof topicImageSizes)[number]

@@ -710,7 +710,7 @@ Check for:
    - `estimateEmbedTokens` in `packages/pipeline/review/filter.ts` and `TRANSCRIPT_CHARS_PER_TOKEN` in
      `packages/models/transcription.ts` (now `toEstimatedTokens` in `packages/models/budget.ts`), and `rejectChatTurn`
      in `apps/api/chat/privateChat.ts` (now exported from `apps/api/chat/chatTurnAuthorization.ts`)
-   - the `serve-pages-from-a-web-service` OpenSpec change (now the unapplied `split-web-from-api`, with its attachment
+   - the `serve-pages-from-a-web-service` OpenSpec change (now folded into `launch-hardening`, with its attachment
      extraction moved to `extract-attachment-text-in-a-worker`), and `extractText` called on the api's event loop (now
      `readChatAttachmentText` in `apps/api/chat/chatAttachmentParts.ts` over `extractTextInWorker` in
      `apps/api/chat/attachmentExtraction.ts`)
@@ -918,8 +918,9 @@ Check for:
    - `isItemExpanded` and the `ItemExpanded` story (now `isEntryExpanded` and `EntryExpanded`), `openHostLink` in
      `apps/web/src/mcpViews/mcpViewHost.ts` (folded into `openMcpViewLink`)
    - `apps/api/note/noteHtml.ts` and `noteHtml.test.ts` (now `apps/api/noteHtml.ts` and `apps/api/noteHtml.test.ts`)
-   - `apps/api/share/fonts/` (now `packages/pipeline/assets/fonts/`), and `CardElement`, `toCardElementPng`, and
-     `toImageDataUri` in `apps/api/share/previewImage.ts` (now `packages/pipeline/cardElementPng.ts`)
+   - `apps/api/share/fonts/` (now `packages/pipeline/assets/fonts/`), `CardElement` and `toCardElementPng` in
+     `apps/api/share/previewImage.ts` (now `packages/pipeline/cardElementPng.ts`), and `toImageDataUri` there and
+     `toDataUrl` in `packages/pipeline/attach.ts` (now `toDataUrl` in `packages/server/dataUrl.ts`)
    - `apps/web/src/components/common/HomeRankDialog.tsx` and its story (now `RankDialog.tsx` and its story there, over
      `packages/core/components/RankDialog.tsx`)
    - `UpdatesList.tsx` and `UpdatesButton.tsx` with their stories in `apps/web/src/components/topic/` and
@@ -999,6 +1000,24 @@ Check for:
      `isTopicPostDraftSaved`)
    - `DailySpendCutoffsCard`'s `saveDraft`, `draft`, `savedDraft`, and `savedDraftRef` (now `saveSpendControlDraft`,
      `spendControlDraft`, `savedSpendControlDraft`, and `savedSpendControlDraftRef`)
+   - `apps/api/sessions.ts` and `sessions.test.ts` (now `packages/db/sessions.ts` and its test), and
+     `toAvatarContentType` in `apps/api/avatars.ts` (now in `packages/db/avatars.ts`, beside `replaceAvatar` and
+     `replaceTeamAvatar`)
+   - `fetchMcpClientName` (now `fetchMcpConsentClient` in `packages/client/mcpClient.ts`), `sendEmailBatches` in
+     `packages/emails/email.ts` (removed: each account email goes through `sendAccountEmail`), and
+     `loadChatSpendRejection` (now `loadChatUserRejection` in `apps/api/chat/chatTurnAuthorization.ts`)
+   - CI's report-only `bun audit` step in the `gate` job (now `bun run check:advisories` in the `advisories` job)
+   - `apps/api/chat/attachmentExtractionWorker.ts` (removed: extraction runs in a child process through
+     `packages/pipeline/attachExtraction.ts`, with `attachExtractionChild.ts` and `attachExtractionWatchdog.ts`), and
+     `extractTextInWorker` (now `extractTextInChildProcess` in `apps/api/chat/attachmentExtraction.ts`)
+   - `ExtractionRequest` and `ExtractionResult` in `apps/api/chat/attachmentExtraction.ts` (now
+     `AttachmentExtractionRequest` and `AttachmentExtractionReply` in `packages/pipeline/attachExtraction.ts`),
+     `ExtractedAttachment` in `apps/worker/workflows/processAttachmentActivities.ts` (now in
+     `packages/pipeline/attachExtraction.ts`), and `toSerializedWorkbook` in `packages/pipeline/attachTable.ts` (now
+     `toWorkbookText` in `packages/pipeline/attachWorkbook.ts`)
+   - the unapplied `split-web-from-api` OpenSpec change (now folded into `launch-hardening`)
+   - CI's `release` job in `.github/workflows/ci.yml` (removed: a push to `main` releases through the push trigger of
+     Northflank's `release-main`, without waiting for CI)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

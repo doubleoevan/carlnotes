@@ -36,6 +36,7 @@ export function TeamDialogs({
 						name: teamPage.name,
 						description: teamPage.description,
 						avatarVersion: teamPage.avatarVersion,
+						uncheckedAvatarVersion: teamPage.uncheckedAvatarVersion,
 						isPublic: teamPage.isPublic,
 					}}
 					currentTopics={teamPage.topics.map((teamTopic) => ({ id: teamTopic.id, name: teamTopic.name }))}

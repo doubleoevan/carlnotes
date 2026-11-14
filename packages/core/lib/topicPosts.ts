@@ -213,6 +213,7 @@ export function toTopicPostEditableImage(topicPost: TopicPostResponse): Editable
 		image: topicPost.image,
 		imageOrigin: topicPost.imageOrigin,
 		imagePrompt: topicPost.imagePrompt,
+		isImageUnchecked: topicPost.isImageUnchecked,
 		imageRegenerationQuota: topicPost.imageRegenerationQuota,
 	}
 }

@@ -1,9 +1,12 @@
 // a film's own image, with the connection pool and the model calls stubbed: the wide crop, which image a film shows,
-// the first image generation in the film house style, a film that already has its image, and a replaced image's rebuild
+// with an unchecked upload passed over,
+// the first image generation in the film house style, a film that already has its image, a replaced image's rebuild,
+// and an uploaded image's removal
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as storage from "@carlnotes/db/store"
 import * as litellm from "@carlnotes/models/litellm"
+import * as edgePurge from "@carlnotes/server/edgePurge"
 import sharp from "sharp"
 import * as podcastEpisodeImageRenders from "../podcast/podcastEpisodeImageRenders"
 import { toTestImageBytes } from "../resourceImages/resourceImageTestFixtures"
@@ -13,10 +16,15 @@ import { type TopicImageOriginal, toTopicImageHash, toTopicImageOriginal } from 
 import * as topicImageScenes from "../topicImages/writeTopicImageScene"
 import {
 	generateTopicPodcastEpisodeVideoImage,
+	removeTopicPodcastEpisodeVideoImageUpload,
 	replaceTopicPodcastEpisodeVideoImage,
 	TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_FORMAT,
 } from "./topicPodcastEpisodeVideoImage"
-import { loadShownImageStill, toShownImage } from "./topicPodcastEpisodeVideoInputs"
+import {
+	loadShownImageStill,
+	loadTopicPodcastEpisodeVideoEpisode,
+	toShownImage,
+} from "./topicPodcastEpisodeVideoInputs"
 import * as videoFrames from "./videoFrames"
 
 // an original at the film's frame size, and the key its hash names under the film's folder
@@ -64,6 +72,11 @@ function stubTopicPodcastEpisodeVideoWithoutImage(): SentQuery[] {
 // the film row's write, which sets the image
 function toTopicPodcastEpisodeVideoRowUpdate(sentQueries: SentQuery[]): SentQuery | undefined {
 	return sentQueries.find((sentQuery) => sentQuery.text.startsWith('update "topic_podcast_episode_videos"'))
+}
+
+// the insert that records object keys as pending deletions
+function toPendingObjectDeletionInsert(sentQueries: SentQuery[]): SentQuery | undefined {
+	return sentQueries.find((sentQuery) => sentQuery.text.startsWith('insert into "pending_object_deletions"'))
 }
 
 test("an upload or a render is center-cropped to 16:9 at the film's frame size", async () => {
@@ -132,6 +145,30 @@ test("a film shows its own image, or else its podcast episode's, its topic's, or
 
 	// with no image anywhere, the podcast card has no stored original
 	expect(toShownImage({ ...hashes, podcastEpisodeImageHash: null, topicImageHash: null }).imageOriginalKey).toBeNull()
+})
+
+// a film draws no upload whose check has not run, so it shows the next image that is checked
+test("a film whose own image is an upload still unchecked shows its podcast episode's image", async () => {
+	// a published podcast episode with an image, in the column order the film's read selects, whose film has an
+	// unchecked image row. the upload is the film's own image if it is published, and the film has none if it is not
+	const podcastEpisodeRow = ["topic-1", "owner-1", "published", "Agents", 2026, 14, "audio.mp3", {}, "episode-hash"]
+	for (const topicPodcastEpisodeVideoImageHash of ["film-upload", null]) {
+		stubConnectionPool(({ text }) => {
+			if (text.includes('from "unchecked_images"')) {
+				return [["topicPodcastEpisodeVideoImage", "film-upload"]]
+			}
+
+			// the podcast episode read ends with its topic's name and image, and the film's own image
+			const filmImageColumns = ["AI Agents", "topic-hash", topicPodcastEpisodeVideoImageHash]
+			return text.includes('from "episodes"') ? [[...podcastEpisodeRow, ...filmImageColumns]] : []
+		})
+
+		// the film shows the podcast episode's image, and the read says an unchecked upload would be shown
+		const topicPodcastEpisodeVideoEpisode = await loadTopicPodcastEpisodeVideoEpisode("episode-1")
+		expect(topicPodcastEpisodeVideoEpisode?.imageHash).toBe("episode-hash")
+		expect(topicPodcastEpisodeVideoEpisode?.hasUncheckedUpload).toBe(true)
+		restoreConnectionPool()
+	}
 })
 
 test("a first image generation writes a wide scene, generates it in the film house style, and bills the owner", async () => {
@@ -282,6 +319,55 @@ test("a regenerated or uploaded image with a larger original stores both files",
 	})
 	const originalKey = `episodes/episode-1/video/image-${ORIGINAL_HASH}-original.jpg`
 	expect(upload.mock.calls.map((uploadCall) => uploadCall[0])).toEqual([ORIGINAL_KEY, originalKey])
+})
+
+test("removing a film's uploaded image clears its hash, records its files as pending deletions, and returns the film's id", async () => {
+	// the film of episode-1 shows an upload on a public topic. the read selects the film's id, the image's hash, its
+	// origin, the topic's id, and the topic's visibility
+	const purgeEdgeCacheTagSpy = spyOn(edgePurge, "purgeEdgeCacheTagAfterDeletion").mockResolvedValue(undefined)
+	const sentQueries = stubConnectionPool(({ text }) =>
+		text.startsWith("select") ? [["film-1", "hash-upload", "uploaded", "topic-1", "public"]] : [],
+	)
+	expect(await removeTopicPodcastEpisodeVideoImageUpload("episode-1")).toBe("film-1")
+
+	// the film row loses the image's hash, its origin, and its prompt, by the film's one podcast episode
+	const topicPodcastEpisodeVideoRowUpdate = toTopicPodcastEpisodeVideoRowUpdate(sentQueries)
+	expect(topicPodcastEpisodeVideoRowUpdate?.text).toContain(
+		'set "image_hash" = $1, "image_origin" = $2, "image_prompt" = $3',
+	)
+	expect(topicPodcastEpisodeVideoRowUpdate?.values.slice(0, 3)).toEqual([null, null, null])
+	expect(topicPodcastEpisodeVideoRowUpdate?.values.at(-1)).toBe("episode-1")
+
+	// the jpeg at the film's size and its larger original are recorded as pending deletions
+	expect(toPendingObjectDeletionInsert(sentQueries)?.values).toEqual([
+		"episodes/episode-1/video/image-hash-upload.jpg",
+		"episodes/episode-1/video/image-hash-upload-original.jpg",
+	])
+
+	// the public topic's image files leave the edge
+	expect(purgeEdgeCacheTagSpy.mock.calls).toEqual([["topic-image:topic-1"]])
+})
+
+test("a film whose image is generated, or that has no image of its own, keeps its row and its files", async () => {
+	// a film of a public topic with a generated image, then one with no image of its own
+	const purgeEdgeCacheTagSpy = spyOn(edgePurge, "purgeEdgeCacheTagAfterDeletion").mockResolvedValue(undefined)
+	for (const topicPodcastEpisodeVideoImageRow of [
+		["film-1", "hash-generated", "generated", "topic-1", "public"],
+		["film-1", null, null, "topic-1", "public"],
+	]) {
+		// the removal reads the film and returns null
+		const sentQueries = stubConnectionPool(({ text }) =>
+			text.startsWith("select") ? [topicPodcastEpisodeVideoImageRow] : [],
+		)
+		expect(await removeTopicPodcastEpisodeVideoImageUpload("episode-1")).toBeNull()
+
+		// nothing is written, and nothing leaves the edge
+		expect(toTopicPodcastEpisodeVideoRowUpdate(sentQueries)).toBeUndefined()
+		expect(toPendingObjectDeletionInsert(sentQueries)).toBeUndefined()
+		expect(sentQueries).toHaveLength(1)
+		expect(purgeEdgeCacheTagSpy).not.toHaveBeenCalled()
+		restoreConnectionPool()
+	}
 })
 
 test("the intro's still comes from the larger original, or from the film-size jpeg of an existing film", async () => {

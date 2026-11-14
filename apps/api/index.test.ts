@@ -9,6 +9,7 @@ import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientSt
 import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
 import { PROVIDER_PHOTO_ORIGINS } from "./avatars"
 import { DEFAULT_BODY_LIMIT_BYTES } from "./bodyLimit"
+import * as chatTurnAuthorization from "./chat/chatTurnAuthorization"
 import { BASELINE_POLICY_DIRECTIVES, FRAME_SOURCE_DIRECTIVE } from "./contentSecurityPolicy"
 import { RENDERED_EDGE_CACHE_CONTROL } from "./edgeCache"
 import server from "./index"
@@ -167,15 +168,22 @@ test("a write to an unknown path responds 404, never a page", async () => {
 	expect(response.body).not.toBe(PAGE_HTML)
 })
 
-// post a chat turn as a signed-in user. a signed-out post is rejected before its body is read, so the payload checks
-// are reached only with a session
+// post a chat turn as a signed-in user who may chat on the topic. a post is rejected before its body is read if it is
+// signed out or its turn is not allowed, so the payload checks are reached only with a session and an allowed turn
 async function postSignedInChatTurn(chatTurnBody: unknown): Promise<Response> {
 	signInAs("user-1")
+	spyOn(chatTurnAuthorization, "authorizeChatTurn").mockResolvedValue({
+		status: "allowed",
+		userId: "user-1",
+		isTopicOwner: false,
+		isPersisted: true,
+		canEditTopic: false,
+	})
 	return server.fetch(new Request("http://localhost:3000/api/topics/abc123/chat", toJsonRequest(chatTurnBody)))
 }
 
 // the question is validated before the handler runs
-test("a chat turn with no question is rejected before any work", async () => {
+test("a chat turn with no question is rejected before it is answered", async () => {
 	const response = await postSignedInChatTurn({ question: "   " })
 	expect(response.status).toBe(400)
 })

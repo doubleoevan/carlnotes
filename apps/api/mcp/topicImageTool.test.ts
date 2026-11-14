@@ -1,10 +1,14 @@
 // the set_topic_image tool: a regenerate past the month's regenerations starts no render, a user who may not edit the
-// topic changes nothing, and a url that returns a page leaves the image unchanged
+// topic changes nothing, a url that returns a page leaves the image unchanged, and a url's image that stays unchecked
+// returns the topic's current image
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import * as dnsPromises from "node:dns/promises"
+import { toTestTopicResponse } from "@carlnotes/contracts/topicFeedTestFixtures"
+import { toTopicImageUrls } from "@carlnotes/contracts/topicImages"
 import * as topicImageRenders from "@carlnotes/pipeline/topicImages/topicImageRenders"
 import * as authorization from "../authorization"
 import * as topicImageEdits from "../topic/topicImageEdits"
+import * as topics from "../topic/topics"
 import { type RegisteredToolHandler, toRegisteredTools, toResultText, USER } from "./toolTestFixtures"
 
 // resolve the .example hosts to a fixed public address. every other host keeps the real resolver
@@ -72,4 +76,41 @@ test("a url that returns a page leaves the image unchanged", async () => {
 	expect(toolResult.isError).toBe(true)
 	expect(toResultText(toolResult)).toContain("That url is not a supported image")
 	expect(replaceImageSpy).not.toHaveBeenCalled()
+})
+
+test("a url's image that stays unchecked returns the topic's current image and says only the caller sees the new one", async () => {
+	// an editor, a url whose image stays unchecked, and the topic's page with its published image
+	const publishedImage = toTopicImageUrls("topic-1", "published-hash")
+	spyOn(topicImageEdits, "loadTopicImageEditor").mockResolvedValue(EDITOR)
+	const setTopicImageFromUrlSpy = spyOn(topicImageEdits, "setTopicImageFromUrl").mockResolvedValue({
+		status: "saved",
+		image: toTopicImageUrls("topic-1", "unchecked-hash"),
+		isImageUnchecked: true,
+	})
+	spyOn(topics, "loadTopicPage").mockResolvedValue(toTestTopicResponse({ id: "topic-1", image: publishedImage }))
+
+	// the result keeps every field, with the current image in the new one's place, and its text says that only the caller
+	// sees the new image
+	const uncheckedToolResult = await toSetTopicImageHandler()({
+		topic_id: "topic-1",
+		image_url: "https://images.example/a",
+	})
+	expect(uncheckedToolResult.isError).toBeFalsy()
+	expect(toResultText(uncheckedToolResult)).toContain("Only you can see the new image until Carl finishes checking it.")
+	expect(uncheckedToolResult.structuredContent).toMatchObject({
+		status: "saved",
+		topicId: "topic-1",
+		afterTopicDraft: { name: expect.any(String) },
+		image: publishedImage,
+	})
+
+	// the result names no url of the unchecked image, whose files only the caller's own session reads
+	expect(JSON.stringify(uncheckedToolResult)).not.toContain("unchecked-hash")
+
+	// an image that passed its check is returned as the new image
+	const savedImage = toTopicImageUrls("topic-1", "saved-hash")
+	setTopicImageFromUrlSpy.mockResolvedValue({ status: "saved", image: savedImage, isImageUnchecked: false })
+	const savedToolResult = await toSetTopicImageHandler()({ topic_id: "topic-1", image_url: "https://images.example/a" })
+	expect(toResultText(savedToolResult)).toBe("Saved the new image.")
+	expect(savedToolResult.structuredContent).toMatchObject({ status: "saved", topicId: "topic-1", image: savedImage })
 })

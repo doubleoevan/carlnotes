@@ -1,7 +1,8 @@
-// the podcast episode settings that read the environment: the speech model that records episodes, how many films
-// render at once, how many generated images a film draws, and whether an MCP view plays a film
+// the podcast episode settings that read the environment: the speech model that records podcast episodes, how many
+// films render at once, whether the film backfill runs, how many generated images a film draws by default, and
+// whether an MCP view plays a film
 
-import { toPositiveInteger, toWholeNumber } from "./envSettings"
+import { toWholeNumber } from "./envSettings"
 
 // the Gemini speech model that records episodes.
 // PODCAST_SPEECH_MODEL names another model, and an empty value turns podcast episodes off
@@ -34,20 +35,28 @@ export function topicPodcastEpisodeVideoConcurrency(): number {
 }
 
 /**
- * Returns how many films the backfill renders at once, from TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_CONCURRENCY.
+ * Returns how many films the backfill renders at once, from TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_CONCURRENCY. Zero
+ * turns the backfill off.
  */
 export function topicPodcastEpisodeVideoBackfillConcurrency(): number {
-	return toPositiveInteger(
+	return toWholeNumber(
 		Bun.env.TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_CONCURRENCY,
 		DEFAULT_TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_CONCURRENCY,
 	)
 }
 
-// how many generated images one film draws at most, across all its chapters
+/**
+ * Whether the film backfill runs: films are on, and the backfill concurrency is above zero.
+ */
+export function isTopicPodcastEpisodeVideoBackfillEnabled(): boolean {
+	return topicPodcastEpisodeVideoConcurrency() > 0 && topicPodcastEpisodeVideoBackfillConcurrency() > 0
+}
+
+// how many generated images one film draws at most by default, across all its chapters
 const DEFAULT_GENERATED_CHAPTER_IMAGE_LIMIT = 40
 
 /**
- * Returns how many generated images one film draws at most, from
+ * Returns how many generated images one film draws at most by default, from
  * TOPIC_PODCAST_EPISODE_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT. Zero turns generated images off.
  */
 export function generatedChapterImageLimit(): number {

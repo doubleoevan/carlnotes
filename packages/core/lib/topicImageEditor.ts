@@ -21,13 +21,16 @@ export const REGENERATE_LABEL = "Regenerate"
 export const UPLOAD_IMAGE_LABEL = "Upload an image"
 
 /**
- * Returns the key an editor mounts under, so a reload of the topic's count or image origin starts its own counts over.
+ * Returns the key an editor mounts under, so a reload of the topic's count, its image origin, or whether its image is
+ * unchecked starts the editor's own counts and its unchecked image's line over.
  */
 export function toTopicImageEditorKey(topic: {
 	imageRegenerationQuota: { used: number } | null
 	imageOrigin: string | null
+	isImageUnchecked?: boolean
 }): string {
-	return `${topic.imageRegenerationQuota?.used ?? "none"}:${topic.imageOrigin ?? "none"}`
+	const uncheckedKey = topic.isImageUnchecked ? "unchecked" : "published"
+	return `${topic.imageRegenerationQuota?.used ?? "none"}:${topic.imageOrigin ?? "none"}:${uncheckedKey}`
 }
 
 // the image prompt's label, which its empty input shows too

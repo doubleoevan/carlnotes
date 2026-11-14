@@ -1,8 +1,38 @@
-// topic tool tests for the prompt version write and the settings tool's podcast switch
-import { expect, test } from "bun:test"
+// topic tool tests for the prompt version write, the settings tool's podcast switch, and a visibility change whose
+// unchecked images could not go back to their uploaders
+import { afterEach, expect, mock, spyOn, test } from "bun:test"
+import { restoreConnectionPool, stubConnectionPool, toTableRow } from "@carlnotes/db/connectionPoolStub"
+import { topics } from "@carlnotes/db/schema/topics"
+import * as publishedUncheckedImages from "@carlnotes/pipeline/publishedUncheckedImages"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
+import * as authorization from "../authorization"
 import { savePromptVersion } from "../topic/promptVersions"
-import { toPodcastFieldDescription, toUpdateTopicFieldsShape } from "./topicTools"
+import { toPodcastFieldDescription, toUpdateTopicFieldsShape, updateTopicFields } from "./topicTools"
+
+// the pool's own query and every spy, put back after each test
+afterEach(() => {
+	restoreConnectionPool()
+	mock.restore()
+})
+
+// the unchecked images go back in the transaction that writes the visibility, before the Topic's row is written
+test("a visibility change whose unchecked images could not go back writes no visibility", async () => {
+	const privateTopicRow = toTableRow(topics, { id: "topic-1", ownerId: "owner-1", name: "T", visibility: "private" })
+	const sentQueries = stubConnectionPool(({ text }) => (text.includes('from "topics"') ? [privateTopicRow] : []))
+	spyOn(authorization, "isAllowed").mockResolvedValue(true)
+	const unpublishTopicUncheckedImagesSpy = spyOn(
+		publishedUncheckedImages,
+		"unpublishTopicUncheckedImages",
+	).mockRejectedValue(new Error("no lock"))
+	const redrawSpy = spyOn(publishedUncheckedImages, "redrawUnpublishedImageFiles").mockResolvedValue(undefined)
+
+	// the edit fails with the error, and nothing after the failed step runs
+	const topicEdit = { userId: "owner-1", topicId: "topic-1", promptVersionOrigin: "chat" } as const
+	await expect(updateTopicFields({ ...topicEdit, topicFields: { visibility: "public" } })).rejects.toThrow("no lock")
+	expect(unpublishTopicUncheckedImagesSpy.mock.calls[0]?.[1]).toEqual({ topicId: "topic-1", visibility: "public" })
+	expect(sentQueries.some(({ text }) => text.startsWith('update "topics"'))).toBe(false)
+	expect(redrawSpy).not.toHaveBeenCalled()
+})
 
 // an unchanged prompt writes no version, and a changed one does
 test("the version write skips an unchanged prompt and saves a changed one", async () => {

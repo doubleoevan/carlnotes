@@ -67,6 +67,11 @@ test("clipAttachmentText marks the cut inside the limit", () => {
 	expect(clippedPdf).toEndWith(
 		"[The attachment is cut here. It runs 312 pages and only the first 50,000 characters are included.]",
 	)
+
+	// a text held in part is cut the same, and its marker names the whole length it is given
+	const heldText = "x".repeat(50_100)
+	expect(clipAttachmentText(heldText, undefined, 80_000)).toBe(clippedAttachment)
+	expect(clipAttachmentText("short", undefined, 5)).toBe("short")
 })
 
 // a kept attachment is stored, summarized by a paid call, and gets added into every later chat turn
@@ -138,7 +143,7 @@ test("a kept pdf summarizes the text its chat turn read without extracting it ag
 	spyOn(store, "uploadAttachment").mockResolvedValue()
 	spyOn(store, "clearPendingObjectDeletion").mockResolvedValue()
 	const generateAttachmentContextSpy = spyOn(attach, "generateAttachmentContext").mockResolvedValue("A summary.")
-	const extractTextSpy = spyOn(attachmentExtraction, "extractTextInWorker")
+	const extractTextSpy = spyOn(attachmentExtraction, "extractTextInChildProcess")
 
 	// the kept PDF with the text its chat turn read
 	const keptPdf = {

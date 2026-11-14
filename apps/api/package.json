@@ -31,7 +31,7 @@
 		"hono": "^4.13.16",
 		"hono-rate-limiter": "^0.5.4",
 		"jose": "^6.2.15",
-		"markdown-to-jsx": "^9.10.4",
+		"markdown-to-jsx": "9.10.4",
 		"react": "19.3.1",
 		"react-dom": "19.3.1",
 		"sanitize-html": "2.18.1",

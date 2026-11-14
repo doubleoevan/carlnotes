@@ -2,20 +2,24 @@
 
 ## Purpose
 TBD - created by archiving change add-redis-and-scale-out. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: One Redis store serves every caller, and a failed use of it returns null
 
-The app SHALL reach Redis through one module in `packages/db/`, built on Bun's built-in `RedisClient` from the `REDIS_URL`
-setting, with no Redis package added. Every read and write SHALL go through one wrapper that returns a result on success
-and null on any failure, including a client that is not connected and a command with no reply within two seconds, so a
-caller always has a value to act on and no Redis failure ever reaches a request as an error or holds it. The wrapper
-SHALL count each failed command, missed deadline, failed connection attempt, and dropped connection toward the minute's
-gauges, and SHALL log the first failure of each minute. Three commands in a row that miss their deadline SHALL replace
-the client through the store's own reconnect, since a wedged socket can stay open. A call made while a reconnect waits
-SHALL fail at once without adding to the count. The client SHALL NOT queue commands while disconnected, so a command
-against a dead connection fails at once instead of holding its request. The store SHALL own reconnection: a closed
-connection reconnects after a delay of one second that doubles on each failure up to thirty seconds, with no limit on
-attempts. The delay resets once a connection succeeds, and for the subscriber connection once its subscribes succeed.
+The app SHALL reach Redis through one module in `packages/db/`, built on Bun's built-in `RedisClient` from the
+`REDIS_URL` setting, with no Redis package added. Every read and write SHALL go through one wrapper that returns a
+result on success and null on any failure, including a client that is not connected and a command with no reply within
+two seconds, so a caller always has a value to act on and no Redis failure ever reaches a request as an error or holds
+it, apart from an account close: while Redis is unreachable a close SHALL respond 503 and close nothing, so a closed
+account's session can never survive in Redis. The wrapper SHALL count each failed command, missed deadline, failed
+connection attempt, and dropped connection toward the minute's gauges, and SHALL log the first failure of each minute.
+Three commands in a row that miss their deadline SHALL replace the client through the store's own reconnect, since a
+wedged socket can stay open. A call made while a reconnect waits SHALL fail at once without adding to the count. The
+client SHALL NOT queue commands while disconnected, so a command against a dead connection fails at once instead of
+holding its request. The store SHALL own reconnection: a closed connection reconnects after a delay of one second that
+doubles on each failure up to thirty seconds, with no limit on attempts. The delay resets once a connection succeeds,
+and for the subscriber connection once its subscribes succeed.
 
 #### Scenario: A failed read returns null
 
@@ -43,6 +47,18 @@ attempts. The delay resets once a connection succeeds, and for the subscriber co
 
 - **WHEN** three commands in a row miss their deadline
 - **THEN** the store closes the client and reconnects on its backoff
+
+#### Scenario: An account close is rejected while Redis is unreachable
+
+- **WHEN** a user closes their account while Redis is unreachable
+- **THEN** the api responds 503, the account and its sessions are unchanged, and a close sent after Redis responds
+  again succeeds
+
+#### Scenario: Every other request is served while Redis is unreachable
+
+- **WHEN** Redis is unreachable and a person loads a public profile, a topic page, and the home, signs in, counts a
+  view, and sends a chat turn
+- **THEN** each request is served without an error from Redis
 
 ### Requirement: A frequently read response is served from a short-lived read-through cache
 
@@ -217,4 +233,3 @@ Sentry warning, at most once an hour per process, like every other condition.
 
 - **WHEN** the client stays connected and the minute counts twelve errors
 - **THEN** one `redis-errors` warning is sent
-

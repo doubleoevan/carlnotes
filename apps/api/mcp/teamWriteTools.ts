@@ -1,6 +1,11 @@
 // the team write tools: request_to_join_team, send_invite, respond_to_invite, and post_to_team_room, each through the
 // module its web route calls, under the same checks
-import { CHAT_PAUSED_ERROR, CHAT_PAUSED_LINE } from "@carlnotes/contracts/chat"
+import {
+	CHAT_PAUSED_ERROR,
+	CHAT_PAUSED_LINE,
+	EMAIL_UNVERIFIED_ERROR,
+	EMAIL_UNVERIFIED_LINE,
+} from "@carlnotes/contracts/chat"
 import { toModerationRejectionMessage } from "@carlnotes/contracts/moderation"
 import { chatRoomMessagePayload, userInvitePayload } from "@carlnotes/contracts/payloads"
 import type { CallToolResult } from "@modelcontextprotocol/server"
@@ -214,16 +219,20 @@ function toAcceptInviteResult(acceptResult: InviteAcceptResult): CallToolResult 
 	}
 }
 
+// the line a caller reads for each rejection reason that has one of its own
+const REJECTION_LINES: Record<string, string> = {
+	[CHAT_PAUSED_ERROR]: CHAT_PAUSED_LINE,
+	[EMAIL_UNVERIFIED_ERROR]: EMAIL_UNVERIFIED_LINE,
+}
+
 // what a post says: posted, held back with Carl's reason, or why nothing posted
 function toPostResult(chatRoomPostResult: ChatRoomPostResult): CallToolResult {
 	switch (chatRoomPostResult.status) {
-		// a message to Carl past the daily spend cutoff or the budget posts nothing, and says why
+		// a message to Carl past the daily spend cutoff or the budget, or from an unverified account while the unverified
+		// accounts switch is on, posts nothing and says why
 		case "posted":
 			if (chatRoomPostResult.rejectionReason) {
-				const reasonText =
-					chatRoomPostResult.rejectionReason === CHAT_PAUSED_ERROR
-						? CHAT_PAUSED_LINE
-						: chatRoomPostResult.rejectionReason
+				const reasonText = REJECTION_LINES[chatRoomPostResult.rejectionReason] ?? chatRoomPostResult.rejectionReason
 				return toTextResult(`Nothing was posted. ${reasonText}`, true)
 			}
 

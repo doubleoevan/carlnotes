@@ -1,5 +1,6 @@
 import { authClient } from "@carlnotes/client/authClient"
-import { fetchMcpClientName, sendMcpConsent } from "@carlnotes/client/mcpClient"
+import { fetchMcpConsentClient, sendMcpConsent } from "@carlnotes/client/mcpClient"
+import type { McpConsentClient } from "@carlnotes/contracts/aiAgentIdentity"
 import { useEffect, useState } from "react"
 import { Button } from "@/components/primitives/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/primitives/dialog"
@@ -12,24 +13,25 @@ import { PAGE_CLASS } from "@/lib/styleClasses"
  */
 export function McpConsentPage() {
 	usePageTitle("Connect to AI")
-	// whether Better Auth's redirect to this page signed its query, and the mcp client id from it
+	// whether Better Auth's redirect to this page signed its query, and the mcp client id and redirect address from it
 	const searchParams = useSearchParams()
 	const isQuerySigned = searchParams.has("sig")
 	const mcpClientId = searchParams.get("client_id")
+	const redirectUri = searchParams.get("redirect_uri")
 	const { data: session, isPending } = authClient().useSession()
-	const [mcpClientName, setMcpClientName] = useState<string | null | undefined>(undefined)
+	const [mcpConsentClient, setMcpConsentClient] = useState<McpConsentClient | null | undefined>(undefined)
 	const [error, setError] = useState<string | null>(null)
 	const [isSubmitting, setIsSubmitting] = useState(false)
 
-	// fetch the client's registered name. undefined while it loads, null for a client CarlNotes does not know
+	// fetch the client asking for consent. undefined while it loads, null for a client CarlNotes does not know
 	useEffect(() => {
 		if (!mcpClientId || !session) {
 			return
 		}
-		fetchMcpClientName(mcpClientId)
-			.then(setMcpClientName)
-			.catch(() => setMcpClientName(null))
-	}, [mcpClientId, session])
+		fetchMcpConsentClient(mcpClientId, redirectUri)
+			.then(setMcpConsentClient)
+			.catch(() => setMcpConsentClient(null))
+	}, [mcpClientId, redirectUri, session])
 
 	// send the consent, then follow Better Auth's redirect out of the app
 	const handleConsent = async (isAccepted: boolean): Promise<void> => {
@@ -53,10 +55,10 @@ export function McpConsentPage() {
 	if (isPending || !session) {
 		return null
 	}
-	const clientDisplayName = mcpClientName ?? "your AI"
-	const isClientKnown = typeof mcpClientName === "string"
+	const clientDisplayName = mcpConsentClient?.name ?? "your AI"
+	const isClientKnown = Boolean(mcpConsentClient)
 	// a link without a client id names no client CarlNotes can know
-	const isClientMissing = !mcpClientId || mcpClientName === null
+	const isClientMissing = !mcpClientId || mcpConsentClient === null
 	return (
 		<main className={PAGE_CLASS}>
 			{/* the question as a modal the user answers: no close, and no way out but the two buttons */}
@@ -71,6 +73,12 @@ export function McpConsentPage() {
 					<DialogDescription>
 						Carl can share your topics and take its questions. It only changes what you can change yourself.
 					</DialogDescription>
+					{/* the host the answer returns to, only if CarlNotes does not know it */}
+					{mcpConsentClient?.unknownRedirectHost && (
+						<p className="text-destructive text-sm">
+							{`Allowing shares CarlNotes with ${mcpConsentClient.unknownRedirectHost}, a site CarlNotes doesn't know. Allow only if you trust it.`}
+						</p>
+					)}
 					{error && <p className="text-destructive text-sm">{error}</p>}
 					{isClientMissing && (
 						<p className="text-destructive text-sm">CarlNotes doesn't know this AI. Start again from your AI.</p>

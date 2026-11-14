@@ -1,9 +1,18 @@
-// store tests: the object content key, the keys among nullable rows, and deleteStoredObject, whose failed delete
-// leaves the key pending with its failure and whose successful delete clears the key
+// store tests: the object content key, the keys among nullable rows, deleteStoredObject, whose failed delete
+// leaves the key pending with its failure and whose successful delete clears the key, the clear that counts the keys
+// that were pending, and deletePendingStoredObjects, which deletes only the keys still pending
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import { restoreConnectionPool, stubConnectionPool } from "./connectionPoolStub"
-import { deleteStoredObject, toResourceContentKey, toResourceImageKey, toStoredObjectKeys } from "./store"
+import { db } from "./index"
+import {
+	clearPendingObjectDeletions,
+	deletePendingStoredObjects,
+	deleteStoredObject,
+	toResourceContentKey,
+	toResourceImageKey,
+	toStoredObjectKeys,
+} from "./store"
 
 // save the endpoint the environment had
 const restoreEnvSettings = saveEnvSettings(["S3_ENDPOINT"])
@@ -65,4 +74,46 @@ test("a successful delete clears the key", async () => {
 	expect(sentQueries).toHaveLength(1)
 	expect(sentQueries[0]?.text).toStartWith('delete from "pending_object_deletions"')
 	expect(sentQueries[0]?.values).toEqual(["avatars/user-1/3f2a.png"])
+})
+
+// a save that names keys learns from the count that their objects were pending deletion
+test("a clear of several keys returns how many were pending", async () => {
+	const sentQueries = stubConnectionPool(() => [["images/a.jpg"]])
+	expect(await clearPendingObjectDeletions(["images/a.jpg", "images/b.jpg"])).toBe(1)
+	expect(sentQueries[0]?.text).toStartWith('delete from "pending_object_deletions"')
+	expect(sentQueries[0]?.values).toEqual(["images/a.jpg", "images/b.jpg"])
+	expect(await clearPendingObjectDeletions([])).toBe(0)
+})
+
+// a save of the same keys cleared their rows, so the objects it stored stay
+test("a delete of pending objects skips a key that is no longer pending and records each deleted key again", async () => {
+	// a configured bucket whose every delete succeeds, and a pool where the second and third keys are still pending
+	Bun.env.S3_ENDPOINT = "https://bucket.example"
+	const bucketDeleteSpy = spyOn(Bun.S3Client.prototype, "delete").mockResolvedValue(undefined)
+	const sentQueries = stubConnectionPool(({ text }) =>
+		text.startsWith("select") ? [["images/b.jpg"], ["images/c.jpg"]] : [],
+	)
+	await deletePendingStoredObjects(["images/a.jpg", "images/b.jpg", "images/c.jpg"], db)
+
+	// the keys still pending are deleted in the order given, and are recorded again with a later try
+	expect(bucketDeleteSpy.mock.calls.map(([objectKey]) => objectKey)).toEqual(["images/b.jpg", "images/c.jpg"])
+	const recordedKeys = sentQueries.find(({ text }) => text.startsWith('insert into "pending_object_deletions"'))
+	expect(recordedKeys?.values).toContain("images/b.jpg")
+	expect(recordedKeys?.values).toContain("images/c.jpg")
+	expect(recordedKeys?.values).not.toContain("images/a.jpg")
+})
+
+// the first object is the one a save looks for, so the others stay if it could not be deleted
+test("a delete of pending objects keeps every object if the first delete fails", async () => {
+	// an unconfigured bucket, so the first delete fails before it reaches storage
+	Bun.env.S3_ENDPOINT = ""
+	spyOn(console, "error").mockImplementation(() => {})
+	const sentQueries = stubConnectionPool(({ text }) =>
+		text.startsWith("select") ? [["images/a.jpg"], ["images/b.jpg"]] : [],
+	)
+	await deletePendingStoredObjects(["images/a.jpg", "images/b.jpg"], db)
+
+	// the failure is written to the first key's row, and nothing else is deleted or recorded
+	expect(sentQueries.map(({ text }) => text.split(" ")[0])).toEqual(["select", "update"])
+	expect(sentQueries[1]?.values).toContain("images/a.jpg")
 })

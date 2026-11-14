@@ -76,7 +76,8 @@ const FLEX_AUDIO_RATE_MULTIPLIER = 1
 export type SpeechCostOptions = { speechTier: SpeechTier; inputTokens: number; audioTokens: number; recordedAt?: Date }
 
 // Google's transcription rates in dollars per million tokens, for the audio and text input and the transcript output.
-// LiteLLM's Gemini pass-through charges the key nothing for a transcription, so the app prices it itself
+// the app prices a transcription itself for its spend row, and LiteLLM's Gemini pass-through charges the key for the
+// same call from its own price table
 const TRANSCRIPTION_INPUT_COST_PER_MILLION_TOKENS = 2
 const TRANSCRIPTION_OUTPUT_COST_PER_MILLION_TOKENS = 12
 

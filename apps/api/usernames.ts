@@ -11,13 +11,13 @@ import {
 } from "@carlnotes/contracts/usernames"
 import { db, isUniqueViolation } from "@carlnotes/db"
 import { users } from "@carlnotes/db/schema/users"
+import { refreshSessionUser } from "@carlnotes/db/sessions"
 import { zValidator } from "@hono/zod-validator"
 import { eq, inArray } from "drizzle-orm"
 import { Hono } from "hono"
 import { type AppEnv, currentUser } from "./currentUser"
 import { toObjectionableCategory, toObjectionableContentResponse } from "./moderation"
 import { toolCallerRateLimiter } from "./rateLimit"
-import { refreshSessionUser } from "./sessions"
 import { toTermsOutdatedResponse } from "./termsAcceptance"
 
 // how many proposals a username batch offers. enough for a real choice, small enough to stay a cheap query

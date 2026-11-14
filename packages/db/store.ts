@@ -60,12 +60,19 @@ export async function clearPendingObjectDeletion(objectKey: string, handle: DbHa
 
 /**
  * Clears the pending deletions of several keys at once, on the caller's transaction if there is one. No key clears
- * nothing.
+ * nothing. Returns how many keys were pending.
  */
-export async function clearPendingObjectDeletions(objectKeys: string[], handle: DbHandle = db): Promise<void> {
+export async function clearPendingObjectDeletions(objectKeys: string[], handle: DbHandle = db): Promise<number> {
+	let clearedKeyCount = 0
 	for (const objectKeyBatch of toChunks(objectKeys, PENDING_OBJECT_DELETION_BATCH_SIZE)) {
-		await handle.delete(pendingObjectDeletions).where(inArray(pendingObjectDeletions.objectKey, objectKeyBatch))
+		// clear one batch, and count the keys that were pending
+		const clearedKeyRows = await handle
+			.delete(pendingObjectDeletions)
+			.where(inArray(pendingObjectDeletions.objectKey, objectKeyBatch))
+			.returning({ objectKey: pendingObjectDeletions.objectKey })
+		clearedKeyCount += clearedKeyRows.length
 	}
+	return clearedKeyCount
 }
 
 /**
@@ -139,6 +146,40 @@ export async function listStoredObjectKeys(keyPrefix: string): Promise<string[]>
  */
 export async function deleteStoredObjects(objectKeys: string[]): Promise<void> {
 	await runWithConcurrency(objectKeys, OBJECT_DELETE_CONCURRENCY, deleteStoredObject)
+}
+
+/**
+ * Deletes the stored objects among these keys that are still pending deletion, read on the caller's transaction. The
+ * first key is deleted before the others, and a failed first delete keeps every object. Each deleted key is recorded
+ * as pending again for the upload grace period, so a save that names the same keys clears a row and can tell that its
+ * objects may be gone.
+ */
+export async function deletePendingStoredObjects(objectKeys: string[], handle: DbHandle): Promise<void> {
+	// the keys still pending, in the order given. a save that named these keys since then cleared their rows
+	const pendingKeyRows =
+		objectKeys.length > 0
+			? await handle
+					.select({ objectKey: pendingObjectDeletions.objectKey })
+					.from(pendingObjectDeletions)
+					.where(inArray(pendingObjectDeletions.objectKey, objectKeys))
+			: []
+
+	// the first of those keys, and the others
+	const pendingObjectKeys = new Set(pendingKeyRows.map((pendingKeyRow) => pendingKeyRow.objectKey))
+	const [firstObjectKey, ...otherObjectKeys] = objectKeys.filter((objectKey) => pendingObjectKeys.has(objectKey))
+
+	// a failed first delete keeps every object, and the first key stays pending for the sweep
+	if (!firstObjectKey || !(await deleteStoredObject(firstObjectKey))) {
+		return
+	}
+
+	// delete the others, then record every key again. a key whose delete failed keeps its own pending row
+	await deleteStoredObjects(otherObjectKeys)
+	await recordPendingObjectDeletions({
+		handle,
+		objectKeys: [firstObjectKey, ...otherObjectKeys],
+		nextTryAt: new Date(Date.now() + UPLOAD_GRACE_MS),
+	})
 }
 
 // clear the pending row of a deleted object, or raise a pending key's attempt count, save the failure, and push the

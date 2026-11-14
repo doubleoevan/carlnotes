@@ -12,24 +12,29 @@ import {
 	toDroppedImage,
 	toUploadableAvatar,
 } from "./AvatarUpload"
+import { UncheckedAvatarLine } from "./UncheckedAvatarLine"
 
 /**
  * The signed-in user's own avatar with a camera overlay on hover. A click anywhere on the image opens
- * the file chooser, a drag and dropped image skips the chooser, and either uploads at once.
+ * the file chooser, a drag and dropped image skips the chooser, and either uploads at once. An upload that is shown to
+ * the user alone shows with its line under it, unless the caller places the line.
  */
 export function UserAvatarPicker({
 	userId,
 	username,
 	className,
+	hasUncheckedLine = true,
 }: {
 	userId: string
 	username: string
 	className?: string
+	// whether the picker shows an unchecked upload's line under the avatar. false if the caller places the line
+	hasUncheckedLine?: boolean
 }) {
 	const [isUploading, setIsUploading] = useState(false)
 	const [updateRejection, setUpdateRejection] = useState<string | null>(null)
 	// the version comes from the session, so a finished upload re-renders every picker at once
-	const { avatarVersion, uploadAvatarFile } = useAvatar()
+	const { avatarVersion, isAvatarUnchecked, uploadAvatarFile } = useAvatar()
 
 	// upload the avatar photo. the hook refreshes the session on success, which updates every avatar on the page
 	async function handleUploadAvatarFile(avatarFile: File): Promise<void> {
@@ -91,6 +96,8 @@ export function UserAvatarPicker({
 					/>
 				</label>
 			</FileDropZone>
+			{/* the upload only the user sees until its check passes */}
+			{isAvatarUnchecked && hasUncheckedLine && <UncheckedAvatarLine />}
 			{updateRejection && (
 				<p role="alert" className="text-destructive mt-1 text-xs">
 					{updateRejection}

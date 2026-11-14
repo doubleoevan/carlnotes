@@ -1,6 +1,6 @@
 // a live smoke test of speech and transcription. record a podcast clip on each Gemini tier, speak a sentence in each
 // host's voice as an MP3 and transcribe it back as a browser's recording, and check the key's spend against the app's
-// own speech rates. a transcription charges nothing on the key, so the run prints its estimate and tokens alone
+// own speech and transcription rates
 // run it with: bun run smoke:speech. it needs the proxy from bun run carl-up, with GEMINI_API_KEY on the proxy
 
 import type { PodcastEpisodeSpeaker } from "@carlnotes/contracts/enums"
@@ -46,12 +46,17 @@ type SpokenAnswerClip = ClipSpend & { isMp3: boolean; audioBytes: Uint8Array }
 // a spoken answer clip that failed before it spent
 const FAILED_SPOKEN_ANSWER_CLIP: SpokenAnswerClip = { ...FAILED_CLIP_SPEND, isMp3: false, audioBytes: new Uint8Array() }
 
-// a spoken answer transcribed back. the speech call's spend, whether the audio is an MP3, and whether the transcript
-// has the spoken word
-type VoiceClip = Omit<SpokenAnswerClip, "audioBytes"> & { isTranscribed: boolean }
+// a spoken answer transcribed back. the speech call's spend, whether the audio is an MP3, whether the transcript has
+// the spoken word, and the transcription call's spend
+type VoiceClip = Omit<SpokenAnswerClip, "audioBytes"> & { isTranscribed: boolean; transcriptionSpend: ClipSpend }
 
 // a voice clip that failed before it spent
-const FAILED_VOICE_CLIP: VoiceClip = { ...FAILED_CLIP_SPEND, isMp3: false, isTranscribed: false }
+const FAILED_VOICE_CLIP: VoiceClip = {
+	...FAILED_CLIP_SPEND,
+	isMp3: false,
+	isTranscribed: false,
+	transcriptionSpend: FAILED_CLIP_SPEND,
+}
 
 // how wide a label is in the printed report, before its colon. the longest label is "co-host answer estimated $"
 const REPORT_LABEL_WIDTH = 26
@@ -120,7 +125,7 @@ async function recordSpokenAnswerClip({
 }
 
 // speak the sentence in Carl's voice on the test key, wait for the speech call's spend, then encode the MP3 as Chrome's
-// recording, transcode it, and transcribe it on the same key
+// recording, transcode it, transcribe it on the same key, and wait for the transcription call's spend
 async function recordVoiceClip(testKey: string): Promise<VoiceClip> {
 	// speak the sentence in Carl's voice, and return a failed clip if the call recorded no audio
 	const { audioBytes, ...speechClip } = await recordSpokenAnswerClip({
@@ -132,24 +137,32 @@ async function recordVoiceClip(testKey: string): Promise<VoiceClip> {
 		return FAILED_VOICE_CLIP
 	}
 
-	// encode the MP3 as Chrome's recording, then transcode and transcribe it on the same key
+	// encode the MP3 as Chrome's recording, then read the key's spend, and transcode and transcribe it on the same key
 	const recordingBytes = await runFfmpeg({ ffmpegArguments: CHROME_RECORDING_ARGUMENTS, inputBytes: audioBytes })
 	const transcodedBytes = await transcodeRecording(recordingBytes)
+	const spendBeforeDollars = (await readLiteLLMKeySpend(testKey)) ?? 0
 	const transcribeRecordingResult = await transcribeRecording({ audioBytes: transcodedBytes, litellmApiKey: testKey })
 	if (transcribeRecordingResult.outcome !== "transcribed") {
 		printReportLine({ label: "transcription failed", value: JSON.stringify(transcribeRecordingResult) })
-		return { ...speechClip, isTranscribed: false }
+		return { ...speechClip, isTranscribed: false, transcriptionSpend: FAILED_CLIP_SPEND }
 	}
 
-	// print the transcript, its tokens, and its estimate, which the key is not charged
+	// print the transcript and its tokens
 	const { transcript } = transcribeRecordingResult
 	printReportLine({ label: "transcript", value: transcript })
 	printReportLine({
 		label: "transcription",
 		value: `${transcribeRecordingResult.inputTokens} in, ${transcribeRecordingResult.outputTokens} out tokens`,
 	})
-	printReportLine({ label: "transcription est. $", value: transcriptionCost(transcribeRecordingResult).toFixed(6) })
-	return { ...speechClip, isTranscribed: transcript.toLowerCase().includes(SPOKEN_ANSWER_WORD) }
+
+	// wait for the proxy to write the transcription call's spend on the key, so the next clip's spend starts after it
+	const transcriptionSpend = {
+		isRecorded: true,
+		estimatedDollars: transcriptionCost(transcribeRecordingResult),
+		chargedDollars: await waitForChargedDollars(testKey, spendBeforeDollars),
+	}
+	printClipSpend("transcription", transcriptionSpend)
+	return { ...speechClip, isTranscribed: transcript.toLowerCase().includes(SPOKEN_ANSWER_WORD), transcriptionSpend }
 }
 
 // whether the audio is an MP3: an ID3 tag or an MPEG frame sync at the start
@@ -215,6 +228,10 @@ async function smokeTest(): Promise<boolean> {
 			["the spoken answer is an MP3", voiceClip.isMp3],
 			["the spoken answer's spend reached the key at the standard rate", isChargedAtRate(voiceClip)],
 			["the spoken answer was transcribed with the word spoken", voiceClip.isTranscribed],
+			[
+				"the transcription's spend reached the key at the app's transcription rate",
+				isChargedAtRate(voiceClip.transcriptionSpend),
+			],
 			["the co-host's spoken answer is an MP3", cohostClip.isRecorded && cohostClip.isMp3],
 			["the co-host's spoken answer's spend reached the key at the standard rate", isChargedAtRate(cohostClip)],
 		]

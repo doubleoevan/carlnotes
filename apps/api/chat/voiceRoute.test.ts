@@ -1,7 +1,8 @@
-// voice route tests: each route's gates, the spoken questions cutoff and its read with the budget check, the recording's
-// body limit and its form, the transcript with its spend row, the silent recording, and the failure reports
+// voice route tests: each route's gates, the unverified accounts switch's rejection, the spoken questions cutoff and
+// its read with the budget check, the recording's body limit and its form, the transcript with its spend row, the
+// silent recording, and the failure reports
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
-import { SPOKEN_QUESTIONS_PAUSED_ERROR } from "@carlnotes/contracts/chat"
+import { EMAIL_UNVERIFIED_ERROR, SPOKEN_QUESTIONS_PAUSED_ERROR } from "@carlnotes/contracts/chat"
 import * as monthlyBudgetCutoffs from "@carlnotes/db/monthlyBudgetCutoffs"
 import { restoreRedisClient } from "@carlnotes/db/redisClientStub"
 import { transcriptionCost } from "@carlnotes/models/budget"
@@ -169,6 +170,30 @@ test("a page the user may not talk on is rejected before any model is called", a
 	const notFoundResponse = await signedInApp.request(VOICE_SPEECH_PATH, toJsonRequest({ page: ROOM_PAGE, text: "Hi." }))
 	expect(notFoundResponse.status).toBe(404)
 	expect(transcodeRecordingSpy).not.toHaveBeenCalled()
+	expect(recordSpokenAnswerSpy).not.toHaveBeenCalled()
+})
+
+// a user the unverified accounts switch limits gets the unverified email's rejection on the transcription and the
+// speech routes, and no model is called
+test("a voice request the unverified accounts switch limits is rejected before any model is called", async () => {
+	spyOn(voiceAuthorization, "authorizeVoiceChatPage").mockResolvedValue({ status: "emailUnverified", userId: "user-1" })
+	const { transcodeRecordingSpy, transcribeRecordingSpy } = stubTranscription({ outcome: "silent" })
+	const recordSpokenAnswerSpy = spyOn(speech, "recordSpokenAnswer")
+	const signedInApp = toSignedInVoiceApp()
+
+	// the transcription route names the unverified email
+	const transcriptionResponse = await signedInApp.request(VOICE_TRANSCRIPTION_PATH, toTranscriptionRequest(TOPIC_PAGE))
+	expect(transcriptionResponse.status).toBe(403)
+	expect(await transcriptionResponse.json()).toEqual({ error: EMAIL_UNVERIFIED_ERROR })
+
+	// the speech route names it too
+	const speechResponse = await signedInApp.request(VOICE_SPEECH_PATH, toJsonRequest({ page: TOPIC_PAGE, text: "Hi." }))
+	expect(speechResponse.status).toBe(403)
+	expect(await speechResponse.json()).toEqual({ error: EMAIL_UNVERIFIED_ERROR })
+
+	// nothing was transcoded, transcribed, or spoken
+	expect(transcodeRecordingSpy).not.toHaveBeenCalled()
+	expect(transcribeRecordingSpy).not.toHaveBeenCalled()
 	expect(recordSpokenAnswerSpy).not.toHaveBeenCalled()
 })
 

@@ -2,8 +2,9 @@
 name: carlnotes
 
 services:
+  # the same image and digest as production's infra/litellm/Dockerfile, so a proxy change shows up in dev first
   litellm:
-    image: ghcr.io/berriai/litellm-database:v1.94.0
+    image: ghcr.io/berriai/litellm-database:v1.106.4@sha256:db36453d25e76c9eb689d7d51b8e5fa48843243d7a86ed1284cf574ce0107b3f
     ports:
       - "4000:4000"
     volumes:

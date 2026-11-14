@@ -1,11 +1,17 @@
 // home card id tests: the home shows one podcast episode, one film, and one Topic Post per topic, in the order read,
-// the reads behind the home films and the week's new Topic Posts, and the cached ids' reload once they are cleared
-import { afterEach, beforeEach, describe, expect, test } from "bun:test"
+// the reads behind the home films and the week's new Topic Posts, the cached ids' reload once they are cleared, the
+// admin block that takes its user's rows out of every read, and the pinned-only switch that leaves every read its
+// pinned rows alone
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { HOME_PODCAST_EPISODE_COUNT, NEW_PODCAST_EPISODE_DAYS, NEW_TOPIC_POST_DAYS } from "@carlnotes/contracts/home"
 import { DAY_MS } from "@carlnotes/contracts/time"
-import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
+import { restoreConnectionPool, type SentQuery, stubConnectionPool, toTableRow } from "@carlnotes/db/connectionPoolStub"
+import * as dailySpendCutoffs from "@carlnotes/db/dailySpendCutoffs"
+import { DEFAULT_SPEND_CONTROL_SETTINGS } from "@carlnotes/db/dailySpendCutoffTestFixtures"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
+import { topics } from "@carlnotes/db/schema/topics"
 import { clearSharedTopicFeedCaches } from "../topic/feedCaches"
+import { topicsRoute } from "../topic/topicsRoute"
 import { loadHomeCardIds, toFirstIdsPerTopic } from "./homeCardIds"
 
 // read the home through an empty in-memory Redis
@@ -13,8 +19,9 @@ beforeEach(() => {
 	stubRedisClient()
 })
 
-// put the connection pool and the Redis client back after each test
+// put the spies, the connection pool, and the Redis client back after each test
 afterEach(() => {
+	mock.restore()
 	restoreConnectionPool()
 	restoreRedisClient()
 })
@@ -150,5 +157,161 @@ describe("the week's new Topic Posts", () => {
 		await clearSharedTopicFeedCaches()
 		await loadHomeCardIds()
 		expect(sentQueries.filter(isNewestTopicPostRead)).toHaveLength(2)
+	})
+})
+
+// whether a read is one of the home's seven id reads, which the settings read is not
+function isHomeIdRead({ text }: SentQuery): boolean {
+	return !text.includes('"spend_control_settings"')
+}
+
+// read the home card ids with no rows, and return the seven id reads in the order the home shows their sections
+async function loadHomeIdReads(): Promise<SentQuery[]> {
+	const sentQueries = stubConnectionPool(() => [])
+	await loadHomeCardIds()
+	return sentQueries.filter(isHomeIdRead)
+}
+
+// the filter that leaves out a row whose user, named by a column, is under an admin block
+function toAdminBlockFilterText(userIdColumn: string): string {
+	return `not exists (select "id" from "users" where ("users"."id" = ${userIdColumn} and "users"."admin_blocked_at" is not null))`
+}
+
+// the filter every home read leaves a blocked owner's topic out with
+const OWNER_ADMIN_BLOCK_FILTER_TEXT = toAdminBlockFilterText('"topics"."owner_id"')
+
+describe("an admin block", () => {
+	test("takes the user's topics, their podcast episodes, and their films out of every read", async () => {
+		const homeIdReads = await loadHomeIdReads()
+		expect(homeIdReads).toHaveLength(7)
+		expect(homeIdReads.filter(({ text }) => text.includes(OWNER_ADMIN_BLOCK_FILTER_TEXT))).toHaveLength(7)
+	})
+
+	test("takes the Topic Posts the user wrote out of Featured posts and New posts this week", async () => {
+		const homeIdReads = await loadHomeIdReads()
+		const topicPostReads = homeIdReads.filter(({ text }) => text.includes('from "topic_posts"'))
+		expect(topicPostReads).toHaveLength(2)
+
+		// both Topic Post reads leave out a post whose author is blocked, and no other read names an author
+		const authorFilterText = toAdminBlockFilterText('"topic_posts"."author_user_id"')
+		for (const { text } of topicPostReads) {
+			expect(text).toContain(authorFilterText)
+		}
+		expect(homeIdReads.filter(({ text }) => text.includes(authorFilterText))).toHaveLength(2)
+	})
+
+	test("leaves the blocked user's public Topic open at its url", async () => {
+		// a public topic with the fields its page reads, whose owner is under an admin block
+		const blockedOwnerAccessRow = ["user", "free", null, null, new Date("2026-11-13T00:00:00Z")]
+		const topicRow = toTableRow(topics, {
+			id: "topic-1",
+			ownerId: "owner-1",
+			name: "Agents",
+			prompt: "agents",
+			frequency: "daily",
+			scheduledTime: "09:00:00",
+			scheduledDayOfWeek: "monday",
+			visibility: "public",
+			tags: [],
+			maxTopicFindings: 10,
+			createdAt: new Date("2026-10-01T00:00:00Z"),
+			updatedAt: new Date("2026-10-01T00:00:00Z"),
+		})
+		stubConnectionPool(({ text }) => {
+			if (text.includes('from "topics" where "topics"."id" = $1')) {
+				return [topicRow]
+			}
+			return text.includes('"admin_blocked_at" from "users"') ? [blockedOwnerAccessRow] : []
+		})
+
+		// a visitor's page load opens the topic
+		const response = await topicsRoute.request("/topics/topic-1")
+		expect(response.status).toBe(200)
+		expect(await response.json()).toMatchObject({ id: "topic-1", name: "Agents" })
+	})
+})
+
+describe("the pinned-only switch", () => {
+	// the filter each read adds while the switch is on, in the order the home shows the reads' sections
+	const PINNED_ONLY_FILTER_TEXTS = [
+		'"topics"."feature_order" is not null',
+		'"topic_podcast_episode_videos"."home_order" is not null',
+		'"topic_podcast_episode_videos"."home_order" is not null',
+		'"episodes"."feature_order" is not null',
+		'"episodes"."feature_order" is not null',
+		'"topic_posts"."home_order" is not null',
+		'"topic_posts"."home_order" is not null',
+	]
+
+	// whether a read takes its pinned rows alone
+	const isPinnedOnlyRead = ({ text }: SentQuery): boolean =>
+		PINNED_ONLY_FILTER_TEXTS.some((pinnedOnlyFilterText) => text.includes(pinnedOnlyFilterText))
+
+	// read the settings as the defaults with the switch on or off
+	function stubPinnedOnlySwitch(isHomePinnedOnly: boolean): ReturnType<typeof spyOn> {
+		return spyOn(dailySpendCutoffs, "loadSpendControlSettings").mockResolvedValue({
+			...DEFAULT_SPEND_CONTROL_SETTINGS,
+			isHomePinnedOnly,
+		})
+	}
+
+	test("is off with no settings row, and no read is limited to its pinned rows", async () => {
+		const homeIdReads = await loadHomeIdReads()
+		expect(homeIdReads).toHaveLength(7)
+		expect(homeIdReads.filter(isPinnedOnlyRead)).toHaveLength(0)
+	})
+
+	test("on, every read takes the rows an admin pinned alone, in the same order", async () => {
+		stubPinnedOnlySwitch(true)
+		const homeIdReads = await loadHomeIdReads()
+
+		// each of the seven reads holds its own home order filter
+		expect(homeIdReads).toHaveLength(7)
+		for (const [i, pinnedOnlyFilterText] of PINNED_ONLY_FILTER_TEXTS.entries()) {
+			expect(homeIdReads[i]?.text).toContain(pinnedOnlyFilterText)
+		}
+
+		// the pinned rows stay in their order, and the week's rows stay newest first
+		expect(homeIdReads[0]?.text).toContain('order by "topics"."feature_order" is null, "topics"."feature_order" asc')
+		expect(homeIdReads[2]?.text).toContain('order by "episodes"."published_at" desc')
+
+		// a pinned row of a blocked owner's topic is still left out
+		expect(homeIdReads.filter(({ text }) => text.includes(OWNER_ADMIN_BLOCK_FILTER_TEXT))).toHaveLength(7)
+	})
+
+	test("on, an unpinned row leaves every list, and a week with no pinned row reads as no ids", async () => {
+		// a database where nothing is pinned. only a read of every row returns one
+		stubPinnedOnlySwitch(true)
+		const toUnpinnedRows = (sentQuery: SentQuery): unknown[] =>
+			isHomeIdRead(sentQuery) && !isPinnedOnlyRead(sentQuery) ? [["unpinned-1", "topic-1"]] : []
+		stubConnectionPool(toUnpinnedRows)
+		const pinnedOnlyIds = await loadHomeCardIds()
+
+		// no list holds the unpinned row, so each week's section is absent
+		expect(Object.values(pinnedOnlyIds)).toEqual([[], [], [], [], [], [], []])
+
+		// the switch off fills every list again on the next cache refresh
+		stubPinnedOnlySwitch(false)
+		await clearSharedTopicFeedCaches()
+		stubConnectionPool(toUnpinnedRows)
+		expect(Object.values(await loadHomeCardIds())).toEqual(Array.from({ length: 7 }, () => ["unpinned-1"]))
+	})
+
+	test("is read with the ids, so the home follows it on its next cache refresh", async () => {
+		// the switch on, read once for two loads of the cached ids
+		const loadSpendControlSettingsSpy = stubPinnedOnlySwitch(true)
+		const sentQueries = stubConnectionPool(() => [])
+		await loadHomeCardIds()
+		await loadHomeCardIds()
+		expect(loadSpendControlSettingsSpy).toHaveBeenCalledTimes(1)
+		expect(sentQueries.filter(isPinnedOnlyRead)).toHaveLength(7)
+
+		// the cached ids outlive the switch until they are read again
+		stubPinnedOnlySwitch(false)
+		await loadHomeCardIds()
+		expect(sentQueries).toHaveLength(7)
+		await clearSharedTopicFeedCaches()
+		await loadHomeCardIds()
+		expect(sentQueries.filter((sentQuery) => !isPinnedOnlyRead(sentQuery))).toHaveLength(7)
 	})
 })

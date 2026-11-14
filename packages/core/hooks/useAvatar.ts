@@ -2,13 +2,17 @@
 
 import { authClient } from "@carlnotes/client/authClient"
 import { sendAvatarSource, uploadAvatar, uploadAvatarBody } from "@carlnotes/client/profileClient"
-import { toAvatarVersion } from "@carlnotes/contracts/avatars"
+import { toSessionAvatarVersion } from "@carlnotes/contracts/avatars"
 
-// the current image and its url's version, whether there is a provider photo to show, and the functions that change it
+// the avatar setting a picker and the account fields read
 type AvatarSetting = {
+	// the current image and its url's version, whether the image is an upload shown to the user alone, and whether
+	// there is a provider photo to show
 	avatarSource: string
 	avatarVersion: string | null
+	isAvatarUnchecked: boolean
 	hasProviderPhoto: boolean
+	// the functions that change it
 	setAvatarSource: (nextSource: "generated" | "oauth") => Promise<void>
 	uploadAvatarFile: (file: File) => Promise<string | null>
 	uploadAvatarBody: (body: FormData) => Promise<string | null>
@@ -43,7 +47,8 @@ export function useAvatar(): AvatarSetting {
 
 	return {
 		avatarSource: session?.user.avatarSource ?? "generated",
-		avatarVersion: toAvatarVersion(session?.user ?? {}),
+		avatarVersion: toSessionAvatarVersion(session?.user ?? {}),
+		isAvatarUnchecked: Boolean(session?.user.uncheckedAvatarKey),
 		hasProviderPhoto: Boolean(providerImageUrl),
 		setAvatarSource,
 		uploadAvatarFile: uploadPhoto,

@@ -1,18 +1,19 @@
-// send email through Resend's HTTP API. every call first takes the rate limit slot that every process shares
+// send email through Resend's HTTP API. every call first takes a slot from a rate limit that every process shares, an
+// account email from the account emails' own limit
 
-import { waitForResendSlot } from "@carlnotes/db/resendRateLimit"
+import { waitForAccountEmailSlot, waitForResendSlot } from "@carlnotes/db/resendRateLimit"
 import { reportError } from "@carlnotes/server/monitoring"
 import { toEmailSenderAddress } from "@carlnotes/server/personalSourcesEmailContent"
+import { runWithRetries } from "@carlnotes/server/retry"
 import { z } from "zod"
+
+// the account emails, each sent to one address on its own
+const ACCOUNT_EMAIL_KINDS = ["verification", "password-reset", "email-change", "topic-invite", "team-invite"] as const
+type AccountEmailKind = (typeof ACCOUNT_EMAIL_KINDS)[number]
 
 // which kind of email is being sent, so a blocked signup reports differently from a missed scan email
 export type EmailKind =
-	// the account emails, each sent to one address on its own
-	| "verification"
-	| "password-reset"
-	| "email-change"
-	| "topic-invite"
-	| "team-invite"
+	| AccountEmailKind
 	// the reading emails, which a scan sends in batches
 	| "topic-scan"
 	| "manual-scan"
@@ -33,16 +34,26 @@ export type EmailMessage = {
 	replyTo?: string
 }
 
+// one account email to send
+type AccountEmailMessage = EmailMessage & { emailKind: AccountEmailKind }
+
 // a failed Resend call's HTTP status, null without a response, and Resend's error name
 export type ResendFailure = { httpStatus: number | null; resendError: string }
 
-// the result of one Resend call for a Scan's email
+// the result of one Resend call under an idempotency key
 export type ResendCallResult =
 	| { outcome: "accepted" }
 	// a rate limit, a busy idempotency key, a 5xx, or a network failure. retryAfterSeconds is Resend's own wait, if it sent one
 	| { outcome: "retryable"; failure: ResendFailure; retryAfterSeconds: number | null }
 	// any other rejection, a spent quota, or missing configuration
 	| { outcome: "rejected"; failure: ResendFailure }
+
+// a Resend call that did not accept an account email, with the call's result
+class AccountEmailCallFailure extends Error {
+	constructor(readonly failedResendCallResult: Exclude<ResendCallResult, { outcome: "accepted" }>) {
+		super("an account email was not delivered")
+	}
+}
 
 // one Resend call for a Scan's email, with the Scan and one message or a batch of them
 export type SendScanEmailCallOptions = { scanId: string; messages: EmailMessage[] }
@@ -59,6 +70,11 @@ const RESEND_QUOTA_ERRORS = new Set(["daily_quota_exceeded", "monthly_quota_exce
 
 // how long one Resend call may take before it is abandoned as a network failure
 const RESEND_TIMEOUT_MS = 20_000
+
+// how many attempts an account email gets, and the wait after its first failed attempt if Resend names none. each
+// later wait doubles
+const ACCOUNT_EMAIL_ATTEMPTS = 6
+const ACCOUNT_EMAIL_BACKOFF_MS = 5000
 
 /**
  * Returns whether Resend will take this address. One address that Resend rejects fails a whole batch.
@@ -91,7 +107,7 @@ export async function sendEmail(message: EmailMessage): Promise<boolean> {
 	// wait for the rate limit slot, then post the email to Resend
 	const recipientDomain = message.to.split("@")[1] ?? "an unknown domain"
 	try {
-		await waitForResendSlot()
+		await waitForEmailSlot(message.emailKind)
 		const response = await fetch(RESEND_EMAIL_URL, {
 			method: "POST",
 			headers: toResendHeaders(resendConfig.apiKey),
@@ -122,39 +138,57 @@ export async function sendEmail(message: EmailMessage): Promise<boolean> {
 }
 
 /**
- * Send multiple emails through Resend's batch endpoint, up to 100 per call instead of one POST per recipient.
- * Returns one acceptance flag per message, in the message order. A rejected call marks its whole chunk not accepted.
+ * Sends one account email and returns whether Resend accepted it. A rate limit that is not a spent quota, a 5xx, and a
+ * network failure get another attempt under the same idempotency key, a rate limit after the wait Resend named. A
+ * send that no attempt can help, or that fails every attempt, is reported by its kind.
  */
-export async function sendEmailBatches(messages: EmailMessage[]): Promise<boolean[]> {
-	// nothing to send needs no config check
-	if (messages.length === 0) {
-		return []
-	}
+export async function sendAccountEmail(message: AccountEmailMessage): Promise<boolean> {
+	// one delivery id for every attempt, so an attempt whose response was lost sends no second copy
+	const deliveryId = crypto.randomUUID()
 
-	// log, report, and skip without a key and a verified from-address
-	const emailKind = messages[0]?.emailKind ?? "topic-scan"
-	const resendConfig = toResendConfig(emailKind)
-	if (!resendConfig) {
-		return messages.map(() => false)
-	}
-
-	// Resend rejects the whole batch if one address fails its validation
-	const sendableMessages = messages.filter((message) => isSendableAddress(message.to))
-	if (sendableMessages.length < messages.length) {
-		reportDroppedAddresses(emailKind, messages.length - sendableMessages.length)
-	}
-
-	// send one messages batch at a time within Resend's per-call limit, collecting one flag per message
-	const acceptedByMessage = new Map<EmailMessage, boolean>()
-	for (let start = 0; start < sendableMessages.length; start += RESEND_BATCH_LIMIT) {
-		const messagesBatch = sendableMessages.slice(start, start + RESEND_BATCH_LIMIT)
-		// the whole batch shares one outcome, so each of its messages reports what the call returned
-		const isMessagesAccepted = await sendEmailBatch(messagesBatch, resendConfig)
-		for (const message of messagesBatch) {
-			acceptedByMessage.set(message, isMessagesAccepted)
+	// ponytail: the attempts wait in this process's memory, and a restart drops an email waiting for its next attempt.
+	// a Temporal workflow would finish the attempts after a restart if deploys during a Resend outage lose mail
+	try {
+		// attempt the send until Resend accepts it or no other attempt can help
+		await runWithRetries({
+			attempts: ACCOUNT_EMAIL_ATTEMPTS,
+			runAttempt: () => sendAccountEmailCall(deliveryId, message),
+			toDelayMs: toAccountEmailRetryDelayMs,
+		})
+		return true
+	} catch (error) {
+		// throw an error that is not a Resend call's result
+		if (!(error instanceof AccountEmailCallFailure)) {
+			throw error
 		}
+
+		// log and report the undelivered email by its kind and what Resend said, never by its address
+		const { httpStatus, resendError } = error.failedResendCallResult.failure
+		const statusLabel = String(httpStatus ?? "no response")
+		console.error(`the ${message.emailKind} email was not delivered: ${statusLabel} ${resendError}`)
+		reportError(error, "email", { emailKind: message.emailKind, status: statusLabel, resendError })
+		return false
 	}
-	return messages.map((message) => acceptedByMessage.get(message) ?? false)
+}
+
+// make one Resend call for an account email, and throw the call's result if Resend did not accept it
+async function sendAccountEmailCall(deliveryId: string, message: AccountEmailMessage): Promise<void> {
+	const resendCallResult = await sendIdempotentEmailCall({ deliveryId, messages: [message], hasStableKey: true })
+	if (resendCallResult.outcome !== "accepted") {
+		throw new AccountEmailCallFailure(resendCallResult)
+	}
+}
+
+// the wait before an account email's next attempt, which is the wait Resend named or a backoff that doubles with each
+// failed attempt. null for a failure that no other attempt can help
+function toAccountEmailRetryDelayMs(error: unknown, attempt: number): number | null {
+	if (!(error instanceof AccountEmailCallFailure) || error.failedResendCallResult.outcome !== "retryable") {
+		return null
+	}
+
+	// a rate limit waits as long as Resend asked, and any other failure waits on the backoff
+	const { retryAfterSeconds } = error.failedResendCallResult
+	return retryAfterSeconds === null ? ACCOUNT_EMAIL_BACKOFF_MS * 2 ** (attempt - 1) : retryAfterSeconds * 1000
 }
 
 /**
@@ -166,7 +200,9 @@ export async function sendScanEmailCall({ scanId, messages }: SendScanEmailCallO
 	return sendIdempotentEmailCall({ deliveryId: scanId, messages })
 }
 
-/** Sends a retryable delivery through the shared provider limiter without logging private request or error text. */
+/**
+ * Sends a retryable delivery after its email kind's rate limit slot, without logging private request or error text.
+ */
 export async function sendIdempotentEmailCall({
 	deliveryId,
 	messages,
@@ -192,7 +228,7 @@ export async function sendIdempotentEmailCall({
 
 	// wait for the rate limit slot, then post the call
 	try {
-		await waitForResendSlot()
+		await waitForEmailSlot(emailKind)
 		const response = await fetch(isBatch ? RESEND_BATCH_URL : RESEND_EMAIL_URL, {
 			method: "POST",
 			headers: { ...toResendHeaders(resendConfig.apiKey), "Idempotency-Key": idempotencyKey },
@@ -234,53 +270,10 @@ function toFailedResendCallResult(resendFailure: ResendFailure, retryAfterHeader
 	return { outcome: "retryable", failure: resendFailure, retryAfterSeconds: usableRetryAfterSeconds }
 }
 
-// post a batch of messages to Resend's batch endpoint
-async function sendEmailBatch(messagesBatch: EmailMessage[], resendConfig: ResendConfig): Promise<boolean> {
-	// the batch's messages all come from one caller, so the first message names the kind for the logs
-	const emailKind = messagesBatch[0]?.emailKind ?? "topic-scan"
-
-	// wait for the rate limit slot, then post the batch
-	try {
-		await waitForResendSlot()
-		const response = await fetch(RESEND_BATCH_URL, {
-			method: "POST",
-			headers: toResendHeaders(resendConfig.apiKey),
-			body: JSON.stringify(messagesBatch.map((message) => toResendEmailBody(message, resendConfig.fromEmail))),
-			signal: AbortSignal.timeout(RESEND_TIMEOUT_MS),
-		})
-		if (!response.ok) {
-			// every recipient in a rejected batch silently misses their email, so the rejection is reported
-			const errorBody = await response.text()
-			console.error(
-				`resend batch of ${messagesBatch.length} ${emailKind} emails failed: ${response.status} ${errorBody}`,
-			)
-			reportError(new Error(`resend rejected the batch with ${response.status}`), "email", {
-				status: String(response.status),
-				emailKind,
-				batchSize: String(messagesBatch.length),
-				resendError: toResendErrorName(errorBody),
-			})
-			return false
-		}
-
-		// a batch is atomic, so an accepted call returns one id per message
-		const acceptedIds = ((await response.json().catch(() => null)) as { data?: unknown[] } | null)?.data
-		if (acceptedIds && acceptedIds.length !== messagesBatch.length) {
-			reportError(new Error("resend accepted a batch without an id for every message"), "email", {
-				emailKind,
-				batchSize: String(messagesBatch.length),
-				acceptedCount: String(acceptedIds.length),
-			})
-		}
-
-		// log the batch size, so an accepted batch that never arrives can be traced in resend
-		console.log(`resend accepted a batch of ${messagesBatch.length} ${emailKind} emails`)
-		return true
-	} catch (error) {
-		console.error(`resend batch of ${messagesBatch.length} ${emailKind} emails threw`, error)
-		reportError(error, "email", { emailKind, batchSize: String(messagesBatch.length) })
-		return false
-	}
+// wait for a slot of the account emails' own limit for an account email, and of the shared limit for any other email
+function waitForEmailSlot(emailKind: EmailKind): Promise<void> {
+	const isAccountEmail = (ACCOUNT_EMAIL_KINDS as readonly EmailKind[]).includes(emailKind)
+	return isAccountEmail ? waitForAccountEmailSlot() : waitForResendSlot()
 }
 
 // the Resend key and the verified from-address that every call needs

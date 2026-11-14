@@ -10,12 +10,12 @@ import { db } from "@carlnotes/db"
 import { podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { topics } from "@carlnotes/db/schema/topics"
 import { topicImageRegenerateModel } from "@carlnotes/models/topicImageModel"
-import { replacePodcastEpisodeImage } from "@carlnotes/pipeline/podcast/podcastEpisodeImageRenders"
 import {
 	storePodcastEpisodeImageFiles,
 	toPodcastEpisodeImageFileKey,
 } from "@carlnotes/pipeline/topicImages/topicImageFiles"
 import { startTopicImageRender } from "@carlnotes/pipeline/topicImages/topicImageRenders"
+import { dropUnpublishedUncheckedImage, publishOrSaveUncheckedImage } from "@carlnotes/pipeline/uncheckedImages"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { zValidator } from "@hono/zod-validator"
 import { eq } from "drizzle-orm"
@@ -24,9 +24,14 @@ import { isAllowed } from "../authorization"
 import { uploadSignedOutRejection } from "../bodyLimit"
 import { type AppEnv, toAnalyticsProperties } from "../currentUser"
 import { toolCallerRateLimiter } from "../rateLimit"
-import { imageUploadBodyLimit, readUploadedImageOriginal, toImagePromptRejection } from "../topic/imageEdits"
+import {
+	imageUploadBodyLimit,
+	readUploadedImageOriginal,
+	toImagePromptRejection,
+	toImageUploadResponse,
+} from "../topic/imageEdits"
 import { namedTopicColumns } from "../topic/permissions"
-import { serveImageFile } from "../topic/serveImageFile"
+import { serveCurrentOrUncheckedImageFile } from "../topic/serveImageFile"
 import { loadPodcastEpisodeEditor } from "./podcastEpisodeEditor"
 
 // the podcast episode image routes
@@ -46,13 +51,19 @@ export const podcastEpisodeImagesRoute = new Hono<AppEnv>()
 					.where(eq(podcastEpisodes.id, podcastEpisodeId))
 			: []
 
-		// an unknown file, an unknown episode, or a hash that is no longer current is not found
-		if (!podcastEpisodeTopic || podcastEpisodeTopic.imageHash !== hash) {
+		// an unknown file or an unknown podcast episode is not found
+		if (!podcastEpisodeTopic) {
 			return context.json({ error: "not found" }, 404)
 		}
-		return serveImageFile(context, {
-			topic: podcastEpisodeTopic.topic,
-			objectKey: toPodcastEpisodeImageFileKey(podcastEpisodeId, hash, file),
+
+		// the podcast episode's current image goes to anyone who may see its topic, and an unchecked upload of the
+		// signed-in user goes to them alone. any other hash is not found
+		const { topic, imageHash } = podcastEpisodeTopic
+		return serveCurrentOrUncheckedImageFile(context, {
+			imageFile: { topic, objectKey: toPodcastEpisodeImageFileKey(podcastEpisodeId, hash, file) },
+			hash,
+			currentImageHash: imageHash,
+			uncheckedImageSubject: { subjectKind: "podcastEpisodeImage", subjectId: podcastEpisodeId },
 		})
 	})
 	// an editor's regenerate. a fresh render on the better model, from an optional image prompt, within the month's limit
@@ -81,7 +92,9 @@ export const podcastEpisodeImagesRoute = new Hono<AppEnv>()
 				return imagePromptRejection
 			}
 
-			// the render row and its workflow
+			// the render row and its workflow, in place of an unchecked upload shown to its uploader alone. a published
+			// unchecked image stays
+			await dropUnpublishedUncheckedImage({ subjectKind: "podcastEpisodeImage", subjectId: editor.podcastEpisodeId })
 			const renderId = await startTopicImageRender({
 				topicId: editor.topicId,
 				podcastEpisodeId: editor.podcastEpisodeId,
@@ -115,24 +128,26 @@ export const podcastEpisodeImagesRoute = new Hono<AppEnv>()
 				return uploadedImage.response
 			}
 
-			// the files under their hash, then the row that makes the upload current
-			const hash = await storePodcastEpisodeImageFiles(editor.podcastEpisodeId, uploadedImage.original)
-			await replacePodcastEpisodeImage({
-				podcastEpisodeId: editor.podcastEpisodeId,
-				renderId: null,
-				hash,
-				origin: "uploaded",
-				imagePrompt: null,
-				costDollars: 0,
+			// the files under their hash, then the row that makes the upload current, or the unchecked image's row that shows
+			// it to its uploader alone
+			const { podcastEpisodeId } = editor
+			const hash = await storePodcastEpisodeImageFiles(podcastEpisodeId, uploadedImage.original)
+			const uploadedImageOutcome = await publishOrSaveUncheckedImage({
+				subjectKind: "podcastEpisodeImage",
+				subjectId: podcastEpisodeId,
+				uploaderUserId: editor.userId,
+				imageHash: hash,
+				isUnchecked: uploadedImage.isUnchecked,
 			})
 
 			// the upload's event, and the urls that replace the current ones at once
 			trackEvent("topic_image_upload", editor.userId, {
 				...toAnalyticsProperties(context),
 				topicId: editor.topicId,
-				podcastEpisodeId: editor.podcastEpisodeId,
+				podcastEpisodeId,
 				isOwner: editor.topicOwnerId === editor.userId,
 			})
-			return context.json({ image: toPodcastEpisodeImageUrls(editor.podcastEpisodeId, hash) })
+			const image = toPodcastEpisodeImageUrls(podcastEpisodeId, hash)
+			return context.json(toImageUploadResponse({ image }, uploadedImageOutcome === "unchecked"))
 		},
 	)

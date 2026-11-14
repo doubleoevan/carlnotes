@@ -1,7 +1,9 @@
 name: CI
 
-# run the quality gate and the image smoke test on pushes to main and on PRs into main, and start the release on a push
-# to main once both pass. the gate and the smoke test are offline: no secrets, no hosted database, no LiteLLM
+# run the quality gate, the dependency advisory check, the image smoke test, and the mobile export on pushes to main and
+# on PRs into main. no release waits on a job here. Northflank's release-main workflow builds every push to main from
+# its own push trigger. the gate and the smoke test are offline: no secrets, no hosted database, no LiteLLM. the
+# advisory check asks the package registry for the advisories on the lockfile's packages
 on:
   push:
     branches: [main]
@@ -27,9 +29,6 @@ jobs:
           persist-credentials: false
       # install the exact Bun the Dockerfile pins and the locked dependencies
       - uses: ./.github/actions/setup-bun
-      # audit the lockfile against the GitHub Advisory Database, report-only
-      - run: bun audit
-        continue-on-error: true
       # the exact gate the .githooks/pre-push hook runs, so local and CI cannot diverge
       - run: bash scripts/preflight.sh
       # publish the test coverage that the gate wrote. an upload failure or a Codecov outage never blocks a push
@@ -39,6 +38,18 @@ jobs:
           disable_search: true
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
+
+  # check the lockfile against the GitHub Advisory Database, in a job apart from the gate. the check fails on a high or
+  # critical advisory that dependency-advisories.json does not name, so a new advisory turns this job red and leaves
+  # the gate's result as it is. no job waits on this one
+  advisories:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-bun
+      - run: bun run check:advisories
 
   # build the production image and boot it against an empty Postgres with dummy settings. it fails on a build step, a
   # boot that exits, or any page or health route that does not respond 200

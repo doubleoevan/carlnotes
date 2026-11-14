@@ -47,3 +47,6 @@ export const Attachments: Story = {
 export const Failed: Story = {
 	args: { chatTurn: toStoryChatTurn({ rejection: "failed", answer: "" }), onRetry: () => {} },
 }
+export const EmailUnverified: Story = {
+	args: { chatTurn: toStoryChatTurn({ rejection: "emailUnverified", answer: "" }) },
+}

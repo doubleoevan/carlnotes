@@ -1,12 +1,18 @@
 // the admin console's reports: the open list, and resolving one by removing its content, clearing it, or putting an
 // admin block on its author
+import { toAvatarKeyVersion, toAvatarVersion } from "@carlnotes/contracts/avatars"
+import type { ReportedSubjectQuery } from "@carlnotes/contracts/payloads"
 import {
 	type AdminReport,
 	REMOVABLE_REPORT_SUBJECT_KINDS,
 	type ReportResolution,
 	type ReportSubjectKind,
 } from "@carlnotes/contracts/reports"
-import type { TopicImageUrls } from "@carlnotes/contracts/topicImages"
+import {
+	type TopicImageUrls,
+	toPodcastEpisodeImageUrls,
+	toTopicPodcastEpisodeVideoPosterUrl,
+} from "@carlnotes/contracts/topicImages"
 import {
 	fromTopicPostBodyImagePath,
 	toTopicPostBodyImageIds,
@@ -15,29 +21,32 @@ import {
 import { db } from "@carlnotes/db"
 import { chatRoomMessages } from "@carlnotes/db/schema/chat"
 import { noteComments, notes } from "@carlnotes/db/schema/notes"
+import { podcastEpisodes, topicPodcastEpisodeVideos } from "@carlnotes/db/schema/podcast"
 import { reports } from "@carlnotes/db/schema/reports"
 import { comments } from "@carlnotes/db/schema/social"
+import { teams } from "@carlnotes/db/schema/teams"
 import { topicPosts } from "@carlnotes/db/schema/topicPosts"
 import { topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
 import { loadTopicImageUrlsByTopic, loadTopicPostImageUrlsByPost } from "@carlnotes/db/topicImages"
-import { topicImageModel } from "@carlnotes/models/topicImageModel"
-import { removeTopicImageUpload, startTopicImageRender } from "@carlnotes/pipeline/topicImages/topicImageRenders"
-import { removeTopicPostImageUpload } from "@carlnotes/pipeline/topicPosts/topicPostImageRenders"
 import { and, desc, eq, inArray, isNull } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core"
 import type { Context } from "hono"
 import { setAdminBlock } from "../adminBlocks"
-import { deleteChatRoomMessage } from "../chat/roomDeletes"
-import { deleteNoteComment } from "../note/noteComments"
-import { deleteCommentThread } from "../social/comments"
-import { removeReportedTopicPostBodyImage } from "../topicPost/topicPostBodyImageReports"
+import { publishedAvatarColumns, toPublishedAvatarFromUser } from "../avatars"
 import { toSignedTopicPostBodyImageUrl } from "../topicPost/topicPostBodyImages"
+import { removeReportedSubject, removeReportedSubjectImages } from "./removeReportedSubject"
 import { toReportTextHash } from "./reports"
 
 // the reporter and the author, each joined to the report from the users table
 const reporters = alias(users, "reporters")
 const authors = alias(users, "authors")
+
+// the avatar or the images of a reported profile, team, or podcast episode: a published avatar's version, or a podcast
+// episode's own image with its film's poster
+type ReportedSubjectImages = Partial<
+	Pick<AdminReport, "subjectImage" | "subjectAvatarVersion" | "topicPodcastEpisodeVideoPosterUrl">
+>
 
 /**
  * Counts the open reports.
@@ -47,11 +56,73 @@ export async function countOpenReports(): Promise<number> {
 }
 
 /**
- * Loads the open reports newest first, each with whether its subject is already deleted.
+ * Loads the open reports newest first, each with its subject's avatar or images as they stand, whether Remove has
+ * something to take down, and whether its subject is already deleted.
  */
 export async function loadOpenReports(): Promise<AdminReport[]> {
 	// the open rows with both people's usernames
-	const reportRows = await db
+	const reportRows = await loadOpenReportRows()
+
+	// which removable subjects still exist, the reported images as they stand, and the avatars and podcast episode
+	// images that Remove alone takes down, read per kind in one query each
+	const [existingSubjectKeys, topicImageUrlsByTopic, topicPostImageUrlsByPost, subjectImagesBySubjectKey] =
+		await Promise.all([
+			loadExistingSubjectKeys(reportRows),
+			loadTopicImageUrlsByTopic(toSubjectIdsOfKind(reportRows, "topicImage")),
+			loadTopicPostImageUrlsByPost(toSubjectIdsOfKind(reportRows, "topicPostImage")),
+			loadSubjectImagesBySubjectKey(reportRows),
+		])
+
+	// a reported image as it stands now: a Topic's, a Topic Post's, a body image's, or none for any other kind
+	const toSubjectImage = ({ subjectKind, subjectId }: ReportedSubjectQuery): TopicImageUrls | null => {
+		if (subjectKind === "topicImage") {
+			return topicImageUrlsByTopic.get(subjectId) ?? null
+		}
+
+		// a body image is signed for the admin
+		if (subjectKind === "topicPostBodyImage") {
+			return toReportedBodyImageUrls(subjectId)
+		}
+		return subjectKind === "topicPostImage" ? (topicPostImageUrlsByPost.get(subjectId) ?? null) : null
+	}
+
+	// each report with its subject's avatar or images, and what the console offers for it
+	return reportRows.map((reportRow) => {
+		// the avatar or the images that Remove alone takes down, and whether Remove and Block both delete the subject
+		const subjectKey = `${reportRow.subjectKind}:${reportRow.subjectId}`
+		const subjectImages = subjectImagesBySubjectKey.get(subjectKey)
+		const isRemovableKind = REMOVABLE_REPORT_SUBJECT_KINDS.has(reportRow.subjectKind)
+		return {
+			id: reportRow.id,
+			subjectKind: reportRow.subjectKind,
+			subjectId: reportRow.subjectId,
+			subjectText: reportRow.subjectText,
+			subjectPath: reportRow.subjectPath,
+			// a podcast episode's own image, or the reported image
+			subjectImage: subjectImages?.subjectImage ?? toSubjectImage(reportRow),
+			subjectAvatarVersion: subjectImages?.subjectAvatarVersion ?? null,
+			topicPodcastEpisodeVideoPosterUrl: subjectImages?.topicPodcastEpisodeVideoPosterUrl ?? null,
+			reason: reportRow.reason,
+			createdAt: reportRow.createdAt.toISOString(),
+			author:
+				reportRow.authorId && reportRow.authorUsername
+					? { id: reportRow.authorId, username: reportRow.authorUsername }
+					: null,
+			reporter: { id: reportRow.reporterId, username: reportRow.reporterUsername },
+			// Remove deletes a subject of a removable kind, resets a published avatar, and draws a podcast episode's images
+			// again
+			canRemove: isRemovableKind || subjectImages !== undefined,
+			isSubjectDeleted: isRemovableKind && !existingSubjectKeys.has(subjectKey),
+			// an author who is not yet under an admin block can be blocked from the report
+			canAdminBlock: Boolean(reportRow.authorId) && reportRow.authorAdminBlockedAt === null,
+		}
+	})
+}
+
+// the open report rows newest first, each with its reporter and its author
+// biome-ignore lint/nursery/useExplicitReturnType: the query's type is drizzle's generated builder type
+function loadOpenReportRows() {
+	return db
 		.select({
 			id: reports.id,
 			subjectKind: reports.subjectKind,
@@ -72,49 +143,6 @@ export async function loadOpenReports(): Promise<AdminReport[]> {
 		.leftJoin(authors, eq(authors.id, reports.subjectAuthorUserId))
 		.where(isNull(reports.resolvedAt))
 		.orderBy(desc(reports.createdAt))
-
-	// which removable subjects still exist, read per kind in one query each, and the reported images as they stand
-	const [existingSubjectKeys, topicImageUrlsByTopic, topicPostImageUrlsByPost] = await Promise.all([
-		loadExistingSubjectKeys(reportRows),
-		loadTopicImageUrlsByTopic(toSubjectIdsOfKind(reportRows, "topicImage")),
-		loadTopicPostImageUrlsByPost(toSubjectIdsOfKind(reportRows, "topicPostImage")),
-	])
-
-	// a reported image as it stands now: a Topic's, a Topic Post's, a body image's, or none for any other kind
-	const toSubjectImage = ({ subjectKind, subjectId }: (typeof reportRows)[number]): TopicImageUrls | null => {
-		if (subjectKind === "topicImage") {
-			return topicImageUrlsByTopic.get(subjectId) ?? null
-		}
-
-		// a body image is signed for the admin
-		if (subjectKind === "topicPostBodyImage") {
-			return toReportedBodyImageUrls(subjectId)
-		}
-		return subjectKind === "topicPostImage" ? (topicPostImageUrlsByPost.get(subjectId) ?? null) : null
-	}
-
-	// each report with its subject's image and whether the subject is still there
-	return reportRows.map((reportRow) => ({
-		id: reportRow.id,
-		subjectKind: reportRow.subjectKind,
-		subjectId: reportRow.subjectId,
-		subjectText: reportRow.subjectText,
-		subjectPath: reportRow.subjectPath,
-		subjectImage: toSubjectImage(reportRow),
-		reason: reportRow.reason,
-		createdAt: reportRow.createdAt.toISOString(),
-		author:
-			reportRow.authorId && reportRow.authorUsername
-				? { id: reportRow.authorId, username: reportRow.authorUsername }
-				: null,
-		reporter: { id: reportRow.reporterId, username: reportRow.reporterUsername },
-		canRemove: REMOVABLE_REPORT_SUBJECT_KINDS.has(reportRow.subjectKind),
-		isSubjectDeleted:
-			REMOVABLE_REPORT_SUBJECT_KINDS.has(reportRow.subjectKind) &&
-			!existingSubjectKeys.has(`${reportRow.subjectKind}:${reportRow.subjectId}`),
-		// an author who is not yet under an admin block can be blocked from the report
-		canAdminBlock: Boolean(reportRow.authorId) && reportRow.authorAdminBlockedAt === null,
-	}))
 }
 
 // a reported body image's column copy at every size, signed for the admin, who may not be one of its post's readers
@@ -132,20 +160,109 @@ function toReportedBodyImageUrls(subjectId: string): TopicImageUrls | null {
 	return { page: bodyImageSizeUrls, list: bodyImageSizeUrls, thumbnail: bodyImageSizeUrls }
 }
 
+// the avatar or the images that Remove alone takes down, by subject key: each reported profile's and team's published
+// avatar, and each reported podcast episode's images. a subject with none to take down has no entry
+async function loadSubjectImagesBySubjectKey(
+	reportRows: ReportedSubjectQuery[],
+): Promise<Map<string, ReportedSubjectImages>> {
+	const [profileAvatars, teamAvatars, podcastEpisodeImages] = await Promise.all([
+		loadPublishedProfileAvatars(toSubjectIdsOfKind(reportRows, "profile")),
+		loadTeamAvatars(toSubjectIdsOfKind(reportRows, "team")),
+		loadPodcastEpisodeImages(toSubjectIdsOfKind(reportRows, "podcastEpisode")),
+	])
+	return new Map([...profileAvatars, ...teamAvatars, ...podcastEpisodeImages])
+}
+
+// each reported profile's published avatar by subject key, leaving out a user with no upload and no published
+// provider photo
+async function loadPublishedProfileAvatars(userIds: string[]): Promise<Map<string, ReportedSubjectImages>> {
+	if (userIds.length === 0) {
+		return new Map()
+	}
+
+	// the avatar columns of each reported profile's user
+	const userRows = await db
+		.select({ id: users.id, ...publishedAvatarColumns })
+		.from(users)
+		.where(inArray(users.id, userIds))
+
+	// a published avatar's url names its version
+	const publishedUserRows = userRows.filter((userRow) => toPublishedAvatarFromUser(userRow) !== null)
+	return new Map(
+		publishedUserRows.map((userRow) => [`profile:${userRow.id}`, { subjectAvatarVersion: toAvatarVersion(userRow) }]),
+	)
+}
+
+// each reported team's uploaded avatar by subject key, leaving out a team with none
+async function loadTeamAvatars(teamIds: string[]): Promise<Map<string, ReportedSubjectImages>> {
+	if (teamIds.length === 0) {
+		return new Map()
+	}
+
+	// the stored avatar of each reported team
+	const teamRows = await db
+		.select({ id: teams.id, avatarKey: teams.avatarKey })
+		.from(teams)
+		.where(inArray(teams.id, teamIds))
+
+	// an uploaded avatar's url names its version
+	const avatarTeamRows = teamRows.filter((teamRow) => teamRow.avatarKey !== null)
+	return new Map(
+		avatarTeamRows.map((teamRow) => [
+			`team:${teamRow.id}`,
+			{ subjectAvatarVersion: toAvatarKeyVersion(teamRow.avatarKey) },
+		]),
+	)
+}
+
+// each reported podcast episode's own image and its film's poster by subject key, leaving out a podcast episode that
+// is gone, removed, or left with no topic
+async function loadPodcastEpisodeImages(podcastEpisodeIds: string[]): Promise<Map<string, ReportedSubjectImages>> {
+	if (podcastEpisodeIds.length === 0) {
+		return new Map()
+	}
+
+	// each podcast episode's status, topic, and image hash with its film's, in one read
+	const podcastEpisodeRows = await db
+		.select({
+			id: podcastEpisodes.id,
+			status: podcastEpisodes.status,
+			topicId: podcastEpisodes.topicId,
+			imageHash: podcastEpisodes.imageHash,
+			topicPodcastEpisodeVideoImageHash: topicPodcastEpisodeVideos.imageHash,
+		})
+		.from(podcastEpisodes)
+		.leftJoin(topicPodcastEpisodeVideos, eq(topicPodcastEpisodeVideos.podcastEpisodeId, podcastEpisodes.id))
+		.where(inArray(podcastEpisodes.id, podcastEpisodeIds))
+
+	// leave out a podcast episode that is removed or left with no topic, which has no image to draw again
+	const standingPodcastEpisodeRows = podcastEpisodeRows.filter(
+		(podcastEpisodeRow) => podcastEpisodeRow.status !== "removed" && podcastEpisodeRow.topicId !== null,
+	)
+
+	// map each hash to its urls, null for an image that is not drawn yet and for a film with no image of its own
+	return new Map(
+		standingPodcastEpisodeRows.map(({ id, imageHash, topicPodcastEpisodeVideoImageHash }) => [
+			`podcastEpisode:${id}`,
+			{
+				subjectImage: imageHash ? toPodcastEpisodeImageUrls(id, imageHash) : null,
+				topicPodcastEpisodeVideoPosterUrl: topicPodcastEpisodeVideoImageHash
+					? toTopicPodcastEpisodeVideoPosterUrl(id, topicPodcastEpisodeVideoImageHash)
+					: null,
+			},
+		]),
+	)
+}
+
 // the subject ids of one kind among some reports
-function toSubjectIdsOfKind(
-	reportRows: { subjectKind: ReportSubjectKind; subjectId: string }[],
-	subjectKind: ReportSubjectKind,
-): string[] {
+function toSubjectIdsOfKind(reportRows: ReportedSubjectQuery[], subjectKind: ReportSubjectKind): string[] {
 	return reportRows.filter((reportRow) => reportRow.subjectKind === subjectKind).map((reportRow) => reportRow.subjectId)
 }
 
 // the subjects among some reports that still exist, as kind:id keys, for the removable kinds. a topic image exists
 // while its topic does, and a topic post's image while its post does
-async function loadExistingSubjectKeys(
-	reportRows: { subjectKind: ReportSubjectKind; subjectId: string }[],
-): Promise<Set<string>> {
-	// the ids of each removable kind, a message id as the bigint it is
+async function loadExistingSubjectKeys(reportRows: ReportedSubjectQuery[]): Promise<Set<string>> {
+	// the ids of each removable kind, a chat room message id as the bigint it is
 	const chatMessageIds = toSubjectIdsOfKind(reportRows, "chatMessage")
 		.map((subjectId) => Number(subjectId))
 		.filter((subjectId) => Number.isSafeInteger(subjectId))
@@ -215,7 +332,8 @@ type ResolveReportOptions = {
 
 /**
  * Resolves an open report: Remove deletes the content through its own delete path, Clear leaves it, and Block also
- * sets an admin block on its author. Returns whether an open report with that id existed.
+ * sets an admin block on its author. Remove alone resets a reported avatar and draws a reported podcast episode's
+ * images again. Returns whether an open report with that id existed.
  */
 export async function resolveReport({
 	context,
@@ -243,10 +361,15 @@ export async function resolveReport({
 		await setAdminBlock(report.subjectAuthorUserId, adminUserId)
 	}
 
-	// Remove and Block delete the content first, through the path its author or a leader would use. content already
-	// gone is fine
+	// Remove and Block delete the content of a removable kind first, through the path its author or a leader would
+	// use. content already gone is fine
 	if (resolution !== "cleared" && REMOVABLE_REPORT_SUBJECT_KINDS.has(report.subjectKind)) {
 		await removeReportedSubject({ context, adminUserId, subjectKind: report.subjectKind, subjectId: report.subjectId })
+	}
+
+	// Remove alone resets a reported avatar and draws a reported podcast episode's images again
+	if (resolution === "removed") {
+		await removeReportedSubjectImages(report)
 	}
 
 	// close the report and drop its copy of the text. Clear keeps a hash, so a later report can tell the text changed
@@ -261,101 +384,4 @@ export async function resolveReport({
 		})
 		.where(eq(reports.id, report.id))
 	return true
-}
-
-// what removing needs: the admin's request context and id, and the subject
-type RemoveReportedSubjectOptions = {
-	context: Context
-	adminUserId: string
-	subjectKind: ReportSubjectKind
-	subjectId: string
-}
-
-// delete a reported message, note, note comment, or comment as the admin, render a reported image again, or take a
-// reported body image out of its post
-async function removeReportedSubject({
-	context,
-	adminUserId,
-	subjectKind,
-	subjectId,
-}: RemoveReportedSubjectOptions): Promise<void> {
-	if (subjectKind === "chatMessage") {
-		// the room's own delete takes the message's files and mentions with it. the admin branch of its gate allows it
-		const numericChatMessageId = Number(subjectId)
-		const [chatRoomMessage] = Number.isSafeInteger(numericChatMessageId)
-			? await db.select().from(chatRoomMessages).where(eq(chatRoomMessages.id, numericChatMessageId))
-			: []
-		// a message already gone leaves nothing to delete
-		if (chatRoomMessage) {
-			await deleteChatRoomMessage(context, adminUserId, chatRoomMessage)
-		}
-		return
-	}
-	// the note delete takes its comments and reads with it
-	if (subjectKind === "note") {
-		await db.delete(notes).where(eq(notes.id, subjectId))
-		return
-	}
-
-	// the comment's note id comes from the row, and the admin branch deletes anyone's comment
-	if (subjectKind === "noteComment") {
-		const [noteComment] = await db
-			.select({ noteId: noteComments.noteId })
-			.from(noteComments)
-			.where(eq(noteComments.id, subjectId))
-		// a comment already gone leaves nothing to delete
-		if (noteComment) {
-			await deleteNoteComment({ noteCommentId: subjectId, noteId: noteComment.noteId, authorUserId: null })
-		}
-		return
-	}
-
-	// a comment is deleted for everyone, as its Topic's owner would delete it, with its mentions' cached reads cleared
-	if (subjectKind === "comment") {
-		await deleteCommentThread(subjectId)
-		return
-	}
-
-	// a topic's image and a topic post's are drawn again
-	if (subjectKind === "topicImage") {
-		await regenerateReportedTopicImage(subjectId)
-	}
-	if (subjectKind === "topicPostImage") {
-		await regenerateReportedTopicPostImage(subjectId)
-	}
-
-	// a body image is taken out of its post's body
-	if (subjectKind === "topicPostBodyImage") {
-		await removeReportedTopicPostBodyImage(subjectId)
-	}
-}
-
-// remove an upload, then draw the topic's image again on the platform's budget. skip a topic that is gone
-async function regenerateReportedTopicImage(topicId: string): Promise<void> {
-	const [topic] = await db.select({ id: topics.id }).from(topics).where(eq(topics.id, topicId))
-	if (topic) {
-		await removeTopicImageUpload(topicId)
-		await startTopicImageRender({ topicId, userId: null, kind: "admin", model: topicImageModel() })
-	}
-}
-
-// remove an upload, then draw the topic post's image again on the platform's budget. skip a post that is gone
-async function regenerateReportedTopicPostImage(topicPostId: string): Promise<void> {
-	const [topicPost] = await db
-		.select({ topicId: topicPosts.topicId })
-		.from(topicPosts)
-		.where(eq(topicPosts.id, topicPostId))
-	if (!topicPost) {
-		return
-	}
-
-	// the render row names the post, bills no user, and is the admin's
-	await removeTopicPostImageUpload(topicPostId)
-	await startTopicImageRender({
-		topicId: topicPost.topicId,
-		topicPostId,
-		userId: null,
-		kind: "admin",
-		model: topicImageModel(),
-	})
 }

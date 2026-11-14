@@ -10,6 +10,10 @@ bun run check:components
 # check that every import, package.json, and tsconfig under apps/ and packages/ stays inside its workspace boundary
 bun scripts/check-package-boundaries.ts
 
+# check that .bun-version names the Bun in the Dockerfile's image tag, and that the lockfile installs every package the
+# root package.json patches at its patched version
+bun scripts/check-dependency-pins.ts
+
 # check that no file, export, type, or declared dependency is left unused. knip.jsonc names each entry point that no
 # import reaches
 bunx knip

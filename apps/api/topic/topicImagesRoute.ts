@@ -26,9 +26,9 @@ import { uploadSignedOutRejection } from "../bodyLimit"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { toObjectionableContentResponse } from "../moderation"
 import { toolCallerRateLimiter } from "../rateLimit"
-import { imageUploadBodyLimit, readUploadedImageOriginal } from "./imageEdits"
+import { imageUploadBodyLimit, readUploadedImageOriginal, toImageUploadResponse } from "./imageEdits"
 import { namedTopicColumns } from "./permissions"
-import { serveImageFile } from "./serveImageFile"
+import { serveCurrentOrUncheckedImageFile } from "./serveImageFile"
 import {
 	loadTopicImageEditor,
 	regenerateTopicImage,
@@ -46,11 +46,19 @@ export const topicImagesRoute = new Hono<AppEnv>()
 		const [topic] = await db.select(namedTopicColumns).from(topics).where(eq(topics.id, topicId))
 		const topicImage = topic && derivedFile ? await loadTopicImage(topicId) : null
 
-		// an unknown file, an unknown topic, or a hash that is no longer current is not found
-		if (!topic || !derivedFile || !topicImage || topicImage.hash !== hash) {
+		// an unknown file or an unknown topic is not found
+		if (!topic || !derivedFile) {
 			return context.json({ error: "not found" }, 404)
 		}
-		return serveImageFile(context, { topic, objectKey: toTopicImageFileKey(topicId, hash, file) })
+
+		// the topic's current image goes to anyone who may see the topic, and an unchecked upload of the signed-in user
+		// goes to them alone. any other hash is not found
+		return serveCurrentOrUncheckedImageFile(context, {
+			imageFile: { topic, objectKey: toTopicImageFileKey(topicId, hash, file) },
+			hash,
+			currentImageHash: topicImage?.hash,
+			uncheckedImageSubject: { subjectKind: "topicImage", subjectId: topicId },
+		})
 	})
 	// the owner's regenerate: a fresh render on the better model, from an optional image prompt, within the month's limit
 	.post(
@@ -116,13 +124,13 @@ export const topicImagesRoute = new Hono<AppEnv>()
 			return uploadedImage.response
 		}
 
-		// the checked original becomes the current image
-		const image = await storeUploadedTopicImage({
+		// the checked original becomes the current image, or is shown to its uploader alone
+		const { image, isImageUnchecked } = await storeUploadedTopicImage({
 			topicImageEditor,
-			original: uploadedImage.original,
+			checkedImage: uploadedImage,
 			analyticsProperties: toAnalyticsProperties(context),
 		})
-		return context.json({ image })
+		return context.json(toImageUploadResponse({ image }, isImageUnchecked))
 	})
 
 // the poster url of the image a succeeded film render left, or null for any other render

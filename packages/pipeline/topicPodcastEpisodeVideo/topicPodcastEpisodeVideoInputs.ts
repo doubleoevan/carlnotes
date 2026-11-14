@@ -1,6 +1,7 @@
 // what a podcast episode film is drawn from: the published podcast episode, the image its film shows, and its
 // chapters with the Resource each one narrates
 
+import type { UncheckedImageSubjectKind } from "@carlnotes/contracts/enums"
 import type { PodcastEpisodeScript } from "@carlnotes/contracts/podcast"
 import {
 	AI_VOICES_NOTE,
@@ -9,7 +10,7 @@ import {
 	toTranscriptTurn,
 } from "@carlnotes/contracts/podcastEpisodes"
 import { toHostWithoutWww } from "@carlnotes/contracts/seo"
-import { db } from "@carlnotes/db"
+import { type DbHandle, db } from "@carlnotes/db"
 import { podcastEpisodeChapters, podcastEpisodes, topicPodcastEpisodeVideos } from "@carlnotes/db/schema/podcast"
 import { resources } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
@@ -18,6 +19,7 @@ import {
 	toTopicPodcastEpisodeVideoImageKey,
 	toTopicPodcastEpisodeVideoImageLargeOriginalKey,
 } from "@carlnotes/db/topicPodcastEpisodeVideoKeys"
+import { loadUncheckedImageHashes } from "@carlnotes/db/uncheckedImages"
 import { asc, eq } from "drizzle-orm"
 import sharp from "sharp"
 import { toChapterTurns } from "../podcast/podcastEpisodeScript"
@@ -43,6 +45,8 @@ export type TopicPodcastEpisodeVideoEpisode = {
 	imageOriginalKey: string | null
 	// the larger original of the film's own image, which the intro and the sign-off zoom into. null for any other image
 	imageLargeOriginalKey: string | null
+	// whether an upload whose check has not run would be that image. the film shows the upload once its check passes
+	hasUncheckedUpload: boolean
 	// the lower thirds of the intro and the sign-off
 	introText: LowerThirdText
 	signOffText: LowerThirdText
@@ -67,13 +71,15 @@ export type RenderableTopicPodcastEpisodeVideoEpisode = TopicPodcastEpisodeVideo
 }
 
 /**
- * Returns a published podcast episode as its film reads it, or null for any other podcast episode.
+ * Returns a published podcast episode as its film reads it, read on the caller's transaction if there is one, or null
+ * for any other podcast episode.
  */
 export async function loadTopicPodcastEpisodeVideoEpisode(
 	podcastEpisodeId: string,
+	handle: DbHandle = db,
 ): Promise<TopicPodcastEpisodeVideoEpisode | null> {
 	// the podcast episode with its topic's name and image, and its film's own image
-	const [podcastEpisodeRow] = await db
+	const [podcastEpisodeRow] = await handle
 		.select({
 			topicId: podcastEpisodes.topicId,
 			ownerId: podcastEpisodes.ownerId,
@@ -96,22 +102,46 @@ export async function loadTopicPodcastEpisodeVideoEpisode(
 		return null
 	}
 
-	// the film's own image, or else the podcast episode's, or else its topic's, or else the podcast card
-	const { topicId, podcastEpisodeImageHash, topicImageHash, topicPodcastEpisodeVideoImageHash } = podcastEpisodeRow
-	const shownImage = toShownImage({
-		podcastEpisodeId,
-		topicId: topicId ?? "",
-		podcastEpisodeImageHash,
-		topicImageHash,
-		topicPodcastEpisodeVideoImageHash,
-	})
+	// the uploads of the three images whose check has not run, by their kind. a film never shows one
+	const topicId = podcastEpisodeRow.topicId ?? ""
+	const uncheckedImageRows = await loadUncheckedImageHashes(handle, [
+		{ subjectKind: "topicPodcastEpisodeVideoImage", subjectId: podcastEpisodeId },
+		{ subjectKind: "podcastEpisodeImage", subjectId: podcastEpisodeId },
+		{ subjectKind: "topicImage", subjectId: topicId },
+	])
+	const uncheckedImageHashByKind = new Map(
+		uncheckedImageRows.map((uncheckedImageRow) => [uncheckedImageRow.subjectKind, uncheckedImageRow.imageHash]),
+	)
+	const toCheckedImageHash = (subjectKind: UncheckedImageSubjectKind, imageHash: string | null): string | null =>
+		uncheckedImageHashByKind.get(subjectKind) === imageHash ? null : imageHash
+
+	// the film's own image, or else the podcast episode's, or else its topic's, or else the podcast card, of the images
+	// that are checked
+	const checkedImageHashes = {
+		topicPodcastEpisodeVideoImageHash: toCheckedImageHash(
+			"topicPodcastEpisodeVideoImage",
+			podcastEpisodeRow.topicPodcastEpisodeVideoImageHash,
+		),
+		podcastEpisodeImageHash: toCheckedImageHash("podcastEpisodeImage", podcastEpisodeRow.podcastEpisodeImageHash),
+		topicImageHash: toCheckedImageHash("topicImage", podcastEpisodeRow.topicImageHash),
+	}
+	const shownImage = toShownImage({ podcastEpisodeId, topicId, ...checkedImageHashes })
+
+	// an unchecked upload would be the shown image if it is the film's own, or the podcast episode's or the topic's
+	// with no checked image before it in that order
+	const hasUncheckedUpload =
+		uncheckedImageHashByKind.has("topicPodcastEpisodeVideoImage") ||
+		(!checkedImageHashes.topicPodcastEpisodeVideoImageHash &&
+			(uncheckedImageHashByKind.has("podcastEpisodeImage") ||
+				(!checkedImageHashes.podcastEpisodeImageHash && uncheckedImageHashByKind.has("topicImage"))))
 	return {
 		podcastEpisodeId,
-		topicId: topicId ?? "",
+		topicId,
 		ownerId: podcastEpisodeRow.ownerId,
 		audioKey: podcastEpisodeRow.audioKey,
 		script: podcastEpisodeRow.script,
 		...shownImage,
+		hasUncheckedUpload,
 		introText: {
 			title: podcastEpisodeRow.title ?? PODCAST_SHOW_NAME,
 			detail: toPodcastEpisodeDetailsLine(podcastEpisodeRow, podcastEpisodeRow.topicName),

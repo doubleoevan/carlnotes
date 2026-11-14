@@ -36,6 +36,11 @@ export const podcastEpisodePageResponse = z.object({
 	// and for a film with no image of its own. both are optional, so a released app reads a page without them
 	topicPodcastEpisodeVideoImageOrigin: z.enum(topicImageOrigins).nullable().optional(),
 	topicPodcastEpisodeVideoImagePrompt: z.string().nullable().optional(),
+	// whether the podcast episode's image, and whether its film's image, is this editor's own upload, shown to them
+	// alone until its image moderation can run. each is absent for any other image, and from an api older than the
+	// fields
+	isPodcastEpisodeImageUnchecked: z.boolean().optional(),
+	isTopicPodcastEpisodeVideoImageUnchecked: z.boolean().optional(),
 	// this episode's position among the home podcast episodes and the home podcast episodes themselves, both null for
 	// anyone but an admin
 	homeOrder: z.number().nullable(),

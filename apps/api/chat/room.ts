@@ -1,8 +1,7 @@
-import { CHAT_PAUSED_ERROR, type ChatRoomAttachmentRejection } from "@carlnotes/contracts/chat"
+import type { ChatRoomAttachmentRejection } from "@carlnotes/contracts/chat"
 import { hasAllMention, hasModelMention, isModelChatMessage } from "@carlnotes/contracts/chatMentions"
 import type { ChatAttachment } from "@carlnotes/contracts/payloads"
 import { db } from "@carlnotes/db"
-import { isUserPastDailySpendCutoff } from "@carlnotes/db/dailySpendCutoffs"
 import { chatRoomMessages } from "@carlnotes/db/schema/chat"
 import { isBudgetRejection, MODEL_CHAT_TURN_FAILED_REJECTION, SPENT_BUDGET_REJECTION } from "@carlnotes/models/models"
 import { reserveUserSpend, type SpendReservation, toReleaseOnFailure } from "@carlnotes/models/spendReservations"
@@ -13,6 +12,7 @@ import { reportError } from "@carlnotes/server/monitoring"
 import { and, eq } from "drizzle-orm"
 import type { AnalyticsProperties } from "../currentUser"
 import { loadUsername } from "../usernames"
+import { FREE_USER_CHAT_REJECTION_ERRORS, loadFreeUserChatRejection } from "./chatTurnAuthorization"
 import { encryptChatText } from "./encryption"
 import { saveLinkPreviews } from "./linkPreviews"
 import { saveChatMentions } from "./mentions"
@@ -27,9 +27,9 @@ export type PostChatRoomMessageOptions = { analyticsProperties?: AnalyticsProper
 
 /**
  * Post a chat message into the chatRoom. Member chat mentions become notification rows, and a chat message that addresses Carl
- * starts his chat turn, unless the poster's spend and open reservations have already reached the budget or a free poster
- * is past the chat cutoff, in which case the rejection comes back privately in this response and nothing posts to the
- * chat room.
+ * starts his chat turn, unless the poster's spend and open reservations have already reached the budget, the unverified
+ * accounts switch limits a free poster, or a free poster is past the chat cutoff, in which case the rejection comes back
+ * privately in this response and nothing posts to the chat room.
  */
 export async function postChatRoomMessage(
 	userId: string,
@@ -54,9 +54,11 @@ export async function postChatRoomMessage(
 	// whether this chat message gives carl the chat turn
 	const isModelChatTurn = isModelAddressed(content, repliedToChatMessage)
 
-	// reject a free user past the chat cutoff privately before anything posts
-	if (isModelChatTurn && (await isUserPastDailySpendCutoff(userId, "chat"))) {
-		return { chatMessageId: 0, rejectionReason: CHAT_PAUSED_ERROR }
+	// reject a free user the unverified accounts switch limits, or one past the chat cutoff, privately before anything
+	// posts
+	const freeUserChatRejection = isModelChatTurn ? await loadFreeUserChatRejection(userId) : null
+	if (freeUserChatRejection) {
+		return { chatMessageId: 0, rejectionReason: FREE_USER_CHAT_REJECTION_ERRORS[freeUserChatRejection.status] }
 	}
 
 	// the budget gate reserves carl's chat turn's largest cost before anything posts, so a budget that the spend and

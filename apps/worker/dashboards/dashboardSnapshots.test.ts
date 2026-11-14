@@ -1,12 +1,15 @@
 // the nightly Dashboard build: a private topic counts only in the full snapshot, an unchanged snapshot is not written
 // again and only moves its day, what is no longer built is deleted, a build whose snapshots were deleted while it
-// loaded writes nothing, only a public summary gets a share image, and the retention delete keeps 400 days
+// loaded writes nothing, a build that fails with Redis unreachable is reported and leaves the saved snapshots as they
+// are, only a public summary gets a share image, and the retention delete keeps 400 days
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { DAILY_COUNT_RETENTION_DAYS } from "@carlnotes/contracts/dashboards"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
-import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
+import { restoreRedisClient, stubRedisClient, stubUnreachableRedisClient } from "@carlnotes/db/redisClientStub"
 import * as store from "@carlnotes/db/store"
+import * as monitoring from "@carlnotes/server/monitoring"
 import {
+	buildDashboardSnapshotsActivity,
 	deleteExpiredDailyCountsActivity,
 	drawDashboardShareImagesActivity,
 } from "../workflows/buildDashboardSnapshotsActivities"
@@ -127,6 +130,58 @@ test("an unchanged build writes no snapshot, moves an earlier day's, and deletes
 	expect(dayMoves.map(({ values }) => [values[0], values.at(-1)])).toEqual([[LAST_DAY, "id-summary:public"]])
 	const snapshotDeletes = sentQueries.filter(({ text }) => text.startsWith('delete from "dashboard_snapshots"'))
 	expect(snapshotDeletes.map(({ values }) => values)).toEqual([["id-stale"]])
+})
+
+test("a rebuild writes each changed snapshot over its saved row, and leaves its paragraph and share image", async () => {
+	// every snapshot of an earlier build, each saved under an older hash
+	stubRedisClient()
+	const firstQueries = stubConnectionPool((sentQuery) => toBuildRows(sentQuery))
+	await buildDashboardSnapshots(SUBJECT, LAST_DAY)
+	const savedRows = toWrittenSnapshots(firstQueries).map(({ key }) => {
+		const [selection, accessLevel] = key.split(":")
+		return [`id-${key}`, selection, accessLevel, "older-hash", "2026-11-09"]
+	})
+
+	// the rebuild changes both summaries
+	const sentQueries = stubConnectionPool((sentQuery) => toBuildRows(sentQuery, savedRows))
+	expect(await buildDashboardSnapshots(SUBJECT, LAST_DAY)).toEqual(["public", "full"])
+
+	// each saved row takes its new day, body, and hash in place, with its paragraph and share image as they were
+	const snapshotWrites = sentQueries.filter(({ text }) => text.startsWith('insert into "dashboard_snapshots"'))
+	expect(snapshotWrites).toHaveLength(savedRows.length)
+	for (const { text } of snapshotWrites) {
+		// the columns the write sets on a saved row
+		const [, updatedColumnsText = ""] = text.split(" do update set ")
+		expect(text).toContain('on conflict ("dashboard_kind","subject_id","selection","access_level") do update set')
+		expect(updatedColumnsText).toContain('"body" = ')
+		expect(updatedColumnsText).not.toContain('"paragraph"')
+		expect(updatedColumnsText).not.toContain('"image_key"')
+	}
+
+	// no row is deleted, so no read between the two builds finds the Dashboard empty
+	expect(sentQueries.filter(({ text }) => text.startsWith('delete from "dashboard_snapshots"'))).toEqual([])
+})
+
+test("a build that fails with Redis unreachable is reported and leaves the saved snapshots as they are", async () => {
+	// Redis down, so no sketch can be counted, with the failed connection's log quiet
+	stubUnreachableRedisClient()
+	spyOn(console, "error").mockImplementation(() => {})
+	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
+
+	// a Dashboard whose last build saved a public summary
+	const savedRows = [["id-summary:public", "summary", "public", "hash", "2026-11-09"]]
+	const sentQueries = stubConnectionPool((sentQuery) => toBuildRows(sentQuery, savedRows))
+
+	// the rebuild's one build fails, and the failure is reported with its Dashboard
+	const failedBuild = buildDashboardSnapshotsActivity({ subjects: [SUBJECT], lastDay: LAST_DAY })
+	await expect(failedBuild).rejects.toThrow("the topicDashboard user-1 sketch count failed")
+	expect(reportErrorSpy.mock.calls.map(([, stage, subject]) => [stage, subject])).toEqual([["dashboard", SUBJECT]])
+
+	// no saved snapshot is written over, moved, or deleted
+	const snapshotWrites = sentQueries.filter(({ text }) =>
+		/^(insert into|update|delete from) "dashboard_snapshots"/.test(text),
+	)
+	expect(snapshotWrites).toEqual([])
 })
 
 test("the retention delete keeps the last 400 days of daily view and play counts", async () => {

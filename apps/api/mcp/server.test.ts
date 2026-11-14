@@ -83,8 +83,29 @@ test("the client name route reads an encoded url client id whole", async () => {
 	const response = await toSignedInApp(mcpClientsRoute, "user-1").request(
 		`/mcp/clients/${encodeURIComponent(clientId)}`,
 	)
-	expect(await response.json()).toEqual({ name: "Claude" })
+	expect(await response.json()).toEqual({ name: "Claude", unknownRedirectHost: null })
 	expect(loadNameSpy).toHaveBeenCalledWith(clientId)
+	loadNameSpy.mockRestore()
+})
+
+test("the client name route names a redirect host only if CarlNotes does not know it", async () => {
+	// a client that registered under a well-known name, whatever its redirect address
+	const loadNameSpy = spyOn(oauthClientNames, "loadOAuthClientName").mockResolvedValue("Claude")
+	const signedInApp = toSignedInApp(mcpClientsRoute, "user-1")
+	const toUnknownRedirectHostOf = async (redirectUri: string): Promise<unknown> => {
+		const response = await signedInApp.request(`/mcp/clients/client-1?redirect_uri=${encodeURIComponent(redirectUri)}`)
+		return (await response.json()).unknownRedirectHost
+	}
+
+	// a known AI app, a loopback address, and an app's own scheme name no host, and a stranger's server names its own
+	expect(await toUnknownRedirectHostOf("https://claude.ai/api/mcp/auth_callback")).toBeNull()
+	expect(await toUnknownRedirectHostOf("http://localhost:8976/callback")).toBeNull()
+	expect(await toUnknownRedirectHostOf("cursor://anysphere.cursor-retrieval/oauth/callback")).toBeNull()
+	expect(await toUnknownRedirectHostOf("https://unknown.example/callback")).toBe("unknown.example")
+
+	// a redirect address past the length limit is rejected, never read
+	const oversizedResponse = await signedInApp.request(`/mcp/clients/client-1?redirect_uri=${"a".repeat(2001)}`)
+	expect(oversizedResponse.status).toBe(400)
 	loadNameSpy.mockRestore()
 })
 

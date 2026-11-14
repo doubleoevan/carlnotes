@@ -299,6 +299,9 @@ export const topicResponse = topicDetails.extend({
 	imageRegenerationQuota: imageRegenerationQuota.nullable(),
 	imageOrigin: z.enum(topicImageOrigins).nullable(),
 	imagePrompt: z.string().nullable(),
+	// whether the image is this editor's own upload, shown to them alone until its image moderation can run. absent
+	// for any other image, and from an api older than the field
+	isImageUnchecked: z.boolean().optional(),
 })
 
 export type TopicResponse = z.infer<typeof topicResponse>

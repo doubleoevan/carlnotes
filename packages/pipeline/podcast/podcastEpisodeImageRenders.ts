@@ -1,9 +1,10 @@
 // a podcast episode image's scene input, and the write that makes a stored image the podcast episode's current one
 
 import type { TopicImageOrigin } from "@carlnotes/contracts/enums"
-import { db } from "@carlnotes/db"
+import { type DbTransaction, db } from "@carlnotes/db"
 import { podcastEpisodeChapters, podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { topics } from "@carlnotes/db/schema/topics"
+import { recordPendingObjectDeletions } from "@carlnotes/db/store"
 import { purgeEdgeCacheTagAfterDeletion, toTopicImageCacheTag } from "@carlnotes/server/edgePurge"
 import { asc, eq } from "drizzle-orm"
 import { toPodcastEpisodeImageObjectKeys } from "../topicImages/topicImageFiles"
@@ -95,6 +96,54 @@ export async function replacePodcastEpisodeImage({
 	if (replacedImage?.previousHash && replacedImage.previousHash !== hash) {
 		await purgePublicImageFiles(replacedImage)
 	}
+}
+
+/**
+ * Clears a podcast episode's current image on the caller's transaction, and keeps the image's files.
+ */
+export async function clearPodcastEpisodeImage(transaction: DbTransaction, podcastEpisodeId: string): Promise<void> {
+	await transaction
+		.update(podcastEpisodes)
+		.set({ imageHash: null, imageOrigin: null, imagePrompt: null })
+		.where(eq(podcastEpisodes.id, podcastEpisodeId))
+}
+
+/**
+ * Deletes a podcast episode's uploaded image, its hash and its files, so its cards show the topic's image until the
+ * next render lands. Returns the podcast episode's topic id if its current image was an upload, or null.
+ */
+export async function removePodcastEpisodeImageUpload(podcastEpisodeId: string): Promise<string | null> {
+	const removedUpload = await db.transaction(async (transaction) => {
+		// the current image, which has to be an upload, and the topic whose visibility decides the edge purge
+		const [podcastEpisode] = await transaction
+			.select({
+				imageHash: podcastEpisodes.imageHash,
+				imageOrigin: podcastEpisodes.imageOrigin,
+				topicId: topics.id,
+				visibility: topics.visibility,
+			})
+			.from(podcastEpisodes)
+			.leftJoin(topics, eq(topics.id, podcastEpisodes.topicId))
+			.where(eq(podcastEpisodes.id, podcastEpisodeId))
+			.for("no key update", { of: podcastEpisodes })
+		if (!podcastEpisode?.imageHash || podcastEpisode.imageOrigin !== "uploaded") {
+			return null
+		}
+
+		// the hash goes with its files
+		await clearPodcastEpisodeImage(transaction, podcastEpisodeId)
+		await recordPendingObjectDeletions({
+			handle: transaction,
+			objectKeys: toPodcastEpisodeImageObjectKeys(podcastEpisodeId, podcastEpisode.imageHash),
+		})
+		return podcastEpisode
+	})
+
+	// a public topic's removed files leave the edge
+	if (removedUpload) {
+		await purgePublicImageFiles(removedUpload)
+	}
+	return removedUpload?.topicId ?? null
 }
 
 /**

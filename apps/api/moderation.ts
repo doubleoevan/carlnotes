@@ -1,6 +1,8 @@
 // the check every text and image other users see goes through before it is stored. a violation is rejected in Carl's
-// words with the draft kept. a skipped or failed check lets the post through, and a failure is reported without the
-// text or the image. an image the moderation cannot read is rejected
+// words with the draft kept. a skipped check lets the post through. a failed text check lets the text through, and a
+// failed image check returns unchecked, so its caller saves a public-bound image as unchecked. a failure is reported
+// without the text or the image. an image the moderation cannot read is rejected
+
 import {
 	type ModerationCategory,
 	OBJECTIONABLE_CONTENT_REJECTION,
@@ -12,6 +14,7 @@ import {
 	type ModeratedTextKind,
 	type ModerationClassification,
 } from "@carlnotes/models/moderation"
+import { toDataUrl } from "@carlnotes/server/dataUrl"
 import { reportError } from "@carlnotes/server/monitoring"
 import type { Context } from "hono"
 
@@ -46,19 +49,32 @@ export async function toObjectionableCategory({
 // the image under review, and what names it in a failure report. never the image itself
 export type ToObjectionableImageCategoryOptions = { dataUrl: string; subjectKind: string; subjectId: string }
 
+// what an image's check came to: the category it violates, an image the moderation could not read, a check that could
+// not run, or null for an image that may be stored
+export type ObjectionableImageCategory = ModerationCategory | "unreadable" | "unchecked" | null
+
 /**
- * Returns the category an image violates, unreadable if the moderation could not read it, or null if it may be stored.
- * A skipped or failed check returns null, and a failure is reported with the subject's kind and id and never the image.
+ * Returns the category an image violates, unreadable if the moderation could not read it, unchecked if the check
+ * could not run, or null if it may be stored: it is clean, or the check was skipped because no key is set. A check
+ * that could not run is reported with the subject's kind and id and never the image.
  */
 export async function toObjectionableImageCategory({
 	dataUrl,
 	subjectKind,
 	subjectId,
-}: ToObjectionableImageCategoryOptions): Promise<ModerationCategory | "unreadable" | null> {
+}: ToObjectionableImageCategoryOptions): Promise<ObjectionableImageCategory> {
 	const classification = await classifyImage({ dataUrl })
-	return classification.outcome === "unreadable"
-		? "unreadable"
-		: toViolationCategory({ classification, subjectKind, subjectId })
+	if (classification.outcome === "unreadable") {
+		return "unreadable"
+	}
+
+	// a check that could not run leaves the image unchecked, and reports which subject it was
+	if (classification.outcome === "failed") {
+		console.error("the image moderation could not run", classification.error)
+		reportFailedModeration({ error: classification.error, subjectKind, subjectId })
+		return "unchecked"
+	}
+	return toViolationCategory({ classification, subjectKind, subjectId })
 }
 
 // a classification, and what names its subject in a failure report
@@ -77,10 +93,7 @@ function toViolationCategory({
 	// a failure posts unchecked and reports which subject it was
 	if (classification.outcome === "failed") {
 		console.error("the moderation check failed, so the post goes up unchecked", classification.error)
-		reportError(classification.error, "api-route", {
-			moderationSubjectKind: subjectKind,
-			moderationSubjectId: subjectId,
-		})
+		reportFailedModeration({ error: classification.error, subjectKind, subjectId })
 		return null
 	}
 
@@ -89,6 +102,14 @@ function toViolationCategory({
 		return null
 	}
 	return classification.verdict.isViolation ? classification.verdict.category : null
+}
+
+// a failed check's error, and what names its subject
+type ReportFailedModerationOptions = { error: unknown; subjectKind: string; subjectId: string }
+
+// report a check that failed with its subject's kind and id, never the text or the image
+function reportFailedModeration({ error, subjectKind, subjectId }: ReportFailedModerationOptions): void {
+	reportError(error, "api-route", { moderationSubjectKind: subjectKind, moderationSubjectId: subjectId })
 }
 
 // what a check that fails closed finds in an image's frames: nothing, a violation, an image it cannot read, or no
@@ -113,9 +134,7 @@ export async function toStrictImageModeration({
 }: ToStrictImageModerationOptions): Promise<StrictImageModeration> {
 	// every frame at once
 	const classifications = await Promise.all(
-		frameJpegs.map((frameJpeg) =>
-			classifyImage({ dataUrl: `data:image/jpeg;base64,${Buffer.from(frameJpeg).toString("base64")}` }),
-		),
+		frameJpegs.map((frameJpeg) => classifyImage({ dataUrl: toDataUrl("image/jpeg", frameJpeg) })),
 	)
 
 	// a violation in any frame rejects it, then a frame the check could not read
@@ -131,10 +150,7 @@ export async function toStrictImageModeration({
 	// a frame with no verdict leaves the image unchecked, so it is unavailable, and a failure is reported
 	const failedClassification = classifications.find((classification) => classification.outcome === "failed")
 	if (failedClassification?.outcome === "failed") {
-		reportError(failedClassification.error, "api-route", {
-			moderationSubjectKind: subjectKind,
-			moderationSubjectId: subjectId,
-		})
+		reportFailedModeration({ error: failedClassification.error, subjectKind, subjectId })
 	}
 	const isEveryFrameClassified = classifications.every((classification) => classification.outcome === "classified")
 	return isEveryFrameClassified ? { outcome: "clean" } : { outcome: "unavailable" }

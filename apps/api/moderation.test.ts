@@ -71,17 +71,30 @@ test("a rejected comment returns 422 with its category and stores nothing", asyn
 	expect(sentQueries.some((sentQuery) => sentQuery.text.startsWith("insert"))).toBe(false)
 })
 
-// an image's violation names its category, and a failed image check passes with a report naming the subject
-test("an image check names a violation and passes a failure with a report", async () => {
+// an image's violation names its category, a clean or skipped check passes, an unreadable image says so, and a check
+// that could not run is unchecked with one report naming the subject
+test("an image check names a violation, passes a clean or skipped check, and returns unchecked for a failure", async () => {
 	spyOn(moderation, "classifyImage")
 		.mockResolvedValueOnce({ outcome: "classified", verdict: { isViolation: true, category: "sexual" } })
+		.mockResolvedValueOnce({ outcome: "classified", verdict: { isViolation: false, category: null } })
+		.mockResolvedValueOnce({ outcome: "skipped" })
+		.mockResolvedValueOnce({ outcome: "unreadable" })
 		.mockResolvedValueOnce({ outcome: "failed", error: new Error("endpoint down") })
+
+	// the report spied, and an avatar as the image under review
 	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
 	const imageOptions = { dataUrl: "data:image/png;base64,AA", subjectKind: "avatar", subjectId: "u1" }
 
-	// the violation, then the failure that passes
+	// the violation, the clean verdict, the skipped check with no key set, and the image the endpoint could not read
 	expect(await toObjectionableImageCategory(imageOptions)).toBe("sexual")
 	expect(await toObjectionableImageCategory(imageOptions)).toBeNull()
+	expect(await toObjectionableImageCategory(imageOptions)).toBeNull()
+	expect(await toObjectionableImageCategory(imageOptions)).toBe("unreadable")
+	expect(reportErrorSpy).not.toHaveBeenCalled()
+
+	// the check that could not run, reported once with its subject and never the image
+	expect(await toObjectionableImageCategory(imageOptions)).toBe("unchecked")
+	expect(reportErrorSpy).toHaveBeenCalledTimes(1)
 	expect(reportErrorSpy.mock.calls[0]?.[2]).toEqual({ moderationSubjectKind: "avatar", moderationSubjectId: "u1" })
 })
 

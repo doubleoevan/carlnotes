@@ -1,8 +1,10 @@
 import type { AccountFieldElements, ProfileFieldElements } from "@carlnotes/core/components/AccountFields"
+import { UncheckedAvatarLine } from "@carlnotes/core/components/UncheckedAvatarLine"
 import type { UserBlocksElements } from "@carlnotes/core/components/UserBlocksSection"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Check, Info } from "lucide-react-native"
 import { Alert, Pressable, View } from "react-native"
+import { UNCHECKED_AVATAR_LINE_ELEMENTS } from "@/components/avatar/UncheckedAvatarLine"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { PreferenceSwitch } from "@/components/common/PreferenceSwitch"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
@@ -97,9 +99,17 @@ export const USER_BLOCKS_ELEMENTS: UserBlocksElements = {
 // keep the native profile controls around the shared identity and username form
 export const PROFILE_FIELD_ELEMENTS: ProfileFieldElements = {
 	Root: ({ children, className }) => <View className={cn("gap-3", className)}>{children}</View>,
-	Identity: ({ avatar, children }) => (
+	// the avatar over the username, with an unchecked photo's line under the avatar at the card's width
+	Identity: ({ avatar, isAvatarUnchecked, children }) => (
 		<>
-			{avatar}
+			<View>
+				{avatar}
+				{isAvatarUnchecked && (
+					<View className="mt-1">
+						<UncheckedAvatarLine elements={UNCHECKED_AVATAR_LINE_ELEMENTS} />
+					</View>
+				)}
+			</View>
 			{children}
 		</>
 	),

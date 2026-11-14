@@ -107,8 +107,8 @@ export function toUniqueDashboardSubjects(subjects: DashboardSubject[]): Dashboa
 }
 
 /**
- * Returns a Dashboard's snapshot generation, an empty string before its first delete, or null if Redis could not read
- * it. A build writes only if the generation it read before loading its daily counts is still the current one.
+ * Returns a Dashboard's snapshot generation, an empty string before its first one starts, or null if Redis could not
+ * read it. A build writes only if the generation it read before loading its daily counts is still the current one.
  */
 export async function readDashboardSnapshotGeneration(subject: DashboardSubject): Promise<string | null> {
 	return runWithRedis(
@@ -117,9 +117,11 @@ export async function readDashboardSnapshotGeneration(subject: DashboardSubject)
 	)
 }
 
-// start a new snapshot generation for a Dashboard. a generation Redis could not start leaves a running build's write
-// unchecked
-async function startDashboardSnapshotGeneration(subject: DashboardSubject): Promise<void> {
+/**
+ * Starts a new snapshot generation for a Dashboard, so a build that loaded its daily counts before it skips its write.
+ * A generation Redis could not start leaves a running build's write unchecked.
+ */
+export async function startDashboardSnapshotGeneration(subject: DashboardSubject): Promise<void> {
 	await runWithRedis("startDashboardSnapshotGeneration", (client) =>
 		client.set(toSnapshotGenerationKey(subject), crypto.randomUUID(), "EX", String(SNAPSHOT_GENERATION_SECONDS)),
 	)

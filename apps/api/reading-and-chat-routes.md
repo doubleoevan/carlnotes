@@ -40,8 +40,10 @@
 - `topic/relatedness.ts` — what both related reads share: `loadEmbeddingCentroid`, the current model's average
   resource embedding cached in Redis for a day, `toRelatedScore`, the centered cosine distance less a bonus for each
   shared tag, the score limits, the candidate count, `loadRelatedIds`, the public ranking cached in Redis merged with a
-  user's own, `toMergedRelatedIds`, and `toRowsInIdOrder`. The related reads' tests store its centroid through
-  `relatednessTestFixtures.ts`, and build episode rows through `podcast/podcastEpisodeTestFixtures.ts`.
+  user's own, `toMergedRelatedIds`, and `toRowsInIdOrder`. `loadEmbeddingCentroid` also holds the centroid in each
+  process's memory for an hour, so a related read ranks while Redis is unreachable. The related reads' tests store its
+  centroid through `relatednessTestFixtures.ts`, which forgets the in-memory copy before and after each test that
+  stubs the centroid, and build episode rows through `podcast/podcastEpisodeTestFixtures.ts`.
 - `topic/topics.ts` — the topic page read, whose scan costs, month's cost, and attachment details go only to a user
   the gate grants `topic:viewOwnerDetails`, the owner or an admin; `topic/saveTopic.ts` — the create with its default
   Sources and invites, and the update with its changed-field events, and `saveTopicVectorsOnVisibilityChange`, which
@@ -55,7 +57,8 @@
   recorded.
 - `topic/attachments.ts` — a topic attachment's routes: the url add, the context edit, the delete, the download, and
   the file upload; `topic/attachmentWrites.ts` — `addTopicAttachment`, the owner's add of a url's page or pasted text
-  as a plain-text file, which the url route and `add_topic_attachment` share.
+  as a plain-text file, which the url route and `add_topic_attachment` share. The file upload and the url add count
+  against the tool callers' rate limit, as the avatar upload and chat do.
 - `topic/scans.ts` — starting and stopping a manual Scan, and `GET /api/scans/:id`, one Scan's recap and source
   results behind `topic:view`. `toSourceResultsView` parses the stored results, returns null for a missing or
   malformed value, keeps only the `ok`, `fallback`, and `failed` results, and copies each wire field by name. For
@@ -84,8 +87,9 @@
   before any model call once the spend and open reservations reach the budget, its proposal, tools, and streamed reply;
   `chat/chatTurnAuthorization.ts` — whether a user may take a chat turn on a topic, in a team chat, or in the new-topic
   chat, `toChatRejection`, the response each rejected status gets, which the private chat routes, the voice routes, and
-  the chat attachment delete share, `loadChatSpendRejection`, which returns the rejection for a spent budget, then for a
-  free user past the chat cutoff, and `rejectChatTurn`, which also counts a budget rejection; `chat/chatTurnStream.ts` —
+  the chat attachment delete share, `loadChatUserRejection`, which returns the rejection for a spent budget, then for
+  a free unverified password account while the unverified accounts switch is on (`emailUnverified`, a 403 with
+  `email unverified`), then for a free user past the chat cutoff, and `rejectChatTurn`, which also counts a budget rejection; `chat/chatTurnStream.ts` —
   streaming a chat turn's reply, saving its row, then releasing its reservation; `chat/chatProposals.ts` — the change
   Carl previewed in a private chat, recorded in `chat_proposals` as a keyed digest that holds none of the preview's
   text, taken by the user's next message on that page, and applied by the server through the topic tools or the create
@@ -122,13 +126,15 @@
   download, and the object keys behind a user's or a topic's. A chat turn and a chat room post read a PDF's, Word
   file's, or workbook's text through `readChatAttachmentText` in `chat/chatAttachmentParts.ts`, once per file: a kept
   chat attachment stores the text its chat turn read, which the chat turn returns as a `StorableChatAttachment`. The
-  helper calls `extractTextInWorker` in `chat/attachmentExtraction.ts`, which runs `extractTextUpTo` in one persistent
-  worker thread per process, `chat/attachmentExtractionWorker.ts`, so a large file never stalls the event loop. The
-  bytes are transferred to the thread, which reads one file at a time from a queue. A request's files share one
-  90-second deadline from `toExtractionDeadline`. A file read past it rejects with `AttachmentTimeLimitError` and stops
-  only its own read, and reads as too large: a 413 on a chat turn and `attachment too large` on a chat room post. A file
-  that waited behind other files until it rejects with `AttachmentBusyError`, and reads as busy: a 503 on a chat turn
-  and `attachment busy` on a chat room post.
+  helper calls `extractTextInChildProcess` in `chat/attachmentExtraction.ts`, which extracts the file in a child
+  process of its own through `@carlnotes/pipeline/attachExtraction`, so a large file never stalls the event loop and
+  a read that takes too much memory ends its own child process alone. Two child processes read at once, and a user's
+  files are read one at a time, in turn by user. A request's files share one 90-second deadline from
+  `toExtractionDeadline`. A file read past it, and one past the memory limit, rejects with the pipeline's
+  `AttachmentExtractionLimitError`, whose `limit` is `time` or `memory`. Each stops only its own read and reads as
+  too large: a 413 on a chat turn and `attachment too large` on a chat room post. A file that waited behind other
+  files until the deadline rejects with the limit `wait`, and reads as busy: a 503 on a chat turn and
+  `attachment busy` on a chat room post.
 - `team/teams.ts` — creating and updating a team and the topic attach and detach; `team/teamsRoute.ts` — the team
   routes; `team/deleteTeam.ts` — the delete, the handover to a new leader, and the one team row delete an account
   close shares; `team/search.ts` — the site search's team reader; `team/teamPage.ts` — the team

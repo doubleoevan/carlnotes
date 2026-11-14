@@ -102,9 +102,13 @@ one number, the UTC day's spend billed to free users who are not admins.
 A paid user is never paused or slowed. A new Topic's first scan is never skipped: at most it waits its turn. The admin
 console's Limits section counts down to the cutoffs' reset at midnight UTC and meters the day's free-plan spend
 against every cutoff, the waiting scans, and the past hour's signups. It overrides every setting without a
-deploy. Turning off its permission for unverified email sign-ups to scan makes their first scans wait whatever the
-day's spend. Each sweep also alerts once an hour's signups reach 50, and that alert pauses nothing. The
-[deployment guide](apps/docs/deployment.md#spend-control-settings) lists the settings.
+deploy. Turning off its permission for unverified email sign-ups to scan and chat makes their first and manual scans
+wait whatever the day's spend, and chat and voice say that Carl will answer once the email is verified. The same
+section pauses new podcast episodes, pauses new films, sets a film's generated image limit, and leaves the home its
+pinned items alone. Each is off until an admin sets it. Each sweep also alerts once an hour's signups reach 50, and
+that alert pauses nothing. The [deployment guide](apps/docs/deployment.md#spend-control-settings) lists the
+settings, and its [Launch runbook](apps/docs/deployment.md#launch-runbook) says what to watch during a wave, how to
+add capacity, and what each switch stops.
 
 The domain vocabulary lives in `.agents/skills/domain-model/`. The code uses those nouns, so grepping a domain noun
 finds its code. [apps/docs/ai-scaffolding.md](apps/docs/ai-scaffolding.md) explains how the repo constrains
@@ -224,7 +228,7 @@ bun run docs:embed   # chunk the docs markdown by section and embed the changed 
 bun run docs:embed:prd # the same sync against the production database, owner-run. the release-main deploy job also runs it on every release
 bun run topic-images:backfill -- --mode missing # under doppler, draw an image for every topic that has none; --mode redo draws every topic again, and --mode resize rederives the sizes from each stored original
 bun run podcast-episode-images:backfill # under doppler, draw an image for every published podcast episode that has none, on the platform's key
-bun run films:backfill # under doppler, start or join the film backfill that the worker also starts on boot: each topic's latest published podcast episode with no film gets one, and every ready film below the current render version is rendered again while it keeps playing, on the platform's bill, TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_CONCURRENCY at a time (default 1); the worker logs the counts so far and the films left after each batch, and the script prints the rendered, skipped, and failed counts, the generated images drawn, the render time, and the stored bytes. TOPIC_PODCAST_EPISODE_VIDEO_CONCURRENCY (default 1) sets the episode-videos queue's renders per replica, and 0 turns films off. a chapter draws generated images until it shows one distinct image for every 30 seconds, up to TOPIC_PODCAST_EPISODE_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT (default 40) a film, and 0 turns them off
+bun run films:backfill # under doppler, start or join the film backfill that the worker also starts on boot: each topic's latest published podcast episode with no film gets one, and every ready film below the current render version is rendered again while it keeps playing, on the platform's bill, TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_CONCURRENCY at a time (default 1, and 0 turns the backfill off); the worker logs the counts so far and the films left after each batch, and the script prints the rendered, skipped, and failed counts, the generated images drawn, the render time, and the stored bytes. TOPIC_PODCAST_EPISODE_VIDEO_CONCURRENCY (default 1) sets the episode-videos queue's renders per replica, and 0 turns films off. a chapter draws generated images until it shows one distinct image for every 30 seconds, up to TOPIC_PODCAST_EPISODE_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT (default 40) a film, and 0 turns them off
 bun run edge:purge   # clear the pages and the signed-out feed that Cloudflare shares; the deploy job that runs right after the app deploys
 bun run sync:releases # re-read every published GitHub release into the releases table the /releases endpoint serves; it seeds history and repairs a missed webhook delivery, and is safe to re-run
 bun run sync:releases:prd # the same sync against the production database; run it once after the first deploy, since the table starts empty. the webhook writes it going forward
@@ -257,7 +261,7 @@ Run `bun run db:migrate` to apply development migrations and `bun run db:seed` t
 Checks: `bun run check` runs the full gate, the same `scripts/preflight.sh` that the pre-push hook runs:
 
 ```bash
-bun run check       # biome + adopted component conventions + package boundaries + knip + component parity + client parity + purchase paths + contract freeze + tsc + workflow bundles + bun test
+bun run check       # biome + adopted component conventions + package boundaries + dependency pins + knip + component parity + client parity + purchase paths + contract freeze + tsc + workflow bundles + bun test
 ```
 
 Or run them individually:
@@ -268,6 +272,7 @@ bun run check:components               # enforce only the six adopted component 
 bun run report:components              # report the wider feature-component inventory without failing on findings
 bun run report:components -- --json    # deterministic classifications, locations, and counts
 bun scripts/check-package-boundaries.ts # every import stays inside the dependencies its workspace declares
+bun scripts/check-dependency-pins.ts    # .bun-version names the Dockerfile's Bun, the lockfile installs every patched package at its patched version, and docker-compose.yml runs the LiteLLM image infra/litellm/Dockerfile starts from
 bunx knip                               # no file, export, type, or declared dependency is left unused
 bun scripts/check-component-parity.ts   # every Nightshift component contract is implemented in each app it names, and a component both apps define shares its core component or is listed in apps/mobile/parity.md
 bun scripts/check-client-parity.ts      # every api capability the web reaches is reachable from the app, or listed in apps/mobile/parity.md
@@ -277,6 +282,7 @@ bunx tsc -b             # add --force after a dependency change. bun run check d
 bun test
 bun run check:workflows # every Temporal workflow file still bundles
 bun run check:built-dependencies # after build:ui, apps/web declares every package its server build leaves external
+bun run check:advisories # no high or critical advisory on the lockfile outside dependency-advisories.json. it asks the registry, so CI runs it in its own job and bun run check does not
 ```
 
 Component conventions cover web components/pages, mobile components, and core components. Routes, entrypoints,
@@ -415,10 +421,13 @@ Set up [release and uptime monitoring](apps/docs/deployment.md#deploy-alerts) fo
 ## Security
 
 [SECURITY.md](SECURITY.md) says how to report a vulnerability. It also lists the dependency checks that run on their
-own: Dependabot, `bun audit` in CI, CodeQL, the pinned actions and image digests, and the three-day release age.
-Dependency changes run through the pinned Bun, `bunx bun@1.4.3 add ...`, so the lockfile keeps the format CI's Bun
-reads. CI reads that version from `.bun-version` through the shared `.github/actions/setup-bun` step. The Dockerfile
-pins the same version in its image tag, so a Bun upgrade changes both.
+own: Dependabot, the advisory check in CI, CodeQL, the pinned actions and image digests, and the three-day release
+age. The advisory check, `bun run check:advisories`, fails CI's `advisories` job on a high or critical advisory that
+the reviewed allowlist in `dependency-advisories.json` does not name. It runs apart from the gate, and no release
+waits on it. Dependabot's security updates do not see transitive packages, so this check is the one that reports an
+advisory on one. Dependency changes run through the pinned Bun, `bunx bun@1.4.4 add ...`, so the lockfile keeps the
+format CI's Bun reads. CI reads that version from `.bun-version` through the shared `.github/actions/setup-bun` step.
+The Dockerfile pins the same version in its image tag, and `bun run check` fails if the two differ.
 
 ## Attribution
 

@@ -1,6 +1,7 @@
-// test the chat message time label, and the private chat's author lines, retry control, question attachments, and a
-// podcast chat turn's tag
+// test the chat message time label, and the private chat's author lines, retry control, unverified email line,
+// question attachments, and a podcast chat turn's tag
 import { expect, test } from "bun:test"
+import { EMAIL_UNVERIFIED_LINE } from "@carlnotes/contracts/chat"
 import { withPodcastEpisodeNote } from "@carlnotes/contracts/chatQuestionNotes"
 import { TEST_PODCAST_EPISODE_NOTE } from "@carlnotes/contracts/chatTestFixtures"
 import { DAY_MS } from "@carlnotes/contracts/time"
@@ -65,6 +66,16 @@ test("a failed chat turn renders a retry control", async () => {
 	expect(chatMessagesHtml).toContain('aria-hidden="true"')
 	// the words lead the icon, which is what puts the button on the sentence's baseline
 	expect(chatMessagesHtml.indexOf("Try again?")).toBeLessThan(chatMessagesHtml.indexOf("lucide-rotate-ccw"))
+})
+
+// a chat turn the unverified accounts switch rejected asks the user to verify their email, with no retry and no
+// plans link
+test("an unverified email chat turn renders its line", async () => {
+	const rejectedChatTurn = toTestChatTurn({ answer: "", rejection: "emailUnverified" })
+	const chatMessagesHtml = await renderTestChatMessages([rejectedChatTurn], { onRetry: () => {} })
+	expect(chatMessagesHtml).toContain(EMAIL_UNVERIFIED_LINE)
+	expect(chatMessagesHtml).not.toContain("Try again?")
+	expect(chatMessagesHtml).not.toContain('href="/plans"')
 })
 
 // an image sent with a question is shown in its bubble instead of being named and nothing else

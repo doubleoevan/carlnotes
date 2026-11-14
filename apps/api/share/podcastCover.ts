@@ -4,8 +4,9 @@
 import { FULL_PODCAST_COVER_SIZE, type PodcastCover, type PodcastCoverSize } from "@carlnotes/contracts/podcastEpisodes"
 import { attachmentExists, getAttachmentBytes, uploadAttachment } from "@carlnotes/db/store"
 import { runFfmpeg } from "@carlnotes/models/ffmpeg"
-import { type CardElement, toCardElementPng, toImageDataUri } from "@carlnotes/pipeline/cardElementPng"
+import { type CardElement, toCardElementPng } from "@carlnotes/pipeline/cardElementPng"
 import { toTopicImageCardJpeg, toTopicImageOriginalKey } from "@carlnotes/pipeline/topicImages/topicImageFiles"
+import { toDataUrl } from "@carlnotes/server/dataUrl"
 import { toPodcastCoverObjectKey } from "@carlnotes/server/podcastCoverPaths"
 import { type CoverBandTones, toBottomBand, toCoverBandTones, toTopBand } from "./podcastCoverBands"
 import {
@@ -166,14 +167,14 @@ async function loadTopicImageGround({
 	// the square crop of the stored original, and the tones of the bands over it
 	const originalJpeg = await getAttachmentBytes(toTopicImageOriginalKey(topicId, topicImageHash))
 	const squareJpeg = await toTopicImageCardJpeg(originalJpeg, TOPIC_IMAGE_SQUARE_SIZE, TOPIC_IMAGE_SQUARE_SIZE)
-	return { dataUri: toImageDataUri(squareJpeg, "image/jpeg"), bandTones: await toCoverBandTones(squareJpeg) }
+	return { dataUri: toDataUrl("image/jpeg", squareJpeg), bandTones: await toCoverBandTones(squareJpeg) }
 }
 
 // the illustration as a data uri. a read that fails is tried again by the next cover
 function loadCoverIllustrationDataUri(): Promise<string> {
 	coverIllustrationDataUri ??= Bun.file(PODCAST_COVER_ILLUSTRATION_URL)
 		.arrayBuffer()
-		.then((coverIllustrationBytes) => toImageDataUri(new Uint8Array(coverIllustrationBytes), "image/png"))
+		.then((coverIllustrationBytes) => toDataUrl("image/png", new Uint8Array(coverIllustrationBytes)))
 		// forget a failed read, so a file that arrives later is found
 		.catch((error) => {
 			coverIllustrationDataUri = undefined

@@ -14,6 +14,7 @@ import { startTopicScan } from "@carlnotes/pipeline/scan"
 import { screenPendingSources } from "@carlnotes/pipeline/screen"
 import { failStaleScans } from "@carlnotes/pipeline/staleScans"
 import { startDashboardSnapshotsWorkflow } from "@carlnotes/pipeline/temporalClient"
+import { checkUncheckedImages } from "@carlnotes/pipeline/uncheckedImageChecks"
 import { shutdownAnalytics } from "@carlnotes/server/analytics"
 import { toPositiveInteger } from "@carlnotes/server/envSettings"
 import { reportError, shutdownMonitoring, startMonitoring } from "@carlnotes/server/monitoring"
@@ -294,13 +295,18 @@ async function saveFailedScan(topic: Topic): Promise<void> {
 		})
 }
 
-// run the leased sweep and the leased viewer count sync, then retry the pending object deletions, remind the support
-// personal sources of reports left open, send the day's notifications emails, and report the day's spend once the
-// leases are released, after starting the day's Dashboard build
+// run the leased sweep and the leased viewer count sync, then retry the pending object deletions, check the
+// unchecked images again, remind the support inbox of reports left open, send the day's notifications emails, and
+// report the day's spend once the leases are released, after starting the day's Dashboard build
 async function runSweep(): Promise<void> {
 	await runScheduledTopicScans()
 	await syncViewerCounts()
 	await retryPendingObjectDeletions()
+
+	// a failed check of the unchecked images is reported, and the rest of the sweep goes on
+	await checkUncheckedImages().catch((error: unknown) => {
+		reportError(error, "unchecked-image")
+	})
 	await remindOpenReports()
 
 	// a failed email read still leaves the day's spend to report

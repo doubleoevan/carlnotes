@@ -1,8 +1,12 @@
-// a film's chapter images, with the connection pool, storage, the Resource Image fetch, and the model calls stubbed:
-// how many generated images a chapter lacks, which ones a film generates within its limit, each chapter's images in order,
-// and a failed image generation that leaves a chapter on the images it has
+// a film's chapter images, with the connection pool, Redis, storage, the Resource Image fetch, and the model calls
+// stubbed: how many generated images a chapter lacks, which ones a film generates within its limit, an admin's limit
+// in place of the Doppler one, each chapter's images in order, and a failed image generation that leaves a chapter on
+// the images it has
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool } from "@carlnotes/db/connectionPoolStub"
+import * as dailySpendCutoffs from "@carlnotes/db/dailySpendCutoffs"
+import { DEFAULT_SPEND_CONTROL_SETTINGS } from "@carlnotes/db/dailySpendCutoffTestFixtures"
+import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import type { ResourceImage } from "../resourceImages/fetchResourceImages"
 import * as resourceImageFetch from "../resourceImages/fetchResourceImages"
@@ -44,9 +48,11 @@ let reportError: ChapterImageGenerationSpies["reportError"]
 // each Resource's stored images, which a test sets before it prepares
 let resourceImagesById = new Map<string, ResourceImage[]>()
 
-// the shared image generations, a fetch that returns the stored images, and stills made from the bytes they read
+// the shared image generations, an empty in-memory Redis for the spend control settings, a fetch that returns the
+// stored images, and stills made from the bytes they read
 beforeEach(() => {
 	;({ renderOriginal, upload, reportError } = stubChapterImageGenerations())
+	stubRedisClient()
 	resourceImagesById = new Map()
 	loadOrFetchImages = spyOn(resourceImageFetch, "loadOrFetchResourceImages").mockImplementation(
 		async () => resourceImagesById,
@@ -57,9 +63,10 @@ beforeEach(() => {
 	spyOn(videoFrames, "loadPodcastCardStillPng").mockResolvedValue(PODCAST_CARD_STILL)
 })
 
-// put the pool, every spy, and the setting back after each test
+// put the pool, the Redis client, every spy, and the setting back after each test
 afterEach(() => {
 	restoreConnectionPool()
+	restoreRedisClient()
 	mock.restore()
 	restoreEnvSettings()
 })
@@ -201,6 +208,24 @@ test("a limit of zero generates none, and a chapter with nothing else borrows th
 	const images = await prepareOneChapter(300)
 	expect(renderOriginal).not.toHaveBeenCalled()
 	expect(await toImageKinds(images)).toEqual(["podcast-card", "film-image"])
+})
+
+// the limit is read from the spend control settings on every render, so an admin's limit holds for the next render in
+// the same process
+test("an admin's limit of zero generates none for the next render, whatever the Doppler limit", async () => {
+	// a Doppler limit of 40 generates the chapter's missing image
+	Bun.env.TOPIC_PODCAST_EPISODE_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT = "40"
+	stubChapterReads()
+	expect(await toImageKinds(await prepareOneChapter(45))).toEqual(["generated", "podcast-card"])
+	expect(renderOriginal).toHaveBeenCalledTimes(1)
+
+	// the admin's limit of zero generates none for the next render
+	spyOn(dailySpendCutoffs, "loadSpendControlSettings").mockResolvedValue({
+		...DEFAULT_SPEND_CONTROL_SETTINGS,
+		generatedChapterImageLimit: 0,
+	})
+	expect(await toImageKinds(await prepareOneChapter(45))).toEqual(["podcast-card", "film-image"])
+	expect(renderOriginal).toHaveBeenCalledTimes(1)
 })
 
 test("a film that shows the podcast card as its image leaves a chapter with no other image on the podcast card alone", async () => {

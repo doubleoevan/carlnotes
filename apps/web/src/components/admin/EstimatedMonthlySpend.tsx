@@ -263,7 +263,7 @@ function DailySignupsCell({ signupRateRow, pastDaysLabel }: DailySignupsCellProp
 		<td className={CELL_CLASS}>
 			{signupRateRow.signupRate.toLocaleString("en-US")}
 			{signupRateRow.isPastDaysRate && (
-				<span className="text-primary block text-xs whitespace-nowrap sm:ml-2 sm:inline">{pastDaysLabel}</span>
+				<span className="text-link block text-xs whitespace-nowrap sm:ml-2 sm:inline">{pastDaysLabel}</span>
 			)}
 		</td>
 	)

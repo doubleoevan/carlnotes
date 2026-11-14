@@ -17,6 +17,7 @@ import { Hono } from "hono"
 import { isAllowed } from "../authorization"
 import { MULTIPART_ENVELOPE_BYTES, toBodyLimit, uploadSignedOutRejection } from "../bodyLimit"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
+import { toolCallerRateLimiter } from "../rateLimit"
 import { addTopicAttachment } from "./attachmentWrites"
 import { loadOwnedTopic } from "./permissions"
 
@@ -148,34 +149,43 @@ export function toStoredFileHeaders(filename: string, contentType: string): Reco
 	}
 }
 
-// a topic attachment's routes: adding one by url, editing its context, removing it, and downloading it
+// a topic attachment's routes: adding one by url, editing its context, removing it, and downloading it. an added url
+// and an uploaded file each count against the tool callers' limit before a page is fetched or a file is stored
 export const topicAttachmentsRoute = new Hono<AppEnv>()
-	.post("/topics/:id/attachments/url", zValidator("json", attachmentUrlPayload), async (context) => {
-		// reject a signed-out visitor
-		const userId = currentUser(context)
-		if (!userId) {
-			return context.json({ error: "unauthorized" }, 401)
-		}
+	.post(
+		"/topics/:id/attachments/url",
+		toolCallerRateLimiter,
+		zValidator("json", attachmentUrlPayload),
+		async (context) => {
+			// reject a signed-out visitor
+			const userId = currentUser(context)
+			if (!userId) {
+				return context.json({ error: "unauthorized" }, 401)
+			}
 
-		// fetch the page and add it through the ingest a file upload takes, after the owner check
-		const addTopicAttachmentResult = await addTopicAttachment({
-			userId,
-			topicId: context.req.param("id"),
-			topicAttachmentAdd: { kind: "url", url: context.req.valid("json").url },
-			analyticsProperties: toAnalyticsProperties(context),
-		})
-		switch (addTopicAttachmentResult.status) {
-			case "added":
-				return context.json({ id: addTopicAttachmentResult.attachmentId, filename: addTopicAttachmentResult.filename })
-			case "forbidden":
-				return context.json({ error: "forbidden" }, 403)
-			// the ingest's own reason names the url, and anything else is internal
-			case "invalid":
-				return context.json({ error: addTopicAttachmentResult.reason }, 400)
-			case "failed":
-				return context.json({ error: "Carl couldn't process that link. Try again in a moment." }, 502)
-		}
-	})
+			// fetch the page and add it through the ingest a file upload takes, after the owner check
+			const addTopicAttachmentResult = await addTopicAttachment({
+				userId,
+				topicId: context.req.param("id"),
+				topicAttachmentAdd: { kind: "url", url: context.req.valid("json").url },
+				analyticsProperties: toAnalyticsProperties(context),
+			})
+			switch (addTopicAttachmentResult.status) {
+				case "added":
+					return context.json({
+						id: addTopicAttachmentResult.attachmentId,
+						filename: addTopicAttachmentResult.filename,
+					})
+				case "forbidden":
+					return context.json({ error: "forbidden" }, 403)
+				// the ingest's own reason names the url, and anything else is internal
+				case "invalid":
+					return context.json({ error: addTopicAttachmentResult.reason }, 400)
+				case "failed":
+					return context.json({ error: "Carl couldn't process that link. Try again in a moment." }, 502)
+			}
+		},
+	)
 	.patch("/attachments/:id/context", zValidator("json", attachmentContextPayload), async (context) => {
 		// reject a signed-out visitor
 		const userId = currentUser(context)
@@ -221,7 +231,8 @@ export const topicAttachmentsRoute = new Hono<AppEnv>()
 	})
 	.post(
 		TOPIC_ATTACHMENT_UPLOAD_PATH,
-		// reject a visitor, then limit the upload body before it's fully buffered into memory
+		// count the upload, reject a visitor, then limit the upload body before it's fully buffered into memory
+		toolCallerRateLimiter,
 		uploadSignedOutRejection,
 		toBodyLimit(TOPIC_ATTACHMENT_MAX_BYTES + MULTIPART_ENVELOPE_BYTES, TOPIC_ATTACHMENT_TOO_LARGE_LINE),
 		async (context) => {

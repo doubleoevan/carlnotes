@@ -1,10 +1,11 @@
 import { DOCX_TYPE, toBaseContentType, XLSX_TYPE } from "@carlnotes/contracts/attachmentTypes"
-import { getDocumentProxy } from "unpdf"
 import { AttachmentValidationError, isImageAttachmentType } from "./attachContentType"
-import { toSerializedWorkbook } from "./attachTable"
+import { toWorkbookText } from "./attachWorkbook"
+import { readZipEntries } from "./attachZip"
 
-// a file's text, and for a PDF whose read stopped before its last page, how many pages the PDF has
-export type ExtractedText = { text: string; pdfPageCount?: number }
+// a file's text. for a PDF whose read stopped before its last page, how many pages the PDF has, and for a workbook
+// whose text is held only in part, how many characters its whole text runs
+export type ExtractedText = { text: string; pdfPageCount?: number; charCount?: number }
 
 /**
  * Extracts an uploaded file's whole text. A workbook serializes its sheets.
@@ -16,8 +17,10 @@ export async function extractText(contentType: string, bytes: Uint8Array): Promi
 
 /**
  * Extracts an uploaded file's text as extractText does, except that a PDF reads its pages in order and stops once its
- * text passes maxChars, so a file far longer than the caller keeps is never read whole. A PDF that stopped early
- * returns its page count beside the text. Every other type is read whole.
+ * text passes maxChars, and a workbook holds its rows' text only until it passes maxChars, so a file far longer than
+ * the caller keeps is never held whole. A PDF that stopped early returns its page count beside the text, and a
+ * workbook held in part returns the length of its whole text. Every other type is read whole. A Word file or a
+ * workbook whose zip directory declares too large an unpacked size is rejected before it is opened.
  */
 export async function extractTextUpTo(
 	contentType: string,
@@ -40,16 +43,19 @@ export async function extractTextUpTo(
 		return extractPdfText(bytes, maxChars)
 	}
 
-	// a Word document gives its plain text. the parser loads lazily
+	// a Word document gives its plain text, once its zip directory is read, which rejects a file that declares too
+	// large an unpacked size. the parser loads lazily
 	if (baseContentType === DOCX_TYPE) {
+		readZipEntries(bytes)
 		const { default: mammoth } = await import("mammoth")
 		const { value } = await mammoth.extractRawText({ buffer: Buffer.from(bytes) })
 		return { text: value }
 	}
 
-	// a workbook serializes each sheet's rows
+	// a workbook serializes each sheet's rows, and names its whole length if only part of the text is held
 	if (baseContentType === XLSX_TYPE) {
-		return { text: await toSerializedWorkbook(bytes) }
+		const { text, charCount } = await toWorkbookText(bytes, maxChars)
+		return charCount > text.length ? { text, charCount } : { text }
 	}
 
 	// an image includes no text to decode. the model reads it instead, so extraction is not its path
@@ -65,6 +71,8 @@ export async function extractTextUpTo(
 // count if pages are left unread. each page's text joins its items, with a line break where an item ends a line, and
 // the merge collapses whitespace as unpdf's own mergePages does
 async function extractPdfText(bytes: Uint8Array, maxChars: number): Promise<ExtractedText> {
+	// the parser loads lazily, as the Word and workbook parsers do, so a read of any other type never loads it
+	const { getDocumentProxy } = await import("unpdf")
 	const pdf = await getDocumentProxy(bytes)
 	try {
 		// read the pages in order, freeing each page once its text is read
@@ -96,7 +104,7 @@ async function extractPdfText(bytes: Uint8Array, maxChars: number): Promise<Extr
 
 // decodes text by the declared charset, then strict utf-8, then windows-1252, excel's plain csv export
 function decodeTextBytes(bytes: Uint8Array, contentType: string): string {
-	// a declared charset wins when the platform knows it
+	// a declared charset wins if the platform knows it
 	const declaredCharset = /charset=([\w-]+)/i.exec(contentType)?.[1]
 	if (declaredCharset) {
 		try {

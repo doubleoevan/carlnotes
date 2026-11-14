@@ -77,6 +77,18 @@ describe("toUsernameRejection", () => {
 		}
 	})
 
+	it("rejects the second host's name and the words that claim a role, however they are punctuated", () => {
+		for (const name of ["vienna", "Vienna", "official", "staff", "moderator", "mod-erator", "STAFF"]) {
+			expect(toUsernameRejection(name)).toBe("reserved")
+		}
+	})
+
+	it("allows a name that only contains a reserved word", () => {
+		for (const name of ["vienna-fan", "staffordshire", "officially"]) {
+			expect(toUsernameRejection(name)).toBeNull()
+		}
+	})
+
 	it("rejects every route slug, reserved ahead of any vanity-url work", () => {
 		for (const segment of ["topics", "pricing", "account", "activity", "settings", "profiles", "teams", "login"]) {
 			expect(toUsernameRejection(segment)).toBe("reserved")
@@ -144,6 +156,62 @@ describe("routes added by later changes", () => {
 		expect(toUsernameRejection("reset-password")).toBe("reserved")
 		expect(toUsernameRejection("resetpassword")).toBe("reserved")
 		expect(toUsernameRejection("Reset_Password")).toBe("reserved")
+	})
+})
+
+// the web app's route files, where a file's path names the url it serves
+const WEB_ROUTES_FOLDER = new URL("../../apps/web/src/routes", import.meta.url).pathname
+
+// the first url segment of each web route file. a file that starts with a dash is no route, a segment that starts
+// with an underscore is a layout that adds nothing to the url, and an index or a parameter is no slug
+function toWebRouteSlugs(): string[] {
+	// every file under the routes folder, by its path from the folder
+	const routeFilePaths = Array.from(new Bun.Glob("**/*.tsx").scanSync({ cwd: WEB_ROUTES_FOLDER }))
+	const routeSlugs = routeFilePaths.flatMap((routeFilePath) => {
+		// the file's url segments, split at each folder and each dot
+		const pathSegments = routeFilePath.replace(/\.tsx$/, "").split(/[/.]/)
+		const urlSegments = pathSegments.filter((pathSegment) => !pathSegment.startsWith("_"))
+		const [firstUrlSegment] = urlSegments
+
+		// keep the first segment of a route that serves a path of its own
+		const isRouteFile = !pathSegments.some((pathSegment) => pathSegment.startsWith("-"))
+		const isSlug = firstUrlSegment !== undefined && firstUrlSegment !== "index" && !firstUrlSegment.startsWith("$")
+		return isRouteFile && isSlug ? [firstUrlSegment] : []
+	})
+	return [...new Set(routeSlugs)]
+}
+
+// a username can never shadow a root path. every root route of the web app is reserved, and so is every path the api
+// serves at the site's root
+describe("root route slugs", () => {
+	it("reserves the first url segment of every web route file", () => {
+		// the slugs include a route beside the layout, one inside it, one behind sign-in, and one with a parameter
+		const webRouteSlugs = toWebRouteSlugs()
+		expect(webRouteSlugs).toEqual(expect.arrayContaining(["reset-password", "search", "account", "topics"]))
+
+		// each one is reserved in its comparison form
+		const unreservedSlugs = webRouteSlugs.filter((slug) => !RESERVED_USERNAMES.has(toNormalizedUsername(slug)))
+		expect(unreservedSlugs).toEqual([])
+	})
+
+	it("rejects the search page, the component browser, the release notes, the podcast feeds, and the stories folder", () => {
+		for (const slug of [
+			"search",
+			"nightshift",
+			"releases",
+			"changelog",
+			"podcast-feeds",
+			"podcast-video-feeds",
+			"stories",
+		]) {
+			expect(toUsernameRejection(slug)).toBe("reserved")
+		}
+	})
+
+	it("rejects every other path the api serves at the site's root", () => {
+		for (const slug of ["api", "mcp", "docs", "blog", "pricing", "assets", "screenshots"]) {
+			expect(toUsernameRejection(slug)).toBe("reserved")
+		}
 	})
 })
 

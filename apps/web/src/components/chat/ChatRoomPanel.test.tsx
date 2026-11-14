@@ -1,5 +1,6 @@
 // the chat room's rejection notice names why a post was rejected
 import { expect, test } from "bun:test"
+import { EMAIL_UNVERIFIED_LINE } from "@carlnotes/contracts/chat"
 import { ChatRoomRejectionNotice } from "./ChatRoomPanel"
 import { renderWithRouter } from "./renderWithRouter"
 
@@ -29,4 +30,12 @@ test("a file rejection says why the files did not post", async () => {
 	// a file that waited behind other files asks the poster to share it again
 	const busyHtml = await renderWithRouter(<ChatRoomRejectionNotice rejection="attachmentBusy" />)
 	expect(busyHtml).toContain("share them again in a moment")
+})
+
+// an unverified email asks the poster to verify it, and names neither the budget nor a cutoff
+test("an unverified email rejection asks the poster to verify it", async () => {
+	const noticeHtml = await renderWithRouter(<ChatRoomRejectionNotice rejection="emailUnverified" />)
+	expect(noticeHtml).toContain(EMAIL_UNVERIFIED_LINE)
+	expect(noticeHtml).not.toContain("empty mug")
+	expect(noticeHtml).not.toContain("midnight")
 })

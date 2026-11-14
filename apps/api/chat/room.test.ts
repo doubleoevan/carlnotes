@@ -1,13 +1,12 @@
 // who may delete one chat room message, decided without a database, what a chat message page reports,
 // how a spoken chat message posts, which replies post, and how the stream's catch-up starts
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
-import { CHAT_PAUSED_ERROR } from "@carlnotes/contracts/chat"
+import { CHAT_PAUSED_ERROR, EMAIL_UNVERIFIED_ERROR } from "@carlnotes/contracts/chat"
 import { PODCAST_EPISODE_SPEAKER_NAMES } from "@carlnotes/contracts/podcastEpisodes"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as dailySpendCutoffs from "@carlnotes/db/dailySpendCutoffs"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
 import { SPENT_BUDGET_REJECTION } from "@carlnotes/models/models"
-import * as moderation from "@carlnotes/models/moderation"
 import * as spendReservations from "@carlnotes/models/spendReservations"
 import { stubReservedUserSpend } from "@carlnotes/models/spendReservationTestFixtures"
 import * as temporalClient from "@carlnotes/pipeline/temporalClient"
@@ -327,6 +326,30 @@ test("a chat message to carl is rejected before it posts once a free poster is p
 	expect(runModelChatRoomTurnSpy).not.toHaveBeenCalled()
 })
 
+// a poster the unverified accounts switch limits is told privately before anything posts, ahead of the chat cutoff,
+// and nothing is reserved or called
+test("a chat message to carl is rejected before it posts once the unverified accounts switch limits the poster", async () => {
+	// a member of the team's own chat room whom the switch limits, with the chat cutoff passed too
+	spyOn(roomAccess, "loadChatRoom").mockResolvedValue({ topic: null, teamId: "team-1" })
+	const isUnverifiedAccountLimitedSpy = spyOn(dailySpendCutoffs, "isUnverifiedAccountLimited").mockResolvedValue(true)
+	spyOn(dailySpendCutoffs, "isUserPastDailySpendCutoff").mockResolvedValue(true)
+	const reserveUserSpendSpy = spyOn(spendReservations, "reserveUserSpend")
+	const runModelChatRoomTurnSpy = spyOn(roomTurns, "runModelChatRoomTurn").mockResolvedValue(undefined)
+	const sentQueries = stubConnectionPool()
+
+	// the rejection comes back privately, with the unverified email's error
+	expect(await room.postChatRoomMessage("user-1", null, "team-1", "@carl who is hiring?", null, [])).toEqual({
+		chatMessageId: 0,
+		rejectionReason: EMAIL_UNVERIFIED_ERROR,
+	})
+
+	// the switch was read for the poster, and nothing was reserved, stored, or called after
+	expect(isUnverifiedAccountLimitedSpy).toHaveBeenCalledWith("user-1")
+	expect(reserveUserSpendSpy).not.toHaveBeenCalled()
+	expect(sentQueries.some((sentQuery) => sentQuery.text.startsWith('insert into "room_messages"'))).toBe(false)
+	expect(runModelChatRoomTurnSpy).not.toHaveBeenCalled()
+})
+
 // a member's posts to a chat room count in the tool callers' rate limit window, as a private chat post does, so a
 // script cannot start carl's chat turns without limit
 test("a chat room post past the tool callers' rate limit is rejected with a 429", async () => {
@@ -342,53 +365,6 @@ test("a chat room post past the tool callers' rate limit is rejected with a 429"
 
 		// the next post in the window is rate limited
 		expect((await postToTeamRoom()).status).toBe(429)
-	} finally {
-		restoreRedisClient()
-	}
-})
-
-// a shared image the moderation flags rejects the whole post with Carl's 422, and nothing posts
-test("a chat room post with a flagged image is rejected with its category", async () => {
-	// a room the user may post to, a clean text, a flagged image, and a post that must not run
-	stubRedisClient()
-	spyOn(roomAccess, "loadChatRoom").mockResolvedValue({ topic: null, teamId: "team-1" })
-	spyOn(moderation, "classifyUserText").mockResolvedValue({ outcome: "skipped" })
-	spyOn(moderation, "classifyImage").mockResolvedValue({
-		outcome: "classified",
-		verdict: { isViolation: true, category: "violence" },
-	})
-	const postChatRoomMessageSpy = spyOn(room, "postChatRoomMessage")
-	try {
-		// the post, with one image
-		const image = { kind: "image", name: "shot.png", dataUrl: "data:image/png;base64,AA", keep: false }
-		const response = await toSignedInApp(chatRoomRoute, "user-1").request(
-			TEAM_ROOM_PATH.replace(":id", "team-1"),
-			toJsonRequest({ content: "look", attachments: [image] }),
-		)
-		expect(response.status).toBe(422)
-		expect(await response.json()).toEqual({ rejection: "objectionable", category: "violence" })
-		expect(postChatRoomMessageSpy).not.toHaveBeenCalled()
-	} finally {
-		restoreRedisClient()
-	}
-})
-
-// a post to a chat room the user may not use reads as missing before any moderation call is made
-test("a chat room post the user may not make spends no moderation call", async () => {
-	stubRedisClient()
-	spyOn(roomAccess, "loadChatRoom").mockResolvedValue(null)
-	const classifyUserTextSpy = spyOn(moderation, "classifyUserText")
-	const classifyImageSpy = spyOn(moderation, "classifyImage")
-	try {
-		// the post, with one image
-		const image = { kind: "image", name: "shot.png", dataUrl: "data:image/png;base64,AA", keep: false }
-		const response = await toSignedInApp(chatRoomRoute, "user-1").request(
-			TEAM_ROOM_PATH.replace(":id", "team-1"),
-			toJsonRequest({ content: "look", attachments: [image] }),
-		)
-		expect(response.status).toBe(404)
-		expect(classifyUserTextSpy).not.toHaveBeenCalled()
-		expect(classifyImageSpy).not.toHaveBeenCalled()
 	} finally {
 		restoreRedisClient()
 	}

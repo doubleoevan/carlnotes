@@ -39,7 +39,7 @@ export function toTeamPreviewKey(teamPreview: TeamPreview): string {
  */
 export async function toTeamPreviewPng(previewCard: TeamPreview): Promise<Uint8Array> {
 	// the team's avatar bytes, only fetched here. the card's key names the avatar instead, so a stored card loads nothing
-	const avatarImage = await toOwnerImageDataUri(previewCard.avatar)
+	const avatarImage = await toOwnerImageDataUri(previewCard.avatar, AVATAR_SIZE)
 	return toCardPng([toBrandIcon(), toTeamIdentity(previewCard, avatarImage), toTeamFooter(previewCard)])
 }
 

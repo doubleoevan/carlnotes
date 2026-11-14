@@ -346,7 +346,10 @@ in `lib/utcResets.ts`. `AccountFields` includes the shared ProfileFields form, w
 and input elements, and the `Switch` element.
 `NotificationsSection` is the account's Notifications section over those elements: `NotificationsCard` over
 `toNotificationSwitchStates`, with `NotificationsSection` reading the session's push preferences. Only the app renders
-it. `useAvatar` owns upload acknowledgement and session refresh for both File and FormData uploads. `Footer` owns all
+it. `useAvatar` owns upload acknowledgement and session refresh for both File and FormData uploads, and returns
+`isAvatarUnchecked`. `components/UncheckedAvatarLine.tsx` is the unchecked avatar's line, which each app adapts, and
+`ProfileFields` tells its `Identity` element if the avatar is unchecked, so each app places the line in the identity
+row. `Footer` owns all
 footer copy, destinations, and row order for both apps. `components/SpendMeter` is the monthly budget's bar with its
 markers, legend, status line, and cutoff list. `lib/spendMeter`, `monthlyBudgetCutoffs`, and `monthlyBudgetCutoffCopy`
 own budget labels and checkpoint calculations. `lib/spendMeterStoryFixtures` supplies the same spend and cutoff examples
@@ -513,15 +516,18 @@ through the app's own visit analytics. Their tests render through plain elements
 
 ## Topic images and the home
 
-`components/TopicImage` shows a topic's image at a size through the Nightshift contract, picking the 1x or 2x file.
+`components/TopicImage` shows a topic's image at a size through the Nightshift contract, picking the 1x or 2x file,
+or each app's `Placeholder` element, the coffee mug, in a box with no file.
 `components/TopicImageLink` wraps that image in each app's link to the page of what it shows, a topic's, a podcast
 episode's, or a Topic Post's, and renders the plain image if that page is the one open. A link with no label is for a
 pointer or a touch alone, beside a title that opens the same page. `lib/pagePaths` holds `isCurrentPagePath`, which
 compares a link's path with the open page's path without the query, the hash, and the end slash.
 `components/TopicCard` and `PodcastEpisodeCard` are the home's and the Topics page's cards, and `TopicImageEditor` is
 the editor's image block for a topic or a podcast episode (Regenerate with an image prompt and an upload from the
-image), each app supplying its elements and its file picker. `hooks/useTopicImageRender` polls a render until it
-finishes. `lib/topicImageEditor` holds the block's labels, the image dialogs' titles, the count line, and the upload
+image), each app supplying its elements and its file picker. It shows `UNCHECKED_IMAGE_TEXT` through its `Line` element
+while its image is unchecked, from the page read's flag and after an unchecked upload, cleared if a regenerate starts.
+`lib/uncheckedImageCopy.ts` has that line and the unchecked avatar's. `hooks/useTopicImageRender` polls a render until
+it finishes. `lib/topicImageEditor` holds the block's labels, the image dialogs' titles, the count line, and the upload
 check. `hooks/usePodcastEpisodeFields` is the Edit podcast form's title, description, and save, and
 `lib/podcastEpisodeEditor` its labels and the podcast episode's image as the block edits it. `lib/homeFaces` holds the
 home's sections in the order both homes show them, each week's new cards right after their Featured cards, the three
@@ -538,7 +544,7 @@ for a draft and for a published post its author edits, and the post otherwise. `
 is the post's info popup, which follows the Topic's: it takes the post's id and title, reads the post through
 `fetchTopicPost` once it opens, under the mobile screen's `topic-post` cache key, unless its page passes the post, and
 shows the author with the reactions and Share, the post's image, the discussion's play button with the line from
-`toTopicPostDiscussionDateText`, the Topic, and the summary. A row opens it too, through `isOpen` and `onOpenChange`.
+`toTopicPostDiscussionInfoText`, the Topic, and the summary. A row opens it too, through `isOpen` and `onOpenChange`.
 Its Share element takes the post, and `toTopicPostShare` in `lib/topicPosts` returns the topic and the post that each
 app's `ShareTopic` shares. `toInviteDestination` in `lib/inviteRejections` opens the Topic Post an accepted topic
 invite names.

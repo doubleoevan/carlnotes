@@ -20,7 +20,12 @@ export const RESERVED_USERNAMES = new Set([
 	"notesofcarl",
 	"admin",
 	"support",
-	// the root routes the app serves
+	// the podcast's second host, and the words that claim a role on the site
+	"vienna",
+	"official",
+	"staff",
+	"moderator",
+	// the root routes the app serves, each in its comparison form
 	"login",
 	"signup",
 	"join",
@@ -41,6 +46,13 @@ export const RESERVED_USERNAMES = new Set([
 	"assets",
 	"screenshots",
 	"mcp",
+	"search",
+	"nightshift",
+	"releases",
+	"changelog",
+	"podcastfeeds",
+	"podcastvideofeeds",
+	"stories",
 	// reserved ahead of need
 	"settings",
 	"t",

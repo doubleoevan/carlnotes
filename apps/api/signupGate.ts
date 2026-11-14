@@ -4,6 +4,7 @@
 import { GATE_COOKIE_NAME } from "@carlnotes/contracts/signupGate"
 import { deleteRedisKeys, saveRedisJson } from "@carlnotes/db/redis"
 import { isSameSignature, toAuthSecretSignature } from "@carlnotes/server/hmac"
+import { reportError } from "@carlnotes/server/monitoring"
 import type { Context } from "hono"
 import { setCookie } from "hono/cookie"
 import type { AppEnv } from "./currentUser"
@@ -13,6 +14,9 @@ const SINGLE_USE_TOKEN_LIFETIME_MS = 5 * 60 * 1000
 
 // the matching browser-side cookie lifetime
 const GATE_COOKIE_MAX_AGE_SECONDS = SINGLE_USE_TOKEN_LIFETIME_MS / 1000
+
+// how long cloudflare may take to respond to a turnstile check before the check reads as failed
+const TURNSTILE_CHECK_TIMEOUT_MS = 5000
 
 // what a token is for: the purpose its signature is keyed on, and the Redis key prefix its nonce is recorded under
 export type SingleUsePurpose = { signaturePurpose: string; redisKeyPrefix: string }
@@ -102,21 +106,36 @@ export function setGateCookie(context: Context<AppEnv>, gateToken: string): void
 }
 
 /**
- * Verifies a turnstile token server-side against cloudflare. Required on the web's password signup path only.
+ * Verifies a turnstile token server-side against cloudflare. Required on the web's password signup path only. A check
+ * that cloudflare has not responded to within the time limit reads as a failed check.
  */
 export async function verifyTurnstileToken(token: string): Promise<boolean> {
 	const secret = Bun.env.TURNSTILE_SECRET_KEY
 	if (!secret) {
 		throw new Error("TURNSTILE_SECRET_KEY must be set to verify a signup's turnstile token")
 	}
-	// verify server-side against cloudflare's siteverify endpoint
-	const response = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
-		method: "POST",
-		headers: { "Content-Type": "application/x-www-form-urlencoded" },
-		body: new URLSearchParams({ secret, response: token }),
-	})
-	const verification = (await response.json()) as { success: boolean }
-	return verification.success
+
+	// verify server-side against cloudflare's siteverify endpoint, within the time limit
+	try {
+		const response = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+			method: "POST",
+			headers: { "Content-Type": "application/x-www-form-urlencoded" },
+			body: new URLSearchParams({ secret, response: token }),
+			signal: AbortSignal.timeout(TURNSTILE_CHECK_TIMEOUT_MS),
+		})
+		const verification = (await response.json()) as { success: boolean }
+		return verification.success
+	} catch (error) {
+		// throw any failure but a check that ran out of time
+		if (!(error instanceof Error && error.name === "TimeoutError")) {
+			throw error
+		}
+
+		// log and report the check that timed out, and fail it
+		console.error("the turnstile check timed out")
+		reportError(error, "auth", { check: "turnstile" })
+		return false
+	}
 }
 
 // delete the nonce, which succeeds once. a nonce already consumed rejects the token, and an unreachable Redis passes it

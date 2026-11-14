@@ -44,6 +44,10 @@ const SET_TOPIC_IMAGE_REJECTION_TEXTS = {
 	unreadableUrl: "That url is not a supported image (jpeg, png, or webp). The image is unchanged.",
 } as const
 
+// the result text of a url's image that is shown to the caller alone until its image moderation can run
+const SET_TOPIC_IMAGE_UNCHECKED_TEXT =
+	"Only you can see the new image until Carl finishes checking it. Everyone else sees the current image until then."
+
 /**
  * Registers set_topic_image.
  */
@@ -97,13 +101,18 @@ async function toSetTopicImageFromUrlResult({
 	if (setTopicImageFromUrlResult.status === "objectionable") {
 		return toTextResult(toModerationRejectionMessage(setTopicImageFromUrlResult.category), true)
 	}
-	return setTopicImageFromUrlResult.status === "saved"
-		? toSetTopicImageResult({
-				...topicImageWrite,
-				image: setTopicImageFromUrlResult.image,
-				text: "Saved the new image.",
-			})
-		: toTextResult(SET_TOPIC_IMAGE_REJECTION_TEXTS[setTopicImageFromUrlResult.status], true)
+	if (setTopicImageFromUrlResult.status !== "saved") {
+		return toTextResult(SET_TOPIC_IMAGE_REJECTION_TEXTS[setTopicImageFromUrlResult.status], true)
+	}
+
+	// an unchecked image is the caller's alone, so its result says so and shows the topic's current image
+	const { image, isImageUnchecked } = setTopicImageFromUrlResult
+	return toSetTopicImageResult({
+		...topicImageWrite,
+		image,
+		isImageUnchecked,
+		text: isImageUnchecked ? SET_TOPIC_IMAGE_UNCHECKED_TEXT : "Saved the new image.",
+	})
 }
 
 // start a render within the month's regenerations, after the image prompt's moderation
@@ -127,22 +136,26 @@ async function toRegenerateTopicImageResult({
 		: toTextResult(SET_TOPIC_IMAGE_REJECTION_TEXTS.limitReached, true)
 }
 
-// the topic MCP view's result: the topic as its page reads it, with the new image if one was saved now
+// the topic MCP view's result: the topic as its page reads it, with the new image if one was saved now. an unchecked
+// image is its uploader's alone, so its result shows the topic's current image, whose files an app can read
 async function toSetTopicImageResult({
 	userId,
 	topicId,
 	image,
+	isImageUnchecked = false,
 	text,
 }: {
 	userId: string
 	topicId: string
 	image: TopicImageUrls | null
+	isImageUnchecked?: boolean
 	text: string
 }): Promise<CallToolResult> {
-	// the topic's fields as the topic page reads them
+	// the topic's fields and its current image as the topic page reads them
 	const topicPage = await loadTopicPage(userId, topicId)
 	const afterTopicDraft = topicPage ? toEditableTopicDraft(toEditableTopicFields(topicPage)) : null
+	const shownImage = isImageUnchecked ? (topicPage?.image ?? null) : image
 
 	// the line the person reads, and the topic MCP view's result
-	return toStatusResult(text, { status: "saved", topicId, afterTopicDraft, image })
+	return toStatusResult(text, { status: "saved", topicId, afterTopicDraft, image: shownImage })
 }

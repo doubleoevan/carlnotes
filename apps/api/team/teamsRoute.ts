@@ -19,6 +19,7 @@ import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { toObjectionableCategory, toObjectionableContentResponse } from "../moderation"
 import { toolCallerRateLimiter } from "../rateLimit"
 import { toTermsOutdatedResponse } from "../termsAcceptance"
+import { overlayUncheckedTeamAvatar } from "../uncheckedImageOverlays"
 import { deleteTeam } from "./deleteTeam"
 import {
 	approveJoinTeamRequest,
@@ -97,9 +98,11 @@ export const teamsRoute = new Hono<AppEnv>()
 	})
 	.get("/teams/:id/page", async (context) => {
 		// the team page, or the gate a private team shows a non-member with the team's name and the user's join request
-		const teamPageResult = await loadTeamPage(currentUser(context), context.req.param("id"))
+		const userId = currentUser(context)
+		const teamPageResult = await loadTeamPage(userId, context.req.param("id"))
 		if (teamPageResult.status === "visible") {
-			return context.json(teamPageResult.team)
+			// a leader's page names their unchecked avatar beside the published one
+			return context.json(await overlayUncheckedTeamAvatar(teamPageResult.team, userId))
 		}
 		if (teamPageResult.status === "gated") {
 			const { teamName, hasRequestedToJoin } = teamPageResult

@@ -5,7 +5,7 @@ import { db } from "@carlnotes/db"
 import { invites } from "@carlnotes/db/schema/invites"
 import { teams } from "@carlnotes/db/schema/teams"
 import { topics } from "@carlnotes/db/schema/topics"
-import { sendEmail, sendEmailBatches } from "@carlnotes/emails/email"
+import { sendAccountEmail } from "@carlnotes/emails/email"
 import {
 	renderTeamInviteEmail,
 	renderTeamInviteEmailText,
@@ -61,6 +61,8 @@ async function sendTopicInviteEmails(
 		const token = tokenByEmail.get(inviteeEmail)
 		return token ? [{ inviteeEmail, token }] : []
 	})
+
+	// render each invitee's message around the invitee's own invite url
 	const messages = await Promise.all(
 		invitees.map(async ({ inviteeEmail, token }) => {
 			const inviteUrl = `${appUrl}${toInvitePath(token)}?src=invite-email`
@@ -75,16 +77,13 @@ async function sendTopicInviteEmails(
 		}),
 	)
 
-	// each message send is recorded with its own acceptance flag
-	const acceptances = await sendEmailBatches(messages)
-	for (const [index] of invitees.entries()) {
-		await createTopicEmailSend({
-			topicId: topic.id,
-			emailKind: "topic-invite",
-			recipientUserId: null,
-			isAccepted: acceptances[index] ?? false,
-		})
-	}
+	// send each invitee's message on its own, and record each send once Resend accepts it
+	await Promise.all(
+		messages.map(async (message) => {
+			const isAccepted = await sendAccountEmail(message)
+			await createTopicEmailSend({ topicId: topic.id, emailKind: "topic-invite", recipientUserId: null, isAccepted })
+		}),
+	)
 }
 
 // email one user invitation without delaying the response that created it
@@ -151,7 +150,7 @@ async function sendTeamInviteEmail(
 		inviteUrl,
 		appUrl,
 	}
-	await sendEmail({
+	await sendAccountEmail({
 		to: inviteeEmail,
 		subject: toTeamInviteSubject(emailProps),
 		emailContent: await renderTeamInviteEmail(emailProps),
@@ -174,7 +173,7 @@ async function sendTopicInviteEmail(
 		return
 	}
 	const emailProps = { inviterUsername, topicName: topic.name, inviteeEmail, inviteUrl, appUrl }
-	const isAccepted = await sendEmail({
+	const isAccepted = await sendAccountEmail({
 		to: inviteeEmail,
 		subject: toTopicInviteSubject(emailProps),
 		emailContent: await renderTopicInviteEmail(emailProps),

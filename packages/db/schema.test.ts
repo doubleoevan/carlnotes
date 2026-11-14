@@ -8,6 +8,7 @@ import { chatProposals, chatRoomMessages, chatTurns } from "./schema/chat"
 import { podcastEpisodeChapters, podcastEpisodes } from "./schema/podcast"
 import { EMBED_DIMENSIONS, EMBED_MODEL_NAME, findings, resources } from "./schema/scans"
 import { commentMentions, comments, reactions } from "./schema/social"
+import { spendControlSettings } from "./schema/spendControlSettings"
 import { teams } from "./schema/teams"
 import { topicEmailSends } from "./schema/topicEmailSends"
 import { topicPostDiscussions, topicPosts } from "./schema/topicPosts"
@@ -514,6 +515,31 @@ test("chat_turns checks the topic post kind's shape and clears a deleted post", 
 	)
 })
 
+// a settings row saved before these columns reads every new switch as off. each pause and the pinned-only home take
+// false, and the generated chapter image limit takes no value, which reads as its default
+test("the pauses and the pinned-only home in spend_control_settings default to false, and the generated chapter image limit is nullable with no default", () => {
+	// each pause and the pinned-only home
+	expect(spendControlSettings.isPodcastEpisodeRecordingPaused.notNull).toBe(true)
+	expect(spendControlSettings.isPodcastEpisodeRecordingPaused.default).toBe(false)
+	expect(spendControlSettings.isTopicPodcastEpisodeVideoRenderingPaused.notNull).toBe(true)
+	expect(spendControlSettings.isTopicPodcastEpisodeVideoRenderingPaused.default).toBe(false)
+	expect(spendControlSettings.isHomePinnedOnly.notNull).toBe(true)
+	expect(spendControlSettings.isHomePinnedOnly.default).toBe(false)
+
+	// the generated chapter image limit
+	expect(spendControlSettings.generatedChapterImageLimit.notNull).toBe(false)
+	expect(spendControlSettings.generatedChapterImageLimit.hasDefault).toBe(false)
+
+	// the migration adds each column the same way, so it fills the row that is already saved with every switch off
+	const migrationsSql = allMigrationsSql()
+	expect(migrationsSql).toContain(`ADD COLUMN "is_podcast_episode_recording_paused" boolean DEFAULT false NOT NULL`)
+	expect(migrationsSql).toContain(
+		`ADD COLUMN "is_topic_podcast_episode_video_rendering_paused" boolean DEFAULT false NOT NULL`,
+	)
+	expect(migrationsSql).toContain(`ADD COLUMN "is_home_pinned_only" boolean DEFAULT false NOT NULL`)
+	expect(migrationsSql).toMatch(/ADD COLUMN "generated_chapter_image_limit" integer;/)
+})
+
 // a migration waits on a table's lock for at most the lock timeout. the migrations before 0155 were written without it
 test("every migration from 0155 on opens with the lock timeout", () => {
 	const laterSqlFiles = readdirSync(migrationsDirectory).filter((file) => file.endsWith(".sql") && file >= "0155")
@@ -523,3 +549,41 @@ test("every migration from 0155 on opens with the lock timeout", () => {
 		expect(`${file}: ${firstLine}`).toBe(`${file}: SET LOCAL lock_timeout = '3s';--> statement-breakpoint`)
 	}
 })
+
+// a service rolled back one release still runs against the schema, so a migration that drops or renames says in its
+// first comment that the previous release no longer reads what it removes. the migrations before 0169 were written
+// without the comment
+test("every migration from 0169 on that drops or renames says the previous release no longer reads it", () => {
+	// a rename and a drop with no comment about the previous release are not safe to run
+	const lockTimeoutLine = "SET LOCAL lock_timeout = '3s';--> statement-breakpoint"
+	const renameSql = `${lockTimeoutLine}\nALTER TABLE "users" RENAME COLUMN "name" TO "full_name";`
+	const dropSql = `${lockTimeoutLine}\n-- tidy up\nALTER TABLE "users" DROP COLUMN "name";`
+	expect(isSafeForPreviousRelease(renameSql)).toBe(false)
+	expect(isSafeForPreviousRelease(dropSql)).toBe(false)
+	expect(isSafeForPreviousRelease(`${lockTimeoutLine}\nDROP TABLE "feeds";`)).toBe(false)
+
+	// the same drop passes once its first comment says so, and a migration that only adds needs no comment
+	const commentLine = `-- the previous release no longer reads users.name`
+	expect(isSafeForPreviousRelease(`${lockTimeoutLine}\n${commentLine}\nALTER TABLE "users" DROP COLUMN "name";`)).toBe(
+		true,
+	)
+	expect(isSafeForPreviousRelease(`${lockTimeoutLine}\nALTER TABLE "users" ADD COLUMN "nickname" text;`)).toBe(true)
+
+	// every migration from this one on, named in the failure
+	const laterSqlFiles = readdirSync(migrationsDirectory).filter((file) => file.endsWith(".sql") && file >= "0169")
+	expect(laterSqlFiles.length).toBeGreaterThan(0)
+	for (const file of laterSqlFiles) {
+		const isSafe = isSafeForPreviousRelease(readFileSync(join(migrationsDirectory, file), "utf8"))
+		expect(`${file}: ${isSafe}`).toBe(`${file}: true`)
+	}
+})
+
+// whether a migration leaves the schema the previous release reads: it drops and renames nothing, or its first
+// comment says the previous release no longer reads what it removes. a statement breakpoint is not a comment
+function isSafeForPreviousRelease(migrationSql: string): boolean {
+	if (!/\b(?:DROP COLUMN|DROP TABLE|RENAME)\b/i.test(migrationSql)) {
+		return true
+	}
+	const firstComment = migrationSql.split("\n").find((line) => /^\s*--(?!>)/.test(line))
+	return /previous release no longer reads/i.test(firstComment ?? "")
+}

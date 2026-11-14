@@ -1,18 +1,23 @@
 import { sendReportResolution } from "@carlnotes/client/reportClient"
+import { toAvatarImagePath, toTeamAvatarImagePath } from "@carlnotes/contracts/avatars"
 import { DEFAULT_PAGE_SIZE } from "@carlnotes/contracts/pagination"
 import {
 	type AdminReport,
 	isImageReportSubjectKind,
+	REMOVABLE_REPORT_SUBJECT_KINDS,
 	REPORT_SUBJECT_KIND_LABELS,
 	type ReportResolution,
+	type ReportSubjectKind,
 } from "@carlnotes/contracts/reports"
 import { toProfilePath } from "@carlnotes/contracts/seo"
+import { toTopicPodcastEpisodeVideoImageUrls } from "@carlnotes/contracts/topicImages"
 import type { ConfirmationCopy } from "@carlnotes/core/lib/confirmationCopy"
 import { toDateLabel } from "@carlnotes/core/lib/labels"
 import { SAVE_FAILED_TEXT } from "@carlnotes/core/lib/sessionCopy"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useState } from "react"
 import { toast } from "sonner"
+import { Avatar } from "@/components/branding/Avatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { ScrollBox } from "@/components/common/ScrollBox"
 import { Button } from "@/components/primitives/button"
@@ -35,6 +40,16 @@ const SUBJECT_KIND_COLUMN_LABELS = Object.fromEntries(
 // how long a report's text runs before it scrolls inside a box, about what the box shows at once
 const SCROLLING_REPORT_TEXT_CHARS = 300
 
+// the owner of each image that Remove draws again, as its confirmation names it
+const REGENERATED_IMAGE_OWNERS: Partial<Record<ReportSubjectKind, string>> = {
+	topicImage: "topic",
+	topicPostImage: "post",
+	podcastEpisode: "podcast episode",
+}
+
+// what Remove's button and its confirmation say for one report
+type RemoveCopy = { label: string; pendingLabel: string; title: string; clause: string }
+
 // the sort accessors for the reports table columns
 const reportSortValues = {
 	reported: (report: AdminReport) => report.createdAt,
@@ -44,9 +59,10 @@ const reportSortValues = {
 }
 
 /**
- * The admin console's open reports, newest first, each with its text, its people, its reason, and the three
- * resolutions, each confirmed first: Remove deletes the content through its own delete path, Block deletes it too, sets an admin
- * block, and hides everything else its author wrote in reactions and comments, and Clear closes the report.
+ * The admin console's open reports, newest first, each with its text, its avatar or images, its people, its reason,
+ * and the three resolutions, each confirmed first: Remove deletes the content through its own delete path, resets an
+ * avatar, or draws an image again, Block sets an admin block, deletes the content too, and hides everything else its
+ * author wrote in reactions and comments, and Clear closes the report.
  */
 export function AdminReportsTable({
 	reports,
@@ -107,17 +123,81 @@ function ReportText({ text }: { text: string }) {
 	return text.length > SCROLLING_REPORT_TEXT_CHARS ? <ScrollBox className="max-h-40">{text}</ScrollBox> : text
 }
 
-// what Remove does to a report's subject: a topic's or a topic post's image is drawn again, a body image is taken out of
-// its post, and every other kind is deleted
-function toRemoveCopy(report: AdminReport): { label: string; pendingLabel: string; clause: string } {
-	if (report.subjectKind === "topicPostBodyImage") {
-		return { label: "Remove", pendingLabel: "Removing…", clause: "takes the image out of the post" }
+// a report's avatar or images as they stand, above its text: a profile's or a team's published avatar, a reported
+// image, or a podcast episode's own image beside its film's poster. an image opens the page the report's kind links to
+function ReportSubjectImages({ report }: { report: AdminReport }) {
+	// a published avatar at its own url, named by the first line of the text: a username, or a team's name
+	if (report.subjectAvatarVersion) {
+		const avatarImagePath =
+			report.subjectKind === "team"
+				? toTeamAvatarImagePath(report.subjectId, report.subjectAvatarVersion)
+				: toAvatarImagePath(report.subjectId, report.subjectAvatarVersion)
+		return (
+			<Avatar
+				imageUrl={avatarImagePath}
+				ownerId={report.subjectId}
+				name={report.subjectText.split("\n", 1)[0] ?? ""}
+				className="mb-1 block size-16"
+			/>
+		)
 	}
-	if (!isImageReportSubjectKind(report.subjectKind)) {
-		return { label: "Remove", pendingLabel: "Removing…", clause: "deletes the content" }
+
+	// an image report shows its image even before one is drawn, and a podcast episode its own image and its film's
+	const hasSubjectImage = isImageReportSubjectKind(report.subjectKind) || report.subjectImage !== null
+	const { topicPodcastEpisodeVideoPosterUrl } = report
+	if (!hasSubjectImage && !topicPodcastEpisodeVideoPosterUrl) {
+		return null
 	}
-	const imageOwner = report.subjectKind === "topicImage" ? "topic" : "post"
-	return { label: "Regenerate", pendingLabel: "Regenerating…", clause: `draws a new image for the ${imageOwner}` }
+	return (
+		<div className="mb-1 flex flex-wrap gap-2">
+			{/* the reported image, or the podcast episode's own */}
+			{hasSubjectImage && (
+				<TopicImageLink image={report.subjectImage} size="list" name={report.subjectText} path={report.subjectPath} />
+			)}
+			{/* the film's poster */}
+			{topicPodcastEpisodeVideoPosterUrl && (
+				<TopicImageLink
+					image={toTopicPodcastEpisodeVideoImageUrls(topicPodcastEpisodeVideoPosterUrl)}
+					size="list"
+					name={`the film of ${report.subjectText}`}
+					path={report.subjectPath}
+				/>
+			)}
+		</div>
+	)
+}
+
+// what Remove does to a report's subject: a profile's or a team's avatar is reset, a body image is taken out of its
+// post, a topic's, a topic post's, or a podcast episode's image is drawn again, and every other kind is deleted
+function toRemoveCopy({ subjectKind }: AdminReport): RemoveCopy {
+	if (subjectKind === "profile" || subjectKind === "team") {
+		return {
+			label: "Reset avatar",
+			pendingLabel: "Resetting…",
+			title: "Reset this avatar?",
+			clause: `returns the ${subjectKind} to its initials`,
+		}
+	}
+	if (subjectKind === "topicPostBodyImage") {
+		return {
+			label: "Remove",
+			pendingLabel: "Removing…",
+			title: "Remove this image?",
+			clause: "takes the image out of the post",
+		}
+	}
+
+	// an image that is drawn again names its owner
+	const imageOwner = REGENERATED_IMAGE_OWNERS[subjectKind]
+	if (imageOwner) {
+		return {
+			label: "Regenerate",
+			pendingLabel: "Regenerating…",
+			title: "Regenerate this image?",
+			clause: `draws a new image for the ${imageOwner}`,
+		}
+	}
+	return { label: "Remove", pendingLabel: "Removing…", title: "Remove this content?", clause: "deletes the content" }
 }
 
 // what each resolution's confirmation says. Block names the author, and only content still there is deleted or kept
@@ -125,20 +205,26 @@ function toResolutionConfirmation(
 	resolution: ReportResolution,
 	report: AdminReport,
 ): Omit<ConfirmationCopy, "cancelLabel"> {
-	const isSubjectRemovable = report.canRemove && !report.isSubjectDeleted
 	const removeCopy = toRemoveCopy(report)
 	if (resolution === "removed") {
+		// a podcast episode's Regenerate also draws its film's image again if that image is an upload
+		const topicPodcastEpisodeVideoSentence = report.topicPodcastEpisodeVideoPosterUrl
+			? " The film's image is drawn again too if it was uploaded."
+			: ""
 		return {
-			title: `${removeCopy.label} this ${isImageReportSubjectKind(report.subjectKind) ? "image" : "content"}?`,
+			title: removeCopy.title,
 			confirmLabel: removeCopy.label,
-			children: `This ${removeCopy.clause} and closes the report.`,
+			children: `This ${removeCopy.clause} and closes the report.${topicPodcastEpisodeVideoSentence}`,
 		}
 	}
+
+	// Block deletes content of a removable kind that is still there, and leaves an avatar and a podcast episode's images
 	if (resolution === "blocked") {
+		const willBlockDeleteSubject = REMOVABLE_REPORT_SUBJECT_KINDS.has(report.subjectKind) && !report.isSubjectDeleted
 		return {
 			title: `Block ${report.author?.username ?? "this author"}?`,
 			confirmLabel: "Block",
-			children: `This ${isSubjectRemovable ? `${removeCopy.clause}, hides everything else they wrote` : "hides everything they wrote"} in hot takes and reactions, and stops new ones until an admin clears the block.`,
+			children: `This ${willBlockDeleteSubject ? `${removeCopy.clause}, hides everything else they wrote` : "hides everything they wrote"} in hot takes and reactions, and stops new ones until an admin clears the block.`,
 		}
 	}
 	return {
@@ -192,18 +278,8 @@ function ReportRow({
 					<span className="text-muted-foreground italic">already deleted</span>
 				) : (
 					<>
-						{/* an image report shows the image as it stands above the topic's or the post's label, and the image
-						    opens the page the report's kind links to */}
-						{isImageReportSubjectKind(report.subjectKind) && (
-							<TopicImageLink
-								image={report.subjectImage}
-								size="list"
-								name={report.subjectText}
-								className="mb-1"
-								path={report.subjectPath}
-								linkClassName="w-fit"
-							/>
-						)}
+						{/* the avatar or the images as they stand, above the subject's text */}
+						<ReportSubjectImages report={report} />
 						<ReportText text={report.subjectText} />
 					</>
 				)}

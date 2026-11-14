@@ -1,83 +1,8 @@
+// a table file's text: its sheets laid out for the model as headed rows, clipped to the limits, with a line naming
+// the rows left out
 import { toBaseContentType, XLSX_TYPE } from "@carlnotes/contracts/attachmentTypes"
-// a table file's text: its sheets serialized to rows, clipped to the limits, and laid out for the model
 import { MAX_ATTACHMENT_CONTEXT_CHARS } from "@carlnotes/contracts/topics"
-
-// the line that starts each Excel sheet's section in a serialized workbook
-const SHEET_MARKER_PATTERN = /^=== sheet: (.*) ===$/
-
-/**
- * Serializes an Excel workbook to text: each sheet's rows under a marker line, each row as comma-joined cells.
- */
-export async function toSerializedWorkbook(bytes: Uint8Array): Promise<string> {
-	// the parser loads lazily
-	const { default: ExcelJS } = await import("exceljs")
-	const workbook = new ExcelJS.Workbook()
-
-	// exceljs pins an older Buffer type, so the cast matches whatever its loader declares
-	const workbookBytes = Buffer.from(bytes) as unknown as Parameters<typeof workbook.xlsx.load>[0]
-	await workbook.xlsx.load(workbookBytes)
-
-	// exceljs resolves shared strings and turns date serials into dates
-	const worksheetSections: string[] = []
-	for (const worksheet of workbook.worksheets) {
-		const worksheetLines: string[] = []
-		worksheet.eachRow((worksheetRow) => {
-			const worksheetCells: string[] = []
-			worksheetRow.eachCell({ includeEmpty: true }, (cell) => worksheetCells.push(toCsvField(toCellText(cell.value))))
-			worksheetLines.push(toSheetSafeRow(worksheetCells.join(",")))
-		})
-
-		// skip a sheet with no rows, like a chart page
-		if (worksheetLines.length > 0) {
-			worksheetSections.push(`=== sheet: ${worksheet.name} ===\n${worksheetLines.join("\n")}`)
-		}
-	}
-	return worksheetSections.join("\n")
-}
-
-// one cell as text, whichever shape exceljs hands back
-function toCellText(value: unknown): string {
-	if (value === null || value === undefined) {
-		return ""
-	}
-
-	// a date cell keeps its time only when it has one
-	if (value instanceof Date) {
-		const hasTime = value.getUTCHours() + value.getUTCMinutes() + value.getUTCSeconds() > 0
-		return hasTime ? value.toISOString() : value.toISOString().slice(0, 10)
-	}
-
-	// rich text joins its runs, a formula reads as its result, and a hyperlink reads as its text
-	if (typeof value === "object") {
-		const cell = value as { result?: unknown; text?: unknown; richText?: { text: string }[] }
-		if (cell.richText) {
-			return cell.richText.map((part) => part.text).join("")
-		}
-		if (cell.result !== undefined) {
-			return toCellText(cell.result)
-		}
-
-		// a hyperlink's text, or nothing for a shape with no words in it
-		return cell.text !== undefined ? toCellText(cell.text) : ""
-	}
-	return String(value)
-}
-
-// a cell as one csv field: line breaks flatten, and a comma or quote takes standard csv quoting,
-// so no cell can split its row or start a line that reads as a sheet marker
-function toCsvField(cellText: string): string {
-	const flattenedCell = cellText.replace(/\r?\n/g, " ")
-	if (flattenedCell.includes(",") || flattenedCell.includes('"')) {
-		return `"${flattenedCell.replaceAll('"', '""')}"`
-	}
-	return flattenedCell
-}
-
-// a row that reads as a sheet marker is quoted whole. cells that each pass on their own still join into one line,
-// so the finished row is what has to be checked
-function toSheetSafeRow(rowLine: string): string {
-	return SHEET_MARKER_PATTERN.test(rowLine) ? `"${rowLine.replaceAll('"', '""')}"` : rowLine
-}
+import { readWorkbookLines, SHEET_MARKER_PATTERN } from "./attachWorkbook"
 
 // the most rows table text keeps, shared across a workbook's sheets
 export const MAX_TABLE_ROWS = 150
@@ -95,101 +20,180 @@ export type TableTextOptions = {
 	contentType: string
 }
 
+// a workbook's table text, and how many characters the workbook's whole text runs
+export type WorkbookTableText = { tableText: string; charCount: number }
+
 /**
  * Writes extracted table text into headed sheets of verbatim rows, with a line naming what was left out.
  */
 export function toTableText({ serializedText, filename, contentType }: TableTextOptions): string {
-	// walk every sheet under one shared budget
-	const usage: TableTextUsage = { rowsUsed: 0, charsUsed: 0 }
-	const tableLines: string[] = []
-	let skippedTableRows = 0
-	for (const sheet of toParsedSheets(serializedText, contentType)) {
-		skippedTableRows += addSheetLines(sheet, filename, usage, tableLines)
+	const tableTextWriter = toTableTextWriter(filename, toBaseContentType(contentType) === XLSX_TYPE)
+	for (const line of serializedText.split("\n")) {
+		addTableLine(tableTextWriter, line)
 	}
+	return toWrittenTableText(tableTextWriter)
+}
 
-	// name what was left out
-	if (skippedTableRows > 0) {
-		tableLines.push(`[${skippedTableRows} rows omitted]`)
-	}
-	return tableLines.join("\n")
+/**
+ * Reads a workbook and writes its table text as toTableText writes it, holding only the rows the table text keeps.
+ * Returns the table text with the length of the workbook's whole text.
+ */
+export async function toWorkbookTableText(bytes: Uint8Array, filename: string): Promise<WorkbookTableText> {
+	const tableTextWriter = toTableTextWriter(filename, true)
+	const charCount = await readWorkbookLines(bytes, (line) => addTableLine(tableTextWriter, line))
+	return { tableText: toWrittenTableText(tableTextWriter), charCount }
 }
 
 // what table text has spent so far of the row and character budgets its sheets share
 type TableTextUsage = { rowsUsed: number; charsUsed: number }
 
-// writes one sheet into the shared lines, spending the shared budget, and returns how many rows it left out
-function addSheetLines(
-	sheet: { name: string | null; lines: string[] },
-	filename: string,
-	tableTextUsage: TableTextUsage,
-	tableLines: string[],
-): number {
-	// a sheet whose lines are all blank has nothing to write
-	const contentLines = sheet.lines.filter((line) => line.trim())
-	if (contentLines.length === 0) {
-		return 0
+// table text being written one line at a time: the file it is for, whether its lines mark sheets as a workbook's do,
+// the lines of the sheets that ended, what those sheets spent of the shared budgets, how many rows they left out, and
+// the sheet whose lines are arriving
+type TableTextWriter = {
+	filename: string
+	isWorkbook: boolean
+	tableLines: string[]
+	usage: TableTextUsage
+	omittedRowCount: number
+	openSheet: OpenSheet | null
+}
+
+// the sheet whose lines are arriving: its name, its header row and column list once a line with content arrives, how
+// many data rows it has so far, and its budget for each number of digits its row count may have
+type OpenSheet = {
+	name: string | null
+	headerRow: string | null
+	columnList: string
+	dataRowCount: number
+	sheetBudgets: SheetBudget[]
+}
+
+// what a sheet keeps if its row count has a given number of digits: whether its heading fits at all, what the shared
+// budgets have spent once its kept rows are added, and those rows
+type SheetBudget = { isSheetKept: boolean; usage: TableTextUsage; keptRows: string[] }
+
+// the most digits a sheet's row count is budgeted for, which a count under a billion rows has
+const MAX_ROW_COUNT_DIGITS = 9
+
+// a writer with nothing written yet
+function toTableTextWriter(filename: string, isWorkbook: boolean): TableTextWriter {
+	return {
+		filename,
+		isWorkbook,
+		tableLines: [],
+		usage: { rowsUsed: 0, charsUsed: 0 },
+		omittedRowCount: 0,
+		openSheet: null,
+	}
+}
+
+// add one line of a table's text. only a workbook's text marks its sheets, so a csv upload is one unnamed sheet, and
+// its own lines never read as a marker
+function addTableLine(tableTextWriter: TableTextWriter, line: string): void {
+	// a marker ends the open sheet and starts the one it names
+	const marker = tableTextWriter.isWorkbook ? SHEET_MARKER_PATTERN.exec(line) : null
+	if (marker) {
+		closeOpenSheet(tableTextWriter)
+		tableTextWriter.openSheet = toOpenSheet(marker[1] ?? "")
+		return
 	}
 
-	// a sheet arriving after the budgets are spent counts as omitted instead of starting a header
-	const headerRow = contentLines[0] ?? ""
-	const dataRows = contentLines.slice(1)
-	if (tableTextUsage.rowsUsed >= MAX_TABLE_ROWS || tableTextUsage.charsUsed >= MAX_TABLE_CHARS) {
-		return dataRows.length
+	// any other line joins the open sheet or starts the unnamed one. a blank line holds no row
+	tableTextWriter.openSheet ??= toOpenSheet(null)
+	if (!line.trim()) {
+		return
 	}
 
-	// compute the line naming the file, sheet, row count, and columns
-	const sheetLabel = sheet.name === null ? `file "${filename}"` : `file "${filename}", sheet "${sheet.name}"`
-	const sheetHeadingLine = `[${sheetLabel}: ${dataRows.length} rows, columns: ${toColumnList(headerRow)}]`
-
-	// a heading and header that would cross the budget on their own leave the whole sheet out,
-	// since one very wide header would otherwise spend the budget the check never sees
-	const headingChars = sheetHeadingLine.length + headerRow.length + 2
-	if (tableTextUsage.charsUsed + headingChars > MAX_TABLE_CHARS) {
-		return dataRows.length
+	// a sheet's first line with content is its header row, and every later one is a data row
+	if (tableTextWriter.openSheet.headerRow === null) {
+		startSheetRows(tableTextWriter, tableTextWriter.openSheet, line)
+		return
 	}
-	tableLines.push(sheetHeadingLine, headerRow)
-	tableTextUsage.charsUsed += headingChars
+	addDataRow(tableTextWriter.openSheet, line)
+}
 
-	// keep whole rows until either budget would be crossed
-	let omittedRows = 0
-	for (const dataRow of dataRows) {
+// a sheet with no line yet
+function toOpenSheet(name: string | null): OpenSheet {
+	return { name, headerRow: null, columnList: "", dataRowCount: 0, sheetBudgets: [] }
+}
+
+// take a sheet's header row, and budget the sheet's rows. the heading names how many rows the sheet has, which is
+// known only once its last row arrives, and a longer count leaves less room for rows. so the rows are budgeted once
+// for each number of digits the count may have, and the sheet's end picks the budget for the digits its count has
+function startSheetRows(tableTextWriter: TableTextWriter, openSheet: OpenSheet, headerRow: string): void {
+	openSheet.headerRow = headerRow
+	openSheet.columnList = toColumnList(headerRow)
+
+	// a sheet arriving after the budgets are spent has no budget, so its rows are counted and none is kept
+	const { usage } = tableTextWriter
+	if (usage.rowsUsed >= MAX_TABLE_ROWS || usage.charsUsed >= MAX_TABLE_CHARS) {
+		return
+	}
+
+	// a heading and header that would cross the budget on their own leave the whole sheet out. one very wide header
+	// would otherwise spend the budget the check never sees
+	const countlessHeadingLine = toSheetHeadingLine(tableTextWriter.filename, openSheet, "")
+	for (let digitCount = 1; digitCount <= MAX_ROW_COUNT_DIGITS; digitCount++) {
+		const headingChars = countlessHeadingLine.length + digitCount + headerRow.length + 2
+		const isSheetKept = usage.charsUsed + headingChars <= MAX_TABLE_CHARS
+		const charsUsed = usage.charsUsed + (isSheetKept ? headingChars : 0)
+		openSheet.sheetBudgets.push({ isSheetKept, usage: { rowsUsed: usage.rowsUsed, charsUsed }, keptRows: [] })
+	}
+}
+
+// the line naming the file, sheet, row count, and columns
+function toSheetHeadingLine(filename: string, openSheet: OpenSheet, dataRowCountText: string): string {
+	const sheetLabel = openSheet.name === null ? `file "${filename}"` : `file "${filename}", sheet "${openSheet.name}"`
+	return `[${sheetLabel}: ${dataRowCountText} rows, columns: ${openSheet.columnList}]`
+}
+
+// count a data row, and keep it whole in each budget that neither limit would be crossed in
+function addDataRow(openSheet: OpenSheet, dataRow: string): void {
+	openSheet.dataRowCount += 1
+	for (const { isSheetKept, usage, keptRows } of openSheet.sheetBudgets) {
 		// a row past either budget is counted instead of kept
-		if (tableTextUsage.rowsUsed >= MAX_TABLE_ROWS || tableTextUsage.charsUsed + dataRow.length + 1 > MAX_TABLE_CHARS) {
-			omittedRows += 1
+		const isRowPastBudget = usage.rowsUsed >= MAX_TABLE_ROWS || usage.charsUsed + dataRow.length + 1 > MAX_TABLE_CHARS
+		if (!isSheetKept || isRowPastBudget) {
 			continue
 		}
 
 		// the row goes in whole, spending both budgets
-		tableLines.push(dataRow)
-		tableTextUsage.rowsUsed += 1
-		tableTextUsage.charsUsed += dataRow.length + 1
+		keptRows.push(dataRow)
+		usage.rowsUsed += 1
+		usage.charsUsed += dataRow.length + 1
 	}
-	return omittedRows
 }
 
-// splits serialized text into sheets on the workbook markers. only toSerializedWorkbook writes those markers,
-// so a csv upload is one unnamed sheet, and its own lines never read as one
-function toParsedSheets(serializedText: string, contentType: string): { name: string | null; lines: string[] }[] {
-	const isWorkbook = toBaseContentType(contentType) === XLSX_TYPE
-	const sheets: { name: string | null; lines: string[] }[] = []
-	for (const line of serializedText.split("\n")) {
-		// a marker starts a sheet, and any other line joins the open one
-		const marker = isWorkbook ? SHEET_MARKER_PATTERN.exec(line) : null
-		if (marker) {
-			sheets.push({ name: marker[1] ?? "", lines: [] })
-			continue
-		}
-
-		// any other line joins the open sheet or starts the unnamed one
-		if (sheets.length === 0) {
-			sheets.push({ name: null, lines: [line] })
-		} else {
-			sheets[sheets.length - 1]?.lines.push(line)
-		}
+// end the open sheet: write its heading, its header row, and the rows it kept, and count the rows it left out
+function closeOpenSheet(tableTextWriter: TableTextWriter): void {
+	// no sheet is open, or the open one's lines are all blank, so there is nothing to write
+	const { openSheet } = tableTextWriter
+	tableTextWriter.openSheet = null
+	if (!openSheet || openSheet.headerRow === null) {
+		return
 	}
 
-	// return what was collected, one entry per sheet
-	return sheets
+	// the budget for the digits the row count has. a sheet with no budget, or whose heading does not fit, is left out
+	const dataRowCountText = String(openSheet.dataRowCount)
+	const sheetBudget = openSheet.sheetBudgets[dataRowCountText.length - 1] ?? openSheet.sheetBudgets.at(-1)
+	if (!sheetBudget?.isSheetKept) {
+		tableTextWriter.omittedRowCount += openSheet.dataRowCount
+		return
+	}
+
+	// the heading, the header row, and the kept rows, with the budgets as those rows left them
+	const sheetHeadingLine = toSheetHeadingLine(tableTextWriter.filename, openSheet, dataRowCountText)
+	tableTextWriter.tableLines.push(sheetHeadingLine, openSheet.headerRow, ...sheetBudget.keptRows)
+	tableTextWriter.usage = sheetBudget.usage
+	tableTextWriter.omittedRowCount += openSheet.dataRowCount - sheetBudget.keptRows.length
+}
+
+// the table text of every line added, with a line naming how many rows were left out
+function toWrittenTableText(tableTextWriter: TableTextWriter): string {
+	closeOpenSheet(tableTextWriter)
+	const { tableLines, omittedRowCount } = tableTextWriter
+	return (omittedRowCount > 0 ? [...tableLines, `[${omittedRowCount} rows omitted]`] : tableLines).join("\n")
 }
 
 // how many of a sheet's column names the heading lists before it just counts the rest

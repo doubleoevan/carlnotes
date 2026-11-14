@@ -71,7 +71,7 @@ export async function answerChatTurn(
 	const { podcastEpisodeChapter, topicPost } = chatTurnSubject
 
 	// read each attached file into its text, and reject the chat turn with why if a file cannot be read
-	const resolvedChatAttachments = await resolveChatAttachments(attachments)
+	const resolvedChatAttachments = await resolveChatAttachments(attachments, authorization.userId)
 	if (typeof resolvedChatAttachments === "string") {
 		return toAttachmentRejectionResponse(context, resolvedChatAttachments)
 	}
@@ -231,8 +231,11 @@ async function loadChatTurnSubject({
 	return {}
 }
 
-// the response to a chat turn with a file it could not read, naming the rejection, with a retry time for a busy one
-function toAttachmentRejectionResponse(context: Context, rejection: ChatAttachmentRejection): Response {
+/**
+ * Returns the response to a chat turn with a file it could not read, naming the rejection, with a retry time for a
+ * busy one.
+ */
+export function toAttachmentRejectionResponse(context: Context, rejection: ChatAttachmentRejection): Response {
 	const retryHeaders =
 		rejection === "attachmentBusy" ? { "Retry-After": String(BUSY_ATTACHMENT_RETRY_AFTER_SECONDS) } : undefined
 	return context.json(

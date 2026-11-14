@@ -12,7 +12,12 @@ import { clearUnseenCommentMentions, loadTopicMentionedUserIds } from "@carlnote
 import { addViewer } from "@carlnotes/db/viewerCounts"
 import { topicImageModel } from "@carlnotes/models/topicImageModel"
 import { rebuildTopicDashboards } from "@carlnotes/pipeline/dashboardRebuild"
+import {
+	redrawUnpublishedImageFiles,
+	unpublishTopicUncheckedImages,
+} from "@carlnotes/pipeline/publishedUncheckedImages"
 import { startTopicImageRender } from "@carlnotes/pipeline/topicImages/topicImageRenders"
+import type { UncheckedImageHashSubject } from "@carlnotes/pipeline/uncheckedImages"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { purgeEdgeCacheTagAfterDeletion, toTopicImageCacheTag } from "@carlnotes/server/edgePurge"
 import { reportError } from "@carlnotes/server/monitoring"
@@ -301,12 +306,19 @@ export async function updateTopic(
 	// whether the visibility change released the topic's home order inside the transaction
 	let isHomeOrderReleased = false
 	let releasedProfileUserIds: string[] = []
+	// the subjects whose unchecked image the visibility change unpublished
+	let uncheckedImageSubjects: UncheckedImageHashSubject[] = []
 	const removedSourceKinds = await db.transaction(async (transaction) => {
 		// serialize confirmation with publication and invitation reconciliation
 		await lockPersonalSourcesTopic(transaction, topicId)
 		if (visibility !== "private" || inviteeCheck.newInvites.length > 0 || inviteeCheck.reinvitedEmails.length > 0) {
 			await assertPersonalSourcesConverted(transaction, topicId)
 		}
+
+		// a private topic that turns invite or public shows no image whose check has not run. the image goes back to
+		// its uploader alone before the topic's row is written
+		uncheckedImageSubjects = await unpublishTopicUncheckedImages(transaction, { topicId, visibility })
+
 		// write the editable topic fields
 		await transaction
 			.update(topics)
@@ -365,6 +377,9 @@ export async function updateTopic(
 
 		return reconcileTopicSources({ transaction, topicId, payloadSources: payload.sources, podcastNames })
 	})
+
+	// draw again what was drawn from an image that went back to its uploader
+	await redrawUnpublishedImageFiles(topicId, uncheckedImageSubjects)
 
 	// drop the topic's cached visitor copies, and the edge's copies of its image files if it left the public set
 	await clearVisitorTopicCaches({

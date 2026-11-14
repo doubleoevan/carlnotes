@@ -1184,6 +1184,13 @@
       "when": 1794529266068,
       "tag": "0168_true_stick",
       "breakpoints": true
+    },
+    {
+      "idx": 169,
+      "version": "7",
+      "when": 1794591209037,
+      "tag": "0169_talented_karen_page",
+      "breakpoints": true
     }
   ]
 }

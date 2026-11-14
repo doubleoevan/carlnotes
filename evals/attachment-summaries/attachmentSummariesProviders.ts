@@ -1,6 +1,7 @@
 // the attachment summaries eval's promptfoo provider, which runs the summary writers under test
 
-import { generateAttachmentContext, generateImageContext, toDataUrl } from "@carlnotes/pipeline/attach"
+import { generateAttachmentContext, generateImageContext } from "@carlnotes/pipeline/attach"
+import { toDataUrl } from "@carlnotes/server/dataUrl"
 import { renderAsync } from "@resvg/resvg-js"
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from "promptfoo"
 import type { DocumentAttachment, ImageAttachment } from "./attachmentSummariesCases"

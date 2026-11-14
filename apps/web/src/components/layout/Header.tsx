@@ -1,5 +1,5 @@
 import { authClient } from "@carlnotes/client/authClient"
-import { toAvatarVersion } from "@carlnotes/contracts/avatars"
+import { toSessionAvatarVersion } from "@carlnotes/contracts/avatars"
 import { isAdminRole } from "@carlnotes/contracts/enums"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useLocation } from "@tanstack/react-router"
@@ -106,7 +106,7 @@ export function Header() {
 							<UserMenu
 								userId={session.user.id}
 								username={session.user.username}
-								avatarVersion={toAvatarVersion(session.user)}
+								avatarVersion={toSessionAvatarVersion(session.user)}
 								isAdmin={isAdmin}
 								onPlayTopicTutorialVideo={setTopicTutorialVideoOpener}
 							/>

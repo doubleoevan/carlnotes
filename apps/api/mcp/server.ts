@@ -1,8 +1,14 @@
 // the mcp server. one handler serves /mcp and the topic-bound /mcp/t/:topicId with the same tools
 
+import {
+	type McpConsentClient,
+	mcpConsentClientQuery,
+	toUnknownRedirectHost,
+} from "@carlnotes/contracts/aiAgentIdentity"
 import { SITE_URL } from "@carlnotes/contracts/site"
 import { trackBotEvent } from "@carlnotes/server/analytics"
 import { reportError } from "@carlnotes/server/monitoring"
+import { zValidator } from "@hono/zod-validator"
 import {
 	type CallToolResult,
 	McpServer,
@@ -37,17 +43,31 @@ export const mcpRoute = new Hono<AppEnv>()
 	.all("/mcp", (context) => handleMcpRequest(context, null))
 	.all("/mcp/t/:topicId", (context) => handleMcpRequest(context, context.req.param("topicId")))
 
-// the registered name of an mcp client
-export const mcpClientsRoute = new Hono<AppEnv>().get("/mcp/clients/:clientId", async (context) => {
-	// reject a visitor
-	if (!currentUser(context)) {
-		return context.json({ error: "unauthorized" }, 401)
-	}
+// the registered name of an mcp client, and the host its consent's answer returns to if CarlNotes does not know it
+export const mcpClientsRoute = new Hono<AppEnv>().get(
+	"/mcp/clients/:clientId",
+	zValidator("query", mcpConsentClientQuery),
+	async (context) => {
+		// reject a visitor
+		if (!currentUser(context)) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
 
-	// look the client's name up by id
-	const clientName = await loadOAuthClientName(context.req.param("clientId"))
-	return clientName ? context.json({ name: clientName }) : context.json({ error: "not found" }, 404)
-})
+		// look the client's name up by id
+		const clientName = await loadOAuthClientName(context.req.param("clientId"))
+		if (!clientName) {
+			return context.json({ error: "not found" }, 404)
+		}
+
+		// the host comes from the authorize request's redirect address, never from the name the client gave itself
+		const { redirect_uri: redirectUri } = context.req.valid("query")
+		const mcpConsentClient: McpConsentClient = {
+			name: clientName,
+			unknownRedirectHost: redirectUri ? toUnknownRedirectHost(redirectUri) : null,
+		}
+		return context.json(mcpConsentClient)
+	},
+)
 
 // serve one request with the tools registered for the tool caller the rate limit resolved
 async function handleMcpRequest(context: Context<AppEnv>, routeTopicId: string | null): Promise<Response> {

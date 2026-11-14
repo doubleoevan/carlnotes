@@ -3,13 +3,9 @@
 import type { ChatAttachmentRejection } from "@carlnotes/contracts/chat"
 import type { ChatAttachment } from "@carlnotes/contracts/payloads"
 import { toCanonicalContentType } from "@carlnotes/pipeline/attachContentType"
+import { AttachmentExtractionLimitError } from "@carlnotes/pipeline/attachExtraction"
 import { reportError } from "@carlnotes/server/monitoring"
-import {
-	AttachmentBusyError,
-	AttachmentTimeLimitError,
-	extractTextInWorker,
-	toExtractionDeadline,
-} from "./attachmentExtraction"
+import { extractTextInChildProcess, toExtractionDeadline } from "./attachmentExtraction"
 
 // what stands in for a video's content wherever carl reads attachments
 export const VIDEO_ATTACHMENT_CONTEXT = "A video Carl can't watch yet."
@@ -17,8 +13,12 @@ export const VIDEO_ATTACHMENT_CONTEXT = "A video Carl can't watch yet."
 // a sent file whose words are extracted: a PDF, a Word file, or a workbook
 export type ExtractableChatAttachment = Extract<ChatAttachment, { kind: "pdf" | "document" }>
 
-// the file to read, its bytes if the caller already decoded them, and the request's deadline from toExtractionDeadline
-type ReadChatAttachmentTextOptions = { attachment: ExtractableChatAttachment; bytes?: Uint8Array; deadline: number }
+// when a request's files have to be read by, from toExtractionDeadline, and the user who sent them, whose files are
+// read one at a time
+type ChatAttachmentRead = { deadline: number; userId: string }
+
+// the file to read, its bytes if the caller already decoded them, the request's deadline, and the user who sent it
+type ReadChatAttachmentTextOptions = ChatAttachmentRead & { attachment: ExtractableChatAttachment; bytes?: Uint8Array }
 
 // why a file was not read before its request's deadline: its read ran past it, or it waited behind other files
 export type PastDeadlineRejection = Exclude<ChatAttachmentRejection, "attachmentUnreadable">
@@ -42,14 +42,15 @@ export type ResolvedChatAttachments = {
  */
 export async function resolveChatAttachments(
 	attachments: ChatAttachment[],
+	userId: string,
 ): Promise<ResolvedChatAttachments | ChatAttachmentRejection> {
 	// every file of the chat turn shares one deadline, so the turn always responds before the server's idle timeout
 	const chatAttachments: ChatAttachment[] = []
 	const storableAttachments: StorableChatAttachment[] = []
-	const deadline = toExtractionDeadline()
+	const chatAttachmentRead = { deadline: toExtractionDeadline(), userId }
 	for (const attachment of attachments) {
 		// one unreadable file rejects the whole chat turn instead of sending half of it
-		const resolvedChatAttachment = await resolveChatAttachment(attachment, deadline)
+		const resolvedChatAttachment = await resolveChatAttachment(attachment, chatAttachmentRead)
 		if (typeof resolvedChatAttachment === "string") {
 			return resolvedChatAttachment
 		}
@@ -65,7 +66,7 @@ export async function resolveChatAttachments(
 // read before the chat turn's deadline
 async function resolveChatAttachment(
 	attachment: ChatAttachment,
-	deadline: number,
+	chatAttachmentRead: ChatAttachmentRead,
 ): Promise<{ chatAttachment: ChatAttachment; storableAttachment: StorableChatAttachment } | ChatAttachmentRejection> {
 	// an image reaches the model as an image
 	if (attachment.kind === "image") {
@@ -85,7 +86,7 @@ async function resolveChatAttachment(
 
 	// a pdf, word file, or workbook includes bytes, so its words come out here, once, for the model and the store
 	if (attachment.kind === "pdf" || attachment.kind === "document") {
-		const chatAttachmentText = await readChatAttachmentText({ attachment, deadline })
+		const chatAttachmentText = await readChatAttachmentText({ attachment, ...chatAttachmentRead })
 		if ("rejection" in chatAttachmentText) {
 			return chatAttachmentText.rejection
 		}
@@ -104,20 +105,21 @@ async function resolveChatAttachment(
 }
 
 /**
- * Returns a sent file's text, extracted in the worker thread and held to the attachment text limit, for a chat turn and
- * a chat room post alike. The bytes are the file's data url decoded unless the caller already decoded them, and they
- * are transferred to the worker thread. A file that cannot be read is logged and reported, and returns why: a file the
- * worker thread cannot parse is unreadable, a file whose read ran past the request's deadline is too large, and a file
- * that waited behind other files until the deadline is busy.
+ * Returns a sent file's text, extracted in a child process and held to the attachment text limit, for a chat turn and
+ * a chat room post alike. The bytes are the file's data url decoded unless the caller already decoded them. A file
+ * that cannot be read is logged and reported, and returns why: a file the child process cannot parse is unreadable, a
+ * file whose read ran past the request's deadline or the memory limit is too large, and a file that waited behind
+ * other files until the deadline is busy.
  */
 export async function readChatAttachmentText({
 	attachment,
 	bytes = decodeDataUrl(attachment.dataUrl),
 	deadline,
+	userId,
 }: ReadChatAttachmentTextOptions): Promise<{ text: string } | { rejection: ChatAttachmentRejection }> {
 	try {
 		const contentType = toCanonicalContentType(contentTypeFromDataUrl(attachment.dataUrl), attachment.name)
-		return { text: await extractTextInWorker({ contentType, bytes, deadline }) }
+		return { text: await extractTextInChildProcess({ contentType, bytes, deadline, userId }) }
 	} catch (error) {
 		// the log and the report are the only record of why a file was not read
 		console.error("chat attachment extraction failed", error)
@@ -126,13 +128,13 @@ export async function readChatAttachmentText({
 	}
 }
 
-// why a file was not read: other files kept the worker thread busy past its deadline, its read ran past the deadline,
-// or the worker thread could not parse it
+// why a file was not read: other files kept the child processes busy past its deadline, its read ran past the deadline
+// or the memory limit, or the child process could not parse it
 function toChatAttachmentRejection(error: unknown): ChatAttachmentRejection {
-	if (error instanceof AttachmentBusyError) {
-		return "attachmentBusy"
+	if (!(error instanceof AttachmentExtractionLimitError)) {
+		return "attachmentUnreadable"
 	}
-	return error instanceof AttachmentTimeLimitError ? "attachmentTooLarge" : "attachmentUnreadable"
+	return error.limit === "wait" ? "attachmentBusy" : "attachmentTooLarge"
 }
 
 // the text that gets posted. keep stays false on this copy

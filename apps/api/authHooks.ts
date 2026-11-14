@@ -1,15 +1,17 @@
-// the Better Auth request hooks and provider profile mappers: the breach check and the canonical address before a
-// credential request, the sign-in and app connection reports after one, where a request came from, and the Google and
-// GitHub profiles
+// the Better Auth request hooks and provider profile mappers: the breach check, a user's daily count of email changes,
+// and the canonical address before a credential request, the sign-in and app connection reports after one, where a
+// request came from, and the Google and GitHub profiles
 
 import type { AnalyticsEntryPoint } from "@carlnotes/contracts/analyticsEvents"
 import { toClientTelemetry } from "@carlnotes/contracts/clientTelemetry"
 import { toCanonicalEmail } from "@carlnotes/contracts/emails"
 import { MOBILE_APP_SCHEME_ORIGIN } from "@carlnotes/contracts/mobileApp"
+import { DAY_MS, toUtcDay } from "@carlnotes/contracts/time"
 import { toProviderUsername } from "@carlnotes/contracts/usernames"
+import { countRateLimitHit } from "@carlnotes/db/redisRateLimits"
 import { trackBotEvent, trackEvent } from "@carlnotes/server/analytics"
 import { APIError } from "better-auth"
-import { createAuthMiddleware } from "better-auth/api"
+import { createAuthMiddleware, getSessionFromCtx } from "better-auth/api"
 import { loadOAuthClientName } from "./mcp/oauthClientNames"
 import { isBreachedPassword } from "./passwords"
 
@@ -19,11 +21,15 @@ export const APPLE_ID_ORIGIN = "https://appleid.apple.com"
 // the better auth endpoint path for password signup, the only path the gate cookie is required on
 export const PASSWORD_SIGNUP_PATH = "/sign-up/email"
 
+// the better auth endpoint path for a change of email, and how many changes one user may ask for in a day
+const CHANGE_EMAIL_PATH = "/change-email"
+export const DAILY_CHANGE_EMAIL_LIMIT = 5
+
 // the paths that set a password, the only ones the breach check runs on
 const PASSWORD_SETTING_PATHS = new Set([PASSWORD_SIGNUP_PATH, "/reset-password", "/change-password", "/set-password"])
 
 // the paths whose body includes an address that better auth looks up a user by or stores
-const EMAIL_BODY_PATHS = new Set([PASSWORD_SIGNUP_PATH, "/sign-in/email", "/request-password-reset", "/change-email"])
+const EMAIL_BODY_PATHS = new Set([PASSWORD_SIGNUP_PATH, "/sign-in/email", "/request-password-reset", CHANGE_EMAIL_PATH])
 
 // the path the Expo plugin's authorization proxy serves, and the oauth hosts it may send a browser to
 const EXPO_AUTHORIZATION_PROXY_PATH = "/expo-authorization-proxy"
@@ -34,13 +40,22 @@ const SOCIAL_SIGN_IN_PATH = "/sign-in/social"
 const REDIRECT_FIELDS = ["callbackURL", "redirectTo", "errorCallbackURL", "newUserCallbackURL"] as const
 
 /**
- * Runs the proxy and redirect checks, the breach check, and the address canonicalization before a credential request.
+ * Runs the proxy and redirect checks, the breach check, a user's daily count of email changes, and the address
+ * canonicalization before a credential request.
  */
 export const beforeCredentialRequest = createAuthMiddleware(async (context) => {
 	rejectUnknownAuthorizationProxy({ path: context.path, query: context.query, headers: context.headers })
 	rejectSchemeRedirectOutsideSocialSignIn(context.path, context.body)
 	rejectSchemeRedirectOutsideSocialSignIn(context.path, context.query)
 	await rejectBreachedPassword(context.path, context.body)
+
+	// count a change of email against the signed-in user's day, by the session that the store holds. a request with no
+	// session is left to its endpoint
+	const changeEmailSession =
+		context.path === CHANGE_EMAIL_PATH ? await getSessionFromCtx(context, { disableCookieCache: true }) : null
+	if (changeEmailSession) {
+		await rejectChangeEmailPastDailyLimit(changeEmailSession.user.id)
+	}
 	return toCanonicalEmailBody(context.path, context.body)
 })
 
@@ -176,6 +191,24 @@ async function rejectBreachedPassword(path: string, body: Record<string, unknown
 	if (await isBreachedPassword(password)) {
 		throw new APIError("BAD_REQUEST", {
 			message: "That password has appeared in a data breach. Pick one you haven't used elsewhere.",
+		})
+	}
+}
+
+/**
+ * Counts one change of email against the user's UTC day, and rejects the request once the count is past the daily
+ * limit. The count is by user alone, whichever address the request comes from.
+ */
+export async function rejectChangeEmailPastDailyLimit(userId: string): Promise<void> {
+	// count the change in the user's rate limit window for today, and reject it past the daily limit
+	const isWithinDailyLimit = await countRateLimitHit({
+		key: `change-email:${toUtcDay(new Date())}:${userId}`,
+		rateLimitWindowMs: DAY_MS,
+		limit: DAILY_CHANGE_EMAIL_LIMIT,
+	})
+	if (!isWithinDailyLimit) {
+		throw new APIError("TOO_MANY_REQUESTS", {
+			message: "That's too many email changes for one day. Try again tomorrow.",
 		})
 	}
 }

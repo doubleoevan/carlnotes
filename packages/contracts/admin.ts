@@ -90,14 +90,22 @@ export type AdminTotals = {
 export type DailySpendCutoffKind = "podcastEpisodes" | "scheduledScans" | "chat"
 
 // the spend controls in effect: each daily spend cutoff in cents, how many waiting scans one sweep starts, how many
-// signups in an hour send an alert, and whether the first scan dispatch limit applies to unverified password accounts
+// signups in an hour send an alert, how many generated images one film may draw, and the switches
 export type SpendControlSettings = {
 	podcastEpisodesCutoffCents: number
 	scheduledScansCutoffCents: number
 	chatCutoffCents: number
 	firstScanDispatchLimit: number
 	hourlySignupAlertCount: number
+	generatedChapterImageLimit: number
+	// whether an unverified password account's first and manual scans wait for the first scan dispatch limit, and its
+	// chat and voice requests are rejected
 	isUnverifiedFirstScanLimitOn: boolean
+	// whether a Scan records no new podcast episode, and whether a new podcast episode starts no film
+	isPodcastEpisodeRecordingPaused: boolean
+	isTopicPodcastEpisodeVideoRenderingPaused: boolean
+	// whether the home's card sections hold only the items an admin pinned
+	isHomePinnedOnly: boolean
 }
 
 // one numeric spend control on the admin console: the value in effect, its default, and whether an override replaced it
@@ -109,7 +117,7 @@ export type WorstCaseMonthlySpend = { freeUserBudgetCents: number; dailySignupCo
 
 // the admin console's daily spend card: today's free-plan spend, the worst case monthly spend, each cutoff and
 // whether it is passed, the first scan dispatch limit with how many scans wait for it, the signup alert with the past
-// hour's signups, the unverified accounts switch, and the last save
+// hour's signups, the generated chapter image limit, the switches, and the last save
 export type AdminDailySpendCutoffs = {
 	// the spend so far today and the worst case for the month
 	freePlanSpendCents: number
@@ -120,7 +128,12 @@ export type AdminDailySpendCutoffs = {
 	waitingScanCount: number
 	hourlySignupAlertCount: AdminSpendControlSetting
 	hourlySignupCount: number
+	generatedChapterImageLimit: AdminSpendControlSetting
+	// the unverified accounts switch, the two pauses, and the pinned-only home
 	isUnverifiedFirstScanLimitOn: boolean
+	isPodcastEpisodeRecordingPaused: boolean
+	isTopicPodcastEpisodeVideoRenderingPaused: boolean
+	isHomePinnedOnly: boolean
 	// when the overrides were last saved and by whom. both are null before the first save, and the username is null
 	// once the saver's account closed
 	updatedAt: string | null

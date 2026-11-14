@@ -80,7 +80,9 @@ the browser bundle and renders pages through the server build, behind its own ro
 - `components/table/` — the page tables and their cells: `TopicNameLink.tsx`, a topic's linked name with its latest
   podcast episode's play button, and `PodcastEpisodeTitleLink.tsx`, a podcast episode's linked title with its play
   button. `AdminReportsTable.tsx` is the admin console's open content reports, the one the email linked to first, each
-  with Remove and Keep. `TopicsTable.tsx`, `OwnerTopicsTable.tsx`, `TeamMembersTable.tsx`, `TeamsMembershipTable.tsx`,
+  with its reported avatar or images and Remove, Block, and Clear. Remove reads Reset avatar on a published avatar
+  and Regenerate on a reported image or podcast episode. `TopicsTable.tsx`, `OwnerTopicsTable.tsx`,
+  `TeamMembersTable.tsx`, `TeamsMembershipTable.tsx`,
   `TopicSubscriptionsTable.tsx`, `TopicInvitesTable.tsx`, and `SentInvitesTable.tsx` adapt their core tables, and
   `TableConfirmDialog.tsx` is their delete confirmation, its target linked or in bold, and `TooltipSwitch.tsx` and
   `TooltipRemoveButton.tsx` are their row switch and ghost X button, each with a tooltip that names its action.
@@ -234,7 +236,8 @@ the browser bundle and renders pages through the server build, behind its own ro
   scans and the past hour's signups, each over its settings, which save when a field loses focus, except the cutoffs,
   which save from a Save daily cutoffs button; `FreePlanSpendMeter.tsx`, that meter with a circle at each daily spend
   cutoff under a ring of the time left until midnight UTC; `spendControlDraft.ts`, the card's typed overrides, each
-  cutoff's typed value, and the save body they send; `EstimatedMonthlySpend.tsx`, the card's table of the worst case
+  cutoff's typed value, and the save body they send, which holds only the settings the tab changed since it loaded or
+  last saved; `EstimatedMonthlySpend.tsx`, the card's table of the worst case
   monthly spend at each daily signup rate, limited by the highest cutoff beside the month without cutoffs, over the most
   this month and the past days slider, and its table of how long after midnight UTC each cutoff is passed over a slider
   for each cutoff; `ManageAdminsModal.tsx`, where an admin adds and removes other admins.
@@ -244,7 +247,11 @@ the browser bundle and renders pages through the server build, behind its own ro
   `animations.css` differ from that module's steam motion. `Avatar.tsx` is the one avatar that `UserAvatar` and
   `TeamAvatar` render: the stored image, or the owner's initials on a tinted circle if there is no image or it fails to
   load. `HostAvatar.tsx` is Carl's or Vienna's own picture.
-- `components/avatar/` — the user and team avatar pickers, over the upload pieces they both use. `AvatarUpload.tsx`
+- `components/avatar/` — the user and team avatar pickers, over the upload pieces they both use.
+  `UncheckedAvatarLine.tsx` is the line under an unchecked avatar, wrapped at the avatar's width and never narrower than
+  5rem, in `UserAvatarPicker` and `TeamAvatarPicker`. The account page's profile fields place the line themselves, so
+  their picker takes `hasUncheckedLine={false}`: `components/account/AccountFields.tsx` puts it under the avatar's row
+  on a phone and beside the avatar under the username from sm up. `AvatarUpload.tsx`
   turns a chosen file into the resized re-encode the app stores, a PNG for a PNG, WebP, or GIF source so a transparent
   logo keeps its background, and a JPEG for a photo. A file of a megabyte or more decodes at 512 pixels wide,
   a HEIC file the browser rejects decodes through a HEIC decoder the page loads on that pick, and a file that could
@@ -531,7 +538,8 @@ the browser bundle and renders pages through the server build, behind its own ro
 
 `pages/HomePage.tsx` is the home's two faces over `GET /api/home`, and `pages/TopicsPage.tsx` the directory at
 `/topics`. `components/topic/TopicCard.tsx`, `components/podcast/PodcastEpisodeCard.tsx`, and
-`components/primitives/topic-image.tsx` adapt the shared cards and image, the last also exporting the contract's frame
+`components/primitives/topic-image.tsx` adapt the shared cards and image, the last drawing the coffee mug in a box with
+no file and also exporting the contract's frame
 as `TOPIC_IMAGE_FRAME_CLASS`. `components/common/cardElements.tsx` is `CARD_ELEMENTS`, the card box, topic image, and
 text row the two cards share, over core's `CardElements`, with a story beside it.
 `components/podcast/PodcastEpisodeVideoButton.tsx` adapts the shared button that opens a film, with the Video dialog

@@ -33,17 +33,21 @@ type SteamWispProps = {
 
 /**
  * A coffee-mug icon with steam rising from the cup, at the web's 26 points unless a size is given, grown with the
- * system text size. The steam holds still on a phone and under reduced motion, as the web's does.
+ * system text size unless the size already follows its container's. The steam holds still on a phone and under
+ * reduced motion, as the web's does.
  */
 export const CoffeeMug = memo(function CoffeeMug({
 	className,
 	size: baseSize = 26,
+	isFontScaled = true,
 }: {
 	className?: string
 	size?: number
+	isFontScaled?: boolean
 }) {
 	// the mug's size, and whether its steam holds still
-	const size = useFontScaledSize(baseSize)
+	const fontScaledSize = useFontScaledSize(baseSize)
+	const size = isFontScaled ? fontScaledSize : baseSize
 	const { width } = useWindowDimensions()
 	const isSteamStill = useIsReduceMotionEnabled() || width < MD_BREAKPOINT_WIDTH
 	return (

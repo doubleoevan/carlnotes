@@ -1,0 +1,43 @@
+## MODIFIED Requirements
+
+### Requirement: A cached route has a query budget
+
+Each cached route SHALL have a test that requests it twice against a stubbed pool and a fake Redis and asserts the
+second request's statement count stays at or under the route's budget: `GET /api/rooms/mention-count` and `GET
+/api/topics/:id?poll=1`, which read through the Redis cache, `GET /api/topic-feed` for a visitor, whose section order
+reads through the Redis cache, `GET /api/topics/:id`, whose user access and topic role read once through the request
+memo, each page read for a visitor, whose second request sends no statement, and the film, discussion, and Scan status
+reads, whose second request sends none. A change that bypasses a cached read SHALL fail its route's budget test.
+
+Each page read SHALL also have a budget for its first, cold request, the number the page-reads capability states for its
+page, counted on a fixture that returns a row to every branch of the read, because a fixture that returns no row never
+runs the reads that run only with rows. Each page SHALL have a request budget too: its server render sends one api
+request. The web's route tests SHALL hold the request budgets over one list in `packages/contracts` of each page's
+requests, and the query budget test SHALL read the same list, because the api's test cannot load the web's routes.
+
+#### Scenario: A warm request stays inside its budget
+
+- **WHEN** a budget test requests its route twice
+- **THEN** the second request's statement count is at or under the budget
+
+#### Scenario: A bypassed cache fails the budget
+
+- **WHEN** a cached read's key is changed so the second request misses
+- **THEN** the route's budget test fails on the second request's statement count
+
+#### Scenario: A cold page read is counted on a full fixture
+
+- **WHEN** the profile's budget test runs
+- **THEN** its fixture returns a row to the podcast episode, chapter, film, reaction, and team reads, and the count is
+  the one a profile with rows sends, where the old fixture held 14 for a route that sent 26
+
+#### Scenario: A second request from a render fails the request budget
+
+- **WHEN** a change makes a page's loader send a second api request
+- **THEN** the web's route test for that page fails
+
+#### Scenario: One list names each page's requests
+
+- **WHEN** the query budget test and the web's route tests run
+- **THEN** both read each page's requests from the one list in `packages/contracts`, and the query budget test holds the
+  summed statements of a page's listed requests under the page's budget

@@ -18,7 +18,6 @@ import {
 import { type PodcastEpisodePageResponse, podcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpisodePage"
 import {
 	regenerateTopicImageResponse,
-	type TopicImageUrls,
 	uploadTopicImageResponse,
 	uploadTopicPodcastEpisodeVideoImageResponse,
 } from "@carlnotes/contracts/topicImages"
@@ -30,6 +29,7 @@ import {
 } from "@carlnotes/contracts/topicPosts"
 import { type ApiResponse, apiClient, fetchApi, readApiErrorMessage, readApiResponse } from "./apiClient"
 import { readTopicGate, type TopicGate } from "./topicClient"
+import type { UploadedTopicImage } from "./topicImageClient"
 
 // the url params of a podcast episode's own page
 export type PodcastEpisodePageParams = { topicId: string; season: string; episodeNumber: string }
@@ -244,9 +244,12 @@ export async function sendPodcastEpisodeImageRegeneration(
 
 /**
  * Uploads a podcast episode's own image encoded by a browser or native file picker as the form's image field. Returns
- * the image's urls, which replace the current ones at once.
+ * the image's urls, which replace the current ones at once, and whether the upload is unchecked.
  */
-export async function uploadPodcastEpisodeImageBody(podcastEpisodeId: string, body: FormData): Promise<TopicImageUrls> {
+export async function uploadPodcastEpisodeImageBody(
+	podcastEpisodeId: string,
+	body: FormData,
+): Promise<UploadedTopicImage> {
 	const response = await fetchApi(`/api/episodes/${encodeURIComponent(podcastEpisodeId)}/image`, {
 		method: "POST",
 		body,
@@ -254,7 +257,7 @@ export async function uploadPodcastEpisodeImageBody(podcastEpisodeId: string, bo
 	if (!response.ok) {
 		throw new Error((await readApiErrorMessage(response)) ?? `upload failed: ${response.status}`)
 	}
-	return (await readApiResponse(uploadTopicImageResponse, response)).image
+	return readApiResponse(uploadTopicImageResponse, response)
 }
 
 /**
@@ -277,12 +280,13 @@ export async function sendTopicPodcastEpisodeVideoImageRegeneration(
 
 /**
  * Uploads the own image of a podcast episode's film, encoded by a browser or native file picker as the form's image
- * field. Returns the film's poster url, which replaces the current one at once.
+ * field. Returns the film's poster url, which replaces the current one at once, and whether the upload is shown to
+ * its uploader alone until its image moderation can run.
  */
 export async function uploadTopicPodcastEpisodeVideoImageBody(
 	podcastEpisodeId: string,
 	body: FormData,
-): Promise<string> {
+): Promise<{ posterUrl: string; isImageUnchecked?: boolean }> {
 	const response = await fetchApi(`/api/episodes/${encodeURIComponent(podcastEpisodeId)}/video/image`, {
 		method: "POST",
 		body,
@@ -290,7 +294,7 @@ export async function uploadTopicPodcastEpisodeVideoImageBody(
 	if (!response.ok) {
 		throw new Error((await readApiErrorMessage(response)) ?? `upload failed: ${response.status}`)
 	}
-	return (await readApiResponse(uploadTopicPodcastEpisodeVideoImageResponse, response)).posterUrl
+	return readApiResponse(uploadTopicPodcastEpisodeVideoImageResponse, response)
 }
 
 /**

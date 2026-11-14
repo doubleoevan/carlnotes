@@ -1,7 +1,18 @@
 // starts the film backfill on the worker's Temporal, or joins the one running, and waits for its summary. run under
 // doppler: bun run films:backfill
 import { startTopicPodcastEpisodeVideoBackfillWorkflow } from "@carlnotes/pipeline/temporalClient"
-import { topicPodcastEpisodeVideoBackfillConcurrency } from "@carlnotes/server/podcastEpisodeSettings"
+import {
+	isTopicPodcastEpisodeVideoBackfillEnabled,
+	topicPodcastEpisodeVideoBackfillConcurrency,
+} from "@carlnotes/server/podcastEpisodeSettings"
+
+// start no backfill while films or the backfill are off, where a concurrency of zero would never finish a batch
+if (!isTopicPodcastEpisodeVideoBackfillEnabled()) {
+	console.log(
+		"film backfill: off. TOPIC_PODCAST_EPISODE_VIDEO_CONCURRENCY or TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_CONCURRENCY is 0",
+	)
+	process.exit(0)
+}
 
 // start or join the backfill, and wait for what it did
 const topicPodcastEpisodeVideoBackfillStart = await startTopicPodcastEpisodeVideoBackfillWorkflow(

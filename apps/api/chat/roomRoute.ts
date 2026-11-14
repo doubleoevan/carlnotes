@@ -13,7 +13,7 @@ import { isSessionTermsCurrent, toTermsOutdatedRejection } from "../termsAccepta
 import { toStoredFileHeaders } from "../topic/attachments"
 import { loadLinkPreviewImage } from "./linkPreviews"
 import { saveSeenChatMentions } from "./mentions"
-import { chatBodyLimit } from "./privateChat"
+import { chatRoomBodyLimit } from "./privateChat"
 import { loadChatRoom } from "./roomAccess"
 import {
 	clearChatRoom,
@@ -201,7 +201,7 @@ export const chatRoomRoute = new Hono<AppEnv>()
 		TOPIC_ROOM_PATH,
 		toolCallerRateLimiter,
 		chatRoomSignedOutRejection,
-		chatBodyLimit,
+		chatRoomBodyLimit,
 		zValidator("json", chatRoomMessagePayload),
 		(context) => postChatRoomMessageRoute(context, context.req.param("id"), context.req.param("teamId")),
 	)
@@ -209,7 +209,7 @@ export const chatRoomRoute = new Hono<AppEnv>()
 		TEAM_ROOM_PATH,
 		toolCallerRateLimiter,
 		chatRoomSignedOutRejection,
-		chatBodyLimit,
+		chatRoomBodyLimit,
 		zValidator("json", chatRoomMessagePayload),
 		(context) => postChatRoomMessageRoute(context, null, context.req.param("id")),
 	)

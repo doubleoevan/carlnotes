@@ -1,4 +1,5 @@
 import type { AccountFieldElements, ProfileFieldElements } from "@carlnotes/core/components/AccountFields"
+import { UncheckedAvatarLine, type UncheckedAvatarLineElements } from "@carlnotes/core/components/UncheckedAvatarLine"
 import type { UserBlocksElements } from "@carlnotes/core/components/UserBlocksSection"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Check, Info } from "lucide-react"
@@ -87,13 +88,26 @@ export const USER_BLOCKS_ELEMENTS: UserBlocksElements = {
 	Confirm: ConfirmDialog,
 }
 
+// an unchecked photo's line in the profile's identity row: under the whole row on a phone, and beside the avatar under
+// the username from sm up. where it wraps, its lines are balanced, so no word is left alone on the last one
+const IDENTITY_UNCHECKED_AVATAR_LINE_ELEMENTS: UncheckedAvatarLineElements = {
+	Line: ({ children }) => (
+		<p className="text-muted-foreground col-span-2 mt-2 text-xs text-balance sm:col-span-1 sm:col-start-2 sm:-mt-1 sm:self-start">
+			{children}
+		</p>
+	),
+}
+
 // preserve the web profile's row layout, form submission, and provider-photo toggle
 export const PROFILE_FIELD_ELEMENTS: ProfileFieldElements = {
 	Root: ({ children, className }) => <div className={className}>{children}</div>,
-	Identity: ({ avatar, children }) => (
-		<div className="flex items-center gap-4">
-			{avatar}
-			<div className="text-sm">{children}</div>
+	// the avatar beside the username. from sm up an unchecked avatar takes both rows, so its line sits beside it, and
+	// the username ends its row where the line starts the next one, so the two read as one block centered on the avatar
+	Identity: ({ avatar, isAvatarUnchecked, children }) => (
+		<div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4">
+			<div className={cn(isAvatarUnchecked && "sm:row-span-2")}>{avatar}</div>
+			<div className={cn("text-sm", isAvatarUnchecked && "sm:self-end")}>{children}</div>
+			{isAvatarUnchecked && <UncheckedAvatarLine elements={IDENTITY_UNCHECKED_AVATAR_LINE_ELEMENTS} />}
 		</div>
 	),
 	Text: ACCOUNT_FIELD_ELEMENTS.Text,

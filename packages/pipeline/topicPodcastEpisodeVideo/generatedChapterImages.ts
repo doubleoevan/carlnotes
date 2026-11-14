@@ -22,9 +22,9 @@ import { loadOrProvisionUserLiteLLMKey } from "@carlnotes/models/litellm"
 import { classifyImage } from "@carlnotes/models/moderation"
 import { topicImageCostDollars, topicImageModel } from "@carlnotes/models/topicImageModel"
 import { runWithConcurrency } from "@carlnotes/server/concurrency"
+import { toDataUrl } from "@carlnotes/server/dataUrl"
 import { reportError } from "@carlnotes/server/monitoring"
 import { and, eq, inArray, sql } from "drizzle-orm"
-import { toImageDataUri } from "../cardElementPng"
 import type { TopicImageSceneInput } from "../topicImages/writeTopicImageScene"
 import {
 	GENERATED_CHAPTER_IMAGE_FORMAT,
@@ -314,7 +314,7 @@ async function isGeneratedChapterImageAllowed({
 	podcastEpisodeId,
 	position,
 }: IsGeneratedChapterImageAllowedOptions): Promise<boolean> {
-	const classification = await classifyImage({ dataUrl: toImageDataUri(jpegBytes, "image/jpeg") })
+	const classification = await classifyImage({ dataUrl: toDataUrl("image/jpeg", jpegBytes) })
 	if (classification.outcome === "classified") {
 		return !classification.verdict.isViolation
 	}

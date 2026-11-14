@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change coffee-break-podcast. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Speech prices live where they are read, with no unused alias
 
 `litellm-config.yaml` SHALL NOT gain a model alias for speech. The file SHALL say in a comment that speech goes through
@@ -13,10 +15,12 @@ one file, `packages/models/budget.ts`, so a price change in the repo is an edit 
       half the text input rate and the full audio output rate, so the app's spend sum and the key's metered spend agree.
 
 `litellm-config.yaml` SHALL NOT gain a model alias for transcription either. A transcription SHALL call Google's
-model by name on the pass-through's Interactions route, which checks the key's budget and charges the key nothing for
-the call, so the app's own spend row is the only meter of a transcription. The file's comment SHALL say so. The app's
-transcription rate SHALL live in `packages/models/budget.ts` beside the speech rates, from Google's page: $2 per million
-audio and text input tokens and $12 per million output tokens, with thought tokens priced as output.
+model by name on the pass-through's Interactions route, which checks the key's budget and charges the key for the
+call from LiteLLM's own price table, as it charges speech, so the app's spend row for a transcription and the key's
+metered spend agree. The file's comment SHALL say so. The app's transcription rate SHALL live in
+`packages/models/budget.ts` beside the speech rates, from Google's page: $2 per million audio and text input tokens and
+$12 per million output tokens, with thought tokens priced as output. The dev stack SHALL run the proxy at production's
+version, so the speech smoke test checks the charge that production makes.
 
 #### Scenario: The config has no speech alias
 
@@ -29,9 +33,15 @@ audio and text input tokens and $12 per million output tokens, with thought toke
 - **THEN** the only repo file that states them is `packages/models/budget.ts`
 
 #### Scenario: The config has no transcription alias
+
 - **WHEN** the LiteLLM proxy starts with the config
 - **THEN** its model list has no transcription model, and a transcription through the pass-through's Interactions route
   still succeeds
+
+#### Scenario: A transcription is charged to the key at the app's rate
+
+- **WHEN** a recording is transcribed on a user's key through the proxy at production's version
+- **THEN** the key's spend rises by what the app's transcription rate estimates for the call
 
 ### Requirement: Speech is one two-speaker request through the proxy on the user's key
 
@@ -121,4 +131,3 @@ that day.
 
 - **WHEN** a Flex render in January 2027 produces a million audio output tokens
 - **THEN** the recorded speech cost is $18
-

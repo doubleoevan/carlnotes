@@ -2,9 +2,9 @@
 // generated images, then the podcast card. a chapter gets as many generated images as bring it to one distinct image for
 // every 30 seconds, up to the film's limit. the intro and the sign-off cut through each chapter's first image
 
+import { loadSpendControlSettings } from "@carlnotes/db/dailySpendCutoffs"
 import { getAttachmentBytes } from "@carlnotes/db/store"
 import { GENERATED_CHAPTER_IMAGE_LIMIT_PER_CHAPTER } from "@carlnotes/db/topicPodcastEpisodeVideoKeys"
-import { generatedChapterImageLimit } from "@carlnotes/server/podcastEpisodeSettings"
 import { loadOrFetchResourceImages, type ResourceImage } from "../resourceImages/fetchResourceImages"
 import {
 	type GeneratedChapterImageBilling,
@@ -75,12 +75,14 @@ export async function prepareChapterImages({
 	}))
 
 	// generate what the chapters lack, each chapter's first missing image before any chapter's second, up to the limit
+	// in the spend control settings
+	const { generatedChapterImageLimit } = await loadSpendControlSettings()
 	const generatedChapterImages = await loadGeneratedChapterImages({
 		...generatedChapterImageBilling,
 		isChapterImageGenerationSkipped,
 		generatedChapterImageRefs: toGeneratedChapterImageRefs(
 			missingGeneratedChapterImageCounts,
-			generatedChapterImageLimit(),
+			generatedChapterImageLimit,
 		),
 	})
 

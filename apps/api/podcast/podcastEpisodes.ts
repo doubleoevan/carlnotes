@@ -31,6 +31,10 @@ import { clearVisitorTopicPages } from "../topic/feedCaches"
 import { canRateTopic } from "../topic/findingPermissions"
 import { toTopicGateResponse } from "../topic/helpers"
 import { clearHomeCaches } from "../topic/homeOrder"
+import {
+	overlayUncheckedPodcastEpisodeImages,
+	overlayUncheckedPodcastEpisodePageImages,
+} from "../uncheckedImageOverlays"
 import { loadPodcastEpisodePage, loadSeasonPodcastEpisodes } from "./helpers"
 import { loadPodcastEpisodeEditor } from "./podcastEpisodeEditor"
 import {
@@ -71,7 +75,8 @@ export const podcastEpisodesRoute = new Hono<AppEnv>()
 		const { id: topicId, season, episodeNumber } = context.req.valid("param")
 		const podcastEpisodePage = await loadPodcastEpisodePage({ topicId, season, episodeNumber }, userId)
 		if (podcastEpisodePage) {
-			return context.json(podcastEpisodePage)
+			// an editor's page shows their unchecked uploads in place of the podcast episode's image and its film's poster
+			return context.json(await overlayUncheckedPodcastEpisodePageImages(podcastEpisodePage, userId))
 		}
 
 		// respond 403 with the gate of an invite topic to a user or visitor who may not see it, and 404 for a private
@@ -124,7 +129,16 @@ export const podcastEpisodesRoute = new Hono<AppEnv>()
 		if (!accessiblePodcastEpisode) {
 			return context.json({ error: "not found" }, 404)
 		}
-		return context.json(await loadPodcastEpisode({ ...accessiblePodcastEpisode, userId }))
+
+		// the podcast episode, which anyone but a signed-in editor of its topic reads as published
+		const podcastEpisode = await loadPodcastEpisode({ ...accessiblePodcastEpisode, userId })
+		if (!userId || !(await isAllowed(userId, "topic:edit", accessiblePodcastEpisode.topic))) {
+			return context.json(podcastEpisode)
+		}
+
+		// an editor reads their unchecked uploads in place of the podcast episode's image and its film's poster
+		const uncheckedPodcastEpisodeImages = await overlayUncheckedPodcastEpisodeImages(podcastEpisode, userId)
+		return context.json(uncheckedPodcastEpisodeImages.podcastEpisode)
 	})
 	// the stable audio url. hono runs this route for a HEAD too and drops the body
 	.get("/episodes/:id/audio.mp3", async (context) => {

@@ -17,7 +17,7 @@ import { writePrompt } from "./prompts/write"
 export const MODERATION_TEXT_MAX_CHARS = 8000
 
 // how long a classification may take before it fails open, shorter than any posting request's own timeout
-export const MODERATION_TIMEOUT_MS = 4000
+const MODERATION_TIMEOUT_MS = 4000
 
 // what the text is, said in the prompt. the model reads a topic prompt as a prompt and a message as a message
 export type ModeratedTextKind =

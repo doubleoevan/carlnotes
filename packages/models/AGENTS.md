@@ -62,8 +62,9 @@ worker, and the evals all start. It imports `@carlnotes/db`, `@carlnotes/server`
   recording's transcode, and a spoken chat reply's MP3. `transcription.ts` transcodes a chat recording to 16 kHz mono
   WAV, reading only the containers and codecs a browser records, and transcribes it through Google's Interactions API on
   LiteLLM's Gemini pass-through on the user's key with store set to false, so Google keeps no recording. A WAV with no
-  samples is silent and makes no call. The pass-through does not meter that route, so the key is never charged for a
-  transcription, and the api's spend row, priced by `transcriptionCost` in `budget.ts`, is the only meter.
+  samples is silent and makes no call. The proxy charges the key for a transcription from its own price table, as it
+  charges speech, and the api's spend row, priced by `transcriptionCost` in `budget.ts`, agrees with it. The app's
+  monthly budget reads the api's spend rows.
 -  No scanner reads untrusted text. Injection defense is the nonce fence in `prompts/write.ts`, schema-locked outputs,
   and model calls with no tools, as the README's "Content safety and injection defense" describes.
 -  `moderation.ts` — `classifyUserText`, the check of one text a user wrote for other users: one cheap-tier call on the

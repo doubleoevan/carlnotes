@@ -1,6 +1,7 @@
 // a topic image's sizes, the files derived at each, and the urls that serve them
 import { z } from "zod"
 import { type TopicImageSize, topicImageRenderStatuses, topicImageSizes } from "./enums"
+import { toUncheckedImagePath } from "./uncheckedImages"
 
 // the pixel size of every original, generated at 3:2 or cropped to it
 export const TOPIC_IMAGE_ORIGINAL_WIDTH = 1264
@@ -54,11 +55,15 @@ export const topicImageRenderResponse = z.object({
 
 export type TopicImageRenderResponse = z.infer<typeof topicImageRenderResponse>
 
-// what an upload returns: the topic's image as uploaded
-export const uploadTopicImageResponse = z.object({ image: topicImageUrls })
+// what an upload returns: the topic's image as uploaded, and whether it is shown to its uploader alone until its
+// image moderation can run, which an upload that is published and an older api leave out
+export const uploadTopicImageResponse = z.object({ image: topicImageUrls, isImageUnchecked: z.boolean().optional() })
 
-// what a film image's upload returns: the film's poster url
-export const uploadTopicPodcastEpisodeVideoImageResponse = z.object({ posterUrl: z.string() })
+// what a film image's upload returns: the film's poster url, and whether the upload is unchecked the same way
+export const uploadTopicPodcastEpisodeVideoImageResponse = z.object({
+	posterUrl: z.string(),
+	isImageUnchecked: z.boolean().optional(),
+})
 
 // how many regenerations the editor has used this month and how many the plan allows
 export const imageRegenerationQuota = z.object({ used: z.number().int(), limit: z.number().int() })
@@ -91,6 +96,13 @@ export function toTopicImageUrlsOrNull(topicId: string, hash: string | null): To
  */
 export function toAbsoluteTopicImageUrls(image: TopicImageUrls, siteUrl: string): TopicImageUrls {
 	return mapImageUrls(image, (url) => `${siteUrl}${url}`)
+}
+
+/**
+ * Returns image urls with each path marked as an unchecked image's, which only its uploader's session reads.
+ */
+export function toUncheckedTopicImageUrls(image: TopicImageUrls): TopicImageUrls {
+	return mapImageUrls(image, toUncheckedImagePath)
 }
 
 /**

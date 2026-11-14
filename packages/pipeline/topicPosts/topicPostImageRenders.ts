@@ -3,7 +3,7 @@
 
 import type { TopicImageOrigin } from "@carlnotes/contracts/enums"
 import { toHtmlText } from "@carlnotes/contracts/text"
-import { db } from "@carlnotes/db"
+import { type DbTransaction, db } from "@carlnotes/db"
 import { topicPosts } from "@carlnotes/db/schema/topicPosts"
 import { topics } from "@carlnotes/db/schema/topics"
 import { recordPendingObjectDeletions } from "@carlnotes/db/store"
@@ -136,6 +136,17 @@ export async function replaceTopicPostImage({
 }
 
 /**
+ * Clears a Topic Post's current image on the caller's transaction, with the time it changed, and keeps the image's
+ * files.
+ */
+export async function clearTopicPostImage(transaction: DbTransaction, topicPostId: string): Promise<void> {
+	await transaction
+		.update(topicPosts)
+		.set({ imageHash: null, imageOrigin: null, imagePrompt: null, imageUpdatedAt: new Date() })
+		.where(eq(topicPosts.id, topicPostId))
+}
+
+/**
  * Deletes a Topic Post's uploaded image, its hash and its objects, so the post shows no image until the next render
  * lands. Returns whether the current image was an upload.
  */
@@ -158,10 +169,7 @@ export async function removeTopicPostImageUpload(topicPostId: string): Promise<b
 		}
 
 		// the hash goes with its objects
-		await transaction
-			.update(topicPosts)
-			.set({ imageHash: null, imageOrigin: null, imagePrompt: null, imageUpdatedAt: new Date() })
-			.where(eq(topicPosts.id, topicPostId))
+		await clearTopicPostImage(transaction, topicPostId)
 		await recordPendingObjectDeletions({
 			handle: transaction,
 			objectKeys: toTopicPostImageObjectKeys(topicPostId, topicPost.hash),

@@ -3,7 +3,7 @@
 // farther than a fixed limit. the public shown ones are ranked once for everyone, and the ones a user may open through
 // their account are ranked for that user alone
 import { NO_SCRIPT_ROW_LIMIT } from "@carlnotes/contracts/seo"
-import { DAY_MS } from "@carlnotes/contracts/time"
+import { DAY_MS, HOUR_MS } from "@carlnotes/contracts/time"
 import { type DbTransaction, db, isCurrentModelEmbedding, runWithIterativeIndexScan } from "@carlnotes/db"
 import { cacheJson } from "@carlnotes/db/redis"
 import { EMBED_MODEL_NAME, resources } from "@carlnotes/db/schema/scans"
@@ -30,6 +30,12 @@ const EMBEDDING_CENTROID_RESOURCE_LIMIT = 20_000
 
 // the Redis key of the current embedding model's average resource embedding
 export const EMBEDDING_CENTROID_KEY = `embedding-centroid:${EMBED_MODEL_NAME}`
+
+// how long a process ranks with the centroid in its own memory before it reads Redis again
+const MEMORY_EMBEDDING_CENTROID_TTL_MS = HOUR_MS
+
+// the centroid this process last read or computed, and when. a related read ranks with it while Redis is unreachable
+let memoryEmbeddingCentroid: { embeddingCentroid: number[]; loadedAt: number } | null = null
 
 // one related topic's or podcast episode's id and its related score
 type RelatedScoreRow = { id: string; relatedScore: number }
@@ -85,30 +91,53 @@ export function toMergedRelatedIds(relatedScoreRows: RelatedScoreRow[]): string[
 }
 
 /**
- * Loads the current embedding model's average resource embedding over up to twenty thousand resources, from Redis or
- * the database, or null with no embedded resource, which it never stores.
+ * Loads the current embedding model's average resource embedding over up to twenty thousand resources, from this
+ * process's memory for an hour after it was last read or computed, and then from Redis or the database. Null with no
+ * embedded resource, which it never stores.
  */
 export async function loadEmbeddingCentroid(): Promise<number[] | null> {
-	return cacheJson({
+	// the centroid in this process's memory, while it is under an hour old
+	if (memoryEmbeddingCentroid && Date.now() - memoryEmbeddingCentroid.loadedAt < MEMORY_EMBEDDING_CENTROID_TTL_MS) {
+		return memoryEmbeddingCentroid.embeddingCentroid
+	}
+
+	// the centroid in Redis, or computed if Redis has none or cannot be read
+	const embeddingCentroid = await cacheJson({
 		key: EMBEDDING_CENTROID_KEY,
 		ttlMs: EMBEDDING_CENTROID_TTL_MS,
-		load: async () => {
-			// a bounded sample of the current model's resource embeddings
-			const sampledEmbeddings = db
-				.select({ embedding: resources.embedding })
-				.from(resources)
-				.where(isCurrentModelEmbedding)
-				.limit(EMBEDDING_CENTROID_RESOURCE_LIMIT)
-				.as("sampled_embeddings")
-
-			// average the sample
-			const [embeddingCentroidRow] = await db
-				.select({ embedding: sql<number[] | null>`avg(${sampledEmbeddings.embedding})`.mapWith(resources.embedding) })
-				.from(sampledEmbeddings)
-			return embeddingCentroidRow?.embedding ?? null
-		},
-		isStorable: (embeddingCentroid) => embeddingCentroid !== null,
+		load: computeEmbeddingCentroid,
+		isStorable: (computedEmbeddingCentroid) => computedEmbeddingCentroid !== null,
 	})
+
+	// remember a centroid for the next hour of reads
+	if (embeddingCentroid) {
+		memoryEmbeddingCentroid = { embeddingCentroid, loadedAt: Date.now() }
+	}
+	return embeddingCentroid
+}
+
+/**
+ * Forgets the centroid in this process's memory, so the next load reads Redis.
+ */
+export function clearMemoryEmbeddingCentroid(): void {
+	memoryEmbeddingCentroid = null
+}
+
+// average a bounded sample of the current model's resource embeddings, or null with no embedded resource
+async function computeEmbeddingCentroid(): Promise<number[] | null> {
+	// a bounded sample of the current model's resource embeddings
+	const sampledEmbeddings = db
+		.select({ embedding: resources.embedding })
+		.from(resources)
+		.where(isCurrentModelEmbedding)
+		.limit(EMBEDDING_CENTROID_RESOURCE_LIMIT)
+		.as("sampled_embeddings")
+
+	// average the sample
+	const [embeddingCentroidRow] = await db
+		.select({ embedding: sql<number[] | null>`avg(${sampledEmbeddings.embedding})`.mapWith(resources.embedding) })
+		.from(sampledEmbeddings)
+	return embeddingCentroidRow?.embedding ?? null
 }
 
 // the vectors and tags a related score compares: the candidate's and the page's vector, the centroid to take out of

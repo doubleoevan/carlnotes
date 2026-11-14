@@ -1,12 +1,22 @@
 // film image route tests: the editor gate, the month's limit that every image regeneration counts against, a render
-// that names the film, an upload cropped to the film's frame, the poster at the film's current image alone, and a
-// chapter's generated image behind the topic's visibility
+// that names the film, an upload cropped to the film's frame, a flagged upload, an upload saved as unchecked with no
+// rebuild if its check could not run, the poster at the film's current image alone, an unchecked poster to its uploader
+// alone, and a chapter's generated image behind the topic's visibility
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { toTopicPodcastEpisodeVideoChapterImageUrl } from "@carlnotes/contracts/topicImages"
-import { restoreConnectionPool, stubConnectionPool, toSelectionRow } from "@carlnotes/db/connectionPoolStub"
+import {
+	restoreConnectionPool,
+	type SentQuery,
+	stubConnectionPool,
+	toSelectionRow,
+} from "@carlnotes/db/connectionPoolStub"
 import * as storage from "@carlnotes/db/store"
+import * as uncheckedImagesDb from "@carlnotes/db/uncheckedImages"
+import * as moderationModels from "@carlnotes/models/moderation"
+import * as temporalClient from "@carlnotes/pipeline/temporalClient"
 import * as topicImageRenders from "@carlnotes/pipeline/topicImages/topicImageRenders"
 import * as topicPodcastEpisodeVideoImage from "@carlnotes/pipeline/topicPodcastEpisodeVideo/topicPodcastEpisodeVideoImage"
+import * as uncheckedImages from "@carlnotes/pipeline/uncheckedImages"
 import * as authorization from "../authorization"
 import * as moderation from "../moderation"
 import { toJsonRequest, toSignedInApp } from "../testSession"
@@ -43,19 +53,25 @@ afterEach(() => {
 	mock.restore()
 })
 
-// answer the editor gate's read with the topic, the chapter image's read with the ready film's topic, the poster's
-// read with the film's image and the topic, and the film read with the ready film, or with no film
+// stub the pool's reads: the topic for the editor gate, the ready film's topic for the chapter image, the film's image
+// and the topic for the poster, the film's current image on a public topic for an upload, and the ready film, or no
+// film, for the film read. returns each query sent
 function stubTopicPodcastEpisodeVideoReads({
 	hasTopicPodcastEpisodeVideo = true,
 	topicRow = TOPIC_ROW,
 }: {
 	hasTopicPodcastEpisodeVideo?: boolean
 	topicRow?: typeof TOPIC_ROW
-} = {}): void {
-	stubConnectionPool(({ text }) => {
+} = {}): SentQuery[] {
+	return stubConnectionPool(({ text }) => {
 		// the editor gate's read of the podcast episode's topic
 		if (text.includes('from "episodes" inner join "topics"')) {
 			return [topicRow]
+		}
+
+		// an upload's read of the film's current image, its topic and that topic's visibility, and the film's id
+		if (text.includes('left join "topics"')) {
+			return [["hash-current", "topic-1", "public", "film-1"]]
 		}
 
 		// the chapter image's read of the ready film's topic, which reads the film's image beside it
@@ -69,8 +85,8 @@ function stubTopicPodcastEpisodeVideoReads({
 			return [["hash-current", ...topicRow]]
 		}
 
-		// the editor's read of the podcast episode's ready film
-		return hasTopicPodcastEpisodeVideo ? [["film-1"]] : []
+		// the editor's read of the podcast episode's ready film, and no row for a write
+		return hasTopicPodcastEpisodeVideo && text.startsWith("select") ? [["film-1"]] : []
 	})
 }
 
@@ -128,34 +144,155 @@ test("a regenerate past the month's shared limit is rejected, and within it star
 	})
 })
 
+// a png the file picker sent as the form's image field
+function toImageUploadRequest(): RequestInit {
+	const formData = new FormData()
+	formData.set("image", new File([ONE_PIXEL_PNG], "a.png", { type: "image/png" }))
+	return { method: "POST", body: formData }
+}
+
+// spy the store and the publish of a film image, which reach object storage and the film's row
+function spyTopicPodcastEpisodeVideoImageWrites(): {
+	storeImageSpy: ReturnType<typeof spyOn>
+	publishImageSpy: ReturnType<typeof spyOn>
+} {
+	const storeImageSpy = spyOn(topicPodcastEpisodeVideoImage, "storeTopicPodcastEpisodeVideoImage").mockResolvedValue(
+		"hash-new",
+	)
+	const publishImageSpy = spyOn(
+		topicPodcastEpisodeVideoImage,
+		"publishTopicPodcastEpisodeVideoImage",
+	).mockResolvedValue(undefined)
+	return { storeImageSpy, publishImageSpy }
+}
+
 test("an upload is cropped to the film's frame, stored as an upload, and returns the poster url", async () => {
 	stubTopicPodcastEpisodeVideoReads()
 	spyOn(authorization, "isAllowed").mockResolvedValue(true)
 	spyOn(moderation, "toObjectionableImageCategory").mockResolvedValue(null)
-	const replaceImageSpy = spyOn(
-		topicPodcastEpisodeVideoImage,
-		"replaceTopicPodcastEpisodeVideoImage",
-	).mockResolvedValue("hash-new")
+	const { storeImageSpy, publishImageSpy } = spyTopicPodcastEpisodeVideoImageWrites()
 
-	// a png the file picker sent as the form's image field
-	const formData = new FormData()
-	formData.set("image", new File([ONE_PIXEL_PNG], "a.png", { type: "image/png" }))
-	const response = await ownerApp.request("/episodes/episode-1/video/image", { method: "POST", body: formData })
+	// the upload responds with the poster url in its released shape
+	const response = await ownerApp.request("/episodes/episode-1/video/image", toImageUploadRequest())
 	expect(response.status).toBe(200)
 	expect(await response.json()).toEqual({
 		posterUrl: "/api/topic-podcast-episode-video-images/episode-1/hash-new/poster.jpg",
 	})
 
 	// the stored original is the film's frame, and the upload costs nothing and follows no image prompt
-	const [replaceOptions] = replaceImageSpy.mock.calls[0] ?? []
-	expect([replaceOptions?.original.width, replaceOptions?.original.height]).toEqual([1280, 720])
-	expect(replaceOptions).toMatchObject({
+	const [, storedOriginal] = storeImageSpy.mock.calls[0] ?? []
+	expect([storedOriginal?.width, storedOriginal?.height]).toEqual([1280, 720])
+	expect(publishImageSpy).toHaveBeenCalledWith({
 		topicPodcastEpisodeVideoId: "film-1",
+		podcastEpisodeId: "episode-1",
+		imageHash: "hash-new",
 		renderId: null,
 		origin: "uploaded",
 		imagePrompt: null,
 		costDollars: 0,
 	})
+})
+
+test("an upload whose check could not run is saved as unchecked, and its publish with the rebuild never starts", async () => {
+	stubTopicPodcastEpisodeVideoReads()
+	spyOn(authorization, "isAllowed").mockResolvedValue(true)
+	spyOn(moderation, "toObjectionableImageCategory").mockResolvedValue("unchecked")
+	const { publishImageSpy } = spyTopicPodcastEpisodeVideoImageWrites()
+	const publishOrSaveUncheckedImageSpy = spyOn(uncheckedImages, "publishOrSaveUncheckedImage").mockResolvedValue(
+		"unchecked",
+	)
+
+	// the upload responds as a success in its released shape, marked unchecked
+	const response = await ownerApp.request("/episodes/episode-1/video/image", toImageUploadRequest())
+	expect(response.status).toBe(200)
+	expect(await response.json()).toEqual({
+		posterUrl: "/api/topic-podcast-episode-video-images/episode-1/hash-new/poster.jpg",
+		isImageUnchecked: true,
+	})
+
+	// the unchecked image's row names the film's podcast episode and its uploader, and nothing is published or rebuilt
+	expect(publishOrSaveUncheckedImageSpy.mock.calls[0]?.[0]).toMatchObject({
+		subjectKind: "topicPodcastEpisodeVideoImage",
+		subjectId: "episode-1",
+		uploaderUserId: "owner-1",
+		imageHash: "hash-new",
+		isUnchecked: true,
+	})
+	expect(publishImageSpy).not.toHaveBeenCalled()
+})
+
+test("an unchecked upload on a public topic writes the unchecked image's row alone, and the film is neither written nor rebuilt", async () => {
+	// the film's topic is public, which the save of the unchecked image reads through the film's podcast episode
+	const sentQueries = stubTopicPodcastEpisodeVideoReads()
+	spyOn(authorization, "isAllowed").mockResolvedValue(true)
+	spyOn(moderation, "toObjectionableImageCategory").mockResolvedValue("unchecked")
+	spyOn(storage, "deleteStoredObjects").mockResolvedValue(undefined)
+	const { publishImageSpy } = spyTopicPodcastEpisodeVideoImageWrites()
+	const rebuildSpy = spyOn(temporalClient, "startTopicPodcastEpisodeVideoRebuild").mockResolvedValue(undefined)
+
+	// the upload responds as a success in its released shape, marked unchecked
+	const uploaderApp = toSignedInApp(topicPodcastEpisodeVideoImagesRoute, "unchecked-film-image-uploader")
+	const response = await uploaderApp.request("/episodes/episode-1/video/image", toImageUploadRequest())
+	expect(response.status).toBe(200)
+	expect(await response.json()).toMatchObject({ isImageUnchecked: true })
+
+	// the unchecked image's row names the film's podcast episode, its uploader, and the stored file, and is not marked
+	// published
+	const uncheckedImageInsert = sentQueries.find(({ text }) => text.startsWith('insert into "unchecked_images"'))
+	const uncheckedImageValues = [
+		"topicPodcastEpisodeVideoImage",
+		"episode-1",
+		"unchecked-film-image-uploader",
+		"hash-new",
+		false,
+	]
+	expect(uncheckedImageInsert?.values).toEqual(expect.arrayContaining(uncheckedImageValues))
+
+	// the film keeps its image, and no rebuild of its intro and sign-off starts
+	expect(publishImageSpy).not.toHaveBeenCalled()
+	expect(rebuildSpy).not.toHaveBeenCalled()
+})
+
+test("a flagged upload is rejected with its category, and nothing is stored", async () => {
+	stubTopicPodcastEpisodeVideoReads()
+	spyOn(authorization, "isAllowed").mockResolvedValue(true)
+	spyOn(moderationModels, "classifyImage").mockResolvedValue({
+		outcome: "classified",
+		verdict: { isViolation: true, category: "sexual" },
+	})
+	const { storeImageSpy, publishImageSpy } = spyTopicPodcastEpisodeVideoImageWrites()
+
+	// the upload gets the moderation's 422 with the category, and the film's image is unchanged
+	const uploaderApp = toSignedInApp(topicPodcastEpisodeVideoImagesRoute, "flagged-film-image-uploader")
+	const response = await uploaderApp.request("/episodes/episode-1/video/image", toImageUploadRequest())
+	expect(response.status).toBe(422)
+	expect(await response.json()).toEqual({ rejection: "objectionable", category: "sexual" })
+	expect(storeImageSpy).not.toHaveBeenCalled()
+	expect(publishImageSpy).not.toHaveBeenCalled()
+})
+
+test("an unchecked poster is served to its uploader alone, with private headers", async () => {
+	stubTopicPodcastEpisodeVideoReads()
+	spyOn(storage, "attachmentStream").mockReturnValue(new Response("jpeg").body as ReadableStream)
+	const loadUncheckedImageSpy = spyOn(uncheckedImagesDb, "loadUncheckedImageForUploader").mockImplementation(
+		async (_uncheckedImageSubject, userId) =>
+			userId === "owner-1" ? ({ imageHash: "hash-unchecked" } as uncheckedImagesDb.UncheckedImageRow) : null,
+	)
+	const uncheckedPosterPath = "/topic-podcast-episode-video-images/episode-1/hash-unchecked/poster.jpg"
+
+	// the uploader reads the unchecked file, in the browser alone and never from the edge
+	const uploaderResponse = await ownerApp.request(uncheckedPosterPath)
+	expect(uploaderResponse.status).toBe(200)
+	expect(uploaderResponse.headers.get("cache-control")).toBe("private, max-age=31536000, immutable")
+	expect(uploaderResponse.headers.get("cdn-cache-control")).toBeNull()
+	expect(uploaderResponse.headers.get("cache-tag")).toBeNull()
+
+	// another signed-in user and a visitor get not found, and a visitor reads no unchecked image
+	const otherUserApp = toSignedInApp(topicPodcastEpisodeVideoImagesRoute, "reader-1")
+	expect((await otherUserApp.request(uncheckedPosterPath)).status).toBe(404)
+	loadUncheckedImageSpy.mockClear()
+	expect((await topicPodcastEpisodeVideoImagesRoute.request(uncheckedPosterPath)).status).toBe(404)
+	expect(loadUncheckedImageSpy).not.toHaveBeenCalled()
 })
 
 test("the poster serves the film's current image as a jpeg, and no other hash or file", async () => {

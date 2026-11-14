@@ -12,6 +12,11 @@ import { releaseTopicProfileOrders } from "@carlnotes/db/profileOrder"
 import { topics } from "@carlnotes/db/schema/topics"
 import { clearUnseenCommentMentions, loadTopicMentionedUserIds } from "@carlnotes/db/unseenCommentMentions"
 import { rebuildTopicDashboards } from "@carlnotes/pipeline/dashboardRebuild"
+import {
+	redrawUnpublishedImageFiles,
+	unpublishTopicUncheckedImages,
+} from "@carlnotes/pipeline/publishedUncheckedImages"
+import type { UncheckedImageHashSubject } from "@carlnotes/pipeline/uncheckedImages"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { isPodcastEpisodeRecordingConfigured } from "@carlnotes/server/podcastEpisodeSettings"
 import { eq } from "drizzle-orm"
@@ -139,11 +144,20 @@ export async function updateTopicFields({
 	// write the named fields and release the home order in one transaction
 	let isHomeOrderReleased = false
 	let releasedProfileUserIds: string[] = []
+	// the subjects whose unchecked image the visibility change unpublished
+	let uncheckedImageSubjects: UncheckedImageHashSubject[] = []
 	await db.transaction(async (transaction) => {
 		// serialize publication and podcast activation against private confirmation
 		await lockPersonalSourcesTopic(transaction, topicId)
 		if ((topicFields.visibility && topicFields.visibility !== "private") || topicFields.isPodcastEnabled) {
 			await assertPersonalSourcesConverted(transaction, topicId)
+		}
+
+		// a private topic that turns invite or public shows no image whose check has not run. the image goes back to
+		// its uploader alone before the topic's row is written
+		if (topicFields.visibility) {
+			const { visibility } = topicFields
+			uncheckedImageSubjects = await unpublishTopicUncheckedImages(transaction, { topicId, visibility })
 		}
 		await transaction.update(topics).set(namedFields).where(eq(topics.id, topicId))
 		// drop the topic from the home topics and from its owner's profile pins if it stops being public
@@ -152,6 +166,9 @@ export async function updateTopicFields({
 			releasedProfileUserIds = await releaseTopicProfileOrders(topicId, transaction)
 		}
 	})
+
+	// draw again what was drawn from an image that went back to its uploader
+	await redrawUnpublishedImageFiles(topicId, uncheckedImageSubjects)
 
 	// the topic as saved, and drop its cached visitor copies
 	const savedTopic = {

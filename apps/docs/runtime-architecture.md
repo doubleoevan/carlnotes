@@ -20,10 +20,14 @@ Resend call. On a rate limit the activity waits for Resend's `retry-after`, and 
 for good is reported to Sentry without failing the Scan. Each accepted batch records its sends with the Scan, so a retry
 never mails anyone twice.
 
-Emails outside workflows (verification, password reset, invites, flag notices) go straight to Resend. The app reports a
-failed one to Sentry and does not replay it. Every call to Resend, from the app or the worker, first takes a rate limit
-slot kept in Redis, which one call holds for 200 milliseconds. So calls leave evenly spaced at five a second, half of
-Resend's limit of ten.
+Account emails (verification, password reset, change of address, and invitations) are sent by the api outside
+workflows. The api tries each one up to six times under one idempotency key: after the wait Resend names on a rate
+limit, and on a backoff after a 5xx or a network failure. A send that no attempt delivers is reported to Sentry, and a
+restart drops an email that is waiting for its next attempt. A flag notice goes straight to Resend and is not sent
+again. Every call to Resend, from the app or the worker, first takes a rate limit slot kept in Redis. Account emails
+have a slot of their own, which one call holds for 250 milliseconds, so they never wait behind a Scan's batch. Every
+other call shares a slot of 200 milliseconds. Together they leave at most nine calls a second, one under Resend's
+limit of ten.
 
 A succeeded Scan also starts the podcast episode workflow, described under Podcast below.
 
@@ -207,7 +211,7 @@ A build that cannot render pages never takes the site down quietly. Each layer s
 | Declared dependencies | A third-party import the workspace does not declare, or a dev dependency the image runs | `scripts/check-package-boundaries.ts` in preflight |
 | Built dependencies | A package the web server build leaves external that `apps/web` does not declare | `bun run check:built-dependencies` in the Docker build |
 | Image smoke | A built image that fails to migrate, boot, or render `/`, `/plans`, and both health routes | the `image-smoke` CI job, `scripts/image-smoke.sh` |
-| Gated release | Any of the above, before Northflank builds, migrates, or deploys | the `release` CI job, which needs the gate and the image smoke |
+| Release workflow | A rollout whose replicas never run, which fails the release before its next step. A push to `main` releases without waiting for CI | [infra/northflank/release-main.json](../../infra/northflank/release-main.json) |
 | Fail fast | A production boot whose web server build is missing or cannot import, reported in the `startup` stage | `apps/api/uiServer.ts` |
 | Readiness | A replica that cannot render the privacy page, which the platform sends no traffic | `/api/health/ready`, `infra/northflank/app-health-checks.json` |
 | Alerts | A site that is up but not rendering, a new error in a release, and an error spike | the [deploy alerts](deployment.md#deploy-alerts) |

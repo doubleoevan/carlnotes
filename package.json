@@ -34,6 +34,7 @@
 		"report:components": "bun scripts/check-component-conventions.ts --report",
 		"check:components": "bun scripts/check-component-conventions.ts --check",
 		"check:built-dependencies": "bun scripts/check-built-dependencies.ts",
+		"check:advisories": "bun scripts/check-dependency-advisories.ts",
 		"check": "bash scripts/preflight.sh",
 		"test": "bun test",
 		"test:coverage": "bun test --coverage",
@@ -152,6 +153,9 @@
 		"@swc/core",
 		"protobufjs"
 	],
+	"overrides": {
+		"dompurify": "3.4.17"
+	},
 	"patchedDependencies": {
 		"expo-audio@58.0.11": "patches/expo-audio@58.0.11.patch",
 		"markdown-to-jsx@9.10.4": "patches/markdown-to-jsx@9.10.4.patch",

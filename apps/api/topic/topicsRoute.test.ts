@@ -1,8 +1,10 @@
 // topic route tests: a visitor's hidden topic page responds 403 with the gate for an invite topic alone, and 404 for a
 // private or missing one. the related topics read returns the list the page holds, a signed-in page that asks for the
 // separate read leaves the list out, and a hidden topic's related topics read responds as its page does. a Source is
-// removed by the owner or an owning team member, and by nobody else
+// removed by the owner or an owning team member, and by nobody else. an unchecked upload on a topic shows on the
+// topic's page to the editor who uploaded it alone, and never in another user's poll or the visitors' cached page
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
+import { toTopicImageUrls, toUncheckedTopicImageUrls } from "@carlnotes/contracts/topicImages"
 import {
 	FREE_USER_ACCESS_ROW,
 	restoreConnectionPool,
@@ -12,6 +14,7 @@ import {
 } from "@carlnotes/db/connectionPoolStub"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
 import { topics } from "@carlnotes/db/schema/topics"
+import { uncheckedImages } from "@carlnotes/db/schema/uncheckedImages"
 import { toSignedInApp } from "../testSession"
 import * as feeds from "./feeds"
 import * as helpers from "./helpers"
@@ -47,8 +50,12 @@ test("a visitor's hidden topic page is a 403 gate for an invite topic and a 404 
 	expect(await privateResponse.json()).toEqual({ error: "not found" })
 })
 
-// a topic owned by owner-1 with the fields its page reads, public unless a test names another visibility
-function toPageTopicRow(visibility: "public" | "private" | "invite" = "public"): unknown[] {
+// a topic owned by owner-1 with the fields its page reads, public unless a test names another visibility, with any
+// other field a test names
+function toPageTopicRow(
+	visibility: "public" | "private" | "invite" = "public",
+	topicFields: Record<string, unknown> = {},
+): unknown[] {
 	return toTableRow(topics, {
 		id: "topic-1",
 		ownerId: "owner-1",
@@ -64,6 +71,7 @@ function toPageTopicRow(visibility: "public" | "private" | "invite" = "public"):
 		subscriberCount: 3,
 		createdAt: new Date("2026-10-01T00:00:00Z"),
 		updatedAt: new Date("2026-10-01T00:00:00Z"),
+		...topicFields,
 	})
 }
 
@@ -252,4 +260,121 @@ test("removing web search or a topic's last source returns 409 with the rule", a
 	expect(lastSourceResponse.status).toBe(409)
 	expect(await lastSourceResponse.json()).toEqual({ error: "lastSource" })
 	expect(findTopicSourceDelete(lastSourceQueries)).toBeUndefined()
+})
+
+// the hash of topic-1's published image, and of member-1's unchecked upload over it
+const PUBLISHED_IMAGE_HASH = "published-hash"
+const UNCHECKED_IMAGE_HASH = "unchecked-hash"
+
+// stub the connection pool to return public topic-1 with the given published image, owned by owner-1 on team-1,
+// every user as a free user, the team's members, and member-1's unchecked upload unless the test names none. return
+// each query sent
+function stubTopicImages(
+	publishedImageHash: string,
+	uncheckedImageHash: string | null = UNCHECKED_IMAGE_HASH,
+): SentQuery[] {
+	stubRedisClientWithCentroid()
+	const topicRow = toPageTopicRow("public", { teamId: "team-1", imageHash: publishedImageHash })
+	const uncheckedImageRow = toTableRow(uncheckedImages, {
+		subjectKind: "topicImage",
+		subjectId: "topic-1",
+		uploaderUserId: "member-1",
+		imageHash: uncheckedImageHash,
+	})
+	return stubConnectionPool(({ text, values }) => {
+		// the unchecked image, which the read of the user who uploaded it finds
+		if (text.includes('from "unchecked_images"')) {
+			return uncheckedImageHash && values.includes("member-1") ? [uncheckedImageRow] : []
+		}
+
+		// the page's topic, and each user's access row
+		if (text.includes('from "topics" where "topics"."id" = $1')) {
+			return [topicRow]
+		}
+		if (text.includes('"budget_override_cents" from "users"')) {
+			return [FREE_USER_ACCESS_ROW]
+		}
+
+		// the owning team's members among the users the edit check names
+		return text.startsWith('select "user_id", "role" from "team_members"')
+			? TEAM_MEMBER_ROWS.filter(([userId]) => values.includes(userId))
+			: []
+	})
+}
+
+// the image fields of topic-1's page as the given user reads it, or as a visitor for null, on a page load or a poll
+async function readTopicImageFields(
+	userId: string | null,
+	path = "/topics/topic-1?related=separate",
+): Promise<{ response: Response; image: unknown; isImageUnchecked: unknown; imageOrigin: unknown }> {
+	const app = userId ? toSignedInApp(topicsRoute, userId) : topicsRoute
+	const response = await app.request(path)
+	const { image, isImageUnchecked, imageOrigin } = (await response.clone().json()) as Record<string, unknown>
+	return { response, image, isImageUnchecked, imageOrigin }
+}
+
+// an unchecked upload on a public topic shows on the topic's page to the editor who uploaded it, and to nobody else
+test("an unchecked topic image shows on the topic's page to its uploader alone", async () => {
+	const sentQueries = stubTopicImages(PUBLISHED_IMAGE_HASH)
+	const uncheckedImage = toUncheckedTopicImageUrls(toTopicImageUrls("topic-1", UNCHECKED_IMAGE_HASH))
+	const publishedImage = toTopicImageUrls("topic-1", PUBLISHED_IMAGE_HASH)
+
+	// the uploader reads the unchecked upload with its flag, in a response that names no shared cache
+	const uploaderPage = await readTopicImageFields("member-1")
+	expect(uploaderPage.response.status).toBe(200)
+	expect(uploaderPage).toMatchObject({ image: uncheckedImage, isImageUnchecked: true, imageOrigin: "uploaded" })
+	expect(uploaderPage.response.headers.get("cdn-cache-control")).toBeNull()
+	expect(uploaderPage.response.headers.get("cache-tag")).toBeNull()
+
+	// a second editor, a user who may not edit, and a visitor each read the published image with no flag
+	for (const userId of ["owner-1", "stranger-1", null]) {
+		const page = await readTopicImageFields(userId)
+		expect(page.response.status).toBe(200)
+		expect(page.image).toEqual(publishedImage)
+		expect(page.isImageUnchecked).toBeUndefined()
+	}
+
+	// only the two editors' reads looked for an unchecked image
+	const uncheckedImageReads = sentQueries.filter(({ text }) => text.includes('from "unchecked_images"'))
+	expect(uncheckedImageReads.map(({ values }) => values[2])).toEqual(["member-1", "owner-1"])
+})
+
+// a poll's cached page is its own user's, and the visitors' cached page is read with no unchecked image
+test("an unchecked topic image never reaches another user's poll or the visitors' cached page", async () => {
+	const sentQueries = stubTopicImages(PUBLISHED_IMAGE_HASH)
+	const uncheckedImage = toUncheckedTopicImageUrls(toTopicImageUrls("topic-1", UNCHECKED_IMAGE_HASH))
+	const uncheckedImageFields = { image: uncheckedImage, isImageUnchecked: true }
+	const publishedImage = toTopicImageUrls("topic-1", PUBLISHED_IMAGE_HASH)
+	const pollPath = "/topics/topic-1?poll=1"
+
+	// the uploader's poll caches the unchecked upload for the uploader, who reads it again from the cache with no query
+	expect(await readTopicImageFields("member-1", pollPath)).toMatchObject(uncheckedImageFields)
+	const queryCountAfterFirstPoll = sentQueries.length
+	expect(await readTopicImageFields("member-1", pollPath)).toMatchObject(uncheckedImageFields)
+	expect(sentQueries).toHaveLength(queryCountAfterFirstPoll)
+
+	// a second editor's poll, a visitor's poll, and the visitors' cached page all read the published image
+	const laterReads = [
+		await readTopicImageFields("owner-1", pollPath),
+		await readTopicImageFields(null, pollPath),
+		await readTopicImageFields(null, "/topics/topic-1"),
+		await readTopicImageFields(null, "/topics/topic-1"),
+	]
+	for (const laterRead of laterReads) {
+		expect(laterRead.image).toEqual(publishedImage)
+		expect(laterRead.isImageUnchecked).toBeUndefined()
+	}
+})
+
+// once an unchecked upload is published it is the topic's image, read at its plain urls like any published image
+test("an unchecked upload that was published reads at its plain urls with no flag, for its uploader too", async () => {
+	stubTopicImages(UNCHECKED_IMAGE_HASH, null)
+
+	// the uploader and a visitor read the same image, at urls with no unchecked mark
+	for (const userId of ["member-1", null]) {
+		const page = await readTopicImageFields(userId)
+		expect(page.image).toEqual(toTopicImageUrls("topic-1", UNCHECKED_IMAGE_HASH))
+		expect(JSON.stringify(page.image)).not.toContain("unchecked=1")
+		expect(page.isImageUnchecked).toBeUndefined()
+	}
 })

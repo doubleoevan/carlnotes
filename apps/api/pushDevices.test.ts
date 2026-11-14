@@ -3,10 +3,10 @@
 // the caller's own session
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
+import * as sessions from "@carlnotes/db/sessions"
 import { Hono } from "hono"
 import type { AppEnv } from "./currentUser"
 import { pushDevicesRoute } from "./pushDevices"
-import * as sessions from "./sessions"
 import { toJsonRequest, toSignedInApp } from "./testSession"
 
 // put the spied session refresh and the connection pool back after each test

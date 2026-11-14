@@ -107,7 +107,7 @@ export async function toTopicPostPreviewPng(topicPostPreview: TopicPostPreview):
 			: null
 
 	// the avatar's bytes, fetched only here. the card's key names the avatar instead, so a stored card loads nothing
-	const bylineImage = await toOwnerImageDataUri(topicPostPreview.bylineAvatar)
+	const bylineImage = await toOwnerImageDataUri(topicPostPreview.bylineAvatar, AVATAR_SIZE)
 	const footer = toTopicPostFooter(topicPostPreview, bylineImage)
 
 	// the text card with no image, or the image across the top

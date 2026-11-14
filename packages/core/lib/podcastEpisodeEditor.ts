@@ -57,6 +57,9 @@ export type PodcastEpisodeEditorPage = Pick<
 	| "podcastEpisodeImagePrompt"
 	| "topicPodcastEpisodeVideoImageOrigin"
 	| "topicPodcastEpisodeVideoImagePrompt"
+	// whether each image is the editor's own upload shown to them alone, and the editor's regenerations this month
+	| "isPodcastEpisodeImageUnchecked"
+	| "isTopicPodcastEpisodeVideoImageUnchecked"
 	| "imageRegenerationQuota"
 > & { topic: { name: string } }
 
@@ -72,6 +75,7 @@ export function toPodcastEpisodeEditableImage(podcastEpisodePage: PodcastEpisode
 		image: podcastEpisode.image,
 		imageOrigin: podcastEpisodePage.podcastEpisodeImageOrigin,
 		imagePrompt: podcastEpisodePage.podcastEpisodeImagePrompt,
+		isImageUnchecked: podcastEpisodePage.isPodcastEpisodeImageUnchecked,
 		imageRegenerationQuota: podcastEpisodePage.imageRegenerationQuota,
 	}
 }
@@ -90,6 +94,7 @@ export function toTopicPodcastEpisodeVideoEditableImage(podcastEpisodePage: Podc
 		image: posterUrl ? toTopicPodcastEpisodeVideoImageUrls(posterUrl) : podcastEpisode.image,
 		imageOrigin: podcastEpisodePage.topicPodcastEpisodeVideoImageOrigin ?? null,
 		imagePrompt: podcastEpisodePage.topicPodcastEpisodeVideoImagePrompt ?? null,
+		isImageUnchecked: podcastEpisodePage.isTopicPodcastEpisodeVideoImageUnchecked,
 		imageRegenerationQuota: podcastEpisodePage.imageRegenerationQuota,
 	}
 }

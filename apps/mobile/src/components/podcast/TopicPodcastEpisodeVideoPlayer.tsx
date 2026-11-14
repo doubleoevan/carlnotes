@@ -1,4 +1,3 @@
-import { toApiUrl } from "@carlnotes/client/apiClient"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import {
 	type PodcastEpisodePlayButtonElements,
@@ -24,6 +23,7 @@ import { Pressable, View } from "react-native"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
+import { useApiImageProps } from "@/hooks/useApiImageProps"
 import { toTopicPodcastEpisodeVideoAdapter } from "@/topicPodcastEpisodeVideoAdapter"
 import {
 	MOBILE_PLAYBACK_CONTROL_BUTTON_CLASS,
@@ -183,8 +183,10 @@ function TopicPodcastEpisodeVideoSurface({
 		}
 	}, [isFilmLoaded])
 
-	// native controls show only while the film fills the screen
+	// native controls show only while the film fills the screen. an unchecked poster loads with the session and is
+	// never stored
 	const [isFullscreen, setIsFullscreen] = useState(false)
+	const posterImageProps = useApiImageProps(posterUrl)
 	return (
 		<View className="aspect-video w-full overflow-hidden rounded-lg bg-hero">
 			<VideoView
@@ -200,9 +202,9 @@ function TopicPodcastEpisodeVideoSurface({
 				style={{ width: "100%", height: "100%" }}
 			/>
 			{/* the poster over the view until the film's first frame. its url is an api path */}
-			{posterUrl && !(isFilmLoaded && hasFirstFrame) && (
+			{posterImageProps && !(isFilmLoaded && hasFirstFrame) && (
 				<Image
-					source={{ uri: toApiUrl(posterUrl) }}
+					{...posterImageProps}
 					contentFit="contain"
 					accessible={false}
 					style={{ position: "absolute", width: "100%", height: "100%" }}

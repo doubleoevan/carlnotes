@@ -1,5 +1,5 @@
 // avatar tests: which letters a username draws, which tint a user id selects, the contrast that the palette keeps,
-// and the version that an avatar url names
+// the version that an avatar url names, and the version of the signed-in user's own avatar while an upload is unchecked
 import { describe, expect, it } from "bun:test"
 import {
 	AVATAR_COLOR,
@@ -9,6 +9,7 @@ import {
 	toAvatarKeyVersion,
 	toAvatarTint,
 	toAvatarVersion,
+	toSessionAvatarVersion,
 } from "./avatars"
 
 // WCAG relative luminance for visibility
@@ -137,5 +138,27 @@ describe("the palette", () => {
 		for (const tint of AVATAR_TINTS) {
 			expect(toContrastRatio(AVATAR_COLOR, tint)).toBeGreaterThanOrEqual(4.5)
 		}
+	})
+})
+
+describe("toSessionAvatarVersion", () => {
+	// the signed-in user sees their own unchecked upload, whatever avatar everyone else sees
+	it("names the unchecked upload over a published upload, a provider photo, and the initials", () => {
+		const uncheckedAvatarKey = "avatars/user_1/7e8f.png"
+		for (const publishedAvatar of [
+			{ avatarSource: "upload", avatarKey: "avatars/user_1/3f2a.png" },
+			{ avatarSource: "oauth", avatarKey: null },
+			{ avatarSource: "generated", avatarKey: null },
+		]) {
+			expect(toSessionAvatarVersion({ ...publishedAvatar, uncheckedAvatarKey })).toBe("7e8f")
+		}
+	})
+
+	it("names the published avatar if no upload is unchecked", () => {
+		const uploadedAvatar = { avatarSource: "upload", avatarKey: "avatars/user_1/3f2a.png" }
+		expect(toSessionAvatarVersion({ ...uploadedAvatar, uncheckedAvatarKey: null })).toBe("3f2a")
+		expect(toSessionAvatarVersion(uploadedAvatar)).toBe("3f2a")
+		expect(toSessionAvatarVersion({ avatarSource: "oauth" })).toBe("oauth")
+		expect(toSessionAvatarVersion({})).toBeNull()
 	})
 })

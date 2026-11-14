@@ -7,11 +7,11 @@ import { type BillingInterval, type BillingProvider, type PaidPlan, PLANS, type 
 import { type DbTransaction, db } from "@carlnotes/db"
 import { billingSubscriptions } from "@carlnotes/db/schema/billing"
 import { users } from "@carlnotes/db/schema/users"
+import { refreshSessionUser } from "@carlnotes/db/sessions"
 import { isUserLiteLLMKeyBudgetStale, replaceUserLiteLLMKey } from "@carlnotes/models/litellm"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { reportError } from "@carlnotes/server/monitoring"
 import { eq } from "drizzle-orm"
-import { refreshSessionUser } from "./sessions"
 import { stripe } from "./stripeClient"
 
 // the billing_subscriptions values for an active paid subscription

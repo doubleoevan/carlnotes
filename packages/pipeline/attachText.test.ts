@@ -1,33 +1,26 @@
-// extractText tests: a PDF's pages read up to the caller's limit, a Word file, a workbook, a windows-1252 csv, html,
-// and json
-import { expect, test } from "bun:test"
+// extractText tests: a PDF's pages read up to the caller's limit, a Word file, a workbook, a file whose zip directory
+// declares too large an unpacked size, a windows-1252 csv, html, and json
+import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { DOCX_TYPE, XLSX_TYPE } from "@carlnotes/contracts/attachmentTypes"
+import mammoth from "mammoth"
+import { AttachmentValidationError } from "./attachContentType"
+import { toDocxFixtureBytes, toOversizedZipBytes, toPagedPdfBytes, toWorkbookFixtureBytes } from "./attachTestFixtures"
 import { extractText, extractTextUpTo } from "./attachText"
 
-// a Word document fixture built as the minimal OOXML zip: two paragraphs of plain text
-const DOCX_FIXTURE_BASE64 =
-	"UEsDBBQAAAAIACl6Il3JTxqw6wAAAK4BAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbH1QvU7DMBDeeQrLK4odGBBCSTrwMwJDeYCTfUks7LPlc0v79jht6YAK4933q69b7YIXW8zsIvXyRrVSIJloHU29/Fi/NPdScAGy4CNhL/fIcjVcdet9QhZVTNzLuZT0oDWbGQOwigmpImPMAUo986QTmE+YUN+27Z02kQpSacriIYfuCUfY+CKed/V9LJLRsxSPR+KS1UtIyTsDpeJ6S/ZXSnNKUFV54PDsEl9XgtQXExbk74CT7q0uk51F8Q65vEKoLP0Vs9U2mk2oSvW/zYWecRydwbN+cUs5GmSukwevzkgARz/99WHu4RtQSwMECgAAAAAAKXoiXQAAAAAAAAAAAAAAAAYAAABfcmVscy9QSwMEFAAAAAgAKXoiXbmBRHGwAAAAKgEAAAsAAABfcmVscy8ucmVsc43POw7CMAwG4J1TRN5pWgaEUJMuCKkrKgeIEjeNaB5KwqO3JwMDIAZG278/y233sDO5YUzGOwZNVQNBJ70yTjM4D8f1DkjKwikxe4cMFkzQ8VV7wlnkspMmExIpiEsMppzDntIkJ7QiVT6gK5PRRytyKaOmQciL0Eg3db2l8d0A/mGSXjGIvWqADEvAf2w/jkbiwcurRZd/nPhKFFlEjZnB3UdF1atdFRYob+nHi/wJUEsDBAoAAAAAACl6Il0AAAAAAAAAAAAAAAAFAAAAd29yZC9QSwMEFAAAAAgAKXoiXRumyOvFAAAAKQEAABEAAAB3b3JkL2RvY3VtZW50LnhtbG2PwWrDMAyG73sK4XvjbIdRQpIeCnuBbQ+g2moSiCUju0379rMLZTB2+YWQ9P2/+sMtrHAlTYvwYF6b1gCxE7/wNJjvr4/d3kDKyB5XYRrMnZI5jC/91nlxl0CcoRA4ddtg5pxjZ21yMwVMjUTiMjuLBsyl1cluoj6qOEqpGITVvrXtuw24sBkL8iT+XmusolXyeERdQQl9gjwTVAI8rZve1pWq+tD49/qTnLCHiIqTYpyhpHlwzsstX5T+I9hnEPv75PgDUEsBAh4DFAAAAAgAKXoiXclPGrDrAAAArgEAABMAAAAAAAAAAQAAAKSBAAAAAFtDb250ZW50X1R5cGVzXS54bWxQSwECHgMKAAAAAAApeiJdAAAAAAAAAAAAAAAABgAAAAAAAAAAABAA7UEcAQAAX3JlbHMvUEsBAh4DFAAAAAgAKXoiXbmBRHGwAAAAKgEAAAsAAAAAAAAAAQAAAKSBQAEAAF9yZWxzLy5yZWxzUEsBAh4DCgAAAAAAKXoiXQAAAAAAAAAAAAAAAAUAAAAAAAAAAAAQAO1BGQIAAHdvcmQvUEsBAh4DFAAAAAgAKXoiXRumyOvFAAAAKQEAABEAAAAAAAAAAQAAAKSBPAIAAHdvcmQvZG9jdW1lbnQueG1sUEsFBgAAAAAFAAUAIAEAADADAAAAAA=="
+// the text the whole-file reader wrote for the workbook fixture
+const WORKBOOK_FIXTURE_TEXT = [
+	"=== sheet: Submissions ===",
+	"Agency,Agent,Sent",
+	"Writers House,Amy Berkower,2026-08-04",
+	"=== sheet: Notes ===",
+	"Note",
+	"Follow up in september",
+].join("\n")
 
-// a PDF of one line per page, built as the minimal objects pdf.js reads
-function toPagedPdfBytes(pageLines: string[]): Uint8Array {
-	// a catalog, the page tree, then a page, its content stream, and the font per line
-	const pageIds = pageLines.map((_, index) => 3 + index * 2)
-	const fontId = 3 + pageLines.length * 2
-	const objects = [
-		"<</Type/Catalog/Pages 2 0 R>>",
-		`<</Type/Pages/Kids[${pageIds.map((pageId) => `${pageId} 0 R`).join(" ")}]/Count ${pageLines.length}>>`,
-		...pageLines.flatMap((line, index) => {
-			const stream = `BT /F1 24 Tf 72 72 Td (${line}) Tj ET`
-			return [
-				`<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 144]/Contents ${4 + index * 2} 0 R/Resources<</Font<</F1 ${fontId} 0 R>>>>>>`,
-				`<</Length ${stream.length}>>stream\n${stream}\nendstream`,
-			]
-		}),
-		"<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>",
-	]
-	const body = objects.map((object, index) => `${index + 1} 0 obj${object}endobj`).join("\n")
-	return new TextEncoder().encode(`%PDF-1.1\n${body}\ntrailer<</Root 1 0 R>>`)
-}
+// put the spies back after each test
+afterEach(() => {
+	mock.restore()
+})
 
 // extractText reads every page of a PDF, and extractTextUpTo stops after the page whose text passes maxChars and
 // returns the PDF's page count
@@ -50,34 +43,53 @@ test("extractTextUpTo stops reading a pdf's pages past maxChars and counts its p
 
 // the mammoth library reads the fixture's paragraphs as plain text
 test("extractText reads a docx as plain text", async () => {
-	const docxBytes = new Uint8Array(Buffer.from(DOCX_FIXTURE_BASE64, "base64"))
-	const text = await extractText(DOCX_TYPE, docxBytes)
+	const text = await extractText(DOCX_TYPE, toDocxFixtureBytes())
 	expect(text).toContain("Carl reads the word document.")
 	expect(text).toContain("Second paragraph for the fixture.")
 })
 
-// an Excel workbook written by exceljs round-trips through the reader: sheets, cells, and a date serial
+// an Excel workbook written by exceljs round-trips through the reader: sheets, cells, and a date serial. the empty
+// sheet writes nothing
 test("extractText serializes a workbook's sheets as rows", async () => {
-	const { default: ExcelJS } = await import("exceljs")
-	const workbook = new ExcelJS.Workbook()
+	expect(await extractText(XLSX_TYPE, await toWorkbookFixtureBytes())).toBe(WORKBOOK_FIXTURE_TEXT)
+})
 
-	// two sheets with rows, and one chart-like empty sheet that must not serialize
-	const submissions = workbook.addWorksheet("Submissions")
-	submissions.addRow(["Agency", "Agent", "Sent"])
-	submissions.addRow(["Writers House", "Amy Berkower", new Date(Date.UTC(2026, 7, 4))])
-	const notes = workbook.addWorksheet("Notes")
-	notes.addRow(["Note"])
-	notes.addRow(["Follow up in september"])
-	workbook.addWorksheet("Empty")
+// a workbook's rows are held only until their text passes maxChars, and the whole text's length is named beside them
+test("extractTextUpTo holds a workbook's text until it passes maxChars and names its whole length", async () => {
+	// the second line passes 30 characters, so the read holds two lines and counts the rest
+	expect(await extractTextUpTo(XLSX_TYPE, await toWorkbookFixtureBytes(), 30)).toEqual({
+		text: "=== sheet: Submissions ===\nAgency,Agent,Sent",
+		charCount: WORKBOOK_FIXTURE_TEXT.length,
+	})
 
-	// the serialized text names each non-empty sheet and keeps the rows verbatim
-	const workbookBytes = new Uint8Array(await workbook.xlsx.writeBuffer())
-	const text = await extractText(XLSX_TYPE, workbookBytes)
-	expect(text).toContain("=== sheet: Submissions ===")
-	expect(text).toContain("Agency,Agent,Sent")
-	expect(text).toContain("Writers House,Amy Berkower,2026-08-04")
-	expect(text).toContain("=== sheet: Notes ===")
-	expect(text).not.toContain("Empty")
+	// a workbook held whole names no length
+	expect(await extractTextUpTo(XLSX_TYPE, await toWorkbookFixtureBytes(), 1_000)).toEqual({
+		text: WORKBOOK_FIXTURE_TEXT,
+	})
+})
+
+// a small Word file whose zip directory declares gigabytes is rejected from its directory alone, and never opened
+test("extractText rejects a docx that declares a huge unpacked size before it is opened", async () => {
+	const extractRawTextSpy = spyOn(mammoth, "extractRawText")
+	const oversizedDocxBytes = toOversizedZipBytes(toDocxFixtureBytes())
+	expect(oversizedDocxBytes.byteLength).toBeLessThan(2_000)
+
+	// the rejection names the file itself, and the parser never ran
+	const extraction = extractText(DOCX_TYPE, oversizedDocxBytes)
+	await expect(extraction).rejects.toBeInstanceOf(AttachmentValidationError)
+	await expect(extraction).rejects.toThrow("unpacked bytes")
+	expect(extractRawTextSpy).not.toHaveBeenCalled()
+
+	// the same file with the size a real document declares is opened
+	await extractText(DOCX_TYPE, toDocxFixtureBytes())
+	expect(extractRawTextSpy).toHaveBeenCalledTimes(1)
+})
+
+// a workbook gets the same check before either reader opens it
+test("extractText rejects a workbook that declares a huge unpacked size before it is opened", async () => {
+	const extraction = extractText(XLSX_TYPE, toOversizedZipBytes(await toWorkbookFixtureBytes()))
+	await expect(extraction).rejects.toBeInstanceOf(AttachmentValidationError)
+	await expect(extraction).rejects.toThrow("unpacked bytes")
 })
 
 // Excel's plain csv export is windows-1252, where 0xE9 is the accented e

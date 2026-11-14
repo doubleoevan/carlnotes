@@ -9,10 +9,12 @@ import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
 import { useAvatarPicker } from "./avatarUpload"
+import { UncheckedAvatarLine } from "./UncheckedAvatarLine"
 
 /**
- * Uses the picker menu for the same immediate avatar upload as the web profile. `isCameraInitiallyShown` and
- * `initialError` start it with the camera overlay or an upload error showing.
+ * Uses the picker menu for the same immediate avatar upload as the web profile. An upload that is shown to the user
+ * alone shows with its line under it, unless the caller places the line. `isCameraInitiallyShown`, `initialError`,
+ * and `isUncheckedLineShown` start it with the camera overlay, an upload error, or an unchecked photo's line showing.
  */
 export function UserAvatarPicker({
 	userId,
@@ -20,6 +22,8 @@ export function UserAvatarPicker({
 	size = 56,
 	isCameraInitiallyShown = false,
 	initialError = null,
+	isUncheckedLineShown = false,
+	hasUncheckedLine = true,
 }: {
 	userId: string
 	username: string
@@ -27,9 +31,12 @@ export function UserAvatarPicker({
 	size?: number
 	isCameraInitiallyShown?: boolean
 	initialError?: string | null
+	isUncheckedLineShown?: boolean
+	// whether the picker shows an unchecked upload's line under the avatar. false if the caller places the line
+	hasUncheckedLine?: boolean
 }) {
 	// retain a failed upload's feedback and refresh every avatar after success
-	const { avatarVersion, uploadAvatarBody } = useAvatar()
+	const { avatarVersion, isAvatarUnchecked, uploadAvatarBody } = useAvatar()
 	const [isCameraShown, setIsCameraShown] = useState(isCameraInitiallyShown)
 	const [isUploading, setIsUploading] = useState(false)
 	const [error, setError] = useState<string | null>(initialError)
@@ -89,6 +96,10 @@ export function UserAvatarPicker({
 				)}
 			</Button>
 			{avatarPicker.filePickerMenu}
+			{/* the upload only the user sees until its check passes */}
+			{hasUncheckedLine && (isAvatarUnchecked || isUncheckedLineShown) ? (
+				<UncheckedAvatarLine avatarSize={size} />
+			) : null}
 			{error && (
 				<Text accessibilityRole="alert" className="mt-1 text-xs text-destructive">
 					{error}

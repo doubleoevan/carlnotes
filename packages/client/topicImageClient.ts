@@ -35,14 +35,18 @@ export async function fetchTopicImageRender(renderId: string): Promise<TopicImag
 	return readApiResponse(topicImageRenderResponse, response)
 }
 
+// an uploaded image as its uploader sees it: its urls, and whether it is shown to them alone until its image
+// moderation can run
+export type UploadedTopicImage = { image: TopicImageUrls; isImageUnchecked?: boolean }
+
 /**
  * Uploads a topic's own image encoded by a browser or native file picker as the form's image field. Returns the
- * image's urls, which replace the current ones at once.
+ * image's urls, which replace the current ones at once, and whether the upload is unchecked.
  */
-export async function uploadTopicImageBody(topicId: string, body: FormData): Promise<TopicImageUrls> {
+export async function uploadTopicImageBody(topicId: string, body: FormData): Promise<UploadedTopicImage> {
 	const response = await fetchApi(`/api/topics/${topicId}/image`, { method: "POST", body })
 	if (!response.ok) {
 		throw new Error((await readApiErrorMessage(response)) ?? `upload failed: ${response.status}`)
 	}
-	return (await readApiResponse(uploadTopicImageResponse, response)).image
+	return readApiResponse(uploadTopicImageResponse, response)
 }

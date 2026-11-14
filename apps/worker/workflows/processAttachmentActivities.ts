@@ -1,77 +1,66 @@
-// attachment processing activities: the I/O steps the workflow calls. they run in the worker process, not the sandbox
-import { ATTACHMENT_NO_TEXT_REASON, MAX_ATTACHMENT_CONTEXT_CHARS } from "@carlnotes/contracts/topics"
+// attachment processing activities: the I/O steps the workflow calls. they run in the worker process, not the sandbox,
+// and a file's text is extracted in a child process of the worker
+
+import { MAX_ATTACHMENT_CONTEXT_CHARS } from "@carlnotes/contracts/topics"
 import { db } from "@carlnotes/db"
 import { attachments } from "@carlnotes/db/schema/topics"
 import { deleteStoredObject, getAttachmentBytes, recordPendingObjectDeletions } from "@carlnotes/db/store"
 import { loadOrProvisionTopicOwnerLiteLLMKey } from "@carlnotes/models/litellm"
-import { generateAttachmentContext, generateImageContext, toDataUrl } from "@carlnotes/pipeline/attach"
-import { isImageAttachmentType, isTableFileType } from "@carlnotes/pipeline/attachContentType"
-import { toTableText } from "@carlnotes/pipeline/attachTable"
-import { extractText } from "@carlnotes/pipeline/attachText"
-import { CHUNK_CHARS, chunk, MAX_CHUNKS } from "@carlnotes/pipeline/chunk"
+import { generateAttachmentContext, generateImageContext } from "@carlnotes/pipeline/attach"
+import { AttachmentValidationError, isImageAttachmentType } from "@carlnotes/pipeline/attachContentType"
+import {
+	AttachmentExtractionLimitError,
+	type ExtractedAttachment,
+	extractTopicAttachment,
+	toExtractedAttachment,
+} from "@carlnotes/pipeline/attachExtraction"
+import { toDataUrl } from "@carlnotes/server/dataUrl"
 import { ApplicationFailure } from "@temporalio/activity"
 import { eq } from "drizzle-orm"
 
-// the most characters the workflow can process, so that chunk payloads stay well under Temporal's per-message limit
-const MAX_PROCESS_CHARS = MAX_CHUNKS * CHUNK_CHARS
-
-// the extracted attachment chunks and total size, or the context stored as written
-export type ExtractedAttachment = { chunks: string[]; charCount: number; verbatimContext: string | null }
+// how long one attempt may take to read and extract a file, waiting for a child process included. it is under the
+// five minutes the workflow gives each attempt, so a child process never outlives its attempt
+const EXTRACTION_TIME_LIMIT_MS = 270_000
 
 /**
- * Extracts the stored file's text, and returns the text as written or as chunks to summarize.
+ * Extracts the stored file's text, and returns the text as written or as chunks to summarize. A file's text is
+ * extracted in a child process under a memory limit, in turn with the other Topics' files, so a file whose read takes
+ * too much memory fails its own attempt and nothing else.
  */
 export async function extractAttachmentText(attachmentId: string): Promise<ExtractedAttachment> {
-	// load the row for its object key and content type, then read and extract the stored bytes
+	// load the row for its object key and content type, then read the stored bytes
+	const deadline = performance.now() + EXTRACTION_TIME_LIMIT_MS
 	const [attachment] = await db.select().from(attachments).where(eq(attachments.id, attachmentId))
 	if (!attachment) {
 		throw ApplicationFailure.nonRetryable(`attachment ${attachmentId} not found`, "AttachmentNotFound")
 	}
+	const { topicId, filename, contentType } = attachment
 	const bytes = await getAttachmentBytes(attachment.objectKey)
 
-	// an image has no text to extract
-	const extractedText = isImageAttachmentType(attachment.contentType)
-		? await generateImageContext(
-				toDataUrl(attachment.contentType, bytes),
-				await loadOrProvisionTopicOwnerLiteLLMKey(attachment.topicId),
-			)
-		: await extractText(attachment.contentType, bytes)
+	try {
+		// an image has no text to extract, so the model describes it
+		if (isImageAttachmentType(contentType)) {
+			const litellmApiKey = await loadOrProvisionTopicOwnerLiteLLMKey(topicId)
+			return toExtractedAttachment(await generateImageContext(toDataUrl(contentType, bytes), litellmApiKey))
+		}
 
-	// fail a file with no readable text, like a scanned PDF or a chart-only workbook
-	if (!extractedText.trim()) {
-		throw ApplicationFailure.nonRetryable(ATTACHMENT_NO_TEXT_REASON, "NoReadableText")
+		// a table file's rows are written as table text and a short document is stored as written, with no model call,
+		// and a longer document is chunked to summarize
+		return await extractTopicAttachment({ contentType, filename, bytes, turnKey: topicId, deadline })
+	} catch (error) {
+		// a file that is the problem itself, like one with no readable text or a zip that declares too large an
+		// unpacked size, fails at once and is never tried again
+		if (error instanceof AttachmentValidationError) {
+			throw ApplicationFailure.nonRetryable(error.message, "AttachmentRejected")
+		}
+
+		// a read that ran past its time or its memory limit would run past it again, so it is not tried again. a file
+		// that only waited for a child process until its deadline is
+		if (error instanceof AttachmentExtractionLimitError && error.limit !== "wait") {
+			throw ApplicationFailure.nonRetryable(error.message, "AttachmentTooLarge")
+		}
+		throw error
 	}
-
-	// a table file's rows are written as table text, with no model call
-	if (isTableFileType(attachment.contentType)) {
-		const tableContext = toTableText({
-			serializedText: extractedText,
-			filename: attachment.filename,
-			contentType: attachment.contentType,
-		})
-		return { chunks: [], charCount: extractedText.length, verbatimContext: tableContext }
-	}
-
-	// a short document is its own context, with no model call
-	if (extractedText.length <= MAX_ATTACHMENT_CONTEXT_CHARS) {
-		return { chunks: [], charCount: extractedText.length, verbatimContext: extractedText }
-	}
-
-	// a longer document is cut to the processing limit, with the cut marked
-	const markedText =
-		extractedText.length > MAX_PROCESS_CHARS
-			? `${extractedText.slice(0, MAX_PROCESS_CHARS)}${toCutMarker(extractedText.length)}`
-			: extractedText
-
-	// chunk the text to summarize
-	const chunks = chunk(markedText, MAX_CHUNKS, CHUNK_CHARS)
-	return { chunks, charCount: extractedText.length, verbatimContext: null }
-}
-
-// the line appended where a long document was cut
-function toCutMarker(fullLength: number): string {
-	const keptChars = MAX_PROCESS_CHARS.toLocaleString("en-US")
-	return `\n\n[The document is cut here. It runs ${fullLength.toLocaleString("en-US")} characters and only the first ${keptChars} are included.]`
 }
 
 // summarize one chunk into a context note with the cheap model, billed to the topic owner's key

@@ -1,35 +1,29 @@
-// avatar route tests: an upload is cached long only at its current version, an upload records its key first, and an
-// image the moderation flags is rejected before anything stores. a provider photo's redirect is cached for an hour
-import { afterEach, expect, mock, spyOn, test } from "bun:test"
-import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
-import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
+// avatar route tests: an upload is cached long only at its current version, and a provider photo's redirect is cached
+// for an hour. a decode failure is reported, an upload records its key first, an image the moderation flags or cannot
+// read is rejected before anything stores, and a clean upload or one with no moderation key is published at once
+import { afterEach, expect, spyOn, test } from "bun:test"
+import { stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
+import { stubRedisClient } from "@carlnotes/db/redisClientStub"
 import * as store from "@carlnotes/db/store"
 import * as moderation from "@carlnotes/models/moderation"
+import * as avatarImages from "@carlnotes/pipeline/avatarImages"
+import { toBombPng } from "@carlnotes/pipeline/topicPosts/topicPostBodyImageTestFixtures"
 import * as monitoring from "@carlnotes/server/monitoring"
 import { uploadTeamAvatar } from "./avatars"
 import { avatarsRoute } from "./avatarsRoute"
+import {
+	ONE_PIXEL_PNG,
+	requestStoredAvatar,
+	restoreAvatarTest,
+	stubSelectRow,
+	TEAM_AVATAR_KEY,
+	toAvatarUploadRequest,
+	USER_AVATAR_KEY,
+} from "./avatarTestFixtures"
 import { toJsonRequest, toSignedInApp } from "./testSession"
 
-// a user's upload and a team's upload. the id in each file name is its version
-const USER_AVATAR_KEY = "avatars/user-1/3f2a.png"
-const TEAM_AVATAR_KEY = "avatars/teams/team-1/9c1b.webp"
-
 // the pool's own query, the Redis client, and every spy, put back after each test
-afterEach(() => {
-	restoreConnectionPool()
-	restoreRedisClient()
-	mock.restore()
-})
-
-// return one row for every select, with its columns in the order that the route selects them
-function stubSelectRow(row: unknown[]): void {
-	stubConnectionPool(() => [row])
-}
-
-// a conditional request, so a stored image responds with its headers alone and never reads storage
-async function requestStoredAvatar(avatarPath: string, avatarKey: string): Promise<Response> {
-	return avatarsRoute.request(avatarPath, { headers: { "if-none-match": `"${avatarKey}"` } })
-}
+afterEach(restoreAvatarTest)
 
 // the current version's bytes never change, so the browser caches them for a year and the edge for a day,
 // under the user's tag so a deletion can purge it
@@ -52,13 +46,15 @@ test("a user's upload at an old version or with none is cached for a minute", as
 	}
 })
 
-// the photo lives at its provider and can change there, so the redirect is cached for an hour
-test("a provider photo redirects, and the redirect is cached for an hour", async () => {
+// the photo lives at its provider and can change there, so the redirect is cached for an hour. the user's tag lets
+// an avatar reset purge the redirect from the edge
+test("a provider photo redirects, and the redirect is cached for an hour under the user's tag", async () => {
 	stubSelectRow(["oauth", null, "https://lh3.googleusercontent.com/a/photo"])
 	const response = await avatarsRoute.request("/avatars/user-1?v=oauth")
 	expect(response.status).toBe(302)
 	expect(response.headers.get("Location")).toBe("https://lh3.googleusercontent.com/a/photo")
 	expect(response.headers.get("Cache-Control")).toBe("public, max-age=3600")
+	expect(response.headers.get("Cache-Tag")).toBe("user-avatar:user-1")
 })
 
 // a team's avatar follows the same rule as a user's upload, under the team's tag at every version
@@ -105,7 +101,8 @@ test("a team upload records its key before the upload and clears it with the row
 	// a team with no avatar yet, with every query recorded and the upload spied
 	const sentQueries = stubConnectionPool(({ text }) => (text.includes("for update") ? [[null]] : []))
 	const uploadAttachmentSpy = spyOn(store, "uploadAttachment").mockResolvedValue(undefined)
-	expect(await uploadTeamAvatar("team-1", new Uint8Array([1]), "image/webp", "9c1b")).toBeNull()
+	const teamAvatarUpload = { teamId: "team-1", userId: "user-1", bytes: ONE_PIXEL_PNG, contentType: "image/png" }
+	expect(await uploadTeamAvatar({ ...teamAvatarUpload, keyId: "9c1b" })).toEqual({ isImageUnchecked: false })
 
 	// the pending insert comes first, the upload next, and the clear follows the team update
 	const pendingInsertIndex = sentQueries.findIndex(({ text }) =>
@@ -133,9 +130,7 @@ test("a flagged avatar upload is rejected with its category and stores nothing",
 	const uploadAttachmentSpy = spyOn(store, "uploadAttachment").mockResolvedValue(undefined)
 
 	// the upload, as the browser's resized png
-	const formData = new FormData()
-	formData.append("avatar", new File([new Uint8Array([137, 80, 78, 71])], "avatar.png", { type: "image/png" }))
-	const response = await toSignedInApp(avatarsRoute, "user-1").request("/avatars", { method: "POST", body: formData })
+	const response = await toSignedInApp(avatarsRoute, "user-1").request("/avatars", toAvatarUploadRequest())
 	expect(response.status).toBe(422)
 	expect(await response.json()).toEqual({ rejection: "objectionable", category: "sexual" })
 	expect(uploadAttachmentSpy).not.toHaveBeenCalled()
@@ -149,10 +144,80 @@ test("an unreadable avatar upload is rejected as an unsupported type", async () 
 	const uploadAttachmentSpy = spyOn(store, "uploadAttachment").mockResolvedValue(undefined)
 
 	// the upload
-	const formData = new FormData()
-	formData.append("avatar", new File([new Uint8Array([137, 80, 78, 71])], "avatar.gif", { type: "image/gif" }))
-	const response = await toSignedInApp(avatarsRoute, "user-1").request("/avatars", { method: "POST", body: formData })
+	const response = await toSignedInApp(avatarsRoute, "user-1").request("/avatars", toAvatarUploadRequest())
 	expect(response.status).toBe(400)
 	expect(await response.json()).toEqual({ error: "unsupported-type" })
 	expect(uploadAttachmentSpy).not.toHaveBeenCalled()
+})
+
+// bytes that are not an image, and an image that declares too many pixels, are rejected before the moderation is asked
+test("an avatar the server cannot decode or that is too large in pixels is rejected and stores nothing", async () => {
+	stubConnectionPool()
+	const classifyImageSpy = spyOn(moderation, "classifyImage")
+	const uploadAttachmentSpy = spyOn(store, "uploadAttachment").mockResolvedValue(undefined)
+	const signedInApp = toSignedInApp(avatarsRoute, "user-1")
+
+	// bytes that claim to be a png and are not one
+	const undecodableForm = new FormData()
+	undecodableForm.append("avatar", new File([new Uint8Array([137, 80, 78, 71])], "avatar.png", { type: "image/png" }))
+	const undecodableResponse = await signedInApp.request("/avatars", { method: "POST", body: undecodableForm })
+	expect(undecodableResponse.status).toBe(400)
+	expect(await undecodableResponse.json()).toEqual({ error: "unsupported-type" })
+
+	// an image past the pixel limit
+	spyOn(avatarImages, "toStoredAvatar").mockResolvedValue("too-large")
+	const tooLargeResponse = await signedInApp.request("/avatars", toAvatarUploadRequest())
+	expect(tooLargeResponse.status).toBe(400)
+	expect(await tooLargeResponse.json()).toEqual({ error: "too-large" })
+	expect(classifyImageSpy).not.toHaveBeenCalled()
+	expect(uploadAttachmentSpy).not.toHaveBeenCalled()
+})
+
+// a clean upload is stored as the server's own re-encode and becomes the user's avatar
+test("a clean avatar upload stores the server's re-encode and points the user at it", async () => {
+	const sentQueries = stubConnectionPool(({ text }) => (text.includes("for update") ? [[null, null]] : []))
+	stubRedisClient()
+	spyOn(moderation, "classifyImage").mockResolvedValue({
+		outcome: "classified",
+		verdict: { isViolation: false, category: null },
+	})
+	const uploadAttachmentSpy = spyOn(store, "uploadAttachment").mockResolvedValue(undefined)
+
+	// the upload responds in its released shape, not marked unchecked
+	const response = await toSignedInApp(avatarsRoute, "user-1").request("/avatars", toAvatarUploadRequest())
+	expect(response.status).toBe(200)
+	expect(await response.json()).toEqual({ ok: true })
+
+	// the stored bytes are a png the server encoded, and the user's row points at them with no unchecked upload
+	expect(uploadAttachmentSpy.mock.calls[0]?.[2]).toBe("image/png")
+	const userUpdate = sentQueries.find(({ text }) => text.startsWith('update "users"'))
+	expect(userUpdate?.text).toContain('"avatar_source" = $1, "avatar_key" = $2, "unchecked_avatar_key" = $3')
+	expect(userUpdate?.values.slice(0, 3)).toEqual(["upload", uploadAttachmentSpy.mock.calls[0]?.[0], null])
+})
+
+// a small file that declares a huge image is rejected from its header, before the moderation is asked
+test("a team avatar past the pixel limit is rejected and stores nothing", async () => {
+	const sentQueries = stubConnectionPool()
+	const classifyImageSpy = spyOn(moderation, "classifyImage")
+	const uploadAttachmentSpy = spyOn(store, "uploadAttachment").mockResolvedValue(undefined)
+	const hugeAvatarUpload = { teamId: "team-1", userId: "user-1", bytes: toBombPng(12_000), contentType: "image/png" }
+	expect(await uploadTeamAvatar({ ...hugeAvatarUpload, keyId: "9c1b" })).toEqual({ rejection: "too-large" })
+
+	// nothing is classified, stored, or written, so the team's avatar is unchanged
+	expect(classifyImageSpy).not.toHaveBeenCalled()
+	expect(uploadAttachmentSpy).not.toHaveBeenCalled()
+	expect(sentQueries).toEqual([])
+})
+
+// with no moderation key the check is skipped, and the upload shows to everyone at once
+test("an avatar upload with no moderation key set is stored and nothing is saved as unchecked", async () => {
+	const sentQueries = stubConnectionPool(({ text }) => (text.includes("for update") ? [[null, null]] : []))
+	stubRedisClient()
+	spyOn(moderation, "classifyImage").mockResolvedValue({ outcome: "skipped" })
+	spyOn(store, "uploadAttachment").mockResolvedValue(undefined)
+
+	// the upload responds not marked unchecked, and no unchecked avatar is recorded
+	const response = await toSignedInApp(avatarsRoute, "user-1").request("/avatars", toAvatarUploadRequest())
+	expect(await response.json()).toEqual({ ok: true })
+	expect(sentQueries.some(({ text }) => text.startsWith('insert into "unchecked_images"'))).toBe(false)
 })

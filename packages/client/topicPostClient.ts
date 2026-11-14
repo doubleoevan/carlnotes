@@ -1,11 +1,7 @@
 // the api client for Topic Posts: one post's read, a draft's create and saves, the publish, the delete, the image's
 // regenerate and upload, a body image's upload, and a post's place among its author's profile pins and the home's pins. a Topic's posts
 // come with its page
-import {
-	regenerateTopicImageResponse,
-	type TopicImageUrls,
-	uploadTopicImageResponse,
-} from "@carlnotes/contracts/topicImages"
+import { regenerateTopicImageResponse, uploadTopicImageResponse } from "@carlnotes/contracts/topicImages"
 import {
 	type TopicPostBodyImageUploadResponse,
 	topicPostBodyImageUploadResponse,
@@ -24,6 +20,7 @@ import {
 	topicPostSaveResponse,
 } from "@carlnotes/contracts/topicPosts"
 import { type ApiResponse, apiClient, fetchApi, readApiErrorMessage, readApiResponse } from "./apiClient"
+import type { UploadedTopicImage } from "./topicImageClient"
 
 // the failure of a write whose request never arrived
 const UNSENT_WRITE_FAILURE = { status: "failed", message: null } as const
@@ -171,10 +168,10 @@ export async function sendTopicPostDiscussionRegeneration(topicPostId: string, h
 }
 
 /**
- * Uploads an image in place of a Topic Post's current one. Returns the new image's urls. Throws an error with the
- * api's words on a rejection.
+ * Uploads an image in place of a Topic Post's current one. Returns the new image's urls, and whether the upload is
+ * unchecked. Throws an error with the api's words on a rejection.
  */
-export async function uploadTopicPostImageBody(topicPostId: string, body: FormData): Promise<TopicImageUrls> {
+export async function uploadTopicPostImageBody(topicPostId: string, body: FormData): Promise<UploadedTopicImage> {
 	const response = await fetchApi(`/api/topic-posts/${encodeURIComponent(topicPostId)}/image`, {
 		method: "POST",
 		body,
@@ -182,7 +179,7 @@ export async function uploadTopicPostImageBody(topicPostId: string, body: FormDa
 	if (!response.ok) {
 		throw new Error((await readApiErrorMessage(response)) ?? `upload failed: ${response.status}`)
 	}
-	return (await readApiResponse(uploadTopicImageResponse, response)).image
+	return readApiResponse(uploadTopicImageResponse, response)
 }
 
 /**

@@ -1,6 +1,6 @@
 import { authClient } from "@carlnotes/client/authClient"
 import type { ChatPage } from "@carlnotes/client/chatClient"
-import { toAvatarVersion } from "@carlnotes/contracts/avatars"
+import { toSessionAvatarVersion } from "@carlnotes/contracts/avatars"
 import { CLEAR_CHAT_COPY, NEW_TOPIC_CHAT_COPY, toPrivateChatPlaceholder } from "@carlnotes/core/lib/chatCopy"
 import { useNavigate } from "@tanstack/react-router"
 import { lazy, Suspense, useState } from "react"
@@ -135,7 +135,7 @@ export function PrivateChatPanel({
 						author={{
 							userId: session?.user.id ?? null,
 							username: session?.user.username ?? "you",
-							avatarVersion: toAvatarVersion(session?.user ?? {}),
+							avatarVersion: toSessionAvatarVersion(session?.user ?? {}),
 						}}
 					/>
 				</Suspense>

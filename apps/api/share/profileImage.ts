@@ -40,7 +40,7 @@ export function toProfilePreviewKey(profilePreview: ProfilePreview): string {
  */
 export async function toProfilePreviewPng(card: ProfilePreview): Promise<Uint8Array> {
 	// the user's avatar bytes, only fetched here. the card's key names the avatar instead, so a stored card loads nothing
-	const avatarImage = await toOwnerImageDataUri(card.avatar)
+	const avatarImage = await toOwnerImageDataUri(card.avatar, AVATAR_SIZE)
 	return toCardPng([toBrandIcon(), toProfileOwner(card, avatarImage), toProfileFooter(card)])
 }
 

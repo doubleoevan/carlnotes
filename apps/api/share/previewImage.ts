@@ -3,9 +3,11 @@
 import { AVATAR_COLOR, toAvatarInitials, toAvatarTint } from "@carlnotes/contracts/avatars"
 import { getAttachmentBytes } from "@carlnotes/db/store"
 import { darkRoast } from "@carlnotes/nightshift/colors"
-import { type CardElement, toCardElementPng, toImageDataUri } from "@carlnotes/pipeline/cardElementPng"
+import { toCardAvatarPng } from "@carlnotes/pipeline/avatarImages"
+import { type CardElement, toCardElementPng } from "@carlnotes/pipeline/cardElementPng"
 import { toTopicImageCardJpeg } from "@carlnotes/pipeline/topicImages/topicImageFiles"
-import { MAX_AVATAR_BYTES, type PublishedAvatar, toAvatarContentType } from "../avatars"
+import { toDataUrl } from "@carlnotes/server/dataUrl"
+import { MAX_AVATAR_BYTES, type PublishedAvatar } from "../avatars"
 
 // what every platform crops preview images to. 1200x630 is the size X, Slack, and LinkedIn all expect
 const PREVIEW_WIDTH = 1200
@@ -135,40 +137,35 @@ export function toImageOverTextCardPng({
 export async function loadCardImageBandDataUri(originalKey: string): Promise<string> {
 	const originalJpeg = await getAttachmentBytes(originalKey)
 	const bandJpeg = await toTopicImageCardJpeg(originalJpeg, PREVIEW_WIDTH, CARD_IMAGE_BAND_HEIGHT)
-	return toImageDataUri(bandJpeg, "image/jpeg")
+	return toDataUrl("image/jpeg", bandJpeg)
 }
 
 /**
- * The owner's published image as bytes satori can draw, or null to fall back to their initials.
- * A remote provider photo is fetched here and inlined.
+ * The owner's published image as a png satori can draw, resized to the size the card draws it at so no avatar is
+ * decoded at its full size inside a card, or null to fall back to their initials. A remote provider photo is fetched
+ * here and inlined.
  */
-export async function toOwnerImageDataUri(avatar: PublishedAvatar): Promise<string | null> {
+export async function toOwnerImageDataUri(avatar: PublishedAvatar, size: number): Promise<string | null> {
 	if (!avatar) {
 		return null
 	}
 	try {
-		// a stored upload comes from the app's own bucket, and its avatar key names the type to serve it as
-		if ("avatarKey" in avatar) {
-			const bytes = await getAttachmentBytes(avatar.avatarKey)
-			return toImageDataUri(bytes, toAvatarContentType(avatar.avatarKey))
-		}
-		// a provider photo is somebody else's url, so it is bounded by a timeout and a size before being read
-		const response = await fetch(avatar.imageUrl, { signal: AbortSignal.timeout(PROVIDER_PHOTO_TIMEOUT_MS) })
-		if (!response.ok) {
-			return null
-		}
-		const bytes = await toAvatarBytes(response)
-		if (!bytes) {
-			return null
-		}
-		// what the provider says it sent, falling back to the format a provider photo almost always is
-		const contentType = response.headers.get("content-type") ?? "image/jpeg"
-		return toImageDataUri(bytes, contentType)
+		// a stored upload comes from the app's own bucket, and a provider photo from its provider
+		const avatarBytes =
+			"avatarKey" in avatar ? await getAttachmentBytes(avatar.avatarKey) : await fetchProviderPhoto(avatar.imageUrl)
+		return avatarBytes ? toDataUrl("image/png", await toCardAvatarPng(avatarBytes, size)) : null
 	} catch (error) {
 		// an unreadable image draws the initials instead
 		console.error("preview avatar load failed", error)
 		return null
 	}
+}
+
+// a provider photo's bytes, or null for a response that failed or ran past the size an avatar can be. the photo is
+// somebody else's url, so it is bounded by a timeout and a size before being read
+async function fetchProviderPhoto(imageUrl: string): Promise<Uint8Array | null> {
+	const response = await fetch(imageUrl, { signal: AbortSignal.timeout(PROVIDER_PHOTO_TIMEOUT_MS) })
+	return response.ok ? toAvatarBytes(response) : null
 }
 
 // a response's bytes, or null once it runs past the size an avatar can be

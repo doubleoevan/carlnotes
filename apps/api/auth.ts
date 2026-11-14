@@ -14,6 +14,7 @@ import { toNormalizedUsername, toProviderUsername } from "@carlnotes/contracts/u
 import { db, schema } from "@carlnotes/db"
 import { deleteRedisKeys, runWithRedis } from "@carlnotes/db/redis"
 import { incrementRateLimitWindow } from "@carlnotes/db/redisRateLimits"
+import { cacheSession } from "@carlnotes/db/sessions"
 import { provisionLiteLLMKey } from "@carlnotes/models/litellmProxy"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { appUrl } from "@carlnotes/server/appUrl"
@@ -40,7 +41,6 @@ import {
 	toGithubProfileUser,
 } from "./authHooks"
 import { userBudgetCents } from "./authorization"
-import { cacheSession } from "./sessions"
 import { verifyGateToken } from "./signupGate"
 import { saveDefaultUserTeam } from "./team/teams"
 import { ipAddressOptions } from "./trustedProxies"
@@ -157,7 +157,7 @@ export const auth = betterAuth({
 		enabled: true,
 		minPasswordLength: MIN_PASSWORD_LENGTH,
 		sendResetPassword: async ({ user, url }) => {
-			sendAuthEmailInBackground("reset-password", sendResetPasswordEmail(user.email, url))
+			sendAuthEmailInBackground("password-reset", sendResetPasswordEmail(user.email, url))
 		},
 		resetPasswordTokenExpiresIn: RESET_TOKEN_LIFETIME_SECONDS,
 		revokeSessionsOnPasswordReset: true,
@@ -225,7 +225,7 @@ export const auth = betterAuth({
 		changeEmail: {
 			enabled: true,
 			sendChangeEmailConfirmation: async ({ user, newEmail, url }) => {
-				sendAuthEmailInBackground("change-email", sendChangeEmailConfirmationEmail(user.email, newEmail, url))
+				sendAuthEmailInBackground("email-change", sendChangeEmailConfirmationEmail(user.email, newEmail, url))
 			},
 		},
 		additionalFields: {
@@ -239,6 +239,8 @@ export const auth = betterAuth({
 			usernameNormalized: { type: "string", required: false, input: false, returned: false },
 			avatarSource: { type: "string", required: false, input: false, returned: true },
 			avatarKey: { type: "string", required: false, input: false, returned: true },
+			// an uploaded avatar whose image moderation could not run, which the user alone sees until the check passes
+			uncheckedAvatarKey: { type: "string", required: false, input: false, returned: true },
 			// the access requirements to send an invite to this user
 			inviteAccess: { type: "string", required: false, input: false, returned: true },
 			// whether a Scan's new Findings and a chat mention push to the user's phones, null until the first grant

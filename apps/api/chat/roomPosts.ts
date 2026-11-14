@@ -36,7 +36,8 @@ export type ChatRoomPostResult =
 	| { status: "attachmentRejected"; error: ChatRoomAttachmentError }
 
 // the category of the first shared image that reads as a violation, unreadable if the moderation could not read one, or
-// null if every image may post. the images are checked in parallel
+// null if every image may post. an image whose check could not run posts, as a clean one does, because only a room's
+// members see it. the images are checked in parallel
 async function toObjectionableRoomImageCategory(
 	attachments: ChatAttachment[],
 	subjectId: string,
@@ -49,7 +50,8 @@ async function toObjectionableRoomImageCategory(
 		),
 	)
 	const objectionableCategory = imageCategories.find(
-		(imageCategory) => imageCategory !== null && imageCategory !== "unreadable",
+		(imageCategory): imageCategory is ModerationCategory =>
+			imageCategory !== null && imageCategory !== "unreadable" && imageCategory !== "unchecked",
 	)
 	return objectionableCategory ?? (imageCategories.includes("unreadable") ? "unreadable" : null)
 }

@@ -202,8 +202,8 @@ export function ChatRoomPanel({
 import { CHAT_ROOM_REJECTION_COPY } from "@carlnotes/core/lib/chatRejectionCopy"
 
 /**
- * Renders why a chat room post was rejected: the plans link for a spent budget, the chat cutoff, or why its files did
- * not post.
+ * Renders why a chat room post was rejected: the plans link for a spent budget, the chat cutoff, an unverified email,
+ * or why its files did not post.
  */
 export function ChatRoomRejectionNotice({ rejection }: { rejection: ChatRoomRejection }) {
 	return rejection === "budget" ? (

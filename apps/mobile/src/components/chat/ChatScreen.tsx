@@ -1,4 +1,4 @@
-import { toAvatarVersion } from "@carlnotes/contracts/avatars"
+import { toSessionAvatarVersion } from "@carlnotes/contracts/avatars"
 import { isAdminRole } from "@carlnotes/contracts/enums"
 import { toTeamPath } from "@carlnotes/contracts/seo"
 import { reloadChatRooms } from "@carlnotes/core/hooks/useUpdateBadges"
@@ -133,7 +133,7 @@ function ChatScreenContent({ state: chatPageState }: { state: ChatPageState }) {
 						author={{
 							userId: session.user.id,
 							username: session.user.username ?? session.user.name,
-							avatarVersion: toAvatarVersion(session.user),
+							avatarVersion: toSessionAvatarVersion(session.user),
 						}}
 					/>
 				))}

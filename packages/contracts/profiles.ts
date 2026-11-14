@@ -1,6 +1,6 @@
 // the profile contracts: a user's identity, a topic table row, a team's status on a profile, and the billing state
 import { z } from "zod"
-import { toAvatarVersion } from "./avatars"
+import { toSessionAvatarVersion } from "./avatars"
 import { billingIntervals, billingProviders, plans, teamRoles, visibilities } from "./enums"
 import { podcastEpisodeSummary } from "./podcast"
 import { displayEnum } from "./tolerantReads"
@@ -22,19 +22,21 @@ export const userIdentity = z.object({ id: z.string(), username: z.string() })
 export type UserIdentity = z.infer<typeof userIdentity>
 
 /**
- * Returns the signed-in user's identity for a profile link, read from the session user.
+ * Returns the signed-in user's identity for a profile link, read from the session user, with the avatar the user
+ * sees: an upload shown to them alone, or the one everyone else sees.
  */
 export function toSessionProfileIdentity(sessionUser: {
 	id: string
 	username?: string | null
 	avatarSource?: string | null
 	avatarKey?: string | null
+	uncheckedAvatarKey?: string | null
 }): ProfileIdentity {
 	return {
 		userId: sessionUser.id,
 		username: sessionUser.username ?? "",
 		avatarSource: sessionUser.avatarSource ?? null,
-		avatarVersion: toAvatarVersion(sessionUser),
+		avatarVersion: toSessionAvatarVersion(sessionUser),
 	}
 }
 

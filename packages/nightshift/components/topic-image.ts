@@ -27,11 +27,19 @@ export const topicImageBoxVariants = cva("shrink-0 overflow-hidden bg-muted", {
 })
 
 /**
- * The classes both apps draw on the image inside the box, which fills the box and crops to it, and on the frame a page
+ * The classes both apps draw on the image inside the box, which fills the box and crops to it, on the frame a page
  * header, a Topics row, or the Topic roast sheet puts around the box: a card's border and shadow, at the corner the
- * box's size already has.
+ * box's size already has, and on the coffee mug a box with no file shows: centered in the box, faint, in a muted color.
  */
 export const topicImageClasses = {
 	image: "size-full object-cover",
 	frame: "shrink-0 border border-separator shadow-raised",
+	placeholder: "absolute inset-0 items-center justify-center opacity-60",
+	placeholderMug: "text-muted-foreground",
 }
+
+/**
+ * How much of each size's box the coffee mug's height takes in a box with no file. A smaller box gives the mug more of
+ * it, so the mug reads at every size.
+ */
+export const topicImagePlaceholderMugHeights = { page: 0.6, list: 0.8, thumbnail: 1 }

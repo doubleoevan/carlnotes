@@ -6,6 +6,7 @@ import { TeamHeader as SharedTeamHeader, type TeamHeaderElements } from "@carlno
 import { IMAGE_UPLOAD_FAILED_TEXT, toAvatarRejectionText } from "@carlnotes/core/lib/imageUpload"
 import { View } from "react-native"
 import { useAvatarPicker } from "@/components/avatar/avatarUpload"
+import { UncheckedAvatarLine } from "@/components/avatar/UncheckedAvatarLine"
 import { Avatar, PAGE_AVATAR_SIZE } from "@/components/branding/Avatar"
 import { DetailsLine } from "@/components/common/DetailsLine"
 import { PageHeaderIdentity } from "@/components/common/PageHeaderIdentity"
@@ -17,7 +18,8 @@ import { usePageMutation } from "@/hooks/usePageMutation"
 
 /**
  * Renders the web's team header: the avatar, which a leader presses to pick a new one, beside the title, its mention
- * badge, and the counts, then the description.
+ * badge, and the counts, then the description. An unchecked upload shows to the leader who uploaded it in the
+ * team's avatar's place, with its line under it.
  */
 export function TeamHeader({
 	teamPage,
@@ -41,12 +43,15 @@ export function TeamHeader({
 			}),
 	})
 
-	// the team's avatar at the page size, which a leader's press changes
+	// the team's avatar at the page size, which a leader's press changes. the leader who uploaded an unchecked avatar
+	// sees that upload in its place, loaded with their session
+	const shownAvatarVersion = teamPage.uncheckedAvatarVersion ?? teamPage.avatarVersion
 	const avatar = (
 		<Avatar
 			ownerId={teamId}
 			name={teamPage.name}
-			imageUrl={teamPage.avatarVersion ? toTeamAvatarImagePath(teamId, teamPage.avatarVersion) : null}
+			imageUrl={shownAvatarVersion ? toTeamAvatarImagePath(teamId, shownAvatarVersion) : null}
+			isUnchecked={Boolean(teamPage.uncheckedAvatarVersion)}
 			size={PAGE_AVATAR_SIZE}
 		/>
 	)
@@ -57,7 +62,7 @@ export function TeamHeader({
 				noteCount={noteCount}
 				avatar={
 					isLeaderRole(teamPage.role) ? (
-						<>
+						<View className="items-start">
 							<Button
 								ref={teamAvatarPicker.triggerRef}
 								variant="ghost"
@@ -69,7 +74,9 @@ export function TeamHeader({
 								{avatar}
 							</Button>
 							{teamAvatarPicker.filePickerMenu}
-						</>
+							{/* the upload only this leader sees until its check passes */}
+							{teamPage.uncheckedAvatarVersion ? <UncheckedAvatarLine avatarSize={PAGE_AVATAR_SIZE} /> : null}
+						</View>
 					) : (
 						avatar
 					)

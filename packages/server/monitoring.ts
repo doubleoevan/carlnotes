@@ -236,6 +236,7 @@ const reportedStages = [
 	"podcast-episode",
 	"topic-podcast-episode-video",
 	"topic-image",
+	"unchecked-image",
 	"chat",
 	"updates",
 	"prompt-registry",

@@ -1,9 +1,10 @@
 // a podcast episode film's row and its stored files: the render version, the status writes a render and a rebuild
-// make, the swap that replaces a film rendered again, the upload that records its pending deletion first, what a
-// render's minutes cost, and the failure a last attempt records
+// make, the write that stops the films drawn from an image, the swap that replaces a film rendered again, the upload
+// that records its pending deletion first, what a render's minutes cost, and the failure a last attempt records
 
-import { db } from "@carlnotes/db"
-import { topicPodcastEpisodeVideos } from "@carlnotes/db/schema/podcast"
+import type { UncheckedImageSubjectKind } from "@carlnotes/contracts/enums"
+import { type DbHandle, db } from "@carlnotes/db"
+import { podcastEpisodes, topicPodcastEpisodeVideos } from "@carlnotes/db/schema/podcast"
 import {
 	clearPendingObjectDeletion,
 	recordPendingObjectDeletionBeforeUpload,
@@ -12,7 +13,7 @@ import {
 import { TOPIC_PODCAST_EPISODE_VIDEO_DOLLARS_PER_MINUTE } from "@carlnotes/models/budget"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { reportError } from "@carlnotes/server/monitoring"
-import { and, eq, lt, ne, sql } from "drizzle-orm"
+import { and, eq, inArray, lt, ne, sql } from "drizzle-orm"
 import type { PgUpdateSetSource } from "drizzle-orm/pg-core"
 import { recordReplacedImageDeletions } from "../topicImages/topicImageRenders"
 import { loadTopicPodcastEpisodeVideoEpisode } from "./topicPodcastEpisodeVideoInputs"
@@ -77,6 +78,53 @@ export async function saveTopicPodcastEpisodeVideoRendering(podcastEpisodeId: st
 			target: topicPodcastEpisodeVideos.podcastEpisodeId,
 			set: { status: "rendering", error: null },
 		})
+}
+
+// an image that no film may show any longer: what the image was for, the id of its Topic or its podcast episode, and
+// its hash
+export type SaveImageTopicPodcastEpisodeVideosRenderingOptions = {
+	subjectKind: UncheckedImageSubjectKind
+	subjectId: string
+	imageHash: string
+}
+
+/**
+ * Marks each ready film drawn from an image as rendering, on the caller's transaction if there is one, so no film that
+ * shows the image plays until its rebuild. The image is a Topic's, a podcast episode's, or a film's own. Each film
+ * keeps its stored files, which its rebuild reads. Returns the podcast episodes of those films.
+ */
+export async function saveImageTopicPodcastEpisodeVideosRendering(
+	handle: DbHandle,
+	{ subjectKind, subjectId, imageHash }: SaveImageTopicPodcastEpisodeVideosRenderingOptions,
+): Promise<string[]> {
+	// no film shows a Topic Post's image or an avatar
+	const isTopicImage = subjectKind === "topicImage"
+	if (!isTopicImage && subjectKind !== "podcastEpisodeImage" && subjectKind !== "topicPodcastEpisodeVideoImage") {
+		return []
+	}
+
+	// the film of the image's podcast episode, or the films of every podcast episode of the image's Topic
+	const topicPodcastEpisodeIds = handle
+		.select({ id: podcastEpisodes.id })
+		.from(podcastEpisodes)
+		.where(eq(podcastEpisodes.topicId, subjectId))
+	const isImagePodcastEpisode = isTopicImage
+		? inArray(topicPodcastEpisodeVideos.podcastEpisodeId, topicPodcastEpisodeIds)
+		: eq(topicPodcastEpisodeVideos.podcastEpisodeId, subjectId)
+
+	// only a ready film whose intro and sign-off were drawn from the image stops playing
+	const renderingRows = await handle
+		.update(topicPodcastEpisodeVideos)
+		.set({ status: "rendering" })
+		.where(
+			and(
+				isImagePodcastEpisode,
+				eq(topicPodcastEpisodeVideos.status, "ready"),
+				eq(topicPodcastEpisodeVideos.renderedImageHash, imageHash),
+			),
+		)
+		.returning({ podcastEpisodeId: topicPodcastEpisodeVideos.podcastEpisodeId })
+	return renderingRows.map((renderingRow) => renderingRow.podcastEpisodeId)
 }
 
 // the podcast episode, the film's stored keys, its size and length, the image its intro and sign-off were drawn from,

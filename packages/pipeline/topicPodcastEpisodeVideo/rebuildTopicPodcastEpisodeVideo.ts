@@ -1,16 +1,18 @@
 // a ready film rebuilt for a new image, its own or else its podcast episode's: only the intro and the sign-off are
 // rendered again, over the chapters' images that the render stored, joined with the stored chapters part, and the audio
-// and captions are copied from the film that plays now
+// and captions are copied from the film that plays now. a film marked rendering because its image was unpublished or
+// rejected is rebuilt the same way from its stored files, and plays again once it is
 
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { db } from "@carlnotes/db"
+import { type DbTransaction, db } from "@carlnotes/db"
 import { isMonthlyBudgetCutoffPassed } from "@carlnotes/db/monthlyBudgetCutoffs"
 import { deletePodcastFeedCache } from "@carlnotes/db/podcastFeedCache"
 import { topicPodcastEpisodeVideos } from "@carlnotes/db/schema/podcast"
 import { clearPendingObjectDeletion, deleteStoredObjects, downloadPodcastEpisodeFile } from "@carlnotes/db/store"
 import { toTopicPodcastEpisodeVideoImagePartKey } from "@carlnotes/db/topicPodcastEpisodeVideoKeys"
+import { lockTopicImageVisibility } from "@carlnotes/db/uncheckedImages"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { and, eq, sql } from "drizzle-orm"
 import { recordReplacedImageDeletions } from "../topicImages/topicImageRenders"
@@ -32,13 +34,17 @@ import { rewriteVideoFilm } from "./videoParts"
 import { toSegmentSeconds } from "./videoTimeline"
 
 // what a rebuild did. it rendered the new intro and sign-off, or skipped a podcast episode that is not published, a film
-// that is not ready, a film that already shows the current image, or an owner past the podcast episode spend cutoff
+// that is not ready, a film that plays while an upload that would be its image is unchecked, a film that already shows
+// the current image, or an owner past the podcast episode spend cutoff
 export type RebuildTopicPodcastEpisodeVideoResult =
 	| { outcome: "rebuilt"; renderSeconds: number }
-	| { outcome: "skipped"; reason: "unpublished" | "not-ready" | "current" | "spend-cutoff" }
+	| { outcome: "skipped"; reason: "unpublished" | "not-ready" | "unchecked" | "current" | "spend-cutoff" }
 
-// the ready film's stored keys, the image hash it was rendered from, and the render version it was rendered at
+// the stored keys of a ready film, or of a film marked rendering that still has its files, the image hash it was
+// rendered from, and the render version it was rendered at
 type ReadyTopicPodcastEpisodeVideo = {
+	status: "ready" | "rendering"
+	// the parts and the joined film
 	introKey: string | null
 	chaptersKey: string
 	signOffKey: string | null
@@ -49,9 +55,11 @@ type ReadyTopicPodcastEpisodeVideo = {
 
 /**
  * Rebuilds a ready film for the image it shows now, its own or else its podcast episode's, swaps the keys in one
- * update, and schedules the replaced files for deletion after the grace. A failure deletes what it uploaded and throws
- * an error, and the film that plays now stays. An aborted signal kills the ffmpeg run in progress and fails the
- * rebuild before it uploads.
+ * update, and schedules the replaced files for deletion after the grace. A film marked rendering because its image was
+ * unpublished or rejected is rebuilt too, and is ready again after the swap. A failure deletes what it uploaded and
+ * throws an error, and the film row stays as it was. An image that changed while the rebuild ran throws an error too,
+ * so the next attempt reads the new image. An aborted signal kills the ffmpeg run in progress and fails the rebuild
+ * before it uploads.
  */
 export async function rebuildTopicPodcastEpisodeVideo(
 	podcastEpisodeId: string,
@@ -126,11 +134,25 @@ async function loadRebuildInputs(podcastEpisodeId: string): Promise<RebuildInput
 		return { outcome: "skipped", reason: "not-ready" }
 	}
 
-	// a film already rendered from the current image, or an owner past the cutoff, is left as it is
+	// a film that plays keeps playing as it is while an upload that would be its image is unchecked. the rebuild starts
+	// again once the upload passes its check
+	const isFilmPlaying = readyTopicPodcastEpisodeVideo.status === "ready"
+	if (isFilmPlaying && topicPodcastEpisodeVideoEpisode.hasUncheckedUpload) {
+		return { outcome: "skipped", reason: "unchecked" }
+	}
+
+	// a film already rendered from the current image is left as it is, and one marked rendering is ready again
 	if (readyTopicPodcastEpisodeVideo.renderedImageHash === topicPodcastEpisodeVideoEpisode.imageHash) {
+		if (!isFilmPlaying) {
+			await saveCurrentFilmReady(topicPodcastEpisodeVideoEpisode, readyTopicPodcastEpisodeVideo)
+		}
 		return { outcome: "skipped", reason: "current" }
 	}
-	if (await isMonthlyBudgetCutoffPassed(topicPodcastEpisodeVideoEpisode.ownerId, "podcastEpisodes")) {
+
+	// an owner past the cutoff keeps the film that plays now. a film marked rendering plays nothing, so it is rebuilt
+	// whatever its owner spent
+	const { ownerId } = topicPodcastEpisodeVideoEpisode
+	if (isFilmPlaying && (await isMonthlyBudgetCutoffPassed(ownerId, "podcastEpisodes"))) {
 		return { outcome: "skipped", reason: "spend-cutoff" }
 	}
 	return {
@@ -140,7 +162,44 @@ async function loadRebuildInputs(podcastEpisodeId: string): Promise<RebuildInput
 	}
 }
 
-// the film row's keys and image hash, if the film is ready with a chapters part
+// the image a film was drawn from is the one it shows now: the film's podcast episode and Topic, and the image's hash
+type ShownImageCheck = Pick<TopicPodcastEpisodeVideoEpisode, "podcastEpisodeId" | "topicId" | "imageHash">
+
+// throw an error unless a film still shows the image it was drawn from, read on a transaction that takes the Topic's
+// image visibility lock shared. no unchecked image under the Topic is unpublished until that transaction ends
+async function checkImageStillShown(
+	transaction: DbTransaction,
+	{ podcastEpisodeId, topicId, imageHash }: ShownImageCheck,
+): Promise<void> {
+	await lockTopicImageVisibility(transaction, topicId, "shared")
+	const topicPodcastEpisodeVideoEpisode = await loadTopicPodcastEpisodeVideoEpisode(podcastEpisodeId, transaction)
+	if (topicPodcastEpisodeVideoEpisode?.imageHash !== imageHash) {
+		throw new Error("the film's image changed during its rebuild")
+	}
+}
+
+// mark a film ready again that was marked rendering and is drawn from the image it shows now
+async function saveCurrentFilmReady(
+	topicPodcastEpisodeVideoEpisode: TopicPodcastEpisodeVideoEpisode,
+	{ renderedImageHash }: ReadyTopicPodcastEpisodeVideo,
+): Promise<void> {
+	await db.transaction(async (transaction) => {
+		// the image is still the one the film shows, and the film is still the one that was read
+		await checkImageStillShown(transaction, topicPodcastEpisodeVideoEpisode)
+		await transaction
+			.update(topicPodcastEpisodeVideos)
+			.set({ status: "ready" })
+			.where(
+				and(
+					eq(topicPodcastEpisodeVideos.podcastEpisodeId, topicPodcastEpisodeVideoEpisode.podcastEpisodeId),
+					eq(topicPodcastEpisodeVideos.status, "rendering"),
+					eq(topicPodcastEpisodeVideos.renderedImageHash, renderedImageHash),
+				),
+			)
+	})
+}
+
+// the film row's keys and image hash, if the film is ready, or marked rendering with its files, with a chapters part
 async function loadReadyTopicPodcastEpisodeVideo(
 	podcastEpisodeId: string,
 ): Promise<ReadyTopicPodcastEpisodeVideo | null> {
@@ -158,12 +217,14 @@ async function loadReadyTopicPodcastEpisodeVideo(
 		.from(topicPodcastEpisodeVideos)
 		.where(eq(topicPodcastEpisodeVideos.podcastEpisodeId, podcastEpisodeId))
 
-	// a film with no chapters part or no joined film has nothing to rebuild from
+	// a failed film, or one with no chapters part or no joined film, has nothing to rebuild from. a first render's row
+	// has no stored file yet
 	const { status, chaptersKey, filmKey, renderedImageHash } = topicPodcastEpisodeVideo ?? {}
-	if (status !== "ready" || !chaptersKey || !filmKey || !renderedImageHash || !topicPodcastEpisodeVideo) {
+	const isRebuildable = status === "ready" || status === "rendering"
+	if (!isRebuildable || !chaptersKey || !filmKey || !renderedImageHash || !topicPodcastEpisodeVideo) {
 		return null
 	}
-	return { ...topicPodcastEpisodeVideo, chaptersKey, filmKey, renderedImageHash }
+	return { ...topicPodcastEpisodeVideo, status, chaptersKey, filmKey, renderedImageHash }
 }
 
 // the rebuilt intro, sign-off, and film on disk, and the film seconds rendered again
@@ -272,7 +333,7 @@ async function saveRebuiltFilm({
 	}
 
 	// swap the keys only on the film this rebuild read: the same image and the same chapters part. a film removed or
-	// rendered again meanwhile keeps its new files pending deletion
+	// rendered again meanwhile keeps its new files pending deletion. a film marked rendering is ready again
 	const costDollars = toTopicPodcastEpisodeVideoCostDollars(rebuiltFilm.renderedSeconds)
 	const isFilmAsRead = and(
 		eq(topicPodcastEpisodeVideos.podcastEpisodeId, podcastEpisodeId),
@@ -280,10 +341,13 @@ async function saveRebuiltFilm({
 		eq(topicPodcastEpisodeVideos.chaptersKey, readyTopicPodcastEpisodeVideo.chaptersKey),
 	)
 	await db.transaction(async (transaction) => {
+		// the rebuilt film shows the image it was drawn from, or the rebuild fails and its next attempt reads the new one
+		await checkImageStillShown(transaction, topicPodcastEpisodeVideoEpisode)
 		const swappedRows = await transaction
 			.update(topicPodcastEpisodeVideos)
 			.set({
 				...newKeys,
+				status: "ready",
 				renderedImageHash: imageHash,
 				byteSize: Bun.file(rebuiltFilm.filmPath).size,
 				cost: sql`${topicPodcastEpisodeVideos.cost} + ${costDollars.toFixed(6)}`,

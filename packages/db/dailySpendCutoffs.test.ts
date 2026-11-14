@@ -1,5 +1,6 @@
-// daily spend cutoff tests: each cutoff at its amount, the defaults and overrides, the cached and unavailable state, the
-// waiting scan filter, and which first and manual scans wait
+// daily spend cutoff tests: each cutoff at its amount, the defaults and overrides, the switches a stored or cached value
+// lacks, the cached and unavailable state, the waiting scan filter, which first and manual scans wait, and whose chat
+// the unverified accounts switch rejects
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import * as monitoring from "@carlnotes/server/monitoring"
 import {
@@ -15,28 +16,36 @@ import {
 	isFirstScanWaiting,
 	isManualScanWaiting,
 	isTopicFirstScanWaiting,
+	isUnverifiedAccountLimited,
 	isUserPastDailySpendCutoff,
 	loadDailySpendCutoffState,
+	loadSpendControlSettings,
 	toFirstScanDispatchLimit,
 	toFreePlanSpendKey,
 	toSpendControlSettings,
 	toWaitingScanFilter,
 } from "./dailySpendCutoffs"
-import { DEFAULT_SPEND_CONTROL_SETTINGS, toDailySpendCutoffState } from "./dailySpendCutoffTestFixtures"
+import {
+	DEFAULT_SPEND_CONTROL_SETTINGS,
+	toDailySpendCutoffState,
+	toSpendControlOverridesRow,
+} from "./dailySpendCutoffTestFixtures"
 import { db } from "./index"
 import { restoreRedisClient, stubRedisClient } from "./redisClientStub"
 import { scans } from "./schema/scans"
 
-// the stored overrides row with no override, in the column order the settings read selects
-const EMPTY_OVERRIDES_ROW = [null, null, null, null, null, false]
+// the stored overrides row with no override, and the same row with the unverified accounts switch on
+const EMPTY_OVERRIDES_ROW = toSpendControlOverridesRow()
+const UNVERIFIED_SWITCH_ON_ROW = toSpendControlOverridesRow({ isUnverifiedFirstScanLimitOn: true })
 
-// the five Doppler settings the defaults read
+// the six Doppler settings the defaults read
 const SPEND_CONTROL_ENV_NAMES = [
 	"PODCAST_EPISODES_DAILY_SPEND_CUTOFF_USD",
 	"SCHEDULED_SCANS_DAILY_SPEND_CUTOFF_USD",
 	"CHAT_DAILY_SPEND_CUTOFF_USD",
 	"FIRST_SCAN_DISPATCH_LIMIT",
 	"HOURLY_SIGNUP_ALERT_COUNT",
+	"TOPIC_PODCAST_EPISODE_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT",
 ] as const
 
 // each test reads through an empty in-memory Redis with no Doppler value set
@@ -259,13 +268,13 @@ test("past the scheduled scans cutoff, a free owner's first scan or manual scan 
 	expect(waitingScanSql).not.toContain('"accounts"')
 })
 
-// the switch adds an unverified password account's first scan, and leaves out manual scans
-test("the switch makes only an unverified password account's first scan wait", () => {
+// the switch adds an unverified password account's first scan and manual scan, and no other account's
+test("the switch makes an unverified password account's first scan or manual scan wait", () => {
 	const waitingScanSql = toWaitingScanSql(toDailySpendCutoffState(0, { isUnverifiedFirstScanLimitOn: true }))
 	expect(waitingScanSql).toContain('"earlier_scans"')
+	expect(waitingScanSql).toContain('"scans"."is_manual" = $')
 	expect(waitingScanSql).toContain('"users"."email_verified" = false')
 	expect(waitingScanSql).toContain('"accounts"."provider_id" = $')
-	expect(waitingScanSql).not.toContain('"scans"."is_manual"')
 })
 
 // a first scan has no earlier scan of its Topic by start time, then by id
@@ -299,14 +308,116 @@ test("a free owner's first scan waits past the scheduled scans cutoff, and not b
 // below the cutoff the switch makes only an unverified password account's first scan wait
 test("with the switch on, an unverified password account's first scan waits and a verified one's does not", async () => {
 	// the switch on and no cutoff passed, for an unverified password account
-	const switchOnRow = [null, null, null, null, null, true]
-	stubCutoffQueries({ overridesRow: switchOnRow, isUnverifiedPasswordUser: true })
+	stubCutoffQueries({ overridesRow: UNVERIFIED_SWITCH_ON_ROW, isUnverifiedPasswordUser: true })
 	expect(await isFirstScanWaiting("user-1")).toBe(true)
 
 	// the same, for an account that verified or signed in with Google
 	restoreConnectionPool()
-	stubCutoffQueries({ overridesRow: switchOnRow, isUnverifiedPasswordUser: false })
+	stubCutoffQueries({ overridesRow: UNVERIFIED_SWITCH_ON_ROW, isUnverifiedPasswordUser: false })
 	expect(await isFirstScanWaiting("user-1")).toBe(false)
+})
+
+// below the cutoff the switch makes an unverified password account's manual scan wait as its first scan does
+test("with the switch on, an unverified password account's manual scan waits and no other account's does", async () => {
+	// the switch on and no cutoff passed, for an unverified password account
+	stubCutoffQueries({ overridesRow: UNVERIFIED_SWITCH_ON_ROW, isUnverifiedPasswordUser: true })
+	expect(await isManualScanWaiting("user-1")).toBe(true)
+
+	// an account that verified or signed in with a provider, then a paid unverified password account
+	restoreConnectionPool()
+	stubCutoffQueries({ overridesRow: UNVERIFIED_SWITCH_ON_ROW, isUnverifiedPasswordUser: false })
+	expect(await isManualScanWaiting("user-1")).toBe(false)
+	restoreConnectionPool()
+	stubCutoffQueries({
+		accessRow: PLUS_USER_ACCESS_ROW,
+		overridesRow: UNVERIFIED_SWITCH_ON_ROW,
+		isUnverifiedPasswordUser: true,
+	})
+	expect(await isManualScanWaiting("user-1")).toBe(false)
+
+	// the switch off, for an unverified password account
+	restoreConnectionPool()
+	stubRedisClient()
+	stubCutoffQueries({ isUnverifiedPasswordUser: true })
+	expect(await isManualScanWaiting("user-1")).toBe(false)
+})
+
+// the switch rejects the chat and voice of a free unverified password account alone
+test("the unverified accounts switch limits a free unverified password account, and nobody else", async () => {
+	// the switch on, for a free unverified password account
+	stubCutoffQueries({ overridesRow: UNVERIFIED_SWITCH_ON_ROW, isUnverifiedPasswordUser: true })
+	expect(await isUnverifiedAccountLimited("user-1")).toBe(true)
+
+	// an account that verified or signed in with a provider
+	restoreConnectionPool()
+	stubCutoffQueries({ overridesRow: UNVERIFIED_SWITCH_ON_ROW, isUnverifiedPasswordUser: false })
+	expect(await isUnverifiedAccountLimited("user-1")).toBe(false)
+
+	// a paid unverified password account, which reads only its access row
+	restoreConnectionPool()
+	const paidUserQueries = stubCutoffQueries({
+		accessRow: PLUS_USER_ACCESS_ROW,
+		overridesRow: UNVERIFIED_SWITCH_ON_ROW,
+		isUnverifiedPasswordUser: true,
+	})
+	expect(await isUnverifiedAccountLimited("user-1")).toBe(false)
+	expect(paidUserQueries).toHaveLength(1)
+
+	// the switch off, for a free unverified password account
+	restoreConnectionPool()
+	stubRedisClient()
+	stubCutoffQueries({ isUnverifiedPasswordUser: true })
+	expect(await isUnverifiedAccountLimited("user-1")).toBe(false)
+})
+
+// a stored row turns each switch on and overrides the image limit, and an empty table leaves every one off
+test("the settings read each stored switch and image limit, and an empty table reads every one as off", async () => {
+	// an empty table reads the defaults
+	stubCutoffQueries({})
+	expect(await loadSpendControlSettings()).toEqual(DEFAULT_SPEND_CONTROL_SETTINGS)
+
+	// a row with both pauses and the pinned-only home on, and an image limit of zero
+	restoreConnectionPool()
+	stubRedisClient()
+	stubCutoffQueries({ overridesRow: [null, null, null, null, null, false, 0, true, true, true] })
+	expect(await loadSpendControlSettings()).toEqual({
+		...DEFAULT_SPEND_CONTROL_SETTINGS,
+		generatedChapterImageLimit: 0,
+		isPodcastEpisodeRecordingPaused: true,
+		isTopicPodcastEpisodeVideoRenderingPaused: true,
+		isHomePinnedOnly: true,
+	})
+})
+
+// a cached value that a replica wrote before the newer settings existed turns nothing on
+test("overrides that lack the newer settings read every switch as off and the image limit as its default", () => {
+	const olderOverrides = {
+		podcastEpisodesCutoffCents: null,
+		scheduledScansCutoffCents: 7_500,
+		chatCutoffCents: null,
+		firstScanDispatchLimit: null,
+		hourlySignupAlertCount: null,
+		isUnverifiedFirstScanLimitOn: false,
+	}
+	expect(toSpendControlSettings(olderOverrides)).toEqual({
+		...DEFAULT_SPEND_CONTROL_SETTINGS,
+		scheduledScansCutoffCents: 7_500,
+	})
+})
+
+// a failed settings read reports itself and reads every switch as off
+test("a failed settings read reads every switch as off and is reported", async () => {
+	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
+	stubConnectionPool(({ text }) => {
+		if (text.includes('from "spend_control_settings"')) {
+			throw new Error("database unreachable")
+		}
+		return []
+	})
+
+	// every setting reads its default, and the one failure is reported
+	expect(await loadSpendControlSettings()).toEqual(DEFAULT_SPEND_CONTROL_SETTINGS)
+	expect(reportErrorSpy).toHaveBeenCalledTimes(1)
 })
 
 // past the scheduled scans cutoff only a free user's manual scan waits

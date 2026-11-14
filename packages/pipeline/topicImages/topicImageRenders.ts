@@ -218,6 +218,15 @@ export async function replaceTopicImage({
 }
 
 /**
+ * Clears a topic's current image on the caller's transaction, its image row and the hash on the topic's own row, and
+ * keeps the image's files.
+ */
+export async function clearTopicImage(transaction: DbTransaction, topicId: string): Promise<void> {
+	await transaction.delete(topicImages).where(eq(topicImages.topicId, topicId))
+	await transaction.update(topics).set({ imageHash: null }).where(eq(topics.id, topicId))
+}
+
+/**
  * Deletes a topic's uploaded image, its row and its objects, so the drawn covers show until the next render lands.
  * Returns whether the current image was an upload.
  */
@@ -234,8 +243,7 @@ export async function removeTopicImageUpload(topicId: string): Promise<boolean> 
 		}
 
 		// the row goes with its objects
-		await transaction.delete(topicImages).where(eq(topicImages.topicId, topicId))
-		await transaction.update(topics).set({ imageHash: null }).where(eq(topics.id, topicId))
+		await clearTopicImage(transaction, topicId)
 		await recordPendingObjectDeletions({
 			handle: transaction,
 			objectKeys: toTopicImageObjectKeys(topicId, topicImage.hash),

@@ -181,6 +181,9 @@ export const topicPostResponse = topicPostCard.extend({
 	imageRegenerationQuota: imageRegenerationQuota.nullable(),
 	imageOrigin: z.enum(topicImageOrigins).nullable(),
 	imagePrompt: z.string().nullable(),
+	// whether the image is the caller's own upload, shown to them alone until its image moderation can run. absent
+	// for any other image, and from an api older than the field
+	isImageUnchecked: z.boolean().optional(),
 })
 
 export type TopicPostResponse = z.infer<typeof topicPostResponse>

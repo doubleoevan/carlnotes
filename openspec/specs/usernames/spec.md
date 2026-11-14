@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change social-profiles-and-sharing. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Every account holds a username assigned at signup
 
 Every user SHALL hold a username, assigned during signup without requiring the user to supply one. The username SHALL be shaped `Adjective-Noun`, drawn from two hand-picked word lists, with four random digits appended only when needed to break a collision — so a username reads as a name instead of a serial number.
@@ -57,9 +59,14 @@ A combination space small enough that most usernames need digits SHALL NOT ship.
 
 ### Requirement: Usernames are case-insensitively unique and exclude a reserved blocklist
 
-A username SHALL be unique without regard to case across users — enforced at the database level through the unique index on `users.username_normalized` instead of only in application code. Registering a username SHALL be rejected when its normalized form matches any existing username or any reserved slug.
+A username SHALL be unique without regard to case across users — enforced at the database level through the unique
+index on `users.username_normalized` instead of only in application code. Registering a username SHALL be rejected
+when its normalized form matches any existing username or any reserved slug.
 
-The reserved list SHALL cover the names that would pass someone off as the site or its staff and every root route slug, as the usernames capability enumerates, so a username can never shadow a route. The list is enforced at registration: an existing user whose name matches a newly reserved word keeps their username, and only new registrations are rejected.
+The reserved list SHALL cover the names that would pass someone off as the site or its staff, the podcast's second
+host and the words official, staff, and moderator among them, and every root route slug, as the usernames capability
+enumerates, so a username can never shadow a route. The list is enforced at registration: an existing user whose name
+matches a newly reserved word keeps their username, and only new registrations are rejected.
 
 #### Scenario: Case does not create a second username
 
@@ -74,7 +81,8 @@ The reserved list SHALL cover the names that would pass someone off as the site 
 #### Scenario: A new root route joins the list before it ships
 
 - **WHEN** a new root-level route is added to the app
-- **THEN** its slug is added to the reserved list in the same change, and existing matching usernames are grandfathered instead of renamed
+- **THEN** its slug is added to the reserved list in the same change, and existing matching usernames are
+  grandfathered instead of renamed
 
 #### Scenario: A new top-level route needs no reservation
 
@@ -85,6 +93,11 @@ The reserved list SHALL cover the names that would pass someone off as the site 
 
 - **WHEN** a user requests `admin`, `carl`, `support`, or `notesofcarl` as their username
 - **THEN** it is refused
+
+#### Scenario: The second host's name and the staff words are rejected
+
+- **WHEN** a user requests `vienna`, `official`, `staff`, or `moderator` as their username
+- **THEN** it is rejected, and a user who already holds one of those names keeps it
 
 ### Requirement: A username can be changed freely
 
@@ -99,4 +112,3 @@ A username is display only: a profile is addressed by user id, so no link points
 
 - **WHEN** a user changes their username
 - **THEN** every link to their profile still resolves, because it addresses their user id
-

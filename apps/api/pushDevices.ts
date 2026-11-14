@@ -4,12 +4,12 @@ import { pushDeviceDeletePayload, pushDevicePayload, pushPreferencePayload } fro
 import { db } from "@carlnotes/db"
 import { pushDevices } from "@carlnotes/db/schema/pushDevices"
 import { users } from "@carlnotes/db/schema/users"
+import { refreshSessionUser } from "@carlnotes/db/sessions"
 import { zValidator } from "@hono/zod-validator"
 import { and, desc, eq, notInArray, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { type AppEnv, currentSessionId, currentUser } from "./currentUser"
 import { pushDeviceRateLimiter } from "./rateLimit"
-import { refreshSessionUser } from "./sessions"
 
 // the most phones one account keeps registered. a registration past it retires the account's phones seen longest ago
 const MAX_PUSH_DEVICES_PER_USER = 10

@@ -15,6 +15,7 @@ type Story = StoryObj<typeof meta>
 // rendered component states
 export const Budget: Story = {}
 export const RateLimited: Story = { args: { rejection: "rateLimited" } }
+export const EmailUnverified: Story = { args: { rejection: "emailUnverified" } }
 export const Forbidden: Story = { args: { rejection: "forbidden" } }
 export const Failed: Story = { args: { rejection: "failed", onRetry: () => {} } }
 export const Unreadable: Story = { args: { rejection: "attachmentUnreadable" } }

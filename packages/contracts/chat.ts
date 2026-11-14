@@ -83,6 +83,12 @@ export const CHAT_PAUSED_ERROR = "chat paused"
 // the sentence that tells a free user their chat turn waits for the day's cutoff to reset, in carl's words
 export const CHAT_PAUSED_LINE = "Carl is taking a break until midnight UTC. Ask him again then."
 
+// the error that rejects a chat turn or a voice request from a user the unverified accounts switch limits
+export const EMAIL_UNVERIFIED_ERROR = "email unverified"
+
+// the sentence that tells that user carl answers once their email is verified, in carl's words
+export const EMAIL_UNVERIFIED_LINE = "Carl will answer once your email is verified. Check your inbox."
+
 // the error that rejects a spoken question's transcription once the user's spend is past the spoken questions cutoff
 export const SPOKEN_QUESTIONS_PAUSED_ERROR = "spoken questions paused"
 
@@ -179,8 +185,8 @@ export const CHAT_ATTACHMENT_KEEP_LIMIT = 20
 // how many files one member may have shared with one chat room at a time
 export const CHAT_ROOM_ATTACHMENT_LIMIT = 20
 
-// why a sent file was not read: it could not be parsed, it is too large to read before its deadline, or other files kept
-// the worker thread busy until then
+// why a sent file was not read: it could not be parsed, it is too large to read before its deadline or within the
+// memory limit, or other files kept the readers busy until then
 export type ChatAttachmentRejection = "attachmentUnreadable" | "attachmentTooLarge" | "attachmentBusy"
 
 // the error a chat turn's response names for each file it could not read
@@ -191,7 +197,7 @@ export const CHAT_ATTACHMENT_ERRORS: Record<ChatAttachmentRejection, string> = {
 }
 
 // why a chat room post's files did not post: one was rejected, they would pass the member's file limit, one is too
-// large to read in time, or other files kept the worker thread busy
+// large to read, or other files kept the readers busy
 export type ChatRoomAttachmentRejection =
 	| "attachmentRejected"
 	| "attachmentLimitReached"
@@ -208,10 +214,11 @@ export const CHAT_ROOM_ATTACHMENT_ERRORS: Record<ChatRoomAttachmentRejection, st
 
 /**
  * Attachment text is held to a limit, with a marker naming the cut and the attachment's whole length: its characters,
- * or its pages if it is a PDF that stopped reading pages once its text passed the limit.
+ * or its pages if it is a PDF that stopped reading pages once its text passed the limit. A text held in part names its
+ * whole length in charCount.
  */
-export function clipAttachmentText(text: string, pdfPageCount?: number): string {
-	if (text.length <= CHAT_ATTACHMENT_TEXT_CHARS) {
+export function clipAttachmentText(text: string, pdfPageCount?: number, charCount = text.length): string {
+	if (charCount <= CHAT_ATTACHMENT_TEXT_CHARS) {
 		return text
 	}
 
@@ -219,7 +226,7 @@ export function clipAttachmentText(text: string, pdfPageCount?: number): string 
 	const keptChars = CHAT_ATTACHMENT_TEXT_CHARS.toLocaleString("en-US")
 	const marker =
 		pdfPageCount === undefined
-			? `\n\n[The attachment is cut here. It runs ${text.length.toLocaleString("en-US")} characters and only the first ${keptChars} are included.]`
+			? `\n\n[The attachment is cut here. It runs ${charCount.toLocaleString("en-US")} characters and only the first ${keptChars} are included.]`
 			: `\n\n[The attachment is cut here. It runs ${pdfPageCount.toLocaleString("en-US")} pages and only the first ${keptChars} characters are included.]`
 	return `${text.slice(0, CHAT_ATTACHMENT_TEXT_CHARS - marker.length)}${marker}`
 }

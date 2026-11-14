@@ -8,10 +8,10 @@ import {
 } from "@carlnotes/contracts/terms"
 import { db } from "@carlnotes/db"
 import { users } from "@carlnotes/db/schema/users"
+import { refreshSessionUser } from "@carlnotes/db/sessions"
 import { eq } from "drizzle-orm"
 import { type Context, Hono } from "hono"
 import { type AppEnv, currentUser } from "./currentUser"
-import { refreshSessionUser } from "./sessions"
 
 /**
  * Returns the 403 a stale account's user-content write gets, or null if the session's account accepted the published

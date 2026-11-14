@@ -48,7 +48,8 @@ const MAX_TOPIC_FEED_CACHE_HIT_QUERIES = 8
 // each, the owner's identity and access row, the attachments, the Sources, the scans, the user's subscription twice,
 // once for the page and once for the findings' gate, the team's shares and the user's teams, the two podcast episode
 // reads, the image, the Topic Posts, the chat mentions, the findings, and two reads for the reactions and comment
-// counts with one for the first thread page. an editor's page also counts their topic image regenerations this month.
+// counts with one for the first thread page. an editor's page also counts their topic image regenerations this month
+// and reads their unchecked upload.
 // the related topics add four: the iterative index scan setting, the public ranking, the user's own ranking, and the
 // check of the ranked topics. a page that leaves them to their own read sends the 21 alone, and that read sends the
 // topic, the user's access row and topic role, and the same four

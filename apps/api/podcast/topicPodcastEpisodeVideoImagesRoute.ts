@@ -17,9 +17,10 @@ import {
 import { topicImageRegenerateModel } from "@carlnotes/models/topicImageModel"
 import { startTopicImageRender } from "@carlnotes/pipeline/topicImages/topicImageRenders"
 import {
-	replaceTopicPodcastEpisodeVideoImage,
+	storeTopicPodcastEpisodeVideoImage,
 	TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_FORMAT,
 } from "@carlnotes/pipeline/topicPodcastEpisodeVideo/topicPodcastEpisodeVideoImage"
+import { dropUnpublishedUncheckedImage, publishOrSaveUncheckedImage } from "@carlnotes/pipeline/uncheckedImages"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { zValidator } from "@hono/zod-validator"
 import { and, eq } from "drizzle-orm"
@@ -28,9 +29,14 @@ import { isAllowed } from "../authorization"
 import { uploadSignedOutRejection } from "../bodyLimit"
 import { type AppEnv, toAnalyticsProperties } from "../currentUser"
 import { toolCallerRateLimiter } from "../rateLimit"
-import { imageUploadBodyLimit, readUploadedImageOriginal, toImagePromptRejection } from "../topic/imageEdits"
+import {
+	imageUploadBodyLimit,
+	readUploadedImageOriginal,
+	toImagePromptRejection,
+	toImageUploadResponse,
+} from "../topic/imageEdits"
 import { namedTopicColumns } from "../topic/permissions"
-import { serveImageFile } from "../topic/serveImageFile"
+import { serveCurrentOrUncheckedImageFile, serveImageFile } from "../topic/serveImageFile"
 import { loadPodcastEpisodeEditor, type PodcastEpisodeEditor } from "./podcastEpisodeEditor"
 
 // a chapter's position in a url, a whole number of at most three digits
@@ -61,14 +67,20 @@ export const topicPodcastEpisodeVideoImagesRoute = new Hono<AppEnv>()
 				)
 			: []
 
-		// an unknown file, an unknown film, or a hash that is no longer current is not found
-		if (!topicPodcastEpisodeVideoTopic || topicPodcastEpisodeVideoTopic.imageHash !== hash) {
+		// an unknown file or an unknown film is not found
+		if (!topicPodcastEpisodeVideoTopic) {
 			return context.json({ error: "not found" }, 404)
 		}
-		return serveImageFile(context, {
-			topic: topicPodcastEpisodeVideoTopic.topic,
-			objectKey: toTopicPodcastEpisodeVideoImageKey(podcastEpisodeId, hash),
-			contentType: "image/jpeg",
+
+		// the film's current image goes to anyone who may see its topic, and an unchecked upload of the signed-in user
+		// goes to them alone. any other hash is not found
+		const { topic, imageHash } = topicPodcastEpisodeVideoTopic
+		const objectKey = toTopicPodcastEpisodeVideoImageKey(podcastEpisodeId, hash)
+		return serveCurrentOrUncheckedImageFile(context, {
+			imageFile: { topic, objectKey, contentType: "image/jpeg" },
+			hash,
+			currentImageHash: imageHash,
+			uncheckedImageSubject: { subjectKind: "topicPodcastEpisodeVideoImage", subjectId: podcastEpisodeId },
 		})
 	})
 	// a chapter's generated image, to anyone who may see the topic of its ready film
@@ -139,7 +151,12 @@ export const topicPodcastEpisodeVideoImagesRoute = new Hono<AppEnv>()
 				return imagePromptRejection
 			}
 
-			// the render row, which names the film, and its workflow
+			// the render row, which names the film, and its workflow, in place of an unchecked upload shown to its uploader
+			// alone. a published unchecked image stays
+			await dropUnpublishedUncheckedImage({
+				subjectKind: "topicPodcastEpisodeVideoImage",
+				subjectId: editor.podcastEpisodeId,
+			})
 			const renderId = await startTopicImageRender({
 				topicId: editor.topicId,
 				topicPodcastEpisodeVideoId: editor.topicPodcastEpisodeVideoId,
@@ -174,28 +191,29 @@ export const topicPodcastEpisodeVideoImagesRoute = new Hono<AppEnv>()
 				return uploadedImage.response
 			}
 
-			// the file under its hash, the row that makes the upload current, and the rebuild of the intro and sign-off
-			const imageHash = await replaceTopicPodcastEpisodeVideoImage({
-				topicPodcastEpisodeVideoId: editor.topicPodcastEpisodeVideoId,
-				original: uploadedImage.original,
-				renderId: null,
-				origin: "uploaded",
-				imagePrompt: null,
-				costDollars: 0,
+			// the file under its hash, then the row that makes the upload current with the rebuild of the intro and
+			// sign-off, or the unchecked image's row that shows the file to its uploader alone and rebuilds nothing
+			const { podcastEpisodeId, topicPodcastEpisodeVideoId } = editor
+			const imageHash = await storeTopicPodcastEpisodeVideoImage(podcastEpisodeId, uploadedImage.original)
+			const uploadedImageOutcome = await publishOrSaveUncheckedImage({
+				subjectKind: "topicPodcastEpisodeVideoImage",
+				subjectId: podcastEpisodeId,
+				uploaderUserId: editor.userId,
+				imageHash,
+				topicPodcastEpisodeVideoId,
+				isUnchecked: uploadedImage.isUnchecked,
 			})
-			if (!imageHash) {
-				return context.json({ error: "not found" }, 404)
-			}
 
 			// the upload's event, and the poster url that replaces the current one at once
 			trackEvent("topic_image_upload", editor.userId, {
 				...toAnalyticsProperties(context),
 				topicId: editor.topicId,
-				podcastEpisodeId: editor.podcastEpisodeId,
-				topicPodcastEpisodeVideoId: editor.topicPodcastEpisodeVideoId,
+				podcastEpisodeId,
+				topicPodcastEpisodeVideoId,
 				isOwner: editor.topicOwnerId === editor.userId,
 			})
-			return context.json({ posterUrl: toTopicPodcastEpisodeVideoPosterUrl(editor.podcastEpisodeId, imageHash) })
+			const posterUrl = toTopicPodcastEpisodeVideoPosterUrl(podcastEpisodeId, imageHash)
+			return context.json(toImageUploadResponse({ posterUrl }, uploadedImageOutcome === "unchecked"))
 		},
 	)
 

@@ -6,6 +6,7 @@ import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connect
 import * as redis from "@carlnotes/db/redis"
 import * as redisRateLimits from "@carlnotes/db/redisRateLimits"
 import { users } from "@carlnotes/db/schema/users"
+import * as sessions from "@carlnotes/db/sessions"
 import * as litellmProxy from "@carlnotes/models/litellmProxy"
 import { appUrl } from "@carlnotes/server/appUrl"
 import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
@@ -13,7 +14,6 @@ import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import { auth, loadAppleProviderOptions, sendAuthEmailInBackground, toTrustedOrigins } from "./auth"
 import { APPLE_ID_ORIGIN } from "./authHooks"
 import { toPublishedAvatarFromUser } from "./avatars"
-import * as sessions from "./sessions"
 import * as usernames from "./usernames"
 
 // the connection pool's own query, put back after each test along with the spied functions

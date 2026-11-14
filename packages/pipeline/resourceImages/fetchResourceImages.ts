@@ -16,9 +16,9 @@ import {
 } from "@carlnotes/db/store"
 import { classifyImage } from "@carlnotes/models/moderation"
 import { runWithConcurrency } from "@carlnotes/server/concurrency"
+import { toDataUrl } from "@carlnotes/server/dataUrl"
 import { reportError } from "@carlnotes/server/monitoring"
 import { and, asc, eq, inArray } from "drizzle-orm"
-import { toImageDataUri } from "../cardElementPng"
 import { fetchResourceImageCandidate, loadLinkPreviewImageCandidate } from "./fetchResourceImageCandidates"
 import { toResourceImageCandidateUrls } from "./resourceImageCandidates"
 import {
@@ -345,7 +345,7 @@ async function uploadFetchedResourceImages(fetchedImages: FetchedResourceImage[]
 // set. an image the moderation cannot read is left out, and a failed check fails the fetch, which the next call runs
 // again
 async function isResourceImageAllowed(jpegBytes: Uint8Array): Promise<boolean> {
-	const classification = await classifyImage({ dataUrl: toImageDataUri(jpegBytes, "image/jpeg") })
+	const classification = await classifyImage({ dataUrl: toDataUrl("image/jpeg", jpegBytes) })
 	if (classification.outcome === "failed") {
 		throw classification.error
 	}

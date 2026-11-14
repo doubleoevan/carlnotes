@@ -21,10 +21,12 @@ import { TEAM_FIELD_ELEMENTS } from "./TeamFields"
 // a topic the multiselect offers: the user's own, a public one, or an invite topic they can read
 type TopicOption = { id: string; name: string }
 
-// the team being edited or absent while one is being created
+// the team being edited or absent while one is being created, with the version of the avatar shown to this leader
+// alone, if they uploaded one that waits for its check
 type EditedTeam = Pick<TeamIdentity, "teamId" | "name" | "avatarVersion"> & {
 	description: string | null
 	isPublic: boolean
+	uncheckedAvatarVersion?: string
 }
 
 /**
@@ -242,7 +244,7 @@ export function EditTeamModal({
 	)
 }
 
-// show the selected image over the team's saved avatar
+// show the selected image over the team's saved avatar, or over the upload shown to this leader alone with its line
 function TeamImagePicker({
 	team: editedTeam,
 	name,
@@ -254,18 +256,20 @@ function TeamImagePicker({
 	avatarFile: File | null
 	onAvatarChange: (file: File) => void
 }) {
-	// the avatar the team shows: the file just uploaded, otherwise whatever the team has today
+	// the avatar the team shows: the file just uploaded, otherwise the upload shown to this leader alone, otherwise
+	// whatever the team has today
 	const previewTeam = { teamId: editedTeam?.teamId ?? "", name: name || "Team", avatarVersion: null }
 	const avatarUrl = useObjectUrl(avatarFile)
-	const storedAvatarUrl = editedTeam?.avatarVersion
-		? toTeamAvatarImagePath(editedTeam.teamId, editedTeam.avatarVersion)
-		: null
+	const storedAvatarVersion = editedTeam?.uncheckedAvatarVersion ?? editedTeam?.avatarVersion
+	const storedAvatarUrl =
+		editedTeam && storedAvatarVersion ? toTeamAvatarImagePath(editedTeam.teamId, storedAvatarVersion) : null
 	const previewAvatarUrl = avatarUrl ?? storedAvatarUrl
 
 	return (
 		<TeamAvatarPicker
 			team={previewTeam}
 			previewUrl={previewAvatarUrl}
+			isAvatarUnchecked={!avatarFile && Boolean(editedTeam?.uncheckedAvatarVersion)}
 			onAvatarChange={onAvatarChange}
 			className="size-14"
 		/>

@@ -12,7 +12,7 @@ import {
 	authorizeNewTopicChatTurn,
 	authorizeTeamChatTurn,
 	type ChatTurnAuthorization,
-	loadChatSpendRejection,
+	loadChatUserRejection,
 } from "./chatTurnAuthorization"
 import { loadChatRoom } from "./roomAccess"
 
@@ -23,12 +23,17 @@ export type VoiceChatPageAuthorization =
 	| { status: "allowed"; userId: string }
 	| { status: "notFound" }
 
-// the outcomes of a page's access check, which never reads a budget or the chat cutoff
-export type VoiceChatPageAccess = Exclude<VoiceChatPageAuthorization, { status: "budget" | "chatPaused" }>
+// the outcomes of a page's access check, which never reads a budget, the unverified accounts switch, or the chat
+// cutoff
+export type VoiceChatPageAccess = Exclude<
+	VoiceChatPageAuthorization,
+	{ status: "budget" | "emailUnverified" | "chatPaused" }
+>
 
 /**
  * Decides whether this user may talk to carl on the page right now: a topic's, a team's, or the new-topic chat under
- * the chat turn's gate, or a chat room the user is a member of under the monthly spend gate.
+ * the chat turn's gate, or a chat room the user is a member of under the monthly spend gate, the unverified accounts
+ * switch, and the chat cutoff.
  */
 export async function authorizeVoiceChatPage(
 	userId: string | null,
@@ -105,8 +110,8 @@ async function toChatRoomAccess(
 	return (await loadChatRoom(userId, topicId, teamId)) ? { status: "allowed", userId } : { status: "notFound" }
 }
 
-// a chat room's authorization: the chat room's access, then a spent budget or the chat cutoff rejected before any
-// model is called
+// a chat room's authorization: the chat room's access, then a spent budget, the unverified accounts switch, or the
+// chat cutoff rejected before any model is called
 async function authorizeChatRoomVoice(
 	userId: string | null,
 	topicId: string | null,
@@ -118,6 +123,6 @@ async function authorizeChatRoomVoice(
 		return chatRoomAccess
 	}
 
-	// reject a member whose budget is spent or who is past the chat cutoff
-	return (await loadChatSpendRejection(chatRoomAccess.userId)) ?? chatRoomAccess
+	// reject a member whose budget is spent, whom the unverified accounts switch limits, or who is past the chat cutoff
+	return (await loadChatUserRejection(chatRoomAccess.userId)) ?? chatRoomAccess
 }

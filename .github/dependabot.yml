@@ -1,6 +1,8 @@
 # Dependabot version updates for the Bun lockfile, the workflow actions, and the image bases, each weekly. the Bun
 # minor and patch updates are grouped in one pull request, and a major update comes in a pull request of its own. a
-# security update for an advisory comes on its own as soon as GitHub publishes the advisory
+# security update for an advisory on a package that a workspace declares comes on its own as soon as GitHub publishes
+# the advisory. Dependabot's security updates do not see the lockfile's transitive packages, which CI's advisories job
+# checks. no update of either kind moves the four packages that the root package.json patches
 version: 2
 updates:
   - package-ecosystem: bun
@@ -9,6 +11,13 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 10
+    # the packages that the root package.json's patchedDependencies patches, each at one version. an update to another
+    # version installs without the patch
+    ignore:
+      - dependency-name: expo-audio
+      - dependency-name: markdown-to-jsx
+      - dependency-name: react-native-enriched-html
+      - dependency-name: react-native-sse
     groups:
       minor-and-patch:
         patterns: ["*"]

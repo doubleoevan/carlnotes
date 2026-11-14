@@ -1,4 +1,4 @@
-// the topic image primitive: each size with a file, and the ground a topic with no image shows
+// the topic image primitive: each size with a file, and the coffee mug each size shows for a topic with no image
 import { topicImageSizes } from "@carlnotes/contracts/enums"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { SAMPLE_TOPIC_IMAGE } from "../../../.storybook/fixtures/topics"
@@ -24,5 +24,11 @@ export const List: Story = { args: { size: "list" } }
 // the thumbnail, beside a search result
 export const Thumbnail: Story = { args: { size: "thumbnail" } }
 
-// a topic whose render has not landed shows the muted ground at the size's box
+// a topic with no image to show draws the coffee mug on the muted background at the size's box
 export const NoImage: Story = { args: { image: null } }
+
+// the coffee mug at the list size
+export const NoImageList: Story = { args: { image: null, size: "list" } }
+
+// the coffee mug at the thumbnail size
+export const NoImageThumbnail: Story = { args: { image: null, size: "thumbnail" } }

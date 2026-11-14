@@ -1,18 +1,24 @@
-// the mobile implementation of the Nightshift TopicImage: the contract's box as a View, and the file through
-// expo-image at the 2x size
-import { toApiUrl } from "@carlnotes/client/apiClient"
+// the mobile implementation of the Nightshift TopicImage: the contract's box as a View, the file through expo-image
+// at the 2x size, and the coffee mug a box with no file shows. an unchecked image's file loads with the session and is
+// never stored
+
+import type { TopicImageSize } from "@carlnotes/contracts/enums"
 import {
 	TopicImage as SharedTopicImage,
 	type TopicImageElements,
+	type TopicImageFileProps,
 	type TopicImageProps,
 } from "@carlnotes/core/components/TopicImage"
-import { topicImageClasses } from "@carlnotes/nightshift/components/topic-image"
+import { topicImageClasses, topicImagePlaceholderMugHeights } from "@carlnotes/nightshift/components/topic-image"
 import { Image } from "expo-image"
+import { useState } from "react"
 import { View } from "react-native"
+import { CoffeeMug } from "@/components/branding/CoffeeMug"
 import { SkeletonPulse } from "@/components/common/SkeletonPulse"
+import { useApiImageProps } from "@/hooks/useApiImageProps"
 
-// the native elements: the box is a view, an image with its name when a file is in it and a pulse while the first
-// render is under way, and the file an expo-image that fills the contract's image box at 2x
+// the mobile elements: the box is a view, an image with its name when a file is in it and a pulse when none is, the
+// file an expo-image that fills the contract's image box at 2x, and the placeholder the coffee mug centered in the box
 const ELEMENTS: TopicImageElements = {
 	Box: ({ className, label, children }) =>
 		label ? (
@@ -21,18 +27,44 @@ const ELEMENTS: TopicImageElements = {
 			</View>
 		) : (
 			<SkeletonPulse>
-				<View className={className} />
+				<View className={className}>{children}</View>
 			</SkeletonPulse>
 		),
-	Image: ({ url2x, alt }) => (
-		<View className={topicImageClasses.image}>
-			<Image source={{ uri: toApiUrl(url2x) }} accessibilityLabel={alt} contentFit="cover" style={{ flex: 1 }} />
+	Image: TopicImageFile,
+	Placeholder: TopicImagePlaceholder,
+}
+
+// the coffee mug at the contract's share of the box's height, drawn once the box has been measured. the mug follows
+// the box's size, so it does not grow again with the system text size
+function TopicImagePlaceholder({ size }: { size: TopicImageSize }) {
+	const [boxHeight, setBoxHeight] = useState(0)
+	return (
+		<View className={topicImageClasses.placeholder} onLayout={(event) => setBoxHeight(event.nativeEvent.layout.height)}>
+			{boxHeight > 0 && (
+				<CoffeeMug
+					size={boxHeight * topicImagePlaceholderMugHeights[size]}
+					isFontScaled={false}
+					className={topicImageClasses.placeholderMug}
+				/>
+			)}
 		</View>
-	),
+	)
+}
+
+// the file at 2x in the contract's image box. an unchecked image's file, at a path only its uploader's session reads,
+// loads with the stored session cookie and is never stored
+function TopicImageFile({ url2x, alt }: TopicImageFileProps) {
+	const imageProps = useApiImageProps(url2x)
+	return (
+		<View className={topicImageClasses.image}>
+			{imageProps && <Image {...imageProps} accessibilityLabel={alt} contentFit="cover" style={{ flex: 1 }} />}
+		</View>
+	)
 }
 
 /**
- * Shows a topic's image at a size on a phone, or the pulsing muted background while its first image renders.
+ * Shows a topic's image at a size on a phone, or the coffee mug on the pulsing muted background while the topic has
+ * no image to show.
  */
 export function TopicImage(props: TopicImageProps) {
 	return <SharedTopicImage {...props} elements={ELEMENTS} />

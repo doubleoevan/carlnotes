@@ -1,6 +1,7 @@
 // the film rebuild's skips and its swap, with the connection pool stubbed: a film rendered from the image it shows now,
-// its own or else its podcast episode's, and an owner past the spend cutoff are left as they are, and a rebuild swaps
-// only the film it read
+// its own or else its podcast episode's, a film that plays while an upload that would be its image is unchecked, and
+// an owner past the spend cutoff are left as they are, a film marked rendering is ready again or rebuilt whatever its
+// owner spent, and a rebuild swaps only the film it read, while it still shows the image the rebuild drew from
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as monthlyBudgetCutoffs from "@carlnotes/db/monthlyBudgetCutoffs"
@@ -30,6 +31,9 @@ const PUBLISHED_PODCAST_EPISODE_ROW = [
 	null,
 ]
 
+// a ready film rendered from an older image, in the column order the film's read selects
+const READY_FILM_ROW = ["ready", "intro.mp4", "chapters.mp4", "sign-off.mp4", "film.mp4", "image-old", 1]
+
 // put the connection pool and every spy back after each test
 afterEach(() => {
 	restoreConnectionPool()
@@ -37,12 +41,13 @@ afterEach(() => {
 })
 
 // answer the podcast episode read and the film read, which was rendered from an image of the given hash. the film has
-// its own image if a hash for one is given
+// its own image if a hash for one is given, and is ready unless another status is given
 function stubRebuildReads(
 	renderedImageHash: string,
 	topicPodcastEpisodeVideoImageHash: string | null = null,
+	status = "ready",
 ): SentQuery[] {
-	const readyFilmRow = ["ready", "intro.mp4", "chapters.mp4", "sign-off.mp4", "film.mp4", renderedImageHash, 1]
+	const readyFilmRow = [status, "intro.mp4", "chapters.mp4", "sign-off.mp4", "film.mp4", renderedImageHash, 1]
 	return stubConnectionPool(({ text }) => {
 		// the podcast episode read with its film's own image last, then the film read, and no rows for anything else
 		if (text.includes('from "episodes" inner join "topics"')) {
@@ -73,6 +78,27 @@ test("a film rendered from its own image is skipped, though its podcast episode'
 	expect(isFilmRowUpdated(sentQueries)).toBe(false)
 })
 
+// a film keeps the image it was rendered from while the upload that replaced that image is unchecked
+test("a film that plays while its new image is an upload still unchecked is skipped", async () => {
+	// the film's own image is an upload that has an unchecked image row
+	const sentQueries = stubConnectionPool(({ text }) => {
+		if (text.includes('from "unchecked_images"')) {
+			return [["topicPodcastEpisodeVideoImage", "film-upload"]]
+		}
+
+		// the podcast episode read with that upload as its film's own image, then the film read
+		if (text.includes('from "episodes" inner join "topics"')) {
+			return [[...PUBLISHED_PODCAST_EPISODE_ROW, "film-upload"]]
+		}
+		return text.startsWith('select "status"') ? [READY_FILM_ROW] : []
+	})
+
+	// the film that plays now stays, with nothing written
+	const rebuildResult = await rebuildTopicPodcastEpisodeVideo("episode-1")
+	expect(rebuildResult).toEqual({ outcome: "skipped", reason: "unchecked" })
+	expect(isFilmRowUpdated(sentQueries)).toBe(false)
+})
+
 // an owner past the podcast episode spend cutoff keeps the film that plays now
 test("an owner past the spend cutoff keeps the stale film", async () => {
 	// the film shows an old image, and the owner is past the cutoff
@@ -86,6 +112,71 @@ test("an owner past the spend cutoff keeps the stale film", async () => {
 	}
 
 	// nothing was written
+	expect(isFilmRowUpdated(sentQueries)).toBe(false)
+})
+
+// a film marked rendering because its image was unpublished shows that image again once the image passes its check
+test("a film marked rendering that is drawn from the current image is ready again, under the topic's lock", async () => {
+	const sentQueries = stubRebuildReads("image-new", null, "rendering")
+	const rebuildResult = await rebuildTopicPodcastEpisodeVideo("episode-1")
+	expect(rebuildResult).toEqual({ outcome: "skipped", reason: "current" })
+
+	// the Topic's image visibility lock is shared and comes before the read of the image and the write
+	const lockIndex = sentQueries.findIndex(({ text }) => text.includes("pg_advisory_xact_lock_shared"))
+	expect(sentQueries[lockIndex]?.values).toEqual(["unchecked-image-topic:topic-1"])
+	expect(sentQueries[lockIndex + 1]?.text).toContain('from "episodes" inner join "topics"')
+	expect(sentQueries[lockIndex + 2]?.text).toContain('from "unchecked_images"')
+	const filmUpdate = sentQueries[lockIndex + 3]
+	expect(filmUpdate?.text).toStartWith('update "topic_podcast_episode_videos"')
+
+	// the film is ready again if it is still marked rendering and drawn from that image. the second value is the time
+	// the row changed
+	expect(filmUpdate?.values.toSpliced(1, 1)).toEqual(["ready", "episode-1", "rendering", "image-new"])
+})
+
+// a film marked rendering plays nothing, so the spend cutoff that keeps a stale film playing does not stop its rebuild
+test("a film marked rendering is rebuilt whatever its owner spent, and its rebuild fails if its image changes", async () => {
+	// the film was drawn from an image it no longer shows, and the read inside the swap finds another image again
+	let podcastEpisodeReadCount = 0
+	const renderingFilmRow = ["rendering", "intro.mp4", "chapters.mp4", null, "film.mp4", "image-old", 3]
+	const sentQueries = stubConnectionPool(({ text }) => {
+		// the podcast episode shows one image at the start of the rebuild and another at its swap
+		if (text.includes('from "episodes" inner join "topics"')) {
+			podcastEpisodeReadCount += 1
+			const podcastEpisodeImageHash = podcastEpisodeReadCount === 1 ? "image-new" : "image-newer"
+			return [[...PUBLISHED_PODCAST_EPISODE_ROW.slice(0, 8), podcastEpisodeImageHash, "AI Agents", null, null]]
+		}
+		return text.startsWith('select "status"') ? [renderingFilmRow] : []
+	})
+
+	// the steps that read storage and run ffmpeg
+	const cutoffSpy = spyOn(monthlyBudgetCutoffs, "isMonthlyBudgetCutoffPassed").mockResolvedValue(true)
+	spyOn(storage, "downloadPodcastEpisodeFile").mockResolvedValue(undefined)
+	spyOn(storage, "deleteStoredObjects").mockResolvedValue(undefined)
+	spyOn(videoAudio, "loadVideoAudio").mockResolvedValue({
+		audioPath: "/work/audio.mp3",
+		durationSeconds: 60,
+		segments: [],
+		captionCues: [],
+	})
+	spyOn(topicPodcastEpisodeVideoInputs, "loadShownImageStill").mockResolvedValue({
+		stillPng: new Uint8Array([7]),
+		zoomLimit: 2,
+		isPodcastCard: false,
+	})
+	spyOn(videoChapterImages, "prepareChapterImages").mockResolvedValue({
+		chapterImages: new Map(),
+		podcastCardImages: [],
+		firstChapterImages: [],
+		newlyGeneratedChapterImageCount: 0,
+	})
+	spyOn(videoImageParts, "renderVideoImageParts").mockResolvedValue({ introPath: null, signOffPath: null })
+	spyOn(videoParts, "rewriteVideoFilm").mockResolvedValue(undefined)
+	spyOn(topicPodcastEpisodeVideoRows, "uploadTopicPodcastEpisodeVideoFile").mockResolvedValue("film-key")
+
+	// the rebuild runs past the cutoff, and throws an error before the swap because the image changed while it ran
+	await expect(rebuildTopicPodcastEpisodeVideo("episode-1")).rejects.toThrow("image changed during its rebuild")
+	expect(cutoffSpy).not.toHaveBeenCalled()
 	expect(isFilmRowUpdated(sentQueries)).toBe(false)
 })
 
@@ -148,10 +239,12 @@ test("a rebuild swaps only a film that still has the chapters part it read", asy
 		"episodes/episode-1/video/film-image-new-v2.mp4",
 	])
 
-	// the swap names the image and the chapters part the rebuild read, and with no row swapped nothing else is written
+	// the swap names the image and the chapters part the rebuild read, and with no row swapped nothing else is written.
+	// a swapped film is ready, which lets a film marked rendering play again
 	const [swapUpdate] = sentQueries.filter((sentQuery) =>
 		sentQuery.text.startsWith('update "topic_podcast_episode_videos"'),
 	)
+	expect(swapUpdate?.values).toContain("ready")
 	expect(swapUpdate?.text).toContain('"rendered_image_hash" = $')
 	expect(swapUpdate?.text).toContain('"chapters_key" = $')
 	expect(swapUpdate?.values).toContain("chapters-v2.mp4")

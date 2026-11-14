@@ -13,14 +13,17 @@ import {
 	toDroppedImage,
 	toUploadableAvatar,
 } from "./AvatarUpload"
+import { UncheckedAvatarLine } from "./UncheckedAvatarLine"
 
 /**
  * Choose a team's image, by the file chooser or by dropping one on it. What happens to the chosen file
- * is the caller's: the team page uploads it at once, and the edit modal holds it until Save.
+ * is the caller's: the team page uploads it at once, and the edit modal holds it until Save. An unchecked avatar shows
+ * to the leader who uploaded it, with its line under it.
  */
 export function TeamAvatarPicker({
 	team,
 	previewUrl,
+	isAvatarUnchecked = false,
 	onAvatarChange,
 	isDisabled,
 	className,
@@ -28,6 +31,8 @@ export function TeamAvatarPicker({
 	team: Pick<TeamIdentity, "teamId" | "name" | "avatarVersion">
 	// a chosen image not yet uploaded, shown in place of whatever the team has today
 	previewUrl?: string | null
+	// whether the avatar shown is an upload shown to this leader alone until its check passes
+	isAvatarUnchecked?: boolean
 	onAvatarChange: (avatarFile: File) => void
 	// set while an upload is in progress, so a second file cannot be chosen over it
 	isDisabled?: boolean
@@ -64,25 +69,29 @@ export function TeamAvatarPicker({
 	}
 
 	return (
-		<FileDropZone onDropFiles={handleDropFiles} overlay={<AvatarDropOverlay />} className="w-fit">
-			<label className={cn("group relative block cursor-pointer", className)} aria-label="Change the team avatar">
-				{previewUrl ? (
-					<img src={previewUrl} alt="" className="size-full rounded-full border object-cover shadow-raised" />
-				) : (
-					<TeamAvatar team={team} className="size-full" />
-				)}
-				{/* the camera overlay appears on hover or keyboard focus only */}
-				<span className="absolute inset-0 grid place-items-center rounded-full bg-black/55 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
-					<Camera className="size-5 text-white" />
-				</span>
-				<input
-					type="file"
-					accept={PICKED_IMAGE_ACCEPT}
-					onChange={handleFileChange}
-					disabled={isDisabled}
-					className="sr-only"
-				/>
-			</label>
-		</FileDropZone>
+		<div>
+			<FileDropZone onDropFiles={handleDropFiles} overlay={<AvatarDropOverlay />} className="w-fit">
+				<label className={cn("group relative block cursor-pointer", className)} aria-label="Change the team avatar">
+					{previewUrl ? (
+						<img src={previewUrl} alt="" className="size-full rounded-full border object-cover shadow-raised" />
+					) : (
+						<TeamAvatar team={team} className="size-full" />
+					)}
+					{/* the camera overlay appears on hover or keyboard focus only */}
+					<span className="absolute inset-0 grid place-items-center rounded-full bg-black/55 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+						<Camera className="size-5 text-white" />
+					</span>
+					<input
+						type="file"
+						accept={PICKED_IMAGE_ACCEPT}
+						onChange={handleFileChange}
+						disabled={isDisabled}
+						className="sr-only"
+					/>
+				</label>
+			</FileDropZone>
+			{/* the upload only this leader sees until its check passes */}
+			{isAvatarUnchecked && <UncheckedAvatarLine />}
+		</div>
 	)
 }

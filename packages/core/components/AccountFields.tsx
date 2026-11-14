@@ -44,7 +44,9 @@ export type AccountFieldElements = {
 // the profile's platform controls. the shared form owns labels, visibility, and saving
 export type ProfileFieldElements = {
 	Root: Container
-	Identity: ComponentType<{ avatar: ReactNode; children: ReactNode }>
+	// the avatar beside the username, with the unchecked photo's line where the app places it if the avatar is
+	// unchecked
+	Identity: ComponentType<{ avatar: ReactNode; isAvatarUnchecked: boolean; children: ReactNode }>
 	Text: Container
 	ProviderPhoto: ComponentType<{ label: string; isSelected: boolean; onSelect: () => void }>
 	Form: ComponentType<{ children: ReactNode; onSubmit: () => void; isExternallySaved: boolean }>
@@ -80,7 +82,7 @@ export function ProfileFields({
 	// retain an externally controlled username in the web profile dialog
 	const fallbackUsernameChange = useUsernameChange(onUsernameChanged)
 	const accountUsernameChange = usernameChange ?? fallbackUsernameChange
-	const { avatarSource, hasProviderPhoto, setAvatarSource } = useAvatar()
+	const { avatarSource, hasProviderPhoto, isAvatarUnchecked, setAvatarSource } = useAvatar()
 	const { Root, Identity, Text, ProviderPhoto, Form, Field, Rejection, Button } = elements
 	function handleProviderPhotoToggle(): void {
 		void setAvatarSource(avatarSource === "oauth" ? "generated" : "oauth")
@@ -92,7 +94,7 @@ export function ProfileFields({
 	return (
 		<Root className={className}>
 			{/* the current identity and the optional sign-in provider photo */}
-			<Identity avatar={avatar}>
+			<Identity avatar={avatar} isAvatarUnchecked={isAvatarUnchecked}>
 				<Text className="font-display text-lg">{username}</Text>
 				{hasProviderPhoto && (
 					<ProviderPhoto

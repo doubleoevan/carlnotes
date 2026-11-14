@@ -1,6 +1,5 @@
 // the app's button that opens a podcast episode's film: a film card's play button over the card's image, a row's Video
 // pill, or the play button over the film's poster, and the Video sheet its press opens
-import { toApiUrl } from "@carlnotes/client/apiClient"
 import { IDLE_PODCAST_EPISODE_PILL_CLASS } from "@carlnotes/core/components/PodcastEpisodePill"
 import {
 	type PodcastEpisodeVideoButtonElements,
@@ -14,6 +13,7 @@ import { type GestureResponderEvent, Pressable, View } from "react-native"
 import { toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text, TextClassContext } from "@/components/primitives/text"
+import { useApiImageProps } from "@/hooks/useApiImageProps"
 import { captureFilmVisitEvent } from "@/visitAnalytics"
 import { PodcastEpisodePlayButton } from "./PodcastEpisodePlayButton"
 import { TopicPodcastEpisodeVideoDialog } from "./TopicPodcastEpisodeVideoDialog"
@@ -45,7 +45,9 @@ function VideoButton({
 	onPress,
 	onDialogClose,
 }: ComponentProps<PodcastEpisodeVideoButtonElements["Button"]>) {
+	// the button the sheet returns focus to, and the poster's source
 	const buttonRef = useRef<ComponentRef<typeof View>>(null)
+	const posterImageProps = useApiImageProps(posterUrl)
 
 	// the press stops at the button, so it never opens the card or the row it sits on
 	const handlePress = (event: GestureResponderEvent): void => {
@@ -63,7 +65,7 @@ function VideoButton({
 	)
 
 	// the film's poster at 16:9 under the film player's round play button. the whole poster takes the press, and its
-	// url is an api path
+	// url is an api path. an unchecked poster loads with the session and is never stored
 	if (size === "thumbnail") {
 		return (
 			<>
@@ -74,9 +76,9 @@ function VideoButton({
 					className="aspect-video w-30 shrink-0 items-center justify-center overflow-hidden rounded-xs bg-hero active:opacity-75"
 					onPress={handlePress}
 				>
-					{posterUrl && (
+					{posterImageProps && (
 						<Image
-							source={{ uri: toApiUrl(posterUrl) }}
+							{...posterImageProps}
 							contentFit="contain"
 							accessible={false}
 							style={{ position: "absolute", width: "100%", height: "100%" }}

@@ -1,0 +1,20 @@
+[
+	{
+		"advisoryId": "GHSA-j95f-988m-3j2f",
+		"packageName": "@tiptap/core",
+		"reason": "The flaw is in Tiptap's Markdown attribute parser, and @tiptap/markdown is not installed. react-native-enriched-html 1.1.1 pins every @tiptap package, and the release that moves them, 1.2.0, needs the repo's patch of that package made again.",
+		"reviewedAt": "2026-11-13"
+	},
+	{
+		"advisoryId": "GHSA-c475-qrg2-pj4r",
+		"packageName": "basic-ftp",
+		"reason": "basic-ftp is installed only for promptfoo, the evals' tooling, through proxy-agent and get-uri. promptfoo is a development dependency of the root, which the production image does not install. The fixed version is outside the range get-uri accepts.",
+		"reviewedAt": "2026-11-13"
+	},
+	{
+		"advisoryId": "GHSA-mrhx-c7xc-m3w5",
+		"packageName": "zod",
+		"reason": "The advisory covers the zod 3.25.76 that expo-mcp installs through @expo/mcp-tunnel, a development tool of the mobile app. Every other installed zod is 4.6.7, past the fix in 4.6.6. The check fails if a zod installed anywhere but under expo-mcp or @expo/mcp-tunnel falls among the versions the advisory covers.",
+		"reviewedAt": "2026-11-13"
+	}
+]

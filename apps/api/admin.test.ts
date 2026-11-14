@@ -9,13 +9,11 @@ import {
 	type SentQuery,
 	stubConnectionPool,
 } from "@carlnotes/db/connectionPoolStub"
-import {
-	type DailySpendCutoffState,
-	loadDailySpendCutoffState,
-	toWaitingScanFilter,
-} from "@carlnotes/db/dailySpendCutoffs"
+import { loadDailySpendCutoffState, toWaitingScanFilter } from "@carlnotes/db/dailySpendCutoffs"
+import { toDailySpendCutoffState } from "@carlnotes/db/dailySpendCutoffTestFixtures"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
 import { scans } from "@carlnotes/db/schema/scans"
+import { generatedChapterImageLimit } from "@carlnotes/server/podcastEpisodeSettings"
 import { count } from "drizzle-orm"
 import { adminRoute, isSelfDemotion } from "./admin"
 import { computeContributionCents } from "./adminConsole"
@@ -197,6 +195,12 @@ function toSpendControlInserts(sentQueries: SentQuery[]): SentQuery[] {
 	return sentQueries.filter(({ text }) => text.startsWith('insert into "spend_control_settings"'))
 }
 
+// the columns a spend control save sets on the stored row, in the order the update names them
+function toUpdatedColumnNames(spendControlInsert: SentQuery | undefined): string[] {
+	const updateSetText = spendControlInsert?.text.split("do update set")[1] ?? ""
+	return [...updateSetText.matchAll(/"(\w+)" = \$/g)].map(([, columnName]) => columnName ?? "")
+}
+
 test("a visitor gets 401, a non-admin gets 403 on the console and the save, and neither reads or writes the settings", async () => {
 	const sentQueries = stubConnectionPool(toMinimumVersionRouteRows)
 	expect((await saveSpendControlSettings(null, DEFAULT_SPEND_CONTROL_PAYLOAD)).status).toBe(401)
@@ -216,6 +220,70 @@ test("an admin's save writes the overrides in cents, and an empty value clears i
 	expect(spendControlInserts[0]?.values.slice(0, 7)).toEqual([1, null, 4250, null, 0, null, false])
 })
 
+test("an admin's save writes each pause, the pinned-only home, and the image limit", async () => {
+	const sentQueries = stubConnectionPool(toMinimumVersionRouteRows)
+	const payload = {
+		...DEFAULT_SPEND_CONTROL_PAYLOAD,
+		generatedChapterImageLimit: 0,
+		isPodcastEpisodeRecordingPaused: true,
+		isTopicPodcastEpisodeVideoRenderingPaused: true,
+		isHomePinnedOnly: true,
+	}
+	expect((await saveSpendControlSettings("admin-1", payload)).status).toBe(200)
+
+	// the insert names each new column, and the row holds both pauses, an image limit of zero, and the pinned-only home
+	const [spendControlInsert] = toSpendControlInserts(sentQueries)
+	expect(spendControlInsert?.text).toContain('"is_podcast_episode_recording_paused" = $')
+	expect(spendControlInsert?.text).toContain('"is_topic_podcast_episode_video_rendering_paused" = $')
+	expect(spendControlInsert?.text).toContain('"generated_chapter_image_limit" = $')
+	expect(spendControlInsert?.text).toContain('"is_home_pinned_only" = $')
+	expect(spendControlInsert?.values.slice(7, 11)).toEqual([true, true, 0, true])
+})
+
+test("a save from a page loaded before the newer settings existed leaves each of them as stored", async () => {
+	const sentQueries = stubConnectionPool(toMinimumVersionRouteRows)
+	const payload = { ...DEFAULT_SPEND_CONTROL_PAYLOAD, firstScanDispatchLimit: 8 }
+	expect((await saveSpendControlSettings("admin-1", payload)).status).toBe(200)
+
+	// the update sets the dispatch limit and none of the settings the payload left out
+	const updatedColumnNames = toUpdatedColumnNames(toSpendControlInserts(sentQueries)[0])
+	expect(updatedColumnNames).toContain("first_scan_dispatch_limit")
+	expect(updatedColumnNames).not.toContain("is_podcast_episode_recording_paused")
+	expect(updatedColumnNames).not.toContain("is_topic_podcast_episode_video_rendering_paused")
+	expect(updatedColumnNames).not.toContain("generated_chapter_image_limit")
+	expect(updatedColumnNames).not.toContain("is_home_pinned_only")
+})
+
+// a tab that changed one switch sends that switch alone, and the stored row keeps what another tab saved since
+test("a save that leaves out the cutoffs, the first scan limit, the signup alert, and the unverified accounts switch keeps each stored value", async () => {
+	const sentQueries = stubConnectionPool(toMinimumVersionRouteRows)
+	expect((await saveSpendControlSettings("admin-1", { isPodcastEpisodeRecordingPaused: true })).status).toBe(200)
+
+	// the update sets the pause, when it was saved, and who saved it, and no other setting
+	const [spendControlInsert] = toSpendControlInserts(sentQueries)
+	expect(toUpdatedColumnNames(spendControlInsert)).toEqual([
+		"is_podcast_episode_recording_paused",
+		"updated_at",
+		"updated_by_user_id",
+	])
+})
+
+// a first save has no stored row to keep, so each setting it leaves out takes its column's default: no override for a
+// cutoff, a limit, or the alert, and off for a switch
+test("a save of one setting on an empty table writes that setting and the default of every other setting", async () => {
+	const sentQueries = stubConnectionPool(toMinimumVersionRouteRows)
+	expect((await saveSpendControlSettings("admin-1", { firstScanDispatchLimit: 8 })).status).toBe(200)
+
+	// the inserted row in column order: the id, the three cutoffs, the dispatch limit, the signup alert, the four
+	// switches with the image limit among them, then when it was saved and who saved it
+	const [spendControlInsert] = toSpendControlInserts(sentQueries)
+	const [, insertedValuesText] = spendControlInsert?.text.match(/ values \((.*?)\) on conflict/) ?? []
+	expect(insertedValuesText).toBe(
+		"$1, default, default, default, $2, default, default, default, default, default, default, $3, $4",
+	)
+	expect(spendControlInsert?.values.slice(0, 2)).toEqual([1, 8])
+})
+
 test("invalid values are rejected and leave the row unchanged", async () => {
 	const sentQueries = stubConnectionPool(toMinimumVersionRouteRows)
 	const invalidPayloads = [
@@ -226,6 +294,9 @@ test("invalid values are rejected and leave the row unchanged", async () => {
 		{ ...DEFAULT_SPEND_CONTROL_PAYLOAD, firstScanDispatchLimit: 2.5 },
 		{ ...DEFAULT_SPEND_CONTROL_PAYLOAD, hourlySignupAlertCount: 0 },
 		{ ...DEFAULT_SPEND_CONTROL_PAYLOAD, isUnverifiedFirstScanLimitOn: "yes" },
+		{ ...DEFAULT_SPEND_CONTROL_PAYLOAD, generatedChapterImageLimit: -1 },
+		{ ...DEFAULT_SPEND_CONTROL_PAYLOAD, generatedChapterImageLimit: 1.5 },
+		{ ...DEFAULT_SPEND_CONTROL_PAYLOAD, isPodcastEpisodeRecordingPaused: "yes" },
 	]
 	for (const invalidPayload of invalidPayloads) {
 		expect((await saveSpendControlSettings("admin-1", invalidPayload)).status).toBe(400)
@@ -280,19 +351,38 @@ test("the console's waiting scan count reads the waiting scan filter of the sett
 	])
 
 	// the count's filter is the waiting scan filter for the loaded state at the default settings
-	const readState: DailySpendCutoffState = {
-		status: "loaded",
-		freePlanSpendCents: 15_000,
-		settings: {
-			podcastEpisodesCutoffCents: 6_500,
-			scheduledScansCutoffCents: 10_000,
-			chatCutoffCents: 15_000,
-			firstScanDispatchLimit: 5,
-			hourlySignupAlertCount: 50,
-			isUnverifiedFirstScanLimitOn: false,
-		},
-	}
+	const readState = toDailySpendCutoffState(15_000)
 	const waitingScanCountQuery = sentQueries.find(({ text }) => text.startsWith('select count(*) from "scans"'))
 	const expectedCountSql = db.select({ count: count() }).from(scans).where(toWaitingScanFilter(readState)).toSQL().sql
 	expect(waitingScanCountQuery?.text).toBe(expectedCountSql)
+})
+
+// the image limit an admin typed reads back as an override beside its default, each switch reads back as it was saved,
+// and an emptied image limit reads back as its default
+test("the console reads back a stored image limit override, each pause, and the pinned-only home", async () => {
+	// the stored row in the read's column order: five numeric overrides, the unverified accounts switch, the image
+	// limit, the two pauses, the pinned-only home, when it was saved, and the saver's username
+	const savedAt = new Date("2026-11-12T09:00:00Z")
+	let storedRow = [null, null, null, null, null, false, 10, true, true, true, savedAt, "vienna"]
+	stubConnectionPool(({ text }) => (text.includes('from "spend_control_settings"') ? [storedRow] : []))
+
+	// an image limit of 10 over its default, both pauses on, and the pinned-only home on
+	const defaultImageLimit = generatedChapterImageLimit()
+	expect(await loadAdminDailySpendCutoffs()).toMatchObject({
+		generatedChapterImageLimit: { value: 10, defaultValue: defaultImageLimit, isOverridden: true },
+		isPodcastEpisodeRecordingPaused: true,
+		isTopicPodcastEpisodeVideoRenderingPaused: true,
+		isHomePinnedOnly: true,
+		updatedAt: "2026-11-12T09:00:00.000Z",
+		updatedByUsername: "vienna",
+	})
+
+	// the image limit emptied and each switch turned off
+	storedRow = [null, null, null, null, null, false, null, false, false, false, savedAt, "vienna"]
+	expect(await loadAdminDailySpendCutoffs()).toMatchObject({
+		generatedChapterImageLimit: { value: defaultImageLimit, defaultValue: defaultImageLimit, isOverridden: false },
+		isPodcastEpisodeRecordingPaused: false,
+		isTopicPodcastEpisodeVideoRenderingPaused: false,
+		isHomePinnedOnly: false,
+	})
 })

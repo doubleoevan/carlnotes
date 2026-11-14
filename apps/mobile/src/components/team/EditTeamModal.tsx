@@ -6,7 +6,7 @@ import { toTeamPath } from "@carlnotes/contracts/seo"
 import { TeamFields } from "@carlnotes/core/components/TeamFields"
 import { useTeamFields } from "@carlnotes/core/hooks/useTeamFields"
 import { createTeamForInviteLink, saveTeam } from "@carlnotes/core/lib/saveTeam"
-import type { EditedTeam, PendingInvite, TopicOption } from "@carlnotes/core/lib/teamFields"
+import type { PendingInvite, TopicOption } from "@carlnotes/core/lib/teamFields"
 import { sendPendingTeamInvites } from "@carlnotes/core/lib/teamInvites"
 import { useQuery } from "@tanstack/react-query"
 import { router } from "expo-router"
@@ -23,9 +23,11 @@ import { Text } from "@/components/primitives/text"
 import { EditTopicModal } from "@/components/topic/EditTopicModal"
 import { usePageMutation } from "@/hooks/usePageMutation"
 import { TEAM_FIELD_ELEMENTS } from "./TeamFields"
+import { type EditedTeamWithUncheckedAvatar, UncheckedTeamAvatar } from "./UncheckedTeamAvatar"
 
 /**
- * Adapts the shared team editor and save flow to the native sheet.
+ * Adapts the shared team editor and save flow to the native sheet. An unchecked avatar shows to the leader who uploaded
+ * it above the image button, with its line under it, until the leader picks another image.
  */
 export function EditTeamModal({
 	team,
@@ -35,7 +37,7 @@ export function EditTeamModal({
 	onClose,
 	onSaved,
 }: {
-	team?: EditedTeam
+	team?: EditedTeamWithUncheckedAvatar
 	currentTopics?: TopicOption[]
 	initialTopicIds?: string[]
 	initialInvites?: PendingInvite[]
@@ -144,6 +146,8 @@ export function EditTeamModal({
 						hasNameError={Boolean(fields.nameRejection)}
 						avatar={
 							<>
+								{/* the upload only this leader sees until its check passes */}
+								<UncheckedTeamAvatar team={team} name={fields.name} isImagePicked={Boolean(fields.avatarFile)} />
 								<Button
 									ref={teamAvatarPicker.triggerRef}
 									variant="outline"

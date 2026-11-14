@@ -1,5 +1,6 @@
-// voice authorization tests: each page kind asks its own chat turn gate, a chat room asks membership and the monthly
-// spend gate, with every rejection kept, and the access check asks the page's access rules alone
+// voice authorization tests: each page kind asks its own chat turn gate, a chat room asks membership, the monthly
+// spend gate, the unverified accounts switch, and the chat cutoff, with every rejection kept, and the access check asks
+// the page's access rules alone
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as dailySpendCutoffs from "@carlnotes/db/dailySpendCutoffs"
@@ -30,6 +31,10 @@ test("a topic page answers as its chat turn would", async () => {
 	authorizeChatTurnSpy.mockResolvedValue({ status: "budget", userId: "user-1" })
 	expect(await authorizeVoiceChatPage("user-1", topicPage)).toEqual({ status: "budget", userId: "user-1" })
 
+	// a user the unverified accounts switch limits passes through too
+	authorizeChatTurnSpy.mockResolvedValue({ status: "emailUnverified", userId: "user-1" })
+	expect(await authorizeVoiceChatPage("user-1", topicPage)).toEqual({ status: "emailUnverified", userId: "user-1" })
+
 	// an allowed chat turn names the user and nothing else
 	authorizeChatTurnSpy.mockResolvedValue({
 		status: "allowed",
@@ -58,24 +63,30 @@ test("a team page and the new-topic chat answer as their chat turns would", asyn
 	expect(authorizeNewTopicChatTurnSpy).toHaveBeenCalledWith("user-1")
 })
 
-// a chat room sends a visitor to signup, answers like a missing one for a non-member, rejects a spent budget or the chat
-// cutoff before any model is called, and otherwise allows the member
-test("a chat room answers by membership, the monthly spend gate, and the chat cutoff", async () => {
+// a chat room sends a visitor to signup, responds like a missing one for a non-member, rejects a spent budget, the
+// unverified accounts switch, or the chat cutoff before any model is called, and otherwise allows the member
+test("a chat room responds by membership, the monthly spend gate, the unverified accounts switch, and the chat cutoff", async () => {
 	const roomPage = { kind: "room", topicId: "topic-1", teamId: "team-1" } as const
 	expect(await authorizeVoiceChatPage(null, roomPage)).toEqual({ status: "signup" })
 
 	// a chat room the user may not use is a missing one
 	const loadChatRoomSpy = spyOn(roomAccess, "loadChatRoom").mockResolvedValue(null)
 	const isMonthlySpendExhaustedSpy = spyOn(authorization, "isMonthlySpendExhausted").mockResolvedValue(true)
+	const isUnverifiedAccountLimitedSpy = spyOn(dailySpendCutoffs, "isUnverifiedAccountLimited").mockResolvedValue(true)
 	const isUserPastDailySpendCutoffSpy = spyOn(dailySpendCutoffs, "isUserPastDailySpendCutoff").mockResolvedValue(true)
 	expect(await authorizeVoiceChatPage("user-1", roomPage)).toEqual({ status: "notFound" })
 	expect(loadChatRoomSpy).toHaveBeenCalledWith("user-1", "topic-1", "team-1")
 	expect(isMonthlySpendExhaustedSpy).not.toHaveBeenCalled()
 
-	// a member whose budget is spent, then a member past the chat cutoff, then a member under both
+	// a member whose budget is spent, then a member the unverified accounts switch limits
 	loadChatRoomSpy.mockResolvedValue({ topic: null, teamId: "team-1" })
 	expect(await authorizeVoiceChatPage("user-1", roomPage)).toEqual({ status: "budget", userId: "user-1" })
 	isMonthlySpendExhaustedSpy.mockResolvedValue(false)
+	expect(await authorizeVoiceChatPage("user-1", roomPage)).toEqual({ status: "emailUnverified", userId: "user-1" })
+	expect(isUnverifiedAccountLimitedSpy).toHaveBeenCalledWith("user-1")
+
+	// then a member past the chat cutoff, then a member under all three
+	isUnverifiedAccountLimitedSpy.mockResolvedValue(false)
 	expect(await authorizeVoiceChatPage("user-1", roomPage)).toEqual({ status: "chatPaused", userId: "user-1" })
 	expect(isUserPastDailySpendCutoffSpy).toHaveBeenCalledWith("user-1", "chat")
 	isUserPastDailySpendCutoffSpy.mockResolvedValue(false)

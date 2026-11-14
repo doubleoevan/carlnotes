@@ -32,7 +32,15 @@ and the package boundary check fails anything else, a type-only import of `@carl
 - `src/` — the app's own modules. `authClient.ts` configures the shared auth client at module load with the api base
   url and Better Auth's Expo plugin over `expo-secure-store`, and exports `mobileAuthClient`, the app's handle with
   `getCookie`, and `apiBaseUrl`. `apiRequestSettings.ts` is what the api client sends on every request and what a 401
-  does. `appleSignIn.ts` is the native Sign in with Apple sheet. `appSignupGate.ts` attests the install through
+  does. `apiImages.ts` and `hooks/useApiImageProps.ts` are how an image element loads an api path: only an unchecked
+  image's path, one marked `unchecked=1`, gets the stored session cookie, with `cachePolicy="none"`, and every other
+  path loads as a bare url. `Avatar`, `primitives/topic-image.tsx`, and the two film poster elements load through it,
+  and a new image element that can show a subject's own image must too. `Avatar` takes `isUnchecked` for a leader's
+  unchecked team avatar, `components/avatar/UncheckedAvatarLine.tsx` is the line under an unchecked avatar, and
+  `components/team/UncheckedTeamAvatar.tsx` is the Edit team sheet's unchecked avatar. The account screen's profile
+  fields place an unchecked photo's line themselves, under the avatar at the card's width, so their picker takes
+  `hasUncheckedLine={false}`. `appleSignIn.ts` is the native Sign in with Apple sheet. `appSignupGate.ts` attests the
+  install through
   `@expo/app-integrity` and passes the gate, over `appSignupProofPlatform.ts`, which says which proof a build sends.
   `apiBaseUrl.ts` chooses the api url, and `typeRoleStyles.ts` maps the Nightshift type roles to native text styles.
   `activeIconProps.ts` is the class and fill of an active icon, the counterpart of the web's `ACTIVE_ICON_CLASS`.
@@ -179,7 +187,8 @@ Every mobile change holds to the bar the web's Storybook checks set:
   a box around text a minimum height, never a fixed one, as the primitives' `Button` does. The logo and the oauth
   provider icons grow with the text up to double, the 200 percent the web is built for, so they still fit the screen
   at the largest sizes. The mug and the icons size through `useFontScaledSize`, and the name through
-  `maxFontSizeMultiplier`.
+  `maxFontSizeMultiplier`. The mug in a topic image box with no file is the exception: `primitives/topic-image.tsx`
+  measures the box and draws `CoffeeMug` at the contract's share of its height with `isFontScaled={false}`.
 - Touch targets are at least 44 points on iOS and 48 dp on Android. A control drawn smaller, to match the web, reaches the platform minimum through its hit slop,
   as the primitives' `Button` does.
 - Colors come from Nightshift through Uniwind utilities (`bg-primary`, `text-muted-foreground`), whose contrast test

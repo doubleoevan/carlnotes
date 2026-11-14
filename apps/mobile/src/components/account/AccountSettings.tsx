@@ -67,7 +67,7 @@ export function ProfileFields({ onUsernameChanged }: { onUsernameChanged?: () =>
 		<SharedProfileFields
 			key={session.user.id}
 			elements={PROFILE_FIELD_ELEMENTS}
-			avatar={<UserAvatarPicker userId={session.user.id} username={session.user.username} />}
+			avatar={<UserAvatarPicker userId={session.user.id} username={session.user.username} hasUncheckedLine={false} />}
 			username={session.user.username}
 			className="mt-3"
 			onUsernameChanged={onUsernameChanged}

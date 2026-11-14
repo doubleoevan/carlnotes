@@ -19,7 +19,7 @@ import {
 	toTopicPostBodyImage,
 	toTopicPostBodyImageFileKey,
 } from "@carlnotes/pipeline/topicPosts/topicPostBodyImageFiles"
-import { replaceTopicPostImage } from "@carlnotes/pipeline/topicPosts/topicPostImageRenders"
+import { dropUnpublishedUncheckedImage, publishOrSaveUncheckedImage } from "@carlnotes/pipeline/uncheckedImages"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { zValidator } from "@hono/zod-validator"
 import { type Context, Hono } from "hono"
@@ -29,8 +29,13 @@ import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { toObjectionableContentResponse, toStrictImageModeration } from "../moderation"
 import { toolCallerRateLimiter, topicPostBodyImageRateLimiter } from "../rateLimit"
 import { toTermsOutdatedResponse } from "../termsAcceptance"
-import { imageUploadBodyLimit, readUploadedImageOriginal, toImagePromptRejection } from "../topic/imageEdits"
-import { serveImageFile } from "../topic/serveImageFile"
+import {
+	imageUploadBodyLimit,
+	readUploadedImageOriginal,
+	toImagePromptRejection,
+	toImageUploadResponse,
+} from "../topic/imageEdits"
+import { serveCurrentOrUncheckedImageFile, serveImageFile } from "../topic/serveImageFile"
 import {
 	isTopicPostPublic,
 	isValidTopicPostBodyImageSignature,
@@ -235,13 +240,19 @@ export const topicPostImagesRoute = new Hono<AppEnv>()
 		const { topicPostId, hash, file } = context.req.param()
 		const topicPostRow = fromTopicImageFileName(file) ? await loadTopicPostRow(topicPostId) : null
 
-		// an unknown file, an unknown post, a draft, or a hash that is no longer current is not found
-		if (!topicPostRow?.topicPost.publishedAt || topicPostRow.topicPost.imageHash !== hash) {
+		// an unknown file, an unknown post, or a draft is not found
+		if (!topicPostRow?.topicPost.publishedAt) {
 			return context.json({ error: "not found" }, 404)
 		}
-		return serveImageFile(context, {
-			topic: topicPostRow.topic,
-			objectKey: toTopicPostImageFileKey(topicPostId, hash, file),
+
+		// the post's current image goes to anyone who may see its topic, and an unchecked upload of the signed-in user goes
+		// to them alone. any other hash is not found
+		const { topic, topicPost } = topicPostRow
+		return serveCurrentOrUncheckedImageFile(context, {
+			imageFile: { topic, objectKey: toTopicPostImageFileKey(topicPostId, hash, file) },
+			hash,
+			currentImageHash: topicPost.imageHash,
+			uncheckedImageSubject: { subjectKind: "topicPostImage", subjectId: topicPostId },
 		})
 	})
 	// an editor's regenerate. a fresh render on the better model, from an optional image prompt, within the month's
@@ -272,7 +283,9 @@ export const topicPostImagesRoute = new Hono<AppEnv>()
 				return imagePromptRejection
 			}
 
-			// the render row and its workflow, which sends the regenerate's event once the image lands
+			// the render row and its workflow, which sends the regenerate's event once the image is drawn, in place of an
+			// unchecked upload shown to its uploader alone. a published unchecked image stays
+			await dropUnpublishedUncheckedImage({ subjectKind: "topicPostImage", subjectId: topicPost.id })
 			const renderId = await startTopicImageRender({
 				topicId: topic.id,
 				topicPostId: topicPost.id,
@@ -308,24 +321,26 @@ export const topicPostImagesRoute = new Hono<AppEnv>()
 				return uploadedImage.response
 			}
 
-			// the files under their hash, then the row that makes the upload current
-			const hash = await storeTopicPostImageFiles(topicPost.id, uploadedImage.original)
-			await replaceTopicPostImage({
-				topicPostId: topicPost.id,
-				renderId: null,
-				hash,
-				origin: "uploaded",
-				imagePrompt: null,
-				costDollars: 0,
+			// the files under their hash, then the row that makes the upload current, or the unchecked image's row that shows
+			// it to its uploader alone
+			const topicPostId = topicPost.id
+			const hash = await storeTopicPostImageFiles(topicPostId, uploadedImage.original)
+			const uploadedImageOutcome = await publishOrSaveUncheckedImage({
+				subjectKind: "topicPostImage",
+				subjectId: topicPostId,
+				uploaderUserId: editor.userId,
+				imageHash: hash,
+				isUnchecked: uploadedImage.isUnchecked,
 			})
 
 			// the upload's event by its ids, and the urls that replace the current ones at once
 			trackEvent("social_topic_post_image_upload", editor.userId, {
 				...toAnalyticsProperties(context),
-				objectId: topicPost.id,
+				objectId: topicPostId,
 				topicId: topic.id,
 				isOwner: topic.ownerId === editor.userId,
 			})
-			return context.json({ image: toTopicPostImageUrls(topicPost.id, hash) })
+			const image = toTopicPostImageUrls(topicPostId, hash)
+			return context.json(toImageUploadResponse({ image }, uploadedImageOutcome === "unchecked"))
 		},
 	)

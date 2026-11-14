@@ -33,6 +33,7 @@ import * as topicEmailSends from "./schema/topicEmailSends"
 import * as topicImages from "./schema/topicImages"
 import * as topicPosts from "./schema/topicPosts"
 import * as topics from "./schema/topics"
+import * as uncheckedImages from "./schema/uncheckedImages"
 import * as userBlocks from "./schema/userBlocks"
 import * as users from "./schema/users"
 import * as vectors from "./schema/vectors"
@@ -72,6 +73,7 @@ export const schema = {
 	...chat,
 	...columns,
 	...dashboards,
+	...uncheckedImages,
 	...invites,
 	...jobLeases,
 	...personalSources,

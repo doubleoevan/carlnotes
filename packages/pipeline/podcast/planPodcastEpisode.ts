@@ -2,7 +2,7 @@
 // and the Findings that the Podcast Episode narrates
 import { FULL_PODCAST_EPISODE_FINDINGS, SHORT_PODCAST_EPISODE_FINDINGS } from "@carlnotes/contracts/podcastEpisodes"
 import { db } from "@carlnotes/db"
-import { isUserPastDailySpendCutoff } from "@carlnotes/db/dailySpendCutoffs"
+import { isUserPastDailySpendCutoff, loadSpendControlSettings } from "@carlnotes/db/dailySpendCutoffs"
 import { isMonthlyBudgetCutoffPassed } from "@carlnotes/db/monthlyBudgetCutoffs"
 import { hasUnconvertedPersonalSources } from "@carlnotes/db/personalSourcesAuthority"
 import { lockPersonalSourcesTopic } from "@carlnotes/db/personalSourcesLocks"
@@ -110,6 +110,11 @@ async function planPodcastEpisodeInMemo({
 	if (existingPodcastEpisode) {
 		const { id: podcastEpisodeId, status } = existingPodcastEpisode
 		return status === "recording" ? { podcastEpisodeId, plannedFindings } : null
+	}
+
+	// record no new Podcast Episode while new podcast episodes are paused, whoever the Podcast Episode bills
+	if ((await loadSpendControlSettings()).isPodcastEpisodeRecordingPaused) {
+		return skipPodcastEpisode({ scanId, skipReason: "new podcast episodes are paused" })
 	}
 
 	// skip a new Podcast Episode that a check stops before it spends

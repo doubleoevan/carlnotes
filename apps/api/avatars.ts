@@ -1,152 +1,153 @@
-// the avatar a user publishes: an upload they chose, the photo their provider supplied, or the username initials
+// the avatar a user publishes: an upload they chose, the photo their provider supplied, or the username initials. an
+// upload is checked, stored as the server's own resized re-encode, and shown to its uploader alone if its image
+// moderation could not run
+
 import { toAvatarVersion } from "@carlnotes/contracts/avatars"
-import type { avatarSources } from "@carlnotes/contracts/enums"
 import type { ModerationCategory } from "@carlnotes/contracts/moderation"
 import type { ProfileIdentity } from "@carlnotes/contracts/profiles"
 import { db } from "@carlnotes/db"
-import { teams } from "@carlnotes/db/schema/teams"
-import { users } from "@carlnotes/db/schema/users"
 import {
-	clearPendingObjectDeletion,
-	deleteStoredObject,
-	recordPendingObjectDeletionBeforeUpload,
-	recordPendingObjectDeletions,
-	uploadAttachment,
-} from "@carlnotes/db/store"
+	AVATAR_EXTENSIONS,
+	replaceAvatar,
+	replaceTeamAvatar,
+	saveUncheckedAvatar,
+	saveUncheckedTeamAvatar,
+} from "@carlnotes/db/avatars"
+import { users } from "@carlnotes/db/schema/users"
+import { recordPendingObjectDeletionBeforeUpload, uploadAttachment } from "@carlnotes/db/store"
+import { type StoredAvatar, toStoredAvatar } from "@carlnotes/pipeline/avatarImages"
+import { toDataUrl } from "@carlnotes/server/dataUrl"
 import { eq } from "drizzle-orm"
 import { toObjectionableImageCategory } from "./moderation"
-import { refreshSessionUser } from "./sessions"
 
 // an avatar is shown at 64 pixels and under, so a large file buys nothing and costs storage on every account
 export const MAX_AVATAR_BYTES = 2 * 1024 * 1024
 
-// the image types a browser will render inline everywhere. svg is rejected: it is a document that can include a script
-const AVATAR_EXTENSIONS: Record<string, string> = {
-	"image/png": "png",
-	"image/jpeg": "jpg",
-	"image/webp": "webp",
-	"image/gif": "gif",
-}
+// the image types an upload may claim, which a browser renders inline everywhere
 const SUPPORTED_AVATAR_TYPES = new Set(Object.keys(AVATAR_EXTENSIONS))
-
-/**
- * The media type a stored avatar should be served as, read from the file extension. Falls back to png.
- */
-export function toAvatarContentType(avatarKey: string): string {
-	const fileExtension = avatarKey.split(".").pop() ?? ""
-	return Object.keys(AVATAR_EXTENSIONS).find((type) => AVATAR_EXTENSIONS[type] === fileExtension) ?? "image/png"
-}
 
 // why an upload was rejected. a shape check, or the category of a violating image
 export type AvatarRejection = "too-large" | "empty" | "unsupported-type" | { objectionableCategory: ModerationCategory }
 
-// the uploaded image, and the kind and id that name it in a moderation failure report
-type ToAvatarRejectionOptions = { bytes: Uint8Array; contentType: string; subjectKind: string; subjectId: string }
+// what an upload came to: why it was rejected, or that it is stored, with whether it is shown to its uploader alone
+export type AvatarUploadResult = { rejection: AvatarRejection } | { isImageUnchecked: boolean }
 
-// the checks every avatar upload must pass: it has bytes, it is small, it is an image we serve, and others may see it
-async function toAvatarRejection({
+// an upload that passed its checks: the re-encode to store, and whether its image moderation could not run
+type CheckedAvatar = { storedAvatar: StoredAvatar; isUnchecked: boolean }
+
+// the uploaded image, and the kind and id that name it in a moderation failure report
+type ToCheckedAvatarOptions = { bytes: Uint8Array; contentType: string; subjectKind: string; subjectId: string }
+
+// the checks every avatar upload must pass: it has bytes, it is small in bytes and in pixels, it is an image we serve,
+// and others may see it. returns the re-encode to store, or why the upload was rejected
+async function toCheckedAvatar({
 	bytes,
 	contentType,
 	subjectKind,
 	subjectId,
-}: ToAvatarRejectionOptions): Promise<AvatarRejection | null> {
+}: ToCheckedAvatarOptions): Promise<CheckedAvatar | { rejection: AvatarRejection }> {
 	// the shape checks. the type is checked against what the request claims
 	if (bytes.byteLength === 0) {
-		return "empty"
+		return { rejection: "empty" }
 	}
 	if (bytes.byteLength > MAX_AVATAR_BYTES) {
-		return "too-large"
+		return { rejection: "too-large" }
 	}
 
 	// an image type we serve
 	if (!SUPPORTED_AVATAR_TYPES.has(contentType)) {
-		return "unsupported-type"
+		return { rejection: "unsupported-type" }
 	}
 
-	// the moderation. an unreadable image is rejected as an unsupported type, and a skipped or failed check lets it through
-	const dataUrl = `data:${contentType};base64,${Buffer.from(bytes).toString("base64")}`
+	// the pixel size and the format, read before the image is decoded, and the resized re-encode the app stores
+	const storedAvatar = await toStoredAvatar(bytes)
+	if (storedAvatar === "too-large" || storedAvatar === "unsupported-type") {
+		return { rejection: storedAvatar }
+	}
+
+	// the moderation, on the image that will show. an unreadable image is rejected as an unsupported type, a skipped
+	// check lets it through, and a check that could not run leaves it unchecked
+	const dataUrl = toDataUrl(storedAvatar.contentType, storedAvatar.bytes)
 	const objectionableCategory = await toObjectionableImageCategory({ dataUrl, subjectKind, subjectId })
 	if (objectionableCategory === "unreadable") {
-		return "unsupported-type"
+		return { rejection: "unsupported-type" }
 	}
-	return objectionableCategory ? { objectionableCategory } : null
+
+	// a violating image is rejected with its category
+	if (objectionableCategory && objectionableCategory !== "unchecked") {
+		return { rejection: { objectionableCategory } }
+	}
+	return { storedAvatar, isUnchecked: objectionableCategory === "unchecked" }
 }
 
+// write a checked avatar's re-encode under a key that names a random id, so a replacement never reuses the previous
+// object's path, and return the key. the key is recorded as pending first, with the upload grace period
+async function storeCheckedAvatar(keyPrefix: string, keyId: string, storedAvatar: StoredAvatar): Promise<string> {
+	const avatarKey = `${keyPrefix}/${keyId}.${AVATAR_EXTENSIONS[storedAvatar.contentType]}`
+	await recordPendingObjectDeletionBeforeUpload(avatarKey)
+	await uploadAttachment(avatarKey, storedAvatar.bytes, storedAvatar.contentType)
+	return avatarKey
+}
+
+// an uploaded user avatar: who uploaded it, its bytes and the type the request claims, and the random id its key names
+export type UploadAvatarOptions = { userId: string; bytes: Uint8Array; contentType: string; keyId: string }
+
 /**
- * Store an uploaded avatar and point the user at it.
- * The key includes a random id, so a replacement doesn't reuse the previous object's path.
+ * Stores an uploaded avatar and points the user at it. An upload whose image moderation could not run stays unchecked:
+ * the user alone sees it, and their published avatar stays as it is until the sweep's check passes.
  */
-export async function uploadAvatar(
-	userId: string,
-	bytes: Uint8Array,
-	contentType: string,
-	keyId: string,
-): Promise<AvatarRejection | null> {
+export async function uploadAvatar({
+	userId,
+	bytes,
+	contentType,
+	keyId,
+}: UploadAvatarOptions): Promise<AvatarUploadResult> {
 	// the checks run before anything is written, so a rejected upload touches no storage
-	const rejection = await toAvatarRejection({ bytes, contentType, subjectKind: "avatar", subjectId: userId })
-	if (rejection) {
-		return rejection
+	const checkedAvatar = await toCheckedAvatar({ bytes, contentType, subjectKind: "avatar", subjectId: userId })
+	if ("rejection" in checkedAvatar) {
+		return checkedAvatar
 	}
 
-	// record the key as pending with the upload grace period, write the new object, then point the user at it
-	const avatarKey = `avatars/${userId}/${keyId}.${AVATAR_EXTENSIONS[contentType]}`
-	await recordPendingObjectDeletionBeforeUpload(avatarKey)
-	await uploadAttachment(avatarKey, bytes, contentType)
-	await replaceAvatar(userId, "upload", avatarKey)
-	return null
+	// write the new object, then save it as unchecked for the user alone or point the user at it
+	const avatarKey = await storeCheckedAvatar(`avatars/${userId}`, keyId, checkedAvatar.storedAvatar)
+	if (checkedAvatar.isUnchecked) {
+		await saveUncheckedAvatar(userId, avatarKey)
+	} else {
+		await replaceAvatar(userId, "upload", avatarKey)
+	}
+	return { isImageUnchecked: checkedAvatar.isUnchecked }
 }
+
+// an uploaded team avatar: the team, the leader who uploaded it, its bytes and the type the request claims, and the
+// random id its key names
+export type UploadTeamAvatarOptions = UploadAvatarOptions & { teamId: string }
 
 /**
- * Store an uploaded team avatar and point the team at it. The object is written before the row moves onto it,
- * so an upload that fails partway leaves the team on the image it already had,
- * and the old object is only deleted once nothing points at it.
+ * Stores an uploaded team avatar and points the team at it. The object is written before the row moves onto it, so an
+ * upload that fails partway leaves the team on the image it already had. An upload whose image moderation could not
+ * run stays unchecked: its uploader alone sees it, and the team's avatar stays as it is until the sweep's check passes.
  */
-export async function uploadTeamAvatar(
-	teamId: string,
-	bytes: Uint8Array,
-	contentType: string,
-	keyId: string,
-): Promise<AvatarRejection | null> {
+export async function uploadTeamAvatar({
+	teamId,
+	userId,
+	bytes,
+	contentType,
+	keyId,
+}: UploadTeamAvatarOptions): Promise<AvatarUploadResult> {
 	// the same checks that a user's upload must pass before anything is written
-	const rejection = await toAvatarRejection({ bytes, contentType, subjectKind: "teamAvatar", subjectId: teamId })
-	if (rejection) {
-		return rejection
+	const checkedAvatar = await toCheckedAvatar({ bytes, contentType, subjectKind: "teamAvatar", subjectId: teamId })
+	if ("rejection" in checkedAvatar) {
+		return checkedAvatar
 	}
 
-	// record the key as pending with the upload grace period, then write the new object
-	const avatarKey = `avatars/teams/${teamId}/${keyId}.${AVATAR_EXTENSIONS[contentType]}`
-	await recordPendingObjectDeletionBeforeUpload(avatarKey)
-	await uploadAttachment(avatarKey, bytes, contentType)
-
-	// read the previous key with the row locked, record it as pending, point the team at the new object,
-	// and clear the new key's pending row, in one transaction
-	const replacedAvatarKey = await db.transaction(async (transaction) => {
-		const [team] = await transaction
-			.select({ avatarKey: teams.avatarKey })
-			.from(teams)
-			.where(eq(teams.id, teamId))
-			.for("update")
-		const lockedReplacedAvatarKey = toReplacedAvatarKey(team?.avatarKey ?? null, avatarKey)
-
-		// record the replaced key, point the team at the new object, and clear the new key's pending row
-		if (lockedReplacedAvatarKey) {
-			await recordPendingObjectDeletions({ handle: transaction, objectKeys: [lockedReplacedAvatarKey] })
-		}
-		await transaction.update(teams).set({ avatarKey }).where(eq(teams.id, teamId))
-		await clearPendingObjectDeletion(avatarKey, transaction)
-		return lockedReplacedAvatarKey
-	})
-
-	// delete the replaced object, which nothing points at now
-	if (replacedAvatarKey) {
-		await deleteStoredObject(replacedAvatarKey)
+	// write the new object, then save it as unchecked for its uploader alone or point the team at it
+	const avatarKey = await storeCheckedAvatar(`avatars/teams/${teamId}`, keyId, checkedAvatar.storedAvatar)
+	if (checkedAvatar.isUnchecked) {
+		await saveUncheckedTeamAvatar({ teamId, uploaderUserId: userId, avatarKey })
+	} else {
+		await replaceTeamAvatar(teamId, avatarKey)
 	}
-	return null
-}
-
-// the previous avatar key an upload replaces, or null if there was none or the key is unchanged
-function toReplacedAvatarKey(previousAvatarKey: string | null, avatarKey: string | null): string | null {
-	return previousAvatarKey && previousAvatarKey !== avatarKey ? previousAvatarKey : null
+	return { isImageUnchecked: checkedAvatar.isUnchecked }
 }
 
 /**
@@ -238,41 +239,5 @@ export function toProfileIdentity(profileColumns: JoinedProfileColumns | null): 
 		username: profileColumns.username,
 		avatarSource: profileColumns.avatarSource,
 		avatarVersion: toAvatarVersion(profileColumns),
-	}
-}
-
-// point the user at a source, dropping the object the previous one left behind
-async function replaceAvatar(
-	userId: string,
-	avatarSource: (typeof avatarSources)[number],
-	avatarKey: string | null,
-): Promise<void> {
-	// read the previous key with the row locked, record it as pending, write the avatar to the row,
-	// and clear an uploaded key's pending row, in one transaction
-	const replacedAvatarKey = await db.transaction(async (transaction) => {
-		const [user] = await transaction
-			.select({ avatarKey: users.avatarKey })
-			.from(users)
-			.where(eq(users.id, userId))
-			.for("update")
-		const lockedReplacedAvatarKey = toReplacedAvatarKey(user?.avatarKey ?? null, avatarKey)
-
-		// record the replaced key, then write the avatar
-		if (lockedReplacedAvatarKey) {
-			await recordPendingObjectDeletions({ handle: transaction, objectKeys: [lockedReplacedAvatarKey] })
-		}
-		await transaction.update(users).set({ avatarSource, avatarKey }).where(eq(users.id, userId))
-
-		// clear an uploaded key's pending row
-		if (avatarKey) {
-			await clearPendingObjectDeletion(avatarKey, transaction)
-		}
-		return lockedReplacedAvatarKey
-	})
-
-	// write the avatar to the user's sessions, then delete the replaced object, which nothing points at now
-	await refreshSessionUser(userId)
-	if (replacedAvatarKey) {
-		await deleteStoredObject(replacedAvatarKey)
 	}
 }

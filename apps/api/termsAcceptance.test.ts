@@ -3,9 +3,9 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { TERMS_VERSION } from "@carlnotes/contracts/terms"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
+import * as sessions from "@carlnotes/db/sessions"
 import { Hono } from "hono"
 import type { AppEnv } from "./currentUser"
-import * as sessions from "./sessions"
 import { hasAcceptedCurrentTerms, termsAcceptanceRoute, toTermsOutdatedResponse } from "./termsAcceptance"
 import { signInAs, toJsonRequest, toSignedInApp } from "./testSession"
 

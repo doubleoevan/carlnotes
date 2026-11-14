@@ -1,7 +1,15 @@
-// account tests: a close with a failed revocation before it begins and after it has begun, a LiteLLM key created
-// while the account was closing, the edge purges a close sends, and the daily notifications email's switch
+// account tests: a close with a failed revocation before it begins and after it has begun, both close routes while
+// Redis is unreachable, a LiteLLM key created while the account was closing, the edge purges a close sends, the keys
+// a close records, an unchecked avatar's close, and the daily notifications email's switch
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
-import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
+import {
+	ADMIN_USER_ACCESS_ROW,
+	restoreConnectionPool,
+	type SentQuery,
+	stubConnectionPool,
+} from "@carlnotes/db/connectionPoolStub"
+import { restoreRedisClient, stubRedisClient, stubUnreachableRedisClient } from "@carlnotes/db/redisClientStub"
+import * as sessions from "@carlnotes/db/sessions"
 import * as store from "@carlnotes/db/store"
 import * as litellmProxy from "@carlnotes/models/litellmProxy"
 import * as monitoring from "@carlnotes/server/monitoring"
@@ -9,15 +17,17 @@ import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import { TEST_ANALYTICS_PROPERTIES } from "./analyticsTestFixtures"
 import { type EdgePurgeFetchSpy, stubEdgePurge, toPurgedTags } from "./edgePurgeTestFixtures"
-import * as sessions from "./sessions"
 import { toJsonRequest, toSignedInApp } from "./testSession"
 import { deleteUser, usersRoute } from "./users"
 
-// the connection pool's own query and the environment's Redis url, put back after each test along with the spies
+// the connection pool's own query, the Redis client, and the spies, put back after each test
 const restoreEnvSettings = saveEnvSettings(["REDIS_URL"])
 afterEach(() => {
 	restoreConnectionPool()
+	restoreRedisClient()
 	mock.restore()
+
+	// put the environment's edge purge settings and Redis url back
 	delete Bun.env.CLOUDFLARE_ZONE_ID
 	delete Bun.env.CLOUDFLARE_API_TOKEN
 	restoreEnvSettings()
@@ -53,6 +63,61 @@ test("closing an account without a configured Redis goes on", async () => {
 function toClosingUserRows({ text }: Pick<SentQuery, "text">, litellmVirtualKey: string | null = null): unknown[] {
 	return text.includes('"litellm_virtual_key" from "users"') ? [["user-1", litellmVirtualKey]] : []
 }
+
+// the error both close routes respond with while Redis is unreachable
+const ACCOUNT_CLOSE_UNAVAILABLE_ERROR = "closing an account is unavailable for a moment. try again"
+
+// whether a sent query writes a row
+function isWriteQuery({ text }: SentQuery): boolean {
+	return /^(insert|update|delete) /.test(text)
+}
+
+// a configured Redis that no command reaches, and a connection pool that returns admin-1's access row and user-1's
+// row. returns each query sent
+function stubCloseWithUnreachableRedis(): SentQuery[] {
+	// the Redis url set, with a client that never connects and its failure log quiet
+	Bun.env.REDIS_URL = "redis://localhost:6379"
+	stubUnreachableRedisClient()
+	spyOn(console, "error").mockImplementation(() => {})
+
+	// admin-1 reads as an admin, and the close reads user-1's row
+	return stubConnectionPool(({ text, values }) => {
+		if (text.includes('"role"') && values.includes("admin-1")) {
+			return [ADMIN_USER_ACCESS_ROW]
+		}
+		return toClosingUserRows({ text })
+	})
+}
+
+// a user who closes their own account while Redis is unreachable gets a 503 with the account and its sessions
+// unchanged, and the same close deletes the account once Redis responds again
+test("a user's own close responds 503 while a configured Redis is unreachable, and succeeds once Redis responds again", async () => {
+	// a configured Redis that is unreachable, with user-1 signed in
+	const sentQueries = stubCloseWithUnreachableRedis()
+	const app = toSignedInApp(usersRoute, "user-1")
+
+	// the close is unavailable, and nothing is written
+	const unavailableResponse = await app.request("/users/me", { method: "DELETE" })
+	expect(unavailableResponse.status).toBe(503)
+	expect(await unavailableResponse.json()).toEqual({ error: ACCOUNT_CLOSE_UNAVAILABLE_ERROR })
+	expect(sentQueries.some(isWriteQuery)).toBe(false)
+
+	// Redis responds again, and the same close deletes the user row
+	stubRedisClient()
+	const closedResponse = await app.request("/users/me", { method: "DELETE" })
+	expect(closedResponse.status).toBe(200)
+	expect(await closedResponse.json()).toEqual({ ok: true })
+	expect(sentQueries.some(({ text }) => text.startsWith('delete from "users"'))).toBe(true)
+})
+
+// an admin who closes another user's account while Redis is unreachable gets the same 503, with nothing written
+test("an admin's close of another account responds 503 while a configured Redis is unreachable", async () => {
+	const sentQueries = stubCloseWithUnreachableRedis()
+	const response = await toSignedInApp(usersRoute, "admin-1").request("/admin/users/user-1", { method: "DELETE" })
+	expect(response.status).toBe(503)
+	expect(await response.json()).toEqual({ error: ACCOUNT_CLOSE_UNAVAILABLE_ERROR })
+	expect(sentQueries.some(isWriteQuery)).toBe(false)
+})
 
 // a revocation that fails after the close has begun is reported, and the close still deletes the row
 test("a second failed revocation is reported and the close goes on", async () => {
@@ -158,6 +223,11 @@ test("a failed purge is reported and the close goes on", async () => {
 	])
 })
 
+// the inserts that record object keys as pending among the sent queries
+function toPendingObjectDeletionInserts(sentQueries: SentQuery[]): SentQuery[] {
+	return sentQueries.filter(({ text }) => text.startsWith('insert into "pending_object_deletions"'))
+}
+
 // every key the account owned is recorded as pending in the same transaction as the user row's delete
 test("a close records every key the account owned", async () => {
 	// no configured Redis, a user with an avatar and one chat attachment, and the console quiet
@@ -179,15 +249,40 @@ test("a close records every key the account owned", async () => {
 
 	// the close finishes, and one insert records both keys after the user row's delete returns them
 	expect(await deleteUser("user-1", "user-1", TEST_ANALYTICS_PROPERTIES)).toBe("deleted")
-	const pendingObjectDeletionInserts = sentQueries.filter(({ text }) =>
-		text.startsWith('insert into "pending_object_deletions"'),
-	)
+	const pendingObjectDeletionInserts = toPendingObjectDeletionInserts(sentQueries)
 	const userDeleteIndex = sentQueries.findIndex(({ text }) => text.startsWith('delete from "users"'))
 	expect(pendingObjectDeletionInserts).toHaveLength(1)
 	expect(pendingObjectDeletionInserts[0]?.values).toEqual(
 		expect.arrayContaining(["topics/t1/chat-attachments/user-1/a1/notes.pdf", "avatars/user-1/3f2a.png"]),
 	)
 	expect(sentQueries.indexOf(pendingObjectDeletionInserts[0] as SentQuery)).toBeGreaterThan(userDeleteIndex)
+})
+
+// the user's unchecked avatar is collected with the avatar everyone else sees, and the unchecked image's row is
+// deleted with the user row
+test("a close of an account with an unchecked avatar records and deletes the unchecked object, and deletes the unchecked image's row", async () => {
+	// no configured Redis, a user with an avatar and an unchecked avatar, and a spied object delete
+	delete Bun.env.REDIS_URL
+	spyOn(sessions, "revokeUserSessions").mockResolvedValue(false)
+	const deleteStoredObjectsSpy = spyOn(store, "deleteStoredObjects").mockResolvedValue(undefined)
+	const avatarKeys = ["avatars/user-1/3f2a.png", "avatars/user-1/7d4e.png"]
+	const sentQueries = stubConnectionPool(({ text }) => {
+		// the user row's delete returns no LiteLLM key, the avatar key, and the unchecked avatar key
+		return text.startsWith('delete from "users"') ? [[null, ...avatarKeys]] : toClosingUserRows({ text })
+	})
+
+	// the close finishes, and one insert records both avatar keys after the user row's delete returns them
+	expect(await deleteUser("user-1", "user-1", TEST_ANALYTICS_PROPERTIES)).toBe("deleted")
+	const pendingObjectDeletionInserts = toPendingObjectDeletionInserts(sentQueries)
+	const userDeleteIndex = sentQueries.findIndex(({ text }) => text.startsWith('delete from "users"'))
+	expect(pendingObjectDeletionInserts).toHaveLength(1)
+	expect(pendingObjectDeletionInserts[0]?.values).toEqual(expect.arrayContaining(avatarKeys))
+	expect(sentQueries.indexOf(pendingObjectDeletionInserts[0] as SentQuery)).toBeGreaterThan(userDeleteIndex)
+
+	// both objects are deleted, and so is the unchecked image's row of the user's avatar
+	expect(deleteStoredObjectsSpy.mock.calls).toEqual([[avatarKeys]])
+	const uncheckedImageDelete = sentQueries.find(({ text }) => text.startsWith('delete from "unchecked_images"'))
+	expect(uncheckedImageDelete?.values).toEqual(["userAvatar", "user-1"])
 })
 
 // a team the user led alone is deleted with the account, its chat room attachment and avatar keys recorded in the
@@ -215,9 +310,7 @@ test("a close deletes a solo team with its chat room attachments and avatar", as
 
 	// the close finishes, both keys are recorded, and both objects are deleted together
 	expect(await deleteUser("user-1", "user-1", TEST_ANALYTICS_PROPERTIES)).toBe("deleted")
-	const pendingObjectDeletionInserts = sentQueries.filter(({ text }) =>
-		text.startsWith('insert into "pending_object_deletions"'),
-	)
+	const pendingObjectDeletionInserts = toPendingObjectDeletionInserts(sentQueries)
 	expect(pendingObjectDeletionInserts.flatMap(({ values }) => values)).toEqual(
 		expect.arrayContaining(["topics/t1/room-attachments/r1/notes.pdf", "avatars/teams/team-1/9c1b.webp"]),
 	)

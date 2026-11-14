@@ -1,21 +1,32 @@
-// scan queue tests: the undispatched Scans the sweep dispatches, the waiting scans it starts, the queue report, and the
-// backlog crossing
-import { afterEach, expect, mock, spyOn, test } from "bun:test"
+// scan queue tests: the undispatched Scans the sweep dispatches, the waiting scans it starts, the queue report, the
+// backlog crossing, and the scan dispatch limit
+import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import { SCHEDULED_SCAN_SPENT_BUDGET_REASON } from "@carlnotes/contracts/scanFailure"
 import { restoreConnectionPool, stubConnectionPool, toTableRow } from "@carlnotes/db/connectionPoolStub"
 import type { DailySpendCutoffState } from "@carlnotes/db/dailySpendCutoffs"
 import { toDailySpendCutoffState } from "@carlnotes/db/dailySpendCutoffTestFixtures"
+import * as quotas from "@carlnotes/db/quotas"
 import { scans } from "@carlnotes/db/schema/scans"
 import * as litellm from "@carlnotes/models/litellm"
 import * as scan from "@carlnotes/pipeline/scan"
 import { toScanBacklogCrossing } from "@carlnotes/pipeline/scanWorkflowClient"
 import * as monitoring from "@carlnotes/server/monitoring"
+import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import { reportScanQueue, startUndispatchedScans, toDispatchableScanCount } from "./scanQueue"
+import { startScheduledTopicScans } from "./schedule"
+import { toScheduledTopic } from "./scheduledTopicTestFixtures"
 
-// put each spied function and the connection pool's own query back after each test
+// each test starts with the scan dispatch limit unset
+const restoreEnvSettings = saveEnvSettings(["SCAN_DISPATCH_LIMIT"])
+beforeEach(() => {
+	delete Bun.env.SCAN_DISPATCH_LIMIT
+})
+
+// put each spied function, the connection pool's own query, and the scan dispatch limit back after each test
 afterEach(() => {
 	restoreConnectionPool()
 	mock.restore()
+	restoreEnvSettings()
 })
 
 // an undispatched Scan row's id and manual flag, and optionally its Topic, whether it is a first scan, and whether it
@@ -303,4 +314,81 @@ test("toDispatchableScanCount subtracts the backlog from the limit and keeps the
 	expect(toDispatchableScanCount({ pollerCount: 2, backlogCount: 30, oldestBacklogAgeMs: null })).toBe(70)
 	expect(toDispatchableScanCount({ pollerCount: 2, backlogCount: 500, oldestBacklogAgeMs: null })).toBe(0)
 	expect(toDispatchableScanCount(null)).toBe(100)
+})
+
+// the limit is read on every sweep, so a set value replaces the default and zero leaves nothing to start
+test("toDispatchableScanCount reads the scan dispatch limit that is set, and zero leaves no Scan to start", () => {
+	// a limit of 40 with a backlog of 30 leaves 10
+	Bun.env.SCAN_DISPATCH_LIMIT = "40"
+	expect(toDispatchableScanCount({ pollerCount: 2, backlogCount: 30, oldestBacklogAgeMs: null })).toBe(10)
+
+	// a limit of zero leaves none, with an empty queue and with an unread one
+	Bun.env.SCAN_DISPATCH_LIMIT = "0"
+	expect(toDispatchableScanCount(HEALTHY_SCAN_QUEUE)).toBe(0)
+	expect(toDispatchableScanCount(null)).toBe(0)
+})
+
+// a scan dispatch limit of zero starts no scheduled Scan and writes no Scan row, so every Topic stays scheduled
+test("a scan dispatch limit of zero starts no scheduled Scan, and every Topic stays scheduled", async () => {
+	// 40 scheduled Topics of one owner with scans left today and a spent key budget, and an empty scan queue
+	Bun.env.SCAN_DISPATCH_LIMIT = "0"
+	const scheduledTopics = Array.from({ length: 40 }, (_, i) => toScheduledTopic(`topic-${i}`))
+	spyOn(quotas, "scansRemainingToday").mockResolvedValue(1000)
+	const startTopicScanSpy = spyOn(scan, "startTopicScan").mockResolvedValue({ status: "running" })
+	const sentQueries = stubConnectionPool()
+
+	// start the scheduled Topics' Scans as the sweep does
+	const topicSweepSummary = await startScheduledTopicScans({
+		scheduledTopics,
+		dailyTopicIdsByOwner: new Map(),
+		budgetExhaustedOwnerIds: new Set(["owner-1"]),
+		dispatchableScanCount: toDispatchableScanCount(HEALTHY_SCAN_QUEUE),
+	})
+
+	// no Scan started, every Topic is left for a later sweep, and no Scan row was read or written
+	expect(startTopicScanSpy).not.toHaveBeenCalled()
+	expect(topicSweepSummary).toMatchObject({ scheduled: 40, started: 0, skippedOverBacklog: 40, skippedOverBudget: 0 })
+	expect(sentQueries).toEqual([])
+})
+
+// a scan dispatch limit of zero leaves the waiting scans to the first scan dispatch limit
+test("a scan dispatch limit of zero still starts waiting scans up to the first scan dispatch limit", async () => {
+	// seven waiting first scans and two rows that were opened and never dispatched, each of its own Topic
+	Bun.env.SCAN_DISPATCH_LIMIT = "0"
+	const waitingScanRows = Array.from({ length: 7 }, (_, i) =>
+		toUndispatchedScanRow({
+			id: `waiting-scan-${i}`,
+			isManual: false,
+			topicId: `waiting-topic-${i}`,
+			isFirstScan: true,
+			isWaitingScan: true,
+		}),
+	)
+	const orphanedScanRows = [0, 1].map((i) =>
+		toUndispatchedScanRow({ id: `orphaned-scan-${i}`, isManual: true, topicId: `orphaned-topic-${i}` }),
+	)
+	stubConnectionPool(() => [...waitingScanRows, ...orphanedScanRows])
+	spyOn(console, "log").mockImplementation(() => {})
+	const scanTopicSpy = spyOn(scan, "scanTopic").mockResolvedValue({ status: "running" })
+
+	// dispatch within a scan dispatch limit of zero and a first scan dispatch limit of five
+	const waitingScanTopicIds = await startUndispatchedScans({
+		cutoffState: toDailySpendCutoffState(PASSED_CUTOFF_FREE_PLAN_SPEND_CENTS, { firstScanDispatchLimit: 5 }),
+		dispatchableScanCount: toDispatchableScanCount(HEALTHY_SCAN_QUEUE),
+	})
+
+	// the five oldest waiting scans start, and no row that was opened and never dispatched does
+	expect(scanTopicSpy.mock.calls.map((scanTopicCall) => scanTopicCall[1])).toEqual([
+		"waiting-topic-0",
+		"waiting-topic-1",
+		"waiting-topic-2",
+		"waiting-topic-3",
+		"waiting-topic-4",
+	])
+	expect([...waitingScanTopicIds]).toEqual([
+		"waiting-topic-5",
+		"waiting-topic-6",
+		"orphaned-topic-0",
+		"orphaned-topic-1",
+	])
 })

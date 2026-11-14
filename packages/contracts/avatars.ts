@@ -52,6 +52,18 @@ export function toTeamAvatarImagePath(teamId: string, avatarVersion: string): st
 }
 
 /**
+ * Returns the version in the signed-in user's own avatar url, read from the session user: the version of an upload
+ * shown to them alone, or the version of the avatar everyone else sees.
+ */
+export function toSessionAvatarVersion(sessionUser: {
+	avatarSource?: string | null
+	avatarKey?: string | null
+	uncheckedAvatarKey?: string | null
+}): string | null {
+	return toAvatarKeyVersion(sessionUser.uncheckedAvatarKey ?? null) ?? toAvatarVersion(sessionUser)
+}
+
+/**
  * Returns the version in a user's avatar url, which is the upload's key id, oauth, or null for the initials.
  */
 export function toAvatarVersion(avatar: { avatarSource?: string | null; avatarKey?: string | null }): string | null {

@@ -1,25 +1,36 @@
 // signup gate tests: a signed token passes once and its replay is rejected, a tampered token is rejected before Redis
-// is read, and a token passes on its signature and expiry alone while Redis cannot be reached
+// is read, a token passes on its signature and expiry alone while Redis cannot be reached, and a turnstile check that
+// times out reads as a failed check
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreRedisClient, stubRedisClient, stubUnreachableRedisClient } from "@carlnotes/db/redisClientStub"
+import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
+import { apiRoute } from "./api"
 import {
 	APP_SIGNUP_CHALLENGE_PURPOSE,
 	signGateToken,
 	signSingleUseToken,
 	verifyGateToken,
 	verifySingleUseToken,
+	verifyTurnstileToken,
 } from "./signupGate"
+import { signInAs, toJsonRequest } from "./testSession"
 
-// the signing secret the tokens use, set before each test
-const restoreEnvSettings = saveEnvSettings(["BETTER_AUTH_SECRET"])
+// the real fetch and the real time limit, which the turnstile tests replace
+const realFetch = globalThis.fetch
+const realAbortSignalTimeout = AbortSignal.timeout.bind(AbortSignal)
+
+// the signing secret the tokens use and a turnstile secret, set before each test
+const restoreEnvSettings = saveEnvSettings(["BETTER_AUTH_SECRET", "TURNSTILE_SECRET_KEY"])
 beforeEach(() => {
 	Bun.env.BETTER_AUTH_SECRET = "test-secret"
+	Bun.env.TURNSTILE_SECRET_KEY = "test-turnstile-secret"
 })
 
-// put the secret, the Redis client, and the spies back
+// put the secrets, the fetch, the Redis client, and the spies back
 afterEach(() => {
 	restoreEnvSettings()
+	globalThis.fetch = realFetch
 	restoreRedisClient()
 	mock.restore()
 })
@@ -86,4 +97,50 @@ test("a token passes on its signature and expiry alone while Redis cannot be rea
 	const token = await signGateToken()
 	expect(await verifyGateToken(token)).toBe(true)
 	expect(await verifyGateToken(token)).toBe(true)
+})
+
+// a cloudflare that never responds, and a time limit that passes after a millisecond. returns the spy on the time limit
+function stubUnansweredTurnstileCheck(): ReturnType<typeof spyOn<typeof AbortSignal, "timeout">> {
+	// only the request's own time limit ends the check
+	globalThis.fetch = ((_url: RequestInfo | URL, init?: RequestInit) =>
+		new Promise<Response>((_resolve, reject) => {
+			init?.signal?.addEventListener("abort", () => reject(init.signal?.reason))
+		})) as typeof fetch
+	return spyOn(AbortSignal, "timeout").mockImplementation(() => realAbortSignalTimeout(1))
+}
+
+// a check that cloudflare leaves unanswered is abandoned at five seconds, reported, and read as a failed check
+test("a turnstile check that times out reads as a failed check", async () => {
+	const reportErrorSpy = quietErrorReports()
+	const abortSignalTimeoutSpy = stubUnansweredTurnstileCheck()
+	expect(await verifyTurnstileToken("token")).toBe(false)
+	expect(abortSignalTimeoutSpy).toHaveBeenCalledWith(5000)
+	expect(reportErrorSpy).toHaveBeenCalledWith(expect.any(Error), "auth", { check: "turnstile" })
+})
+
+// any other failure of the check is still thrown
+test("a turnstile check that fails without timing out throws its failure", async () => {
+	globalThis.fetch = (async () => {
+		throw new Error("connection reset")
+	}) as unknown as typeof fetch
+	await expect(verifyTurnstileToken("token")).rejects.toThrow("connection reset")
+})
+
+// the gate responds to a timed-out check as it does to an invalid token, and sets no gate cookie for a signup to pass
+test("the signup gate rejects a timed-out check as it rejects an invalid token", async () => {
+	quietErrorReports()
+	stubRedisClient()
+	signInAs(null)
+
+	// a token that cloudflare rejects
+	globalThis.fetch = (async () => Response.json({ success: false })) as unknown as typeof fetch
+	const invalidTokenResponse = await apiRoute.request("/api/signup-gate", toJsonRequest({ turnstileToken: "token" }))
+
+	// a check that cloudflare never responds to
+	stubUnansweredTurnstileCheck()
+	const timedOutResponse = await apiRoute.request("/api/signup-gate", toJsonRequest({ turnstileToken: "token" }))
+	expect(timedOutResponse.status).toBe(400)
+	expect(timedOutResponse.status).toBe(invalidTokenResponse.status)
+	expect(await timedOutResponse.json()).toEqual(await invalidTokenResponse.json())
+	expect(timedOutResponse.headers.get("set-cookie")).toBeNull()
 })

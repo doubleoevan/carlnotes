@@ -1,5 +1,5 @@
-// podcast episode editor tests: who sees Edit film on the podcast episode page and the topic page, and the image the
-// film's image block opens with
+// podcast episode editor tests: who sees Edit film on the podcast episode page and the topic page, the image the
+// film's image block opens with, and which image block reads an unchecked image's flag
 import { expect, test } from "bun:test"
 import { toPodcastEpisodeFixture, toTopicPodcastFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import { toTestTopicResponse } from "@carlnotes/contracts/topicFeedTestFixtures"
@@ -9,6 +9,7 @@ import {
 	EDIT_TOPIC_PODCAST_EPISODE_VIDEO_LABEL,
 	isTopicPodcastEpisodeVideoEditShown,
 	type PodcastEpisodeEditorPage,
+	toPodcastEpisodeEditableImage,
 	toTopicPageEditedPodcastEpisode,
 	toTopicPodcastEpisodeVideoEditableImage,
 } from "./podcastEpisodeEditor"
@@ -80,4 +81,15 @@ test("the film's image block opens with the film's own image and its image promp
 test("a film with no image of its own opens with the podcast episode's image", () => {
 	const podcastEpisode = { ...FILM_PODCAST_EPISODE, video: { ...FILM, posterUrl: null } }
 	expect(toTopicPodcastEpisodeVideoEditableImage(toEditorPage(podcastEpisode)).image).toEqual(PODCAST_EPISODE_IMAGE)
+})
+
+test("each image block reads whether its own image is unchecked, and not the other's", () => {
+	const uncheckedTopicPodcastEpisodeVideoImagePage = {
+		...toEditorPage(FILM_PODCAST_EPISODE),
+		isTopicPodcastEpisodeVideoImageUnchecked: true,
+	}
+	expect(toTopicPodcastEpisodeVideoEditableImage(uncheckedTopicPodcastEpisodeVideoImagePage).isImageUnchecked).toBe(
+		true,
+	)
+	expect(toPodcastEpisodeEditableImage(uncheckedTopicPodcastEpisodeVideoImagePage).isImageUnchecked).toBeUndefined()
 })

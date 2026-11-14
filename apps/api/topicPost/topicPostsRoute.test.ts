@@ -1,12 +1,17 @@
-// the Topic Post routes: who starts, saves, publishes, reads, and deletes a post, and what each rejection keeps
+// the Topic Post routes: who starts, saves, publishes, reads, and deletes a post, what each rejection keeps, and who
+// reads an unchecked upload over a post's image
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
+import { toTopicPostImageUrls, toUncheckedTopicImageUrls } from "@carlnotes/contracts/topicImages"
+import type { TopicPostResponse } from "@carlnotes/contracts/topicPosts"
 import { restoreConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as topicImages from "@carlnotes/db/topicImages"
+import * as uncheckedImagesDb from "@carlnotes/db/uncheckedImages"
 import { MODERATION_TEXT_MAX_CHARS } from "@carlnotes/models/moderation"
 import * as temporalClient from "@carlnotes/pipeline/temporalClient"
 import * as edgePurge from "@carlnotes/server/edgePurge"
 import * as moderation from "../moderation"
 import { toJsonRequest } from "../testSession"
+import * as topicPosts from "./topicPosts"
 import { topicPostsRoute } from "./topicPostsRoute"
 import {
 	DRAFT_ROW,
@@ -264,4 +269,48 @@ test("a missing post and a visitor's write are not found", async () => {
 	expect((await topicPostsRoute.request("/topic-posts/post-1", toSave(320))).status).toBe(404)
 	expect((await topicPostsRoute.request("/topic-posts/post-1/publish", { method: "POST" })).status).toBe(404)
 	expect((await topicPostsRoute.request("/topic-posts/post-1", { method: "DELETE" })).status).toBe(404)
+})
+
+test("an unchecked Topic Post image shows on the post's page to its uploader alone", async () => {
+	// a published post whose image member-1 and owner-1 may change, and member-1's unchecked upload
+	stubTopicPostRoutes(toPublishedRow(60))
+	const publishedImage = toTopicPostImageUrls("post-1", "published-hash")
+	spyOn(topicPosts, "toTopicPostResponse").mockImplementation(
+		async (userId) =>
+			({
+				id: "post-1",
+				image: publishedImage,
+				imageOrigin: "generated",
+				canEditImage: userId === "member-1" || userId === "owner-1",
+			}) as TopicPostResponse,
+	)
+	const loadUncheckedImageSpy = spyOn(uncheckedImagesDb, "loadUncheckedImageForUploader").mockImplementation(
+		async (_uncheckedImageSubject, userId) =>
+			userId === "member-1" ? ({ imageHash: "unchecked-hash" } as uncheckedImagesDb.UncheckedImageRow) : null,
+	)
+
+	// the uploader reads the unchecked upload with its flag, in a response that names no shared cache
+	const uploaderResponse = await toUserApp("member-1").request("/topic-posts/post-1")
+	expect(await uploaderResponse.json()).toMatchObject({
+		image: toUncheckedTopicImageUrls(toTopicPostImageUrls("post-1", "unchecked-hash")),
+		imageOrigin: "uploaded",
+		isImageUnchecked: true,
+	})
+	expect(uploaderResponse.headers.get("cdn-cache-control")).toBeNull()
+	expect(uploaderResponse.headers.get("cache-tag")).toBeNull()
+
+	// a second editor, a member who may not change the image, and a visitor each read the published image with no flag
+	const otherResponses = [
+		await toUserApp("owner-1").request("/topic-posts/post-1"),
+		await toUserApp("member-2").request("/topic-posts/post-1"),
+		await topicPostsRoute.request("/topic-posts/post-1"),
+	]
+	for (const otherResponse of otherResponses) {
+		const topicPost = (await otherResponse.json()) as TopicPostResponse
+		expect(topicPost.image).toEqual(publishedImage)
+		expect(topicPost.isImageUnchecked).toBeUndefined()
+	}
+
+	// only the two users who may change the image looked for an unchecked image
+	expect(loadUncheckedImageSpy.mock.calls.map(([, userId]) => userId)).toEqual(["member-1", "owner-1"])
 })

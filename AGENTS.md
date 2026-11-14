@@ -63,6 +63,8 @@ Beside them at the root:
 - `infra/` — the service configs the app runs beside: litellm, the Northflank pipelines, and the cloudflared
   dev tunnel for Sign in with Apple's callback and Resend's inbound webhook.
 - `content/blog/` — the blog posts `apps/api/content.ts` serves.
+- `dependency-advisories.json` — the reviewed allowlist of high and critical advisories that do not apply, each with
+  its GHSA id, package, reason, and review date. `bun run check:advisories` reads it in CI's `advisories` job.
 - `patches/` — the dependency patches `bun install` applies, named in the root package.json's `patchedDependencies`.
 - `evals/` — the evals that measure the model-facing prompts, their graders, and the review pipeline, one folder each,
   and `evalHarness.ts`, which the promptfoo evals share. They make real model calls, so no eval runs in `bun test`.
@@ -89,6 +91,7 @@ Each app and package has its own AGENTS.md with entry points, layout, and comman
 | Topic image, home card, home topic, or home podcast episode | `packages/contracts/topicImages.ts`, `packages/contracts/home.ts`, `packages/pipeline/topicImages/`, `apps/worker/workflows/renderTopicImage.ts`, `apps/api/topic/topicImagesRoute.ts`, `apps/api/home/`, `packages/core/components/TopicImage.tsx`, `TopicImageLink.tsx`, `TopicCard.tsx`, `PodcastEpisodeCard.tsx`, `TopicImageEditor.tsx` with both apps' adapters | domain-model, jsx-conventions | `packages/db/migrations/`; the podcast cover beyond `apps/api/share/podcastCover.ts` |
 | Design token, type role, or email color | `packages/nightshift/` (`colors.ts`, `radius.ts`, `elevation.ts`, `typography.ts`, `email.ts`), then `bun run nightshift:write` | — | `packages/nightshift/tokens.css`, `packages/nightshift/mcpViewTokens.css`, and `packages/nightshift/figma/` (generated) |
 | Shared component contract, or a variant of one | `packages/nightshift/components/<name>.ts`, then both implementations at `apps/web/src/components/primitives/<name>.tsx` and `apps/mobile/src/components/primitives/<name>.tsx` with their stories | jsx-conventions | every other component; `bun scripts/check-component-parity.ts` names a missing implementation |
+| Unchecked image, image moderation, or an admin's Reset avatar and Regenerate | `packages/pipeline/uncheckedImages.ts`, `uncheckedImageChecks.ts`, `publishedUncheckedImages.ts`, `packages/db/uncheckedImages.ts`, `packages/db/schema/uncheckedImages.ts`, `packages/db/avatars.ts`, `packages/models/moderation.ts`, `apps/api/moderation.ts`, `apps/api/uncheckedImageOverlays.ts`, `apps/api/topic/serveImageFile.ts`, `apps/api/avatarsRoute.ts`, `apps/api/report/`, `packages/contracts/uncheckedImages.ts`, `packages/core/lib/uncheckedImageCopy.ts`, `packages/core/components/UncheckedAvatarLine.tsx`, `apps/mobile/src/apiImages.ts`, `apps/worker/schedule.ts` | domain-model, jsx-conventions | `packages/db/migrations/` |
 | Reaction, comment thread, or admin block | `apps/api/social/`, `apps/api/adminBlocks.ts`, `packages/contracts/social.ts`, `packages/contracts/socialText.ts`, `packages/db/schema/social.ts`, `packages/db/socialLimits.ts`, `packages/db/sharedComments.ts` | domain-model | `apps/worker/` except the notifications email step; `packages/pipeline/` beyond `review/`, `podcast/podcastEpisodeSharedComments.ts`, and `personalSources/linkQueue.ts` |
 | Topic Post, its editor, its image, or the Topic Posts section | `apps/api/topicPost/`, `packages/contracts/topicPosts.ts`, `packages/core/components/TopicPost*.tsx`, `packages/core/hooks/useTopicPostSave.ts`, `packages/pipeline/topicPosts/`, `apps/worker/workflows/publishTopicPost.ts`, `apps/web/src/components/topicPost/`, `apps/web/src/pages/TopicPostPage.tsx`, `apps/mobile/src/components/topicPost/` | domain-model, jsx-conventions, prompt-authoring | `packages/db/migrations/`; `apps/api/note/` beyond the shared `apps/api/noteHtml.ts` |
 | Topic Post Discussion, or a question asked from a Topic Post's page | `apps/api/topicPost/topicPostDiscussionsRoute.ts`, `packages/pipeline/topicPosts/topicPostDiscussions.ts`, `topicPostDiscussionScript.ts`, `apps/worker/workflows/recordTopicPostDiscussion.ts`, `packages/core/components/TopicPostDiscussionCard.tsx`, `packages/pipeline/chat/retrieveTopicPost.ts`, `topicPostQuestionPrompt.ts`, `apps/api/chat/chatTurnAnswer.ts`, `packages/core/stores/topicPostChatStore.ts`, `packages/core/components/TopicPostTag.tsx` | domain-model, prompt-authoring, jsx-conventions | `packages/db/migrations/`; the podcast episode's own recording beyond `packages/pipeline/podcast/podcastEpisodeAudio.ts` and the shared player |
@@ -135,12 +138,19 @@ Generated or archived paths that burn context:
 
 ## Verification
 
-`bun run check` is the gate: Biome, adopted component conventions, the package boundary check, the dead-code check (`bunx knip`), the component parity
-check against the contracts and `apps/mobile/parity.md`, the client parity check against `apps/mobile/parity.md`, the
-purchase path check
-(`scripts/check-purchase-paths.ts`) that keeps checkout and the portal out of the mobile app's reach, the contract
-freeze check against `contracts/`, `tsc -b`, the Temporal workflow bundle check, the test suite, and the MCP view tests,
-which run each MCP view in this machine's Chrome under the test host. Green before any hand-off.
+`bun run check` is the gate: Biome, adopted component conventions, the package boundary check, the dependency pin
+check (`scripts/check-dependency-pins.ts`), the dead-code check (`bunx knip`), the component parity check against the
+contracts and `apps/mobile/parity.md`, the client parity check against `apps/mobile/parity.md`, the purchase path
+check (`scripts/check-purchase-paths.ts`) that keeps checkout and the portal out of the mobile app's reach, the
+contract freeze check against `contracts/`, `tsc -b`, the Temporal workflow bundle check, the test suite, and the MCP
+view tests, which run each MCP view in this machine's Chrome under the test host. Green before any hand-off.
+
+The dependency pin check fails if `.bun-version` differs from the tag of the Dockerfile's `oven/bun` stages, or if a
+root `patchedDependencies` key names a package version the lockfile does not install. It also fails if
+`docker-compose.yml` runs another LiteLLM image, by tag or digest, than `infra/litellm/Dockerfile` starts from.
+`bun run check:advisories` is not part of the gate: it asks the registry, so CI runs it in the `advisories` job. Its
+rules are in `scripts/dependencyAdvisories.ts`, the pin check's are in `scripts/dependencyPins.ts`, and both checks
+read the lockfile through `scripts/lockfile.ts`.
 
 `scripts/check-component-conventions.ts` runs the focused convention in
 [jsx-conventions](.agents/skills/jsx-conventions/SKILL.md). `componentConventionFiles.ts` owns the feature roots,

@@ -6,7 +6,9 @@ import { deleteDashboardSnapshotRows, toPersonalDashboardSubjects } from "@carln
 import { teamMembers } from "@carlnotes/db/schema/teams"
 import { topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
+import { refreshSessionUser, revokeUserSessions } from "@carlnotes/db/sessions"
 import { deleteStoredObjects, recordPendingObjectDeletions } from "@carlnotes/db/store"
+import { deleteUncheckedImage } from "@carlnotes/db/uncheckedImages"
 import { deleteLiteLLMKey } from "@carlnotes/models/litellmProxy"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { purgeEdgeCacheTagAfterDeletion, toDashboardCacheTag } from "@carlnotes/server/edgePurge"
@@ -21,7 +23,6 @@ import { cancelUserSubscription } from "./billing"
 import { loadChatAttachmentObjectKeys } from "./chat/chatAttachmentReads"
 import { type AnalyticsProperties, type AppEnv, currentUser, toAnalyticsProperties } from "./currentUser"
 import { toUserAvatarCacheTag } from "./edgeCache"
-import { refreshSessionUser, revokeUserSessions } from "./sessions"
 import { deleteRevenueCatCustomer } from "./storeBilling"
 import { deleteTeamRow, purgeDeletedTeamAtEdge } from "./team/deleteTeam"
 import { deleteTopic } from "./topic/deleteTopic"
@@ -139,16 +140,18 @@ export async function deleteUser(
 	})
 
 	// record the keys of everything kept in chat, on any topic, of the topic posts written on other users' topics, of
-	// the Dashboards' share images, and of the avatar, then delete the user row in one transaction, so the keys survive
-	// the cascade
+	// the Dashboards' share images, of the avatar, and of the user's unchecked avatar, then delete the user row
+	// and the unchecked image's row in one transaction, so the keys survive the cascade
 	const { deletedUserRow, objectKeys } = await db.transaction(async (transaction) => {
 		const chatAttachmentObjectKeys = await loadChatAttachmentObjectKeys({ userId: targetUserId }, transaction)
 		const topicPostObjectKeys = await loadTopicPostObjectKeys({ authorUserId: targetUserId }, transaction)
 		const dashboardImageKeys = await deleteDashboardSnapshotRows(transaction, toPersonalDashboardSubjects(targetUserId))
-		const [deletedUserRow] = await transaction
-			.delete(users)
-			.where(eq(users.id, targetUserId))
-			.returning({ litellmVirtualKey: users.litellmVirtualKey, avatarKey: users.avatarKey })
+		const [deletedUserRow] = await transaction.delete(users).where(eq(users.id, targetUserId)).returning({
+			litellmVirtualKey: users.litellmVirtualKey,
+			avatarKey: users.avatarKey,
+			uncheckedAvatarKey: users.uncheckedAvatarKey,
+		})
+		await deleteUncheckedImage(transaction, { subjectKind: "userAvatar", subjectId: targetUserId })
 
 		// every key as pending
 		const objectKeys = [
@@ -156,6 +159,7 @@ export async function deleteUser(
 			...topicPostObjectKeys,
 			...dashboardImageKeys,
 			...(deletedUserRow?.avatarKey ? [deletedUserRow.avatarKey] : []),
+			...(deletedUserRow?.uncheckedAvatarKey ? [deletedUserRow.uncheckedAvatarKey] : []),
 		]
 		await recordPendingObjectDeletions({ handle: transaction, objectKeys })
 		return { deletedUserRow, objectKeys }

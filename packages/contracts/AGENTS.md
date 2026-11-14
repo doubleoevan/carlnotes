@@ -15,8 +15,11 @@ Source count and server receiving availability; it leaves frozen legacy Topic re
 `personalSourcesImportText.ts` normalizes selected transcripts and extracts public links separately from private references.
 `personalSourcesWork.ts` defines content-free workflow metadata and the 30-second quiet period with a five-minute ceiling.
 
-`personalSourcesAccounts.ts` defines connection/key metadata and shared-mailbox guidance. `aiAgentIdentity.ts` derives stable
-app-domain groups without client-advertised names. `personalSourcesRouteContracts.ts` adds Personal sources routes to the contract
+`personalSourcesAccounts.ts` defines connection/key metadata and shared-mailbox guidance. `aiAgentIdentity.ts` derives
+stable app-domain groups without client-advertised names. Its `toUnknownRedirectHost` returns the host of an MCP
+consent's redirect address unless that host is a known AI app's, a loopback address, or an app's own scheme, with the
+`McpConsentClient` shape and the query of the route that returns it. `personalSourcesRouteContracts.ts` adds Personal
+sources routes to the contract
 registry, and `personalSourcesSendText.ts` shares the MCP confirmation wording with the Topic MCP view.
 
 `@carlnotes/contracts`, the universal part of what every workspace may import: the zod response shapes, the request
@@ -76,8 +79,10 @@ request's device properties and names a known crawler, unfurler, podcast app, or
 `isCountedUserAgent` says whether a request counts as a viewer or a listener: not a crawler or an unfurler.
 `scanFailure.ts` is how a stored Scan failure reads to a person, the failure reason a workflow stores, and the
 application failure a workflow reads from an activity's failure, by its fields, so the module imports nothing from
-Temporal. `avatars.ts` is the default avatar's letters and tint and an avatar url's version, `usernames.ts` how a
-username is shaped, validated, and compared, with the word lists a random one is generated from in `usernameWords.ts`,
+Temporal. `avatars.ts` is the default avatar's letters and tint and an avatar url's version, with
+`toSessionAvatarVersion` for the signed-in user's own avatar, which is the upload shown to them alone if there is one.
+`usernames.ts` is how a username is shaped, validated, and compared, with the reserved names no user takes and the
+word lists a random one is generated from in `usernameWords.ts`,
 `emails.ts` the canonical form of a Gmail address, and `chatMentions.ts` the chat mention parser for the chat room
 composer and the room's notifications, with the reserved usernames. `mcpScanStatusTestFixtures.ts` supplies the Scan
 statuses the api tests and the scan MCP view's stories and smoke tests read. `topicFeedTestFixtures.ts` supplies
@@ -172,11 +177,18 @@ them.
 month, the regenerate payload with its note's limit, `TOPIC_POST_DISCUSSION_TITLE`, and the shape the podcast player
 plays a discussion in: `toTopicPostDiscussionPodcastEpisode`, `toDiscussionTopicPostId` for the player's id, and
 `toTopicPostDiscussionAudioPath`. `visitAnalytics.ts` holds `toPlayerVisitEvent`, which reports a discussion's play
-as `social_topic_post_discussion_play`. `reports.ts` has the `topicPostImage` and `topicPostBodyImage` subject kinds
-and `isImageReportSubjectKind`. `topicPostBodyImages.ts` holds a body image's files, its path and its parse, and the
-ids a body names, and `topicPosts.ts` the reading column's width and the code block languages. `plans.ts` holds each
+as `social_topic_post_discussion_play`. `reports.ts` has the `topicPostImage` and `topicPostBodyImage` subject kinds,
+`isImageReportSubjectKind`, and the admin report row's `subjectAvatarVersion` and
+`topicPodcastEpisodeVideoPosterUrl`. `topicPostBodyImages.ts` holds a body image's files, its path and its parse, and
+the ids a body names, and `topicPosts.ts` the reading column's width and the code block languages. `plans.ts` holds each
 plan's `topicPostBodyImageLimit` and `topicPostBodyImageBytes`. `chat.ts` gives a stored chat turn its `topicPost`,
-and `payloads.ts` lets a topic chat turn name a `topicPostId`, never beside a podcast episode chapter.
+and `payloads.ts` lets a topic chat turn name a `topicPostId`, never beside a podcast episode chapter. `chat.ts` also
+holds `EMAIL_UNVERIFIED_ERROR` and `EMAIL_UNVERIFIED_LINE`, the rejection and the line of a chat turn from an
+unverified account while the unverified accounts switch is on. `enums.ts` holds `uncheckedImageSubjectKinds`, the kinds
+of image that can be unchecked. `uncheckedImages.ts` is the mark on an unchecked image's api path:
+`UNCHECKED_IMAGE_QUERY_PARAMETER`, `toUncheckedImagePath`, and `isUncheckedImagePath`, true only for a relative `/api/`
+path whose parsed query has `unchecked=1`. `topicImages.ts` has `toUncheckedTopicImageUrls`, and the four image uploads'
+responses take an optional `isImageUnchecked`.
 
 `news.ts` holds the news: the `newsWindows` a read covers with their labels and lengths, `NEWS_PAGE_SIZE`, the
 `newsQuery` a read takes, a `NewsEvent` and its kinds, the `newsResponse` of one page, and the title, the failed line,

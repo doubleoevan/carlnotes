@@ -20,6 +20,7 @@
 			"entry": [
 				// scripts/preflight.sh
 				"scripts/check-package-boundaries.ts",
+				"scripts/check-dependency-pins.ts",
 				"scripts/check-component-parity.ts",
 				"scripts/check-client-parity.ts",
 				"scripts/check-purchase-paths.ts",

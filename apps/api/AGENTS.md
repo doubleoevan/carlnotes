@@ -38,7 +38,14 @@ tombstones, retained ciphertext, Source cascades, and the publication race. `mcp
 
 Hono server, the `@carlnotes/api` app. Entry `apps/api/index.ts` mounts the route trees; `apps/api/api.ts` aggregates
 the `/api` routes and bounds every body at a megabyte through `toBodyLimit` in `bodyLimit.ts`, except on the chat,
-transcription, upload, and note body save routes, which set their own limits. No app imports it as a value:
+transcription, upload, and note body save routes, which set their own limits. A chat post's turn is authorized from
+the session and the url in `chat/privateChat.ts` before its body limit, so a rejected turn's body is never read.
+`toBodyAdmission` in `bodyLimit.ts` makes a chat body past `LARGE_CHAT_BODY_BYTES` (3.25 MB) wait its turn, oldest
+first and one at a time for each user, so the large chat bodies in progress stay within
+`CHAT_BODY_BYTES_IN_PROGRESS_LIMIT` (104 MB), each until its response ends. A body whose turn does not come in 20
+seconds gets its route's busy response, the private chat's 503 with `Retry-After` or the chat room's 400, and a
+request dropped while it waits is never read. `chat/chatTurnAuthorizationTestFixtures.ts` holds the stubbed rows the chat turn tests share. No app
+imports it as a value:
 `@carlnotes/client` and `apps/web` read `AppType` and the `auth` type from it as types only, and `evals/` and `scripts/`
 at the root import it by name.
 
@@ -231,7 +238,9 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   limits in `index.ts`, allowing an absent header, production, and the configured app origin), `tools.ts` (the reads,
   the site search, and the per-user writes it registers, with their schemas and annotations), `topicEditTools.ts`
   (`edit_topic`, `suggest_sources`, and `create_topic`), `topicImageTool.ts` (`set_topic_image`, a regenerate or a
-  public image url, returning the topic MCP view), `topicAttachmentTool.ts` (`add_topic_attachment`, a url's page or
+  public image url, returning the topic MCP view. If the image set from a url stays unchecked, it returns the
+  Topic's current image and says only the caller can see the new one), `topicAttachmentTool.ts`
+  (`add_topic_attachment`, a url's page or
   pasted text, owner only), `noteTools.ts` (`read_notes`, `save_note`, and `delete_note` through the note routes' own
   reads and writes, with body saves on the note body save limit), `noteResults.ts` (what `read_notes` returns: a page's
   notes fenced and paged, or one note with its html cut at a top-level block and no version once cut),
@@ -266,7 +275,10 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   team's cards, and the caller's private annotations), `noteMcpViewData.ts` (the note MCP view's page of notes and its
   opened note), `topicsMcpViewData.ts` (the topics MCP view's section cards or similar topics), `toolCaller.ts` (the tool caller: the visitor or user an access token resolves to,
   verified in-process against the auth server's signing keys), `oauthClientNames.ts` (the registered name of each MCP
-  client, which the tool caller, the consent page's route, and the app connection report read), `results.ts` (what the
+  client, which the tool caller, the consent page's route, and the app connection report read. That route,
+  `GET /api/mcp/clients/:clientId` in `server.ts`, also returns the host of the authorize request's redirect address
+  if `toUnknownRedirectHost` in `@carlnotes/contracts/aiAgentIdentity` does not know it, which the consent page
+  shows as its one warning line), `results.ts` (what the
   finding tools return for a visitor or a user, paged under a client's result limit, and the paging helpers), and
   `topicResults.ts` (what `list_topics` returns). `mcp.smoke.ts` runs the sections in `mcpSmokeSections.ts` and the
   oauth flow in `mcpOAuthSmokeSections.ts` over the fixtures in `mcpSmokeFixtures.ts` (with both routes' paths and a connected client each section shares), and stops the first scan of the
@@ -297,7 +309,10 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   most listened films and podcast episodes, and the newest Topic Posts, one film, one podcast episode, and one Topic
   Post per topic, and the films, podcast episodes, and Topic Posts of public shown topics published in the last seven
   days, newest first and pinned or not, in one cached read every replica shares for a minute. The route reads the cards
-  of both Topic Post lists at once), and `topicCards.ts` (the card shapes). A Topic Post's publish on a public topic and
+  of both Topic Post lists at once), and `topicCards.ts` (the card shapes). An admin block takes its user's topics,
+  their podcast episodes and films, and the Topic Posts on those topics or by that user out of every list.
+  `isHomePinnedOnly` in the spend control settings leaves every list its pinned rows alone. Both are read with the
+  cached ids, so the home follows them within a minute. A Topic Post's publish on a public topic and
   a published post's delete call `clearHomeCaches` and purge the author's profile. `topic/serveImageFile.ts` streams one
   image file with the visibility gate and the cache headers, and `topic/topicImagesRoute.ts` serves a topic image's
   files (public ones immutable at the edge under `topic-image:<topicId>`, private ones behind `topic:view`), the
@@ -306,6 +321,13 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   moderation, and the editor's regeneration quota. `topic/topicImageEdits.ts` holds a topic image's edits that the
   route and `set_topic_image` share: the editor check, the regenerate, the replacement from an image's bytes, and
   `setTopicImageFromUrl`, which fetches a public image url through `fetchLinkPreviewImage` and the upload's checks.
+  An upload whose image moderation could not run goes through `publishOrSaveUncheckedImage` in
+  `@carlnotes/pipeline/uncheckedImages`, in the topic, podcast episode, film, and Topic Post upload routes alike: shown
+  to its uploader alone on an invite or public Topic, published at once on a private one. The upload still responds as
+  a success in its released shape, with `isImageUnchecked` if it is shown to its uploader alone. Each file route serves
+  its subject's current image, or an unchecked image's hash to its uploader alone, through
+  `serveCurrentOrUncheckedImageFile` in `topic/serveImageFile.ts`, with the headers of a file that never reaches the
+  edge, and a Regenerate drops the unchecked image.
   `podcast/podcastEpisodeImagesRoute.ts` serves a podcast episode's own image files, gated by its topic's visibility,
   and its editor's Regenerate and upload. `podcast/topicPodcastEpisodeVideoImagesRoute.ts`
   does the same for a film's own image: the poster at
@@ -326,8 +348,8 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   route runs, `clearHomeCaches`, the home card ids cache delete and home purge they share, and `releaseHomeOrder`, which
   takes a topic's podcast episodes, their films, and its Topic Posts off the home with it. A topic's write for the
   position it already holds changes nothing, so the Rank dialog's Save of an unchanged order keeps the pins of each
-  topic's podcast episodes and films. `report/adminReports.ts` draws a reported topic image again through an `admin`
-  render instead of deleting it.
+  topic's podcast episodes and films. `report/removeReportedSubject.ts` draws a reported topic image again through an
+  `admin` render instead of deleting it.
 - `podcast/` — a Topic's podcast episodes: `podcastEpisodes.ts` (the routes for a season's episodes, an episode page,
   the next unplayed episode, one episode with its files and its preview card, a listener's progress, a chapter's rating,
   the podcast switch, and removing an episode), `podcastEpisodeListens.ts` (saving a listener's progress, with a
@@ -411,7 +433,26 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   this replica's memory, so a caller stays bounded per replica.
 - `avatars.ts` — the user and team avatar uploads and the published avatar, and `avatarsRoute.ts` their routes, with
   `POST /api/avatars/decode-failures`, which reports a chosen avatar file that could not be decoded, by its content
-  type and byte size, the first five a user sends in a day.
+  type and byte size, the first five a user sends in a day. An upload is checked and stored through
+  `toStoredAvatar` in `@carlnotes/pipeline/avatarImages`: past 4,096 pixels a side it is rejected before it is
+  decoded, and the stored file is the server's own re-encode within 512 pixels. An upload whose image moderation
+  could not run is saved as unchecked through `saveUncheckedAvatar` or `saveUncheckedTeamAvatar` in
+  `@carlnotes/db/avatars`: the published avatar stays, the upload responds `{ ok: true, isImageUnchecked: true }`, and
+  the route serves the unchecked avatar to its uploader's session alone with `private, no-store`. The session returns
+  `uncheckedAvatarKey`, which names the unchecked avatar to its user alone. A provider photo's redirect has the user's
+  avatar tag, so a reset purges it from the edge.
+  `share/previewImage.ts` resizes every avatar through `toCardAvatarPng` before a card inlines it. A request that
+  names `unchecked=1`, which the mobile app's image elements send with the session cookie, gets the file at exactly the
+  version it names: the unchecked avatar for its uploader's session, or the published upload once the unchecked avatar
+  is published.
+  Anything else is a 404 with `private, no-store`, never another version and never a provider photo's redirect.
+  `avatarTestFixtures.ts` holds what the avatar tests and the unchecked avatar tests share.
+- `uncheckedImageOverlays.ts` — the uploader's view of an unchecked image on a subject's own page read.
+  `overlayUncheckedTopicImage`, `overlayUncheckedPodcastEpisodePageImages`, `overlayUncheckedPodcastEpisodeImages`,
+  `overlayUncheckedTopicPostImage`, and `overlayUncheckedTeamAvatar` run in the route after its loader, for a signed-in
+  user who may edit, with one `unchecked_images` read, and mark each unchecked url with `unchecked=1`. The loaders,
+  which the MCP tools call, return the published image. `uncheckedImageOverlayTestFixtures.ts` holds what the overlay
+  tests share.
 - `edgeCache.ts` — what the edge may cache: a signed-out page, a permanent redirect from a page path, the blog and
   release pages, and the signed-out feed for a minute under the `rendered` tag, a versioned avatar or card for a year in
   the browser and a day at the edge, a public topic's counts for 30 seconds at the edge through `setCountsCacheHeaders`,
@@ -427,10 +468,13 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   (the users and teams tables, the platform totals, and the expandable rows, a topic's subscribers among them),
   `spendControlSettings.ts` (the console's `dailySpendCutoffs` field read straight from the database: the day's
   free-plan spend, the worst case monthly spend from `loadWorstCaseMonthlySpend`, each cutoff and whether it is passed,
-  the first scan dispatch limit with the waiting scan count from `toWaitingScanFilter`, the signup alert, and the
-  unverified accounts switch, and the save that writes the one `spend_control_settings` row and deletes both cached
-  reads), and `report/adminReports.ts` (the open content reports, and resolving one by removing its content through the
-  content's own delete path or keeping it).
+  the first scan dispatch limit with the waiting scan count from `toWaitingScanFilter`, the signup alert, a film's
+  generated image limit, and the four switches: the unverified accounts switch, the pauses on new podcast episodes
+  and on new films, and the home that shows pinned items only. Its save writes the one `spend_control_settings` row
+  and deletes both cached reads, and a field the payload leaves out keeps its stored value), and
+  `report/adminReports.ts` (the open content reports, each with its subject's avatar or images as they stand, and
+  resolving one). `emergencySwitches.test.ts` reads every switch with nothing set and checks that each pause is named
+  in one module.
 - The daily spend cutoffs in topic creation and the manual scan route: `topic/saveHelpers.ts` leaves a new Topic's
   first Scan running and undispatched for the sweep if `isFirstScanWaiting` says it waits, and starts the url Source
   screens without the wait. `runManualScan` in `topic/scans.ts` returns running while the Topic's first Scan waits, and
@@ -441,16 +485,28 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   console link, and the report's events), `report/reportSubjects.ts` (what a
   report names, a Topic, profile, Team, chat room message, note, or note comment, each resolved under the same read rule
   that lets the reporter see it), `report/socialReportSubjects.ts` (the same for a Finding, a Podcast Episode, and a
-  comment), and `report/reports.ts` (writing a report). The filter that hides a reported subject from its reporter in
-  the room, comment, and note reads is `toUnreportedFilter` in `@carlnotes/db/contentFilters`.
+  comment), `report/reports.ts` (writing a report), and `report/removeReportedSubject.ts` (what resolving does to a
+  subject: Remove and Block delete the content through its own delete path, and Remove alone resets a reported
+  profile's or team's avatar through `replaceAvatar` and `replaceTeamAvatar` with one purge of its `user-avatar:` or
+  `team-avatar:` tag, and draws a reported podcast episode's image and its film's uploaded image again through
+  `@carlnotes/pipeline/topicImages/removedImageUploads`. An image drawn again also drops an unchecked upload for it).
+  The filter that hides a reported subject from its reporter in the room, comment, and note reads is
+  `toUnreportedFilter` in `@carlnotes/db/contentFilters`. `report/adminReportTestFixtures.ts` holds the open report
+  row and the resolve that the admin report tests and the Remove tests share.
 -  `moderation.ts` — the check every text and image other users see goes through before it is stored:
   `toObjectionableCategory` classifies a text and `toObjectionableImageCategory` an image through
   `@carlnotes/models/moderation`, and each returns the category it violates or null. The image check also returns
-  unreadable if the endpoint rejects the image itself. A failed classification fails open with a report that names the
-  subject and never the text or the image, and a skipped one is not reported. `toObjectionableContentResponse` is the
+  unreadable if the endpoint rejects the image itself, and unchecked if its classification failed, with a report that
+  names the subject and never the image. An unchecked avatar, and an unchecked image on an invite or public Topic,
+  is shown to its uploader alone. On a private Topic it is published and the sweep checks it again, and a chat room
+  image posts as before. A failed text classification fails open with the same kind of report, and a skipped check,
+  with no key set, passes and is not reported. `toObjectionableContentResponse` is the
   422 the clients turn into Carl's rejection. The room post, note create, rename, and body save, comment post, username
   save, team create and update, and `topic/saveTopic.ts` for an invite or public Topic's name, prompt, and tags all
-  check text. The room post's shared images and the user and team avatar uploads check images.
+  check text. The room post's shared images and the user and team avatar uploads check images. `updateTopic` in
+  `topic/saveTopic.ts` and `updateTopicFields` in `tool/topicTools.ts` call `unpublishTopicUncheckedImages` before they
+  write a Topic's visibility, so a change is never blocked by an image, and a Regenerate drops an unpublished unchecked
+  image.
 - `termsAcceptance.ts` — the Terms acceptance gate and route: `toTermsOutdatedResponse` is the 403 a user-content
   write gets while the session's accepted version is older than `TERMS_VERSION`, `isSessionTermsCurrent` is the same
   check as a boolean for a module the route calls, `hasAcceptedCurrentTerms` reads the
@@ -476,6 +532,8 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
 - `activity.ts` — the activity page and its route, over `activityTopics.ts` (each topic's month scans, counts, chat
   mentions, and latest podcast episode). `loadActivity` is exported for `read_activity`, and `loadProfile` in
   `profiles.ts` for `read_profile`.
+- `invite/emails.ts` — the invitation emails for both targets, each its own `sendAccountEmail`, with a topic
+  invitation's send recorded once Resend accepts it.
 - `invite/invites.ts` — the invite links, the topic or team a token opens, and the link routes. A topic's link shared
   from a Topic Post names the post in `invites.topic_post_id`, a published post of that topic, apart from the topic's
   own link;
@@ -495,13 +553,15 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   which with the request's device properties.
 - `auth.ts` creates each new user's LiteLLM key in the user create hook. If the LiteLLM proxy fails or times out, the
   hook reports the failure, and the user is created without a key. The user's first model call creates the key.
-  `authEmails.ts` sends the emails Better Auth asks for, and each mail hook in `auth.ts` starts its send through
-  `sendAuthEmailInBackground`, which logs and reports a send that throws, and responds at once, so a slow or down
-  Resend never holds a signup or a reset request. `/oauth2/register` is limited to 600 registrations an hour per
+  `authEmails.ts` sends the emails Better Auth asks for through `sendAccountEmail`, and each mail hook in `auth.ts`
+  starts its send through `sendAuthEmailInBackground`, which logs and reports a send that throws, and responds at
+  once, so a slow or down Resend never holds a signup or a reset request. `/oauth2/register` is limited to 600
+  registrations an hour per
   address. `auth.ts` composes the MCP OAuth server from the `mcp`, `jwt`, and `cimd` plugins and exports
   `MCP_RESOURCE_URL`, the `/mcp` url every MCP access token is bound to. `authHooks.ts` holds the request hooks
   `auth.ts` passes Better Auth, the breach check and the canonical address before a credential request and the sign-in
-  and app connection reports after one, with the Google and GitHub profile mappers.
+  and app connection reports after one, with the Google and GitHub profile mappers. It also counts a change of email
+  per user, five a UTC day, and rejects the next with a 429 before any email is sent.
   `appleProvider.ts` holds Sign in with Apple's options. It signs Apple's client secret, an ES256 JWT, from the four
   `APPLE_*` values at runtime and signs a new one every week. Apple stays off if any value is unset or the key will not
   sign. Its profile mapper returns the stored email of the user who holds the Apple account if an ID token has none.
@@ -510,6 +570,7 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   `signupGate.ts` holds the single-use token a password signup's gate signs: a five-minute token whose nonce Redis
   records, so one use consumes it and a replay is rejected, and while Redis is down the signature and expiry alone pass.
   The web's gate signs it after the turnstile check, and `setGateCookie` sets it as the cookie the signup route reads.
+  `verifyTurnstileToken` gives Cloudflare five seconds, and a check that times out is reported and reads as failed.
   `appSignupGate.ts` holds the mobile app's gate beside it: `POST /api/signup-gate/app-challenge` issues a single-use
   challenge, and `POST /api/signup-gate/app` consumes it, verifies the install's proof for its platform, and sets the
   same cookie. `appAttest.ts` verifies an iOS App Attest attestation by Apple's steps over `cbor2` and `node:crypto`,
@@ -526,11 +587,8 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   Verification values, such as reset links and OAuth state, are kept in both stores and read the same way.
   The session hooks delete a session's Redis copy if Better Auth deletes the session's row,
   or if the session's daily refresh finds no Postgres row.
-  `sessions.ts` writes the keys that Better Auth owns where the app changes a user outside Better Auth's routes:
-  `refreshSessionUser` after a direct write to the plan, role, username, avatar, or invite access,
-  `revokeUserSessions` from the Postgres tokens before an account's row is deleted,
-  and `cacheSession` from the session update hook,
-  so a session missing from Redis is stored at its next daily refresh.
+  `@carlnotes/db/sessions` writes the keys that Better Auth owns where the app changes a user outside Better Auth's
+  routes.
   An account close is rejected while a configured Redis is unreachable.
 - Every authority check routes through `authorization.ts` and the role and plan readers in
   `@carlnotes/contracts/enums` (`isAdminRole`, `isLeaderRole`, `isPaidPlan`, `isPremiumPlan`), with
@@ -648,8 +706,9 @@ as a transcript among it, which reaches only a reader the post's own read admits
 recordings' audio, which a
 post's delete, a topic's delete, and an account's delete each schedule for deletion. A post's page hides its image from
 a reader who reported it until the image changes. `report/reportSubjects.ts` resolves the `topicPostImage` subject,
-and `report/adminReports.ts` shows the image on its row and, on Regenerate, removes an upload and starts an `admin`
-render with no user. `edgeCache.ts` tags a Topic Post's page `topic-post:<id>`, which an image change purges. A topic
+and `report/adminReports.ts` shows the image on its row. On Regenerate, `report/removeReportedSubject.ts` removes an
+upload and starts an `admin` render with no user. `edgeCache.ts` tags a Topic Post's page `topic-post:<id>`, which an
+image change purges. A topic
 chat turn may name the Topic Post whose page it was asked from: `chat/chatTurnAnswer.ts` loads it with
 `loadChatTurnSubject`, rejects a draft, a post that is gone, and another topic's post before any model call, and binds
 no topic tool, and `chat/chatTurns.ts` stores the turn with the kind `topic_post`, reports `social_topic_post_chat`,

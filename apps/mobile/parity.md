@@ -81,7 +81,7 @@ capability the app will never need, with the reason, or `deferred` for one an ac
 | `podcastEpisodeClient.sendTopicPodcastEpisodeVideoHomeOrder` | web-only | An admin's home order control for a podcast episode's film. Admin stays on the web |
 | `topicClient.fetchRelatedTopics` | web-only | The web's signed-in topic page reads Similar topics apart from the page. The app's topic screen has its own read, `topicClient.fetchTopicPage` with no flag, whose page holds the list |
 | `topicClient.uploadTopicAttachment` | web-only | The browser's File upload. The app uploads to the same route through `topicClient.uploadTopicAttachmentBody` |
-| `mcpClient.fetchMcpClientName` | web-only | The MCP OAuth consent page, which an AI client opens in a browser |
+| `mcpClient.fetchMcpConsentClient` | web-only | The MCP OAuth consent page, which an AI client opens in a browser |
 | `mcpClient.sendMcpConsent` | web-only | The MCP OAuth consent page, which an AI client opens in a browser |
 | `pageHeadClient.fetchDashboardPageHead` | web-only | Server-rendered head tags. The app reads a Dashboard screen's snapshot through `dashboardClient.fetchDashboard` |
 | `pageHeadClient.fetchInvitePageHead` | web-only | Server-rendered head tags for crawlers and link previews. The app has no document head |

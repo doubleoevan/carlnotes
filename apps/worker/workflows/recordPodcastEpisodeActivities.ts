@@ -1,6 +1,7 @@
 // the activities that record a Scan's Podcast Episode.
 // a script or speech failure that another attempt cannot fix is marked non-retryable
 
+import { loadSpendControlSettings } from "@carlnotes/db/dailySpendCutoffs"
 import { isBudgetRejection } from "@carlnotes/models/models"
 import * as podcastEpisodeAudio from "@carlnotes/pipeline/podcast/podcastEpisodeAudio"
 import {
@@ -114,8 +115,13 @@ export async function drawPodcastEpisodeImageActivity(podcastEpisodeId: string):
 }
 
 /**
- * Returns whether films are on, which a TOPIC_PODCAST_EPISODE_VIDEO_CONCURRENCY of zero turns off.
+ * Returns whether a new podcast episode starts its film: films are on, which a TOPIC_PODCAST_EPISODE_VIDEO_CONCURRENCY
+ * of zero turns off, and new films are not paused in the spend control settings.
  */
 export async function isTopicPodcastEpisodeVideoEnabled(): Promise<boolean> {
-	return topicPodcastEpisodeVideoConcurrency() > 0
+	// skip the settings read if films are off
+	if (topicPodcastEpisodeVideoConcurrency() === 0) {
+		return false
+	}
+	return !(await loadSpendControlSettings()).isTopicPodcastEpisodeVideoRenderingPaused
 }

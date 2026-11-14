@@ -1,9 +1,11 @@
 // the daily spend cutoffs: the spend control settings with their defaults, the day's free-plan spend, whether each
-// cutoff is passed, and which scans wait for the first scan dispatch limit
+// cutoff is passed, which scans wait for the first scan dispatch limit, and whether the unverified accounts switch
+// limits a user
 import type { DailySpendCutoffKind, SpendControlSettings } from "@carlnotes/contracts/admin"
 import { DAY_MS, HOUR_MS, toUtcDay } from "@carlnotes/contracts/time"
 import { toPositiveCents, toPositiveInteger, toWholeNumber } from "@carlnotes/server/envSettings"
 import { reportError } from "@carlnotes/server/monitoring"
+import { generatedChapterImageLimit } from "@carlnotes/server/podcastEpisodeSettings"
 import { and, eq, gte, isNotNull, isNull, or, type SQL, sql } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core"
 import { db } from "./index"
@@ -14,7 +16,8 @@ import { scans } from "./schema/scans"
 import { spendControlSettings } from "./schema/spendControlSettings"
 import { accounts, users } from "./schema/users"
 
-// the stored overrides. a null value reads as that setting's default
+// the stored overrides. a null value reads as that setting's default. a cached value that a replica wrote before a
+// newer setting existed lacks that setting, which reads as off or as its default
 export type SpendControlOverrides = Pick<
 	typeof spendControlSettings.$inferSelect,
 	| "podcastEpisodesCutoffCents"
@@ -23,7 +26,15 @@ export type SpendControlOverrides = Pick<
 	| "firstScanDispatchLimit"
 	| "hourlySignupAlertCount"
 	| "isUnverifiedFirstScanLimitOn"
->
+> &
+	Partial<Pick<typeof spendControlSettings.$inferSelect, NewerSpendControlColumn>>
+
+// the settings added after the first ones, which a cached value may lack
+type NewerSpendControlColumn =
+	| "generatedChapterImageLimit"
+	| "isPodcastEpisodeRecordingPaused"
+	| "isTopicPodcastEpisodeVideoRenderingPaused"
+	| "isHomePinnedOnly"
 
 // the cutoff state a reader acts on: the day's free-plan spend and the settings in effect, or unavailable after a failed
 // read, which passes no cutoff and leaves no scan waiting
@@ -53,6 +64,10 @@ export const NO_SPEND_CONTROL_OVERRIDES: SpendControlOverrides = {
 	firstScanDispatchLimit: null,
 	hourlySignupAlertCount: null,
 	isUnverifiedFirstScanLimitOn: false,
+	generatedChapterImageLimit: null,
+	isPodcastEpisodeRecordingPaused: false,
+	isTopicPodcastEpisodeVideoRenderingPaused: false,
+	isHomePinnedOnly: false,
 }
 
 // the results of a failed read. each is its own object, so the cache can tell it apart by identity and leave it unstored
@@ -70,22 +85,33 @@ export function defaultSpendControlSettings(): SpendControlSettings {
 		chatCutoffCents: toPositiveCents(Bun.env.CHAT_DAILY_SPEND_CUTOFF_USD, 150),
 		firstScanDispatchLimit: toWholeNumber(Bun.env.FIRST_SCAN_DISPATCH_LIMIT, 5),
 		hourlySignupAlertCount: toPositiveInteger(Bun.env.HOURLY_SIGNUP_ALERT_COUNT, 50),
+		generatedChapterImageLimit: generatedChapterImageLimit(),
 		isUnverifiedFirstScanLimitOn: false,
+		isPodcastEpisodeRecordingPaused: false,
+		isTopicPodcastEpisodeVideoRenderingPaused: false,
+		isHomePinnedOnly: false,
 	}
 }
 
 /**
- * Returns the settings in effect: each override where one is stored, and the default where none is.
+ * Returns the settings in effect: each override where one is stored, and the default where none is. A setting that the
+ * overrides lack reads as off or as its default.
  */
 export function toSpendControlSettings(overrides: SpendControlOverrides): SpendControlSettings {
 	const defaultSettings = defaultSpendControlSettings()
 	return {
+		// each numeric setting, overridden or at its default
 		podcastEpisodesCutoffCents: overrides.podcastEpisodesCutoffCents ?? defaultSettings.podcastEpisodesCutoffCents,
 		scheduledScansCutoffCents: overrides.scheduledScansCutoffCents ?? defaultSettings.scheduledScansCutoffCents,
 		chatCutoffCents: overrides.chatCutoffCents ?? defaultSettings.chatCutoffCents,
 		firstScanDispatchLimit: overrides.firstScanDispatchLimit ?? defaultSettings.firstScanDispatchLimit,
 		hourlySignupAlertCount: overrides.hourlySignupAlertCount ?? defaultSettings.hourlySignupAlertCount,
+		generatedChapterImageLimit: overrides.generatedChapterImageLimit ?? defaultSettings.generatedChapterImageLimit,
+		// each switch, off unless it is stored as on
 		isUnverifiedFirstScanLimitOn: overrides.isUnverifiedFirstScanLimitOn,
+		isPodcastEpisodeRecordingPaused: overrides.isPodcastEpisodeRecordingPaused ?? false,
+		isTopicPodcastEpisodeVideoRenderingPaused: overrides.isTopicPodcastEpisodeVideoRenderingPaused ?? false,
+		isHomePinnedOnly: overrides.isHomePinnedOnly ?? false,
 	}
 }
 
@@ -164,6 +190,10 @@ const SPEND_CONTROL_OVERRIDE_COLUMNS = {
 	firstScanDispatchLimit: spendControlSettings.firstScanDispatchLimit,
 	hourlySignupAlertCount: spendControlSettings.hourlySignupAlertCount,
 	isUnverifiedFirstScanLimitOn: spendControlSettings.isUnverifiedFirstScanLimitOn,
+	generatedChapterImageLimit: spendControlSettings.generatedChapterImageLimit,
+	isPodcastEpisodeRecordingPaused: spendControlSettings.isPodcastEpisodeRecordingPaused,
+	isTopicPodcastEpisodeVideoRenderingPaused: spendControlSettings.isTopicPodcastEpisodeVideoRenderingPaused,
+	isHomePinnedOnly: spendControlSettings.isHomePinnedOnly,
 }
 
 /**
@@ -238,7 +268,7 @@ export function toFirstScanFilter(): SQL {
  */
 export function toWaitingScanFilter(cutoffState: DailySpendCutoffState): SQL {
 	// past the scheduled scans cutoff a first scan or a manual scan waits, and the switch makes an unverified password
-	// account's first scan wait
+	// account's first and manual scans wait
 	const isScheduledScansCutoffPassed = isDailySpendCutoffPassed(cutoffState, "scheduledScans")
 	const isUnverifiedFirstScanLimitOn = isUnverifiedFirstScanLimitApplied(cutoffState)
 	if (!isScheduledScansCutoffPassed && !isUnverifiedFirstScanLimitOn) {
@@ -246,9 +276,12 @@ export function toWaitingScanFilter(cutoffState: DailySpendCutoffState): SQL {
 	}
 
 	// the rows the limit applies to, by why they wait
+	const firstOrManualScanFilter = or(toFirstScanFilter(), eq(scans.isManual, true))
 	const waitingReasonFilter = or(
-		isScheduledScansCutoffPassed ? or(toFirstScanFilter(), eq(scans.isManual, true)) : undefined,
-		isUnverifiedFirstScanLimitOn ? and(toFirstScanFilter(), toUnverifiedPasswordUserFilter(scans.ownerId)) : undefined,
+		isScheduledScansCutoffPassed ? firstOrManualScanFilter : undefined,
+		isUnverifiedFirstScanLimitOn
+			? and(firstOrManualScanFilter, toUnverifiedPasswordUserFilter(scans.ownerId))
+			: undefined,
 	)
 	return and(
 		eq(scans.status, "running"),
@@ -266,17 +299,7 @@ export function toWaitingScanFilter(cutoffState: DailySpendCutoffState): SQL {
  */
 export async function isFirstScanWaiting(ownerId: string): Promise<boolean> {
 	try {
-		// only a free owner who is not an admin ever waits
-		if (!(await isFreeUser(ownerId))) {
-			return false
-		}
-
-		// past the scheduled scans cutoff every free first scan waits, and the switch adds an unverified password account's
-		const cutoffState = await loadRequestDailySpendCutoffState()
-		if (isDailySpendCutoffPassed(cutoffState, "scheduledScans")) {
-			return true
-		}
-		return isUnverifiedFirstScanLimitApplied(cutoffState) && (await isUnverifiedPasswordUser(ownerId))
+		return await isFreeUserScanWaiting(ownerId)
 	} catch (error) {
 		// report a failed read, and start the first scan
 		reportError(error, "first-scan", { ownerId })
@@ -286,15 +309,49 @@ export async function isFirstScanWaiting(ownerId: string): Promise<boolean> {
 
 /**
  * Whether a manual Scan that bills the user waits for the first scan dispatch limit: a free user who is not an admin,
- * past the scheduled scans cutoff. A failed read is reported and waits for nothing.
+ * past the scheduled scans cutoff, or an unverified password account while the switch is on. A failed read is reported
+ * and waits for nothing.
  */
 export async function isManualScanWaiting(userId: string): Promise<boolean> {
 	try {
-		return await isUserPastDailySpendCutoff(userId, "scheduledScans")
+		return await isFreeUserScanWaiting(userId)
 	} catch (error) {
 		reportError(error, "manual-scan", { userId })
 		return false
 	}
+}
+
+// whether a new first or manual Scan of the user waits. a failed read throws an error
+async function isFreeUserScanWaiting(userId: string): Promise<boolean> {
+	// only a free user who is not an admin ever waits
+	if (!(await isFreeUser(userId))) {
+		return false
+	}
+
+	// past the scheduled scans cutoff every free user's scan waits, and the switch adds an unverified password account's
+	const cutoffState = await loadRequestDailySpendCutoffState()
+	if (isDailySpendCutoffPassed(cutoffState, "scheduledScans")) {
+		return true
+	}
+	return isUnverifiedPasswordUserLimited(cutoffState, userId)
+}
+
+/**
+ * Whether the unverified accounts switch rejects the user's chat and voice requests: the switch is on, and the user is
+ * free, not an admin, signed up with a password, and has not verified their email. A failed access read throws an
+ * error.
+ */
+export async function isUnverifiedAccountLimited(userId: string): Promise<boolean> {
+	// only a free user who is not an admin is ever limited
+	if (!(await isFreeUser(userId))) {
+		return false
+	}
+	return isUnverifiedPasswordUserLimited(await loadRequestDailySpendCutoffState(), userId)
+}
+
+// whether the unverified accounts switch is on and the user signed up with a password and has not verified their email
+async function isUnverifiedPasswordUserLimited(cutoffState: DailySpendCutoffState, userId: string): Promise<boolean> {
+	return isUnverifiedFirstScanLimitApplied(cutoffState) && (await isUnverifiedPasswordUser(userId))
 }
 
 /**

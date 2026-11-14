@@ -74,7 +74,14 @@ export async function loadAdminDailySpendCutoffs(now = new Date()): Promise<Admi
 		waitingScanCount: waitingScanRow?.count ?? 0,
 		hourlySignupAlertCount: toAdminSetting(overrides.hourlySignupAlertCount, defaultSettings.hourlySignupAlertCount),
 		hourlySignupCount,
+		generatedChapterImageLimit: toAdminSetting(
+			overrides.generatedChapterImageLimit ?? null,
+			defaultSettings.generatedChapterImageLimit,
+		),
 		isUnverifiedFirstScanLimitOn: settings.isUnverifiedFirstScanLimitOn,
+		isPodcastEpisodeRecordingPaused: settings.isPodcastEpisodeRecordingPaused,
+		isTopicPodcastEpisodeVideoRenderingPaused: settings.isTopicPodcastEpisodeVideoRenderingPaused,
+		isHomePinnedOnly: settings.isHomePinnedOnly,
 		updatedAt: storedRow?.updatedAt.toISOString() ?? null,
 		updatedByUsername: storedRow?.updatedByUsername ?? null,
 	}
@@ -93,6 +100,10 @@ async function loadStoredSpendControlRow(): Promise<StoredSpendControlRow | unde
 			firstScanDispatchLimit: spendControlSettings.firstScanDispatchLimit,
 			hourlySignupAlertCount: spendControlSettings.hourlySignupAlertCount,
 			isUnverifiedFirstScanLimitOn: spendControlSettings.isUnverifiedFirstScanLimitOn,
+			generatedChapterImageLimit: spendControlSettings.generatedChapterImageLimit,
+			isPodcastEpisodeRecordingPaused: spendControlSettings.isPodcastEpisodeRecordingPaused,
+			isTopicPodcastEpisodeVideoRenderingPaused: spendControlSettings.isTopicPodcastEpisodeVideoRenderingPaused,
+			isHomePinnedOnly: spendControlSettings.isHomePinnedOnly,
 			updatedAt: spendControlSettings.updatedAt,
 			updatedByUsername: users.username,
 		})
@@ -111,13 +122,14 @@ export type SaveSpendControlSettingsOptions = { payload: SpendControlSettingsPay
 
 /**
  * Writes the overrides over the one row, then drops the cached settings and the day's cached free-plan spend, so every
- * replica reads the new settings on its next read.
+ * replica reads the new settings on its next read. A setting the payload leaves out keeps its stored value.
  */
 export async function saveSpendControlSettings({
 	payload,
 	adminUserId,
 }: SaveSpendControlSettingsOptions): Promise<void> {
-	// the row in cents, with a null for each setting left to its default
+	// the row in cents, with a null for each setting that uses its default. drizzle leaves an undefined column out of
+	// the write
 	const row = {
 		podcastEpisodesCutoffCents: toCents(payload.podcastEpisodesCutoffDollars),
 		scheduledScansCutoffCents: toCents(payload.scheduledScansCutoffDollars),
@@ -125,6 +137,10 @@ export async function saveSpendControlSettings({
 		firstScanDispatchLimit: payload.firstScanDispatchLimit,
 		hourlySignupAlertCount: payload.hourlySignupAlertCount,
 		isUnverifiedFirstScanLimitOn: payload.isUnverifiedFirstScanLimitOn,
+		generatedChapterImageLimit: payload.generatedChapterImageLimit,
+		isPodcastEpisodeRecordingPaused: payload.isPodcastEpisodeRecordingPaused,
+		isTopicPodcastEpisodeVideoRenderingPaused: payload.isTopicPodcastEpisodeVideoRenderingPaused,
+		isHomePinnedOnly: payload.isHomePinnedOnly,
 		updatedAt: new Date(),
 		updatedByUserId: adminUserId,
 	}
@@ -137,7 +153,7 @@ export async function saveSpendControlSettings({
 	await deleteRedisKeys(SPEND_CONTROL_SETTINGS_KEY, toFreePlanSpendKey(new Date()))
 }
 
-// a dollar amount in whole cents, or null for no override
-function toCents(dollars: number | null): number | null {
-	return dollars === null ? null : toCentsFromDollars(dollars)
+// a dollar amount in whole cents, null for no override, or undefined for a cutoff the payload leaves out
+function toCents(dollars: number | null | undefined): number | null | undefined {
+	return dollars === null || dollars === undefined ? dollars : toCentsFromDollars(dollars)
 }

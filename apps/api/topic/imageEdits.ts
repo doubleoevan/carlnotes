@@ -11,6 +11,7 @@ import {
 	toTopicImageOriginal,
 	toTopicImageUploadType,
 } from "@carlnotes/pipeline/topicImages/topicImageFiles"
+import { toDataUrl } from "@carlnotes/server/dataUrl"
 import type { Context } from "hono"
 import { MULTIPART_ENVELOPE_BYTES, toBodyLimit } from "../bodyLimit"
 import type { AppEnv } from "../currentUser"
@@ -53,14 +54,19 @@ export type ImageBytesRejection =
 	| { status: "unsupportedType" }
 	| { status: "objectionable"; category: ModerationCategory }
 
+// an image that passed its checks: the original to store, and whether its image moderation could not run, which
+// leaves it to be saved as unchecked or checked again by the sweep
+export type CheckedImageOriginal = { original: TopicImageOriginal; isUnchecked: boolean }
+
 /**
  * Checks an image's bytes as the original to store, cropped to the format's ratio, which is 3:2 if no format is
- * given, or returns why they were rejected: their size, what they decode as, or the image moderation.
+ * given, or returns why they were rejected: their size, what they decode as, or the image moderation. An image whose
+ * image moderation could not run is returned with isUnchecked true.
  */
 export async function toCheckedImageOriginal(
 	imageBytes: Uint8Array,
 	{ subjectKind, subjectId, format }: ImageEditSubject & { format?: Pick<TopicImageFormat, "width" | "height"> },
-): Promise<{ status: "checked"; original: TopicImageOriginal } | ImageBytesRejection> {
+): Promise<({ status: "checked" } & CheckedImageOriginal) | ImageBytesRejection> {
 	// an image past the upload limit is too large
 	if (imageBytes.byteLength > MAX_TOPIC_IMAGE_UPLOAD_BYTES) {
 		return { status: "tooLarge" }
@@ -74,9 +80,9 @@ export async function toCheckedImageOriginal(
 		return { status: "unsupportedType" }
 	}
 
-	// the moderation, on the cropped original that will show. a skipped or failed check lets the image through
+	// the moderation, on the cropped original that will show. a skipped check lets the image through
 	const objectionableCategory = await toObjectionableImageCategory({
-		dataUrl: `data:image/jpeg;base64,${Buffer.from(original.jpegBytes).toString("base64")}`,
+		dataUrl: toDataUrl("image/jpeg", original.jpegBytes),
 		subjectKind,
 		subjectId,
 	})
@@ -85,9 +91,10 @@ export async function toCheckedImageOriginal(
 	if (objectionableCategory === "unreadable") {
 		return { status: "unsupportedType" }
 	}
-	return objectionableCategory
-		? { status: "objectionable", category: objectionableCategory }
-		: { status: "checked", original }
+	if (objectionableCategory && objectionableCategory !== "unchecked") {
+		return { status: "objectionable", category: objectionableCategory }
+	}
+	return { status: "checked", original, isUnchecked: objectionableCategory === "unchecked" }
 }
 
 // the response an image's rejection gets: a 413 for its size, a 400 for its type, or the moderation 422
@@ -106,12 +113,13 @@ function toImageBytesRejectionResponse(context: Context<AppEnv>, rejection: Imag
 
 /**
  * Reads the request's uploaded image as the original to store, cropped to the format's ratio, which is 3:2 if no format
- * is given, or the response that rejects it for its size, its type, or the image moderation.
+ * is given, with whether its image moderation could not run, or the response that rejects it for its size, its type,
+ * or the image moderation.
  */
 export async function readUploadedImageOriginal(
 	context: Context<AppEnv>,
 	imageEditSubject: ImageEditSubject & { format?: Pick<TopicImageFormat, "width" | "height"> },
-): Promise<{ original: TopicImageOriginal } | { response: Response }> {
+): Promise<CheckedImageOriginal | { response: Response }> {
 	// the file, which an empty or missing part never is
 	const uploadedFile = (await context.req.parseBody()).image
 	if (!(uploadedFile instanceof File) || uploadedFile.size === 0) {
@@ -126,8 +134,19 @@ export async function readUploadedImageOriginal(
 	// the bytes, checked by what they decode as and the moderation
 	const checkedImage = await toCheckedImageOriginal(new Uint8Array(await uploadedFile.arrayBuffer()), imageEditSubject)
 	return checkedImage.status === "checked"
-		? { original: checkedImage.original }
+		? { original: checkedImage.original, isUnchecked: checkedImage.isUnchecked }
 		: { response: toImageBytesRejectionResponse(context, checkedImage) }
+}
+
+/**
+ * Returns an upload's response body in its released shape, with isImageUnchecked true if the upload is shown to its
+ * uploader alone.
+ */
+export function toImageUploadResponse<UploadResponse extends object>(
+	uploadResponse: UploadResponse,
+	isImageUnchecked: boolean,
+): UploadResponse & { isImageUnchecked?: true } {
+	return isImageUnchecked ? { ...uploadResponse, isImageUnchecked: true } : uploadResponse
 }
 
 /**

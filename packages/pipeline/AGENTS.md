@@ -67,8 +67,20 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
 - `attach.ts` ingests a topic attachment and builds a topic's scan context, over `attachContentType.ts` (the canonical
   content type and what each type is), `attachText.ts` (the text extracted from an attachment's bytes, a PDF read one
   page at a time, and `extractTextUpTo`, which stops once its text passes the caller's `maxChars`), and `attachTable.ts`
-  (a table file's rows serialized, clipped, and laid out for the model). `chunk.ts` splits a long document's text into
-  bounded chunks for parallel summarization.
+  (a table file's rows serialized, clipped, and laid out for the model, written one line at a time). `attachZip.ts`
+  reads a zip's directory without unpacking it, from the end of the file, so a zip with other bytes before it is
+  read too. It rejects a directory that does not hold every entry it declares and a Word file or a workbook that
+  declares more than 1 GB unpacked, and reads the records a streaming unzip needs. `attachWorkbook.ts` reads a
+  workbook's rows as lines: whole if it declares 4 MB or less unpacked, else as a stream that holds only the rows the
+  table text keeps, with each part written to the stream reader under its name with no leading slash.
+  `attachExtraction.ts` runs an extraction in a child process of its own, at the lowest priority, under a 640 MB
+  memory limit, two at a time, one per sender, with the waiting files taken in turn by sender. Of the parent's
+  environment a child gets `MAX_CHUNKS` and `CHUNK_CHARS` alone, and its temporary files go to a folder of its own,
+  removed with it. `attachExtractionChild.ts` is the child's entry and
+  `attachExtractionWatchdog.ts` the thread that ends a child past the limit, so one file's read ends alone. The api's
+  chat attachments and the worker's Topic attachments both extract through it. `attachTestFixtures.ts` builds the
+  files that the pipeline, api, and worker tests share. `chunk.ts` splits a long document's text into bounded chunks
+  for parallel summarization.
 - `ingest/` — one ingester per Source kind: `rss.ts`, `youtube.ts`, `reddit.ts`, `x.ts`, `bluesky.ts`, `podcast.ts`,
   `url.ts`, and `search.ts`, over `feed.ts` for the feeds that need no key and `normalize.ts` for the url, title, and
   kind a Resource gets before it is stored. `index.ts` reads a topic's Sources oldest first, runs and times each through
@@ -115,8 +127,11 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
   summary counts, the last 30 days against the 30 before, and the map's country names, with no title reaching the
   model. `dashboardShareImage.ts` draws a public Dashboard's share image: its bar chart through ECharts' server-side
   svg renderer in the Nightshift chart theme, rasterized by resvg at 1200 by 630. `dashboardRebuild.ts` rebuilds the
-  Dashboards a topic's visibility, owner, team, or deletion, or a Topic Post's or podcast episode's publication
-  touches: their snapshots leave at once, their edge copies are purged, and `temporalClient.ts` starts each rebuild.
+  Dashboards a change touches, and `temporalClient.ts` starts each rebuild. A change that takes an item out of view
+  (a topic's visibility, team, or deletion, a deleted Topic Post, a removed podcast episode) deletes the Dashboards'
+  snapshots at once and purges their edge copies. A Topic Post's publication
+  (`rebuildTopicDashboardsAfterPublication`) leaves them until its rebuild writes new ones, and starts a new snapshot
+  generation, so a build that loaded before the publication skips its write.
   `loadTopicScanEmailSubscribers` is the one recipient query, an active subscription with email on whose subscriber
   can still read the Topic (on a private Topic, its owner and its teams' members through `toTopicRoleFilter`), and
   `toTopicScanEmailSubscriberIdsQuery` is the same set as a subquery, which the Topic push joins, so unfollowing,
@@ -144,7 +159,8 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
   ready within 15 minutes and kept for 24 hours. The SDK retries a 429 itself.
 - `podcast/` — the steps of the worker's `recordPodcastEpisode` workflow. `planPodcastEpisode.ts` runs the checks that
   stop a recording before it spends anything, inside one request memo, picks the Findings, and marks the podcast
-  episode short on a free Topic or past the billed user's full podcast episodes cutoff.
+  episode short on a free Topic or past the billed user's full podcast episodes cutoff. It records nothing new while
+  the spend control settings pause new podcast episodes.
   `podcastEpisodeSharedComments.ts` takes the comments shared with the podcast by reactions, runs the classification on
   them, and places each one in a chapter or the closing turns. `writePodcastEpisodeScript.ts` writes and saves the
   script. Each segment's prompt lists its chapters' shared comments, and the last segment's also lists the closing ones.
@@ -165,8 +181,9 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
 - `podcast/podcastEpisodeImage.ts` draws a published podcast episode's own image from its title, description, topic
   tags, and chapter titles, in the topic image's house style and at its sizes, billed with the episode. The root
   `podcast-episode-images:backfill` script draws one for every published podcast episode that has none.
-  `podcast/podcastEpisodeImageRenders.ts` reads a podcast episode's scene input for a render and replaces its image
-  (the hash, the origin, the image prompt, and the old files' pending deletions).
+  `podcast/podcastEpisodeImageRenders.ts` reads a podcast episode's scene input for a render, replaces its image
+  (the hash, the origin, the image prompt, and the old files' pending deletions), and removes an uploaded image
+  through `removePodcastEpisodeImageUpload`.
 - `topicImages/` — the steps of the worker's `renderTopicImage` workflow. `writeTopicImageScene.ts` has the prompt
   writer's input (the topic's name, prompt, tags, and up to five finding titles, fenced as untrusted) and the image
   prompt with a house style appended, the topic image's unless another style prompt is named.
@@ -180,6 +197,39 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
   workflow, replaces a topic's image (the row, `topics.image_hash`, and the old files' pending deletions), removes an
   upload, and marks a render failed; a change to a public topic's image purges its files at the edge. `topicCovers.ts`
   drops a topic's cached podcast feeds and the stored covers drawn over its image after a change.
+  `removedImageUploads.ts` removes an uploaded image and draws it again on the platform's budget, for a Topic, a
+  Podcast Episode, a Topic Post, and a film. An admin's removal of a reported image and the sweep's removal of a
+  flagged upload on a private Topic both go through it. The sweep's `removeImageUpload` first marks each ready film
+  drawn from the upload rendering, then starts those films' rebuilds.
+- `uncheckedImages.ts` — the unchecked images: an upload whose image moderation could not run.
+  `publishOrSaveUncheckedImage` publishes an upload that passed its check. An unchecked upload on an invite or public
+  Topic is saved as unchecked: its files are stored, its `unchecked_images` row is written, and the subject's current
+  image stays. An unchecked upload on a private Topic is published at once with a row marked published. It runs under
+  the subject's lock and returns `published` or `unchecked`, and an unchecked upload first takes its Topic's image
+  visibility lock, shared. `publishUploadedImage` makes a stored upload its subject's current image by its kind, for
+  the upload and the sweep alike. `dropUncheckedImage` drops any unchecked image, and `dropUnpublishedUncheckedImage`,
+  a regenerate's, keeps a published one. An unchecked image's files are recorded as pending in the transaction that
+  deletes or replaces it, and `deleteFilesAfterUncheckedImageSubjectLock` deletes them once that transaction has
+  committed. That delete takes the subject's lock again and deletes only the files still pending. An upload clears its
+  own files' pending deletions under the lock, and fails if a file that was pending is already gone, so an upload of
+  bytes that were just replaced never ends with missing files. `isUncheckedAvatarKind` tells an avatar's kind from a
+  kind stored under a content hash.
+- `publishedUncheckedImages.ts` — `unpublishTopicUncheckedImages` unpublishes a private Topic's published unchecked
+  images and shows them to their uploaders alone in the transaction that makes it invite or public. It locks each
+  subject's row before it reads the subject's current image, and marks each ready film drawn from an unpublished image
+  rendering in that transaction. `redrawUnpublishedImageFiles` then forgets the Topic's covers and starts each affected
+  film's rebuild through `startImageTopicPodcastEpisodeVideoRebuilds`, which the sweep also calls once a published
+  upload passes its check.
+- `uncheckedImageChecks.ts` — `checkUncheckedImages`, which the sweep runs for two minutes at most, 20 unchecked images
+  a page, the fewest failed checks first: a clean image is published through the function that publishes its kind, a
+  flagged or unreadable one is deleted, or removed through `removeImageUpload`, which draws nothing, if it is
+  published, and an unchecked image whose subject is gone is deleted. The moderation runs with no lock, then the sweep
+  acts under the subject's lock only on the unchecked image it read. A skipped check keeps the image unchecked, and an
+  image unchecked for over a day is reported once in the `unchecked-image` stage.
+  `uncheckedImageCheckTestFixtures.ts` holds what its tests and the batch tests share.
+- `avatarImages.ts` — `toStoredAvatar` reads an uploaded avatar's pixel size from its header, rejects one past 4,096
+  pixels a side, and stores it resized within 512 pixels, a jpeg as a jpeg and anything else as a png.
+  `toCardAvatarPng` resizes any avatar to the size a share card draws before the card inlines it.
 - `topicPodcastEpisodeVideo/` — a published podcast episode's film, the steps of the worker's film workflows.
   `videoTimeline.ts` turns the chapter times into frame-exact segments, `videoCaptions.ts` writes the WebVTT captions
   from the script, timed with the pauses in the audio, `videoHotTakes.ts` finds where the hosts turn to the Comments,
@@ -197,7 +247,8 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
   podcast episode's, its topic's, or the podcast card) with its larger original, and each chapter's Resource.
   `videoChapterImages.ts` settles each chapter's images before the chapters are encoded: its Resource's images from
   `resourceImages/`, then the generated images that bring it to one distinct image for every 30 seconds, at most 12 a
-  chapter and the film's limit across its chapters, then the podcast card. A chapter with no image and the Comments
+  chapter and the film's limit across its chapters, which it takes from the spend control settings at each render,
+  then the podcast card. A chapter with no image and the Comments
   segment cut between the podcast card and the film's own image. `generatedChapterImages.ts` draws a generated image by
   the film image's own draw from the Finding's title and public relevance explanation alone, checks it with the image
   moderation, stores it beside the film's parts, where a second attempt reuses it, and bills it to the film's row unless
@@ -205,16 +256,23 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
   stubbed draws and chapter reads that the tests of `videoChapterImages.ts` and `generatedChapterImages.ts` share.
   `topicPodcastEpisodeVideoImage.ts` holds the
   film's own image: its 16:9 format, the first draw at 2K, the scene input for an editor's regeneration, and the replace
-  that stores the jpeg and its larger original beside the film's parts, swaps the hash, and starts the rebuild.
+  in two steps. `storeTopicPodcastEpisodeVideoImage` stores the jpeg and its larger original beside the film's
+  parts, and `publishTopicPodcastEpisodeVideoImage` swaps the hash and starts the rebuild, so an unchecked upload
+  stores its files and rebuilds nothing. `removeTopicPodcastEpisodeVideoImageUpload` removes an uploaded image.
   `renderTopicPodcastEpisodeVideo.ts` draws the film's image if it has none, falling back to the podcast episode's on a
   failed draw, then renders, uploads, and bills a film, writing a failed row for missing inputs. A recorded podcast
   episode's film renders in full whatever its owner's spend. Its owner was under the podcast episodes cutoff when the
   podcast episode was planned. A ready film below the current render version renders again under versioned keys while it
   keeps playing, and one guarded update swaps it in. `rebuildTopicPodcastEpisodeVideo.ts` renders only the intro and the
-  sign-off again for a new image, over the chapters' stored images, and joins them with the stored chapters part.
+  sign-off again for a new image, over the chapters' stored images, and joins them with the stored chapters part. It
+  also rebuilds a film marked rendering that still has its files, whatever its owner spent, and marks it ready. A film
+  draws no unchecked upload: `loadTopicPodcastEpisodeVideoEpisode` shows the next checked image in the film's order, and
+  the rebuild skips a film that plays while an unchecked upload would be its image. Its
+  swap takes the Topic's image visibility lock, shared, and throws an error if the film's image changed meanwhile.
   `topicPodcastEpisodeVideoRows.ts` is the film row both of them write: the render version, the skipped, rendering,
   ready, re-rendered, and failed writes, the render state read, the upload that records its pending deletion first, and
-  what a film's rendered minutes cost.
+  what a film's rendered minutes cost. `saveImageTopicPodcastEpisodeVideosRendering` marks each ready film drawn from
+  an image rendering, so a film that shows an unpublished or rejected image plays as audio until its rebuild.
   `topicPodcastEpisodeVideo.test.ts` renders a fixture podcast episode with ffmpeg.
 - `uprightImageSize.ts` — an image's pixel size as it shows, read from its metadata, which the film's stills, the
   topic image originals, and the Resource Images share.
