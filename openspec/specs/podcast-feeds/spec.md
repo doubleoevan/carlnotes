@@ -272,21 +272,6 @@ token the first time, and SHALL offer the reset. A signed-out visitor on a publi
 - **WHEN** a subscriber of an invite Topic opens the dialog
 - **THEN** the link includes their token, and the dialog offers to reset it
 
-### Requirement: Every feed says the hosts are AI voices
-
-The feed's channel description, each item's description, and each transcript SHALL say that Carl and Vienna are AI
-voices, as Apple's guidelines require of a show with AI hosts.
-
-#### Scenario: The channel discloses AI voices
-
-- **WHEN** a feed is fetched
-- **THEN** its channel description says the hosts are AI voices
-
-#### Scenario: Each item discloses AI voices
-
-- **WHEN** a feed is fetched
-- **THEN** every item's description says the hosts are AI voices
-
 ### Requirement: A podcast feed's channel description credits the theme song
 
 Each podcast feed's channel description SHALL end with the theme song's credits: <title> Theme Song with the song's
@@ -442,3 +427,18 @@ option.
 
 - **WHEN** a listener opens the dialog on a Topic with no film
 - **THEN** the dialog offers only the podcast feed
+
+### Requirement: Every feed says Carl and Vienna are AI hosts
+
+The feed's channel description, each item's description, and each transcript SHALL say that Carl and Vienna are AI
+hosts, as Apple's guidelines require of a show with AI hosts.
+
+#### Scenario: The channel discloses AI hosts
+
+- **WHEN** a feed is fetched
+- **THEN** its channel description says Carl and Vienna are AI hosts
+
+#### Scenario: Each item discloses AI hosts
+
+- **WHEN** a feed is fetched
+- **THEN** every item's description says Carl and Vienna are AI hosts

@@ -52,7 +52,7 @@ test("the channel has the tags a podcast app requires, with the show's cover and
 	expect(feedXml).toContain('xmlns:podcast="https://podcastindex.org/namespace/1.0"')
 	expect(feedXml).toContain("<title>Home &lt;espresso&gt;: Coffee Break podcast with Carl and Vienna</title>")
 	expect(feedXml).toContain(
-		`<description>${toXmlText(`Gear & technique. Carl and Vienna are AI voices. ${podcastThemeSongCredit}`)}</description>`,
+		`<description>${toXmlText(`Gear & technique. Carl and Vienna are AI hosts. ${podcastThemeSongCredit}`)}</description>`,
 	)
 
 	// what Apple requires of a channel, and the Podcasting 2.0 tags
@@ -86,7 +86,7 @@ test("an item names its season, episode number, enclosure, cover, chapters, and 
 		`<podcast:chapters url="${podcastEpisodeFilesUrl}/chapters.json" type="application/json+chapters"/>`,
 	)
 	expect(feedXml).toContain(`<podcast:transcript url="${podcastEpisodeFilesUrl}/transcript.html" type="text/html"/>`)
-	expect(feedXml).toContain("<description>A quieter burr set. Carl and Vienna are AI voices.</description>")
+	expect(feedXml).toContain("<description>A quieter burr set. Carl and Vienna are AI hosts.</description>")
 })
 
 test("a rename keeps every guid, and gives the show a new cover url", () => {
@@ -190,6 +190,6 @@ test("the transcript names each speaker, escapes the script's text, and drops th
 	expect(transcriptHtml).toContain("<p><b>Carl:</b> Your grinder got quieter.</p>")
 	expect(transcriptHtml).toContain("<h2>The &lt;quiet&gt; grinder</h2>")
 	expect(transcriptHtml).toContain("<p><b>Vienna:</b> Okay, why do I care about 62 &lt; 90?</p>")
-	expect(transcriptHtml).toContain("<p>Carl and Vienna are AI voices.</p>")
+	expect(transcriptHtml).toContain("<p>Carl and Vienna are AI hosts.</p>")
 	expect(transcriptHtml).toContain('<meta name="robots" content="noindex">')
 })

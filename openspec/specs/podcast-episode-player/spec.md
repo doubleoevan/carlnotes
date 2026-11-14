@@ -16,7 +16,7 @@ under the card that shows the rest. The page's html SHALL include every chapter,
 every chapter SHALL show and the control SHALL not. A chapter's title SHALL play the Podcast Episode from that chapter,
 and a press anywhere else on its row SHALL open the note of its Finding, as a row in the findings list does. A chapter
 whose Finding the user cannot see SHALL play from its whole row. A press on the seek bar SHALL play the Podcast Episode from the position that was pressed. The Podcast Episode's
-details line SHALL end with "Carl and Vienna are AI voices", and while the Podcast Episode is loaded in the player that
+details line SHALL end with "Carl and Vienna are AI hosts", and while the Podcast Episode is loaded in the player that
 line SHALL show the chapter that is playing instead. Once the Podcast Episode is loaded, a pill beside the section
 heading SHALL read "Playing" or "Paused" and SHALL pause or play the Podcast Episode. Each chapter's row SHALL show
 the chapter's pill, such as `E14 · ch 2`, the same pill as on the Finding it narrates, which plays or pauses the chapter
@@ -56,7 +56,7 @@ unless the player shows the recording state or a failed Podcast Episode, as the 
 #### Scenario: The voices are labeled as AI
 
 - **WHEN** the player renders a Podcast Episode that is not loaded
-- **THEN** the Podcast Episode's details line ends with "Carl and Vienna are AI voices"
+- **THEN** the Podcast Episode's details line ends with "Carl and Vienna are AI hosts"
 
 #### Scenario: A Topic without Podcast Episodes shows no player
 
@@ -463,7 +463,7 @@ icon while its chapter plays. A Finding that no chapter of the latest Podcast Ep
 A Topic with a published Podcast Episode that the user may listen to SHALL show a play button to the left of its note
 icon, on its homepage card and in its topic page heading. The button SHALL play or pause the latest Podcast Episode.
 Its tooltip SHALL name the Coffee Break podcast, then show the Podcast Episode's season and episode number, its title
-in bold, and its date, length, chapter count, and the AI voices note, at the tooltip's text size. Hovering the button
+in bold, and its date, length, chapter count, and the AI hosts note, at the tooltip's text size. Hovering the button
 inside the topic page heading SHALL show this tooltip instead of the heading's note hint. The podcast player at the
 bottom of the screen SHALL show the same tooltip on its Podcast Episode's title.
 
@@ -476,7 +476,7 @@ bottom of the screen SHALL show the same tooltip on its Podcast Episode's title.
 
 - **WHEN** a user hovers the play button of a Topic whose latest Podcast Episode is season 2026's episode 14
 - **THEN** the tooltip reads Coffee Break podcast, then Season 2026 · Episode 14, then the title in bold, then the
-  date, length, chapter count, and AI voices note
+  date, length, chapter count, and AI hosts note
 
 ### Requirement: The topic roast shows the latest Podcast Episode
 

@@ -1,7 +1,7 @@
-// a podcast episode's details line counts its chapters, names the AI voices outside a tooltip, and shows the description
+// a podcast episode's details line counts its chapters, names the AI hosts outside a tooltip, and shows the description
 // inside one. the title has no theme song credits beside it
 import { expect, test } from "bun:test"
-import { AI_VOICES_NOTE } from "@carlnotes/contracts/podcastEpisodes"
+import { AI_HOSTS_NOTE } from "@carlnotes/contracts/podcastEpisodes"
 import {
 	toPodcastEpisodeFixture,
 	toPodcastEpisodeSummaryFixture,
@@ -26,13 +26,13 @@ test("a full episode's details line counts its chapters", () => {
 	expect(html).toContain("2 chapters")
 })
 
-test("the AI voices note shows on the page's details and not in a tooltip's", () => {
+test("the AI hosts note shows on the page's details and not in a tooltip's", () => {
 	const tooltipHtml = renderToStaticMarkup(
 		<PodcastEpisodeDetails podcastEpisode={PODCAST_EPISODE_SUMMARY} isInTooltip />,
 	)
 	const pageHtml = renderToStaticMarkup(<PodcastEpisodeDetails podcastEpisode={PODCAST_EPISODE_SUMMARY} />)
-	expect(tooltipHtml).not.toContain(AI_VOICES_NOTE)
-	expect(pageHtml).toContain(AI_VOICES_NOTE)
+	expect(tooltipHtml).not.toContain(AI_HOSTS_NOTE)
+	expect(pageHtml).toContain(AI_HOSTS_NOTE)
 })
 
 test("a tooltip's details end with the description, and the page's details leave it out", () => {

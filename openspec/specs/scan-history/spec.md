@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change add-topic-detail-and-edit-pages. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: The owner can trigger a manual Scan
 A `▶ Run now` control SHALL render for the owner only, above the title row, and SHALL trigger a real Scan of the Topic through the api. The Scan SHALL be recorded as manual, run without blocking the request, and appear in History (as running until it finishes). The api SHALL authorize the trigger through `isAllowed(user, "scan:manual", topic)`, which allows the owner or an admin and enforces the plan's daily scan limit; requests it rejects SHALL be rejected.
 
@@ -75,7 +77,7 @@ After the gate allows a manual Scan, the api SHALL read the budget of the key th
 A scan history row whose Scan has a published Podcast Episode SHALL show that Podcast Episode's number as a pill, such
 as `E14`, that plays the Podcast Episode, or pauses it while it plays. Hovering the pill SHALL show the same tooltip as
 the latest Podcast Episode's play button: the Coffee Break podcast, the season and episode number, the title in bold,
-and the date, length, chapter count, and AI voices note. A row whose Scan rendered no Podcast Episode, or whose Podcast
+and the date, length, chapter count, and AI hosts note. A row whose Scan rendered no Podcast Episode, or whose Podcast
 Episode is still rendering or failed, SHALL show no pill. The pill SHALL follow the same access rule as the player, so
 a subscriber of an invite Topic sees it only for a Podcast Episode published after they joined.
 
@@ -88,7 +90,7 @@ a subscriber of an invite Topic sees it only for a Podcast Episode published aft
 
 - **WHEN** a user hovers the `E14` pill of a Scan whose Podcast Episode is season 2026's episode 14
 - **THEN** the tooltip reads Coffee Break podcast, then Season 2026 · Episode 14, then the title in bold, then the date,
-  length, chapter count, and AI voices note
+  length, chapter count, and AI hosts note
 
 #### Scenario: A Scan with no Podcast Episode shows no pill
 
@@ -148,4 +150,3 @@ it. The Activity page's scan recap popover SHALL show the same chart in the same
 
 - **WHEN** a user opens the ⓘ of a Scan saved before per-Source results were recorded
 - **THEN** the popover shows the notes and the footer with no chart between them
-

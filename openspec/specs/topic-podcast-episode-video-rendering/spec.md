@@ -114,7 +114,7 @@ SHALL run from the last chapter's end to the film's end, cut through the same ch
 image. Their shots SHALL be cut as a chapter's montage is. If fewer than two chapter images remain, the podcast card
 SHALL take turns with them, unless the film's image is the podcast card. An intro or a sign-off with no chapter image
 SHALL show the film's image in every shot. The intro's lower third SHALL show the Podcast Episode's title and details
-line, and the sign-off's SHALL show "Coffee Break podcast with Carl and Vienna" and "Carl and Vienna are AI voices".
+line, and the sign-off's SHALL show "Coffee Break podcast with Carl and Vienna" and "Carl and Vienna are AI hosts".
 Each SHALL fade in and stay until its part ends.
 
 #### Scenario: The intro names the Podcast Episode
@@ -126,7 +126,7 @@ Each SHALL fade in and stay until its part ends.
 #### Scenario: The sign-off says the voices are AI
 
 - **WHEN** the film passes the last chapter's end
-- **THEN** "Carl and Vienna are AI voices" shows until the film ends, and the film's image is the last shot
+- **THEN** "Carl and Vienna are AI hosts" shows until the film ends, and the film's image is the last shot
 
 #### Scenario: The intro cuts through the chapters
 

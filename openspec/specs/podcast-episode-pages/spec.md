@@ -27,7 +27,7 @@ filtered out SHALL show its source's favicon and host as a link, and its row SHA
 start each chapter with a dashed rule that holds the chapter's title. The server's html SHALL include the whole
 transcript, and a browser with JavaScript SHALL collapse it behind a control reading "read more". Expanded, the
 transcript SHALL scroll within a limited height, and the control SHALL read "read less". While the Podcast Episode is
-not loaded in the player, the player's details line SHALL say that Carl and Vienna are AI voices, and once it is loaded
+not loaded in the player, the player's details line SHALL say that Carl and Vienna are AI hosts, and once it is loaded
 the line SHALL show the player's chapter instead. A request under a stale slug SHALL redirect to the current one, as the
 topic page does.
 

@@ -14,7 +14,7 @@ what he found. Carl reports, and Vienna asks what you would ask. No chapter ends
 matters to you. An episode runs up to 30 minutes, or up to 10 minutes on the free plan. With fewer findings, Carl and
 Vienna spend longer on each one. They never pad an episode.
 
-Carl and Vienna are AI voices. Every episode is written from the topic's findings, the brew's own first. Each chapter
+Carl and Vienna are AI hosts. Every episode is written from the topic's findings, the brew's own first. Each chapter
 says where its finding came from.
 
 Every episode opens and closes with the show's theme song, [Coffee Break](https://www.youtube.com/watch?v=S1-nYyIzK24).

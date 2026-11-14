@@ -4,7 +4,7 @@
 import type { UncheckedImageSubjectKind } from "@carlnotes/contracts/enums"
 import type { PodcastEpisodeScript } from "@carlnotes/contracts/podcast"
 import {
-	AI_VOICES_NOTE,
+	AI_HOSTS_NOTE,
 	PODCAST_SHOW_NAME,
 	toPodcastEpisodeDetailsLine,
 	toTranscriptTurn,
@@ -146,7 +146,7 @@ export async function loadTopicPodcastEpisodeVideoEpisode(
 			title: podcastEpisodeRow.title ?? PODCAST_SHOW_NAME,
 			detail: toPodcastEpisodeDetailsLine(podcastEpisodeRow, podcastEpisodeRow.topicName),
 		},
-		signOffText: { title: PODCAST_SHOW_NAME, detail: AI_VOICES_NOTE },
+		signOffText: { title: PODCAST_SHOW_NAME, detail: AI_HOSTS_NOTE },
 	}
 }
 

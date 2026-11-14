@@ -84,8 +84,8 @@ export const PODCAST_EPISODE_SPEAKER_NAMES = { host: "Carl", cohost: "Vienna" } 
 // both hosts' names together, as the podcast's author credit
 export const PODCAST_HOSTS_NAME = `${PODCAST_EPISODE_SPEAKER_NAMES.host} and ${PODCAST_EPISODE_SPEAKER_NAMES.cohost}`
 
-// the sentence that tells a listener that the hosts are AI voices, without its period
-export const AI_VOICES_NOTE = `${PODCAST_HOSTS_NAME} are AI voices`
+// the sentence that tells a listener that Carl and Vienna are AI, without its period
+export const AI_HOSTS_NOTE = `${PODCAST_HOSTS_NAME} are AI hosts`
 
 // the podcast's name in the app's copy
 export const PODCAST_NAME = "Coffee Break podcast"

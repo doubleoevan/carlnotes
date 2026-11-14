@@ -1,5 +1,5 @@
 import type { PodcastEpisode, PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
-import { AI_VOICES_NOTE } from "@carlnotes/contracts/podcastEpisodes"
+import { AI_HOSTS_NOTE } from "@carlnotes/contracts/podcastEpisodes"
 import { toCountLabel, toDotSeparatedText } from "@carlnotes/contracts/text"
 import { cn } from "@carlnotes/nightshift/classNames"
 import type { ComponentType, ReactNode } from "react"
@@ -38,7 +38,7 @@ export function PodcastEpisodeDetails({
 	const labels = [
 		...toPodcastEpisodeDayAndDurationLabels(podcastEpisode),
 		toCountLabel(podcastEpisode.chapterCount, "chapter"),
-		...(isInTooltip ? [] : [AI_VOICES_NOTE]),
+		...(isInTooltip ? [] : [AI_HOSTS_NOTE]),
 	]
 	return (
 		<Group className="flex min-w-0 flex-1 flex-col gap-0.5">

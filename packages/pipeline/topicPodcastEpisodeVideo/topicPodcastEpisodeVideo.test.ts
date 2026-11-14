@@ -33,7 +33,7 @@ const CHAPTER_TIMES = [
 const HOT_TAKES_START_SECONDS = new Map([[1, 62]])
 const DURATION_SECONDS = 80
 const INTRO_TEXT = { title: "Agents that review code", detail: "AI Agents · S2026 E14" }
-const SIGN_OFF_TEXT = { title: "Coffee Break podcast with Carl and Vienna", detail: "Carl and Vienna are AI voices" }
+const SIGN_OFF_TEXT = { title: "Coffee Break podcast with Carl and Vienna", detail: "Carl and Vienna are AI hosts" }
 
 // what the hosts say in each chapter, by its position, in turns long enough for several captions
 const CHAPTER_TURNS = [

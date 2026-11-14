@@ -9,7 +9,7 @@ import type {
 	PodcastEpisodeTranscriptBlock,
 } from "@carlnotes/contracts/podcast"
 import {
-	AI_VOICES_NOTE,
+	AI_HOSTS_NOTE,
 	FULL_PODCAST_COVER_SIZE,
 	PODCAST_EPISODE_SPEAKER_NAMES,
 	PODCAST_HOSTS_NAME,
@@ -87,7 +87,7 @@ export function toPodcastFeedXml({
 		FULL_PODCAST_COVER_SIZE,
 	)
 	const showCoverUrl = `${appUrl}${showCoverPath}`
-	const showDescription = `${topic.prompt || `What Carl found for ${topic.name}.`} ${AI_VOICES_NOTE}. ${PODCAST_THEME_SONG_HEADING}: ${PODCAST_THEME_SONG.youtubeUrl}. ${PODCAST_THEME_SONG_WRITING_CREDIT}. ${PODCAST_THEME_SONG_PERFORMANCE_CREDIT}. ${PODCAST_THEME_SONG_PRODUCTION_CREDIT}. ${PODCAST_THEME_SONG_DRUMMING_CREDIT}.`
+	const showDescription = `${topic.prompt || `What Carl found for ${topic.name}.`} ${AI_HOSTS_NOTE}. ${PODCAST_THEME_SONG_HEADING}: ${PODCAST_THEME_SONG.youtubeUrl}. ${PODCAST_THEME_SONG_WRITING_CREDIT}. ${PODCAST_THEME_SONG_PERFORMANCE_CREDIT}. ${PODCAST_THEME_SONG_PRODUCTION_CREDIT}. ${PODCAST_THEME_SONG_DRUMMING_CREDIT}.`
 
 	// the plain rss image tags, with the cover's url, the show's title, and the show's page
 	const showImageTags = [
@@ -162,7 +162,7 @@ export function toTranscriptHtml(podcastEpisodeTitle: string, podcastEpisodeScri
 		`<title>${Bun.escapeHTML(podcastEpisodeTitle)}</title>`,
 	]
 	const headHtml = headTags.join("\n")
-	const bodyHtml = `<h1>${Bun.escapeHTML(podcastEpisodeTitle)}</h1>\n<p>${AI_VOICES_NOTE}.</p>\n${transcriptBlocksHtml}`
+	const bodyHtml = `<h1>${Bun.escapeHTML(podcastEpisodeTitle)}</h1>\n<p>${AI_HOSTS_NOTE}.</p>\n${transcriptBlocksHtml}`
 	return `<!doctype html>\n<html lang="en">\n<head>\n${headHtml}\n</head>\n<body>\n${bodyHtml}\n</body>\n</html>`
 }
 
@@ -192,7 +192,7 @@ function toPodcastFeedItem(
 	// wrap the item's details, audio, iTunes tags, and Podcasting 2.0 files in an item tag
 	const itemTags = [
 		`<title>${toXmlText(podcastEpisode.title)}</title>`,
-		`<description>${toXmlText(`${podcastEpisode.description} ${AI_VOICES_NOTE}.`)}</description>`,
+		`<description>${toXmlText(`${podcastEpisode.description} ${AI_HOSTS_NOTE}.`)}</description>`,
 		`<link>${toXmlText(podcastEpisodeUrl)}</link>`,
 		`<guid isPermaLink="false">${toXmlText(format === "video" ? `${podcastEpisode.id}-video` : podcastEpisode.id)}</guid>`,
 		`<pubDate>${podcastEpisode.publishedAt.toUTCString()}</pubDate>`,
