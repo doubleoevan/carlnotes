@@ -50,3 +50,14 @@ function writeLastReloadAt(reloadAt: number): boolean {
 		return false
 	}
 }
+
+// the messages Chrome, Safari, and Firefox give a dynamic import whose file the server no longer has
+const STALE_BUNDLE_ERROR_PATTERN =
+	/Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module/i
+
+/**
+ * Returns whether an error is a page file that a deploy removed while this tab still ran the previous build.
+ */
+export function isStaleBundleError(error: unknown): boolean {
+	return error instanceof Error && STALE_BUNDLE_ERROR_PATTERN.test(error.message)
+}
