@@ -11,7 +11,7 @@
 		"@carlnotes/client": "workspace:*",
 		"@carlnotes/contracts": "workspace:*",
 		"@carlnotes/nightshift": "workspace:*",
-		"@tanstack/react-query": "^5.105.3",
+		"@tanstack/react-query": "^5.107.1",
 		"markdown-to-jsx": "9.10.4"
 	},
 	"peerDependencies": {
