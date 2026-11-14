@@ -84,7 +84,15 @@ function toCountedItem({
 	// each known place's people, which a view counts as its viewers and a play counts beside its plays
 	const placeCounts = placeRowGroups.map((rows): PlaceCount => {
 		const peopleCount = readPeopleCount()
-		const place = rows[0]?.place ?? { country: "", region: null, city: null, latitude: null, longitude: null }
+		const place = rows[0]?.place ?? {
+			country: "",
+			region: null,
+			city: null,
+			postalCode: null,
+			metroCode: null,
+			latitude: null,
+			longitude: null,
+		}
 		return { place, peopleCount, ...(isDailyPlayCount ? toPlayCount(rows) : { count: peopleCount }) }
 	})
 

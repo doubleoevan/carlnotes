@@ -1,7 +1,7 @@
 // every Dashboard chart's series for one selection, built from each item's counts: the top ten bars, the pie and the
-// trend with Other for findings past the top ten, the title words, and the map pins under the city minimum. a snapshot
-// keeps only what the charts draw: no trend line with no count in its range, a point per week past 90 days, and each
-// pin's most counted items
+// trend with Other for findings past the top ten, the title words, and a map pin per place. a snapshot keeps only what
+// the charts draw: no trend line with no count in its range, a point per week past 90 days, and each pin's most
+// counted items
 import {
 	DASHBOARD_TOP_ITEM_COUNT,
 	type DashboardPin,
@@ -212,8 +212,8 @@ function toPins(countedItems: DashboardItemCounts[]): DashboardPin[] {
 		toShownPlaces(countedItem.placeCounts).map((shownPlace): ItemPlace => ({ countedItem, shownPlace })),
 	)
 	const itemPlacesByPlace = groupBy(itemPlaces, ({ shownPlace }) => {
-		const { placeLevel, country, region, city, latitude, longitude } = shownPlace
-		return [placeLevel, country, region, city, latitude, longitude].join("|")
+		const { placeLevel, country, region, city, postalCode, latitude, longitude } = shownPlace
+		return [placeLevel, country, region, city, postalCode, latitude, longitude].join("|")
 	})
 	return [...itemPlacesByPlace.values()].map(toPin)
 }
@@ -221,7 +221,7 @@ function toPins(countedItems: DashboardItemCounts[]): DashboardPin[] {
 // one place's pin: the people and counts of every item there summed, and the items most counted there up to the limit
 function toPin(itemPlaces: [ItemPlace, ...ItemPlace[]]): DashboardPin {
 	// the place, and each item's shown place there
-	const { placeLevel, country, region, city, latitude, longitude } = itemPlaces[0].shownPlace
+	const { placeLevel, country, region, city, postalCode, latitude, longitude } = itemPlaces[0].shownPlace
 	const shownPlaces = itemPlaces.map(({ shownPlace }) => shownPlace)
 
 	// the items there with their own counts there, most counted first, up to the limit
@@ -235,6 +235,7 @@ function toPin(itemPlaces: [ItemPlace, ...ItemPlace[]]): DashboardPin {
 		country,
 		region,
 		city,
+		postalCode,
 		latitude,
 		longitude,
 		peopleCount: sumPeopleCounts(shownPlaces),

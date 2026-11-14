@@ -1,59 +1,59 @@
-// shown places tests: a lone town rolls into its country, a 12-and-3 country shows no city, and a place with no
-// city never gets a city pin
+// shown places tests: every place pins on its own with any number of people, at Cloudflare's coordinates or else at
+// its country's center
 
 import { expect, test } from "bun:test"
 import { COUNTRY_CENTERS } from "@carlnotes/contracts/countryCenters"
 import { ZURICH_PLACE } from "@carlnotes/contracts/placeTestFixtures"
 import { type PlaceCount, toShownPlaces } from "./shownPlaces"
 
-// a Swiss city's place count with the given people, and twice as many views
-function toSwissCity(city: string, peopleCount: number): PlaceCount {
-	const place = { ...ZURICH_PLACE, city }
+// a Swiss place count in a city and postal code with the given people, and twice as many views
+function toSwissPlace(city: string, postalCode: string, peopleCount: number): PlaceCount {
+	const place = { ...ZURICH_PLACE, city, postalCode }
 	return { place, peopleCount, count: peopleCount * 2 }
 }
 
-test("a lone town under ten people rolls into its country's pin at the country's center", () => {
-	expect(toShownPlaces([toSwissCity("Hinwil", 3)])).toEqual([
+test("a lone person in a small town pins at the town's own postal code and coordinates", () => {
+	expect(toShownPlaces([toSwissPlace("Hinwil", "8340", 1)])).toEqual([
 		{
-			placeLevel: "country",
+			placeLevel: "city",
 			country: "CH",
-			region: null,
-			city: null,
-			latitude: COUNTRY_CENTERS.CH?.[0] ?? null,
-			longitude: COUNTRY_CENTERS.CH?.[1] ?? null,
-			peopleCount: 3,
-			count: 6,
+			region: "Zurich",
+			city: "Hinwil",
+			postalCode: "8340",
+			latitude: 47.36667,
+			longitude: 8.55,
+			peopleCount: 1,
+			count: 2,
 		},
 	])
 })
 
-test("a 12-and-3 country rolls the 12 in too, so the 3 cannot be found by subtraction", () => {
-	const shownPlaces = toShownPlaces([toSwissCity("Zürich", 12), toSwissCity("Hinwil", 3)])
-	expect(shownPlaces.map(({ placeLevel, peopleCount }) => [placeLevel, peopleCount])).toEqual([["country", 15]])
-})
-
-test("cities of ten or more show beside a remainder of ten or more, and an exact split shows no remainder", () => {
-	const withRemainder = toShownPlaces([toSwissCity("Zürich", 40), toSwissCity("Bern", 25), toSwissCity("Hinwil", 11)])
-	expect(withRemainder.map(({ city, peopleCount }) => [city, peopleCount])).toEqual([
-		["Hinwil", 11],
-		["Bern", 25],
-		["Zürich", 40],
+test("two postal codes in one city pin separately, and nothing rolls into the country", () => {
+	const shownPlaces = toShownPlaces([
+		toSwissPlace("Zürich", "8001", 12),
+		toSwissPlace("Zürich", "8004", 3),
+		toSwissPlace("Uster", "8610", 1),
 	])
-
-	// two small towns make a remainder of ten, which shows beside the big city
-	const smallTowns = [toSwissCity("Hinwil", 4), toSwissCity("Uster", 6)]
-	const withTowns = toShownPlaces([toSwissCity("Zürich", 40), ...smallTowns])
-	expect(withTowns.map(({ placeLevel, peopleCount }) => [placeLevel, peopleCount])).toEqual([
-		["city", 40],
-		["country", 10],
+	expect(shownPlaces.map(({ city, postalCode, peopleCount }) => [city, postalCode, peopleCount])).toEqual([
+		["Zürich", "8001", 12],
+		["Zürich", "8004", 3],
+		["Uster", "8610", 1],
 	])
 })
 
-test("a place with no city or no center counts toward its country and never pins a city", () => {
-	const noCity = {
-		place: { country: "FR", region: null, city: null, latitude: null, longitude: null },
-		peopleCount: 30,
-	}
-	const shownPlaces = toShownPlaces([{ ...noCity, count: 30 }])
-	expect(shownPlaces.map(({ placeLevel, country }) => [placeLevel, country])).toEqual([["country", "FR"]])
+test("a place with no coordinates pins at its country's center, as a city if it names one", () => {
+	const noCoordinates = { latitude: null, longitude: null }
+	const cityPlace = { ...ZURICH_PLACE, ...noCoordinates }
+	const countryPlace = { ...ZURICH_PLACE, ...noCoordinates, region: null, city: null, postalCode: null }
+	const shownPlaces = toShownPlaces([
+		{ place: cityPlace, peopleCount: 2, count: 2 },
+		{ place: countryPlace, peopleCount: 1, count: 1 },
+	])
+	const [centerLatitude, centerLongitude] = COUNTRY_CENTERS.CH ?? [null, null]
+	expect(
+		shownPlaces.map(({ placeLevel, city, latitude, longitude }) => [placeLevel, city, latitude, longitude]),
+	).toEqual([
+		["city", "Zürich", centerLatitude, centerLongitude],
+		["country", null, centerLatitude, centerLongitude],
+	])
 })

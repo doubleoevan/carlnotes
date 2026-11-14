@@ -67,7 +67,7 @@ quotes for a question about the app; a section whose hash is unchanged is not em
   title, path, and visibility and leaves a private topic whose legacy Personal sources text is not converted yet out of
   a team's Dashboard, `dashboardItemCounts.ts` counts each item's viewers by unioning the sketches in Redis through
   `countRowGroups` or sums its plays, `dashboardSummaries.ts` counts the summary strip, `dashboardSeries.ts` builds
-  every chart's series for one selection with the places `shownPlaces.ts` lets a map show under the city minimum, and
+  every chart's series for one selection with a map pin per place from `shownPlaces.ts`, at its postal code or city, and
   `dashboardSnapshots.ts` writes the public snapshots and any full ones that differ. An unchanged snapshot is not
   written again and keeps its paragraph and share image. A batch purges its Dashboards' edge cache tags, the changed
   summaries' paragraphs and share images follow in batches of 25, and the run then deletes daily count rows past 400

@@ -199,8 +199,8 @@ summary, for the worker, its workflows, and the Temporal client.
 
 `dashboards.ts` holds a Dashboard, which the page copy calls "Specials": the three kinds and their page names and paths,
 with `toDashboardPageLinks` for a person's three pages and `toDashboardLinks` for a viewer count line's links, the items
-a view counts and the play formats, the trend ranges, the retention days, the city minimum that keeps a place private,
-the summary and its counts, the snapshot each chart reads, and the path params, the query, and the response of a read.
+a view counts and the play formats, the trend ranges, the retention days, a place down to its postal code, the summary
+and its counts, the snapshot each chart reads, and the path params, the query, and the response of a read.
 `countryCenters.ts` holds each country's center, where a country's pin sits, and `countryNames.ts` a country code's
 English name. `dashboardWork.ts` holds the signal that asks a running Dashboard rebuild to build again, which the
 Temporal client and the workflow share. `placeTestFixtures.ts` holds the places the tests share, and only tests import

@@ -38,6 +38,8 @@ function toTopicViewRow(topicId: string, visibility: string, people: string[]): 
 		null,
 		null,
 		null,
+		null,
+		null,
 		people.length,
 		sketch,
 		topicId,

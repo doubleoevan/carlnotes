@@ -6,6 +6,10 @@ import { ipAddressOptions, isExternalAddress, toForwardedForHops } from "./trust
 // the longest region or city name kept. a real one is far shorter
 const PLACE_NAME_MAX_LENGTH = 100
 
+// a postal code as Cloudflare sends it, like 94107 or SW1A 1AA, and a metro code, the Nielsen DMA number like 807
+const POSTAL_CODE_PATTERN = /^[0-9A-Za-z][0-9A-Za-z -]{0,15}$/
+const METRO_CODE_PATTERN = /^\d{1,6}$/
+
 // a decimal coordinate as Cloudflare sends it, like 37.78044
 const COORDINATE_PATTERN = /^-?\d{1,3}(\.\d{1,10})?$/
 
@@ -31,6 +35,8 @@ export function readRequestPlace(request: Request, ipAddress = ipAddressOptions)
 		country,
 		region: toPlaceName(request.headers.get("cf-region")),
 		city: toPlaceName(request.headers.get("cf-ipcity")),
+		postalCode: toPlaceCode(request.headers.get("cf-postal-code"), POSTAL_CODE_PATTERN),
+		metroCode: toPlaceCode(request.headers.get("cf-metro-code"), METRO_CODE_PATTERN),
 		latitude: toCoordinate(request.headers.get("cf-iplatitude")),
 		longitude: toCoordinate(request.headers.get("cf-iplongitude")),
 	}
@@ -102,6 +108,12 @@ function toUtf8(headerValue: string): string {
 	} catch {
 		return headerValue
 	}
+}
+
+// a postal or metro code exactly as Cloudflare sent it, or null if it does not match the code's pattern
+function toPlaceCode(headerValue: string | null, codePattern: RegExp): string | null {
+	const placeCode = headerValue?.trim() ?? ""
+	return codePattern.test(placeCode) ? placeCode : null
 }
 
 // a coordinate exactly as Cloudflare sent it, or null if it is not a decimal number

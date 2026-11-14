@@ -4,7 +4,7 @@ import type { DashboardPin } from "@carlnotes/contracts/dashboards"
 import { toDashboardMapPins } from "./dashboardMapPins"
 
 test("nearby places share one pin with their visits summed, sized by their people, and a zoom in splits them", () => {
-	// a Paris pin and a France remainder at France's center sharing one Topic Post, and a pin with no stored place
+	// a Paris pin and a France pin with no city at France's center sharing one Topic Post, and a pin with no stored place
 	const topicPost = { itemId: "post-1", title: "Roasting", path: "/p/1" }
 	const pins: DashboardPin[] = [
 		{
@@ -37,7 +37,7 @@ test("nearby places share one pin with their visits summed, sized by their peopl
 		},
 	]
 
-	// zoomed out Paris and the remainder share one pin at Paris, titled France, at the largest size, with the visits and
+	// zoomed out Paris and the France pin share one pin at Paris, titled France, at the largest size, with the visits and
 	// the Topic Post's visits summed and the box they span to zoom to
 	const [francePin, ...otherPins] = toDashboardMapPins(pins, 2)
 	expect(otherPins).toEqual([])
@@ -78,4 +78,23 @@ test("a place joins a pin only within the radius of the pin's largest place, nev
 		["Brazil", "15"],
 		["East, Brazil", "1"],
 	])
+})
+
+test("two postal codes of one city at one spot share a pin titled by the city", () => {
+	// two Zürich postal codes, each with one person, at the coordinates Cloudflare gives both
+	const zurichPin = {
+		placeLevel: "city",
+		country: "CH",
+		region: "Zurich",
+		city: "Zürich",
+		latitude: 47.37,
+		longitude: 8.55,
+	}
+	const pins: DashboardPin[] = [
+		{ ...zurichPin, placeLevel: "city", postalCode: "8001", peopleCount: 1, count: 1, items: [] },
+		{ ...zurichPin, placeLevel: "city", postalCode: "8004", peopleCount: 1, count: 2, items: [] },
+	]
+	const [sharedPin, ...otherPins] = toDashboardMapPins(pins, 12)
+	expect(otherPins).toEqual([])
+	expect([sharedPin?.point.title, sharedPin?.label, sharedPin?.zoomBounds]).toEqual(["Zürich, Switzerland", "3", null])
 })

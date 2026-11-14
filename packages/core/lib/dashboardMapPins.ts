@@ -52,8 +52,8 @@ const NEARBY_CELL_OFFSETS = [-1, 0, 1].flatMap((offsetX) => [-1, 0, 1].map((offs
 /**
  * Returns the pins a map draws at a zoom: each place joins the largest place within the pin radius on the screen, so
  * one pin sums the counts and items of the places it holds and sits at the largest one. Each pin's size follows its
- * people against the most in one pin. A pin sits at its stored place, a city's own or a country remainder's country
- * center, and a pin with no stored place is left out.
+ * people against the most in one pin. A pin sits at its stored place, Cloudflare's coordinates or its country's center,
+ * and a pin with no stored place is left out.
  */
 export function toDashboardMapPins(pins: DashboardPin[], zoom: number): DashboardMapPin[] {
 	// each pin at its place in pixels, largest first so the largest place leads its group
@@ -127,16 +127,19 @@ function toPinSize(peopleCount: number, mostPeopleCount: number): number {
 
 // a group's pin at its leader's place: one place keeps its own title, and a group sums its places
 function toGroupPin(group: PlacedPinGroup, size: number): DashboardMapPin {
-	// the group's counts and items summed, titled by its country if it has one, else by its count of places
+	// the group's counts and items summed, titled by its city if it has one, else its country, else its count of places
 	const [leader] = group
 	const groupPins = group.map(({ pin }) => pin)
 	const countries = new Set(groupPins.map((pin) => pin.country))
+	const cities = new Set(groupPins.map((pin) => (pin.placeLevel === "city" ? pin.city : null)))
 	const countryName = toCountryName(leader.pin.country) ?? leader.pin.country
+	const sharedCity = countries.size === 1 && cities.size === 1 ? leader.pin.city : null
+	const groupTitle = sharedCity ? `${sharedCity}, ${countryName}` : countries.size === 1 ? countryName : null
 	const point =
 		group.length === 1
 			? toPinPoint(leader.pin, countryName)
 			: {
-					title: countries.size === 1 ? countryName : `${group.length} places`,
+					title: groupTitle ?? `${group.length} places`,
 					path: null,
 					counts: sumDashboardCounts(groupPins),
 					items: toSummedItems(groupPins),
@@ -154,7 +157,9 @@ function toGroupPin(group: PlacedPinGroup, size: number): DashboardMapPin {
 	}
 	const isOnePlace = zoomBounds.north === zoomBounds.south && zoomBounds.east === zoomBounds.west
 	return {
-		key: [leader.pin.placeLevel, leader.pin.country, leader.pin.region, leader.pin.city].join("|"),
+		key: [leader.pin.placeLevel, leader.pin.country, leader.pin.region, leader.pin.city, leader.pin.postalCode].join(
+			"|",
+		),
 		latitude: leader.latitude,
 		longitude: leader.longitude,
 		size,

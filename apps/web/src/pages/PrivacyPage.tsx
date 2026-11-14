@@ -77,7 +77,7 @@ When mobile analytics is configured, the app sends PostHog screen names, app lif
 
 **Viewer and listener counts.** To show how many people view a topic or listen to a podcast episode, we add your account id, or a one-way keyed hash of your IP address and browser if you are signed out, to an approximate counter. The counter keeps no record of who you are, cannot be turned back into your address, and sets nothing on your device. A Café and a team page count their visitors the same way.
 
-**Visitors by place.** Specials pages chart visits and plays by day and by place. The place is the country, region, and city that our network provider reads from your connection. We store only a daily count for each item and place, never your IP address, your browser details, or the visit itself, and we delete the counts after 400 days. A city shows on a map only after ten different people have visited from it. Smaller cities count toward their country.
+**Visitors by place.** Specials pages chart visits and plays by day and by place. The place is the country, region, city, and postal code that our network provider reads from your connection. We store only a daily count for each item and place, never your IP address, your browser details, or the visit itself, and we delete the counts after 400 days.
 
 ## What we do not collect
 
@@ -245,7 +245,7 @@ export function PrivacyPage() {
 			{/* the title and the effective / last-updated dates */}
 			<h1 className="font-display text-2xl">Privacy Policy</h1>
 			<p className="text-muted-foreground mt-2 text-sm">
-				Effective date: July 24, 2026 · Last updated: November 11, 2026
+				Effective date: July 24, 2026 · Last updated: November 13, 2026
 			</p>
 			{/* the sections, rendered from the markdown body */}
 			<Markdown options={PRIVACY_MARKDOWN_OPTIONS}>{PRIVACY_BODY}</Markdown>

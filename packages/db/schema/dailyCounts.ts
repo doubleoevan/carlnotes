@@ -5,7 +5,7 @@ import { date, index, integer, numeric, pgTable, primaryKey, text } from "drizzl
 import { bytea, podcastEpisodeFormat, viewItemKind } from "./columns"
 import { podcastEpisodes } from "./podcast"
 
-// the place columns both daily counts share. the key hashes the five values, and an unknown place has all five null
+// the place columns both daily counts share. the key hashes the place's values, and an unknown place has them all null
 // biome-ignore lint/nursery/useExplicitReturnType: drizzle's column builder types are generated, and naming them here would break on an upgrade
 function placeColumns() {
 	return {
@@ -13,6 +13,8 @@ function placeColumns() {
 		country: text("country"),
 		region: text("region"),
 		city: text("city"),
+		postalCode: text("postal_code"),
+		metroCode: text("metro_code"),
 		// the decimal coordinates exactly as Cloudflare sent them
 		latitude: numeric("latitude"),
 		longitude: numeric("longitude"),

@@ -308,28 +308,42 @@ export async function countSketchGroups(
 }
 
 /**
- * Returns the key that names a place in a daily count row: a hash of its five values, or unknown for no place.
+ * Returns the key that names a place in a daily count row: a hash of its values, or unknown for no place. A place with
+ * no postal or metro code hashes its first five values alone, so it keeps the key it had before those codes were read.
  */
 export function toPlaceKey(place: Place | null): string {
 	if (!place) {
 		return UNKNOWN_PLACE_KEY
 	}
-	const placeValues = JSON.stringify([place.country, place.region, place.city, place.latitude, place.longitude])
+	const { country, region, city, postalCode, metroCode, latitude, longitude } = place
+	const placeCodes = postalCode === null && metroCode === null ? [] : [postalCode, metroCode]
+	const placeValues = JSON.stringify([country, region, city, latitude, longitude, ...placeCodes])
 	return createHash("sha256").update(placeValues).digest("hex").slice(0, 32)
 }
 
 /**
- * Returns a place's five daily count columns, all null for no place.
+ * Returns a place's daily count columns, all null for no place.
  */
 export function toPlaceColumns(place: Place | null): PlaceColumns {
-	return place ?? { country: null, region: null, city: null, latitude: null, longitude: null }
+	return (
+		place ?? {
+			country: null,
+			region: null,
+			city: null,
+			postalCode: null,
+			metroCode: null,
+			latitude: null,
+			longitude: null,
+		}
+	)
 }
 
 /**
- * Returns the place a daily count row's five columns name, or null for a row with no known country.
+ * Returns the place a daily count row's columns name, or null for a row with no known country.
  */
-export function toDailyCountPlace({ country, region, city, latitude, longitude }: PlaceColumns): Place | null {
-	return country ? { country, region, city, latitude, longitude } : null
+export function toDailyCountPlace(placeColumns: PlaceColumns): Place | null {
+	const { country, region, city, postalCode, metroCode, latitude, longitude } = placeColumns
+	return country ? { country, region, city, postalCode, metroCode, latitude, longitude } : null
 }
 
 // run the count script for one person's view or play of a row, under the person's keyed hash

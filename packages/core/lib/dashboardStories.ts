@@ -103,7 +103,7 @@ const STORY_PODCAST_TREND: DashboardTrend = {
 	})),
 }
 
-// a city pin with its one topic, or a country's remainder
+// a place's pin with its one topic: a postal code or city at its coordinates, or a country at its center
 function toStoryPin(
 	pin: Partial<DashboardPin> & Pick<DashboardPin, "country" | "latitude" | "longitude" | "peopleCount">,
 ): DashboardPin {
@@ -112,27 +112,79 @@ function toStoryPin(
 		placeLevel: "country",
 		region: null,
 		city: null,
+		postalCode: null,
 		count: pin.peopleCount + 4,
 		items: [{ itemId: item.itemId, title: item.title, path: item.path, count: pin.peopleCount + 4 }],
 		...pin,
 	}
 }
 
-// pins in Paris, Berlin, and San Francisco, and the rest of France, the United States, and Japan at each country's
-// center
+// a city's pin at one of its postal codes
+function toStoryCityPin(
+	pin: Pick<DashboardPin, "country" | "city" | "postalCode" | "latitude" | "longitude" | "peopleCount">,
+): DashboardPin {
+	return toStoryPin({ placeLevel: "city", ...pin })
+}
+
+// two Paris postal codes, Berlin, two San Francisco postal codes, one visitor each in Hinwil and Bend, and a place in
+// Japan with no city at the country's center
 export const STORY_DASHBOARD_PINS: DashboardPin[] = [
-	toStoryPin({ placeLevel: "city", country: "FR", city: "Paris", latitude: 48.86, longitude: 2.35, peopleCount: 42 }),
-	toStoryPin({ country: "FR", latitude: 46.23, longitude: 2.21, peopleCount: 9 }),
-	toStoryPin({ placeLevel: "city", country: "DE", city: "Berlin", latitude: 52.52, longitude: 13.4, peopleCount: 31 }),
-	toStoryPin({
-		placeLevel: "city",
+	toStoryCityPin({
+		country: "FR",
+		city: "Paris",
+		postalCode: "75001",
+		latitude: 48.86,
+		longitude: 2.35,
+		peopleCount: 42,
+	}),
+	toStoryCityPin({
+		country: "FR",
+		city: "Paris",
+		postalCode: "75011",
+		latitude: 48.86,
+		longitude: 2.38,
+		peopleCount: 9,
+	}),
+	toStoryCityPin({
+		country: "DE",
+		city: "Berlin",
+		postalCode: "10115",
+		latitude: 52.52,
+		longitude: 13.4,
+		peopleCount: 31,
+	}),
+	toStoryCityPin({
 		country: "US",
 		city: "San Francisco",
+		postalCode: "94107",
 		latitude: 37.77,
 		longitude: -122.42,
 		peopleCount: 64,
 	}),
-	toStoryPin({ country: "US", latitude: 37.09, longitude: -95.71, peopleCount: 18 }),
+	toStoryCityPin({
+		country: "US",
+		city: "San Francisco",
+		postalCode: "94110",
+		latitude: 37.75,
+		longitude: -122.42,
+		peopleCount: 18,
+	}),
+	toStoryCityPin({
+		country: "CH",
+		city: "Hinwil",
+		postalCode: "8340",
+		latitude: 47.3,
+		longitude: 8.84,
+		peopleCount: 1,
+	}),
+	toStoryCityPin({
+		country: "US",
+		city: "Bend",
+		postalCode: "97701",
+		latitude: 44.06,
+		longitude: -121.31,
+		peopleCount: 1,
+	}),
 	toStoryPin({ country: "JP", latitude: 36.2, longitude: 138.25, peopleCount: 7 }),
 ]
 

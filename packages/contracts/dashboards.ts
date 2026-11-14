@@ -43,9 +43,6 @@ export const DASHBOARD_WINDOW_DAYS = 365
 // how many days a daily count row is kept
 export const DAILY_COUNT_RETENTION_DAYS = 400
 
-// the distinct people a city needs, per item and format, before it shows on its own
-export const CITY_MINIMUM_PEOPLE = 10
-
 // how many items the bar chart ranks, and how many findings the pie and the trend show before the rest fold into Other
 export const DASHBOARD_TOP_ITEM_COUNT = 10
 
@@ -91,11 +88,14 @@ export type DashboardReadAccess = DashboardAccessLevel | "summaryOnly"
 export const DASHBOARD_PARAGRAPH_MAX_CHARS = 480
 
 // where a view or a play came from, as Cloudflare reported it: a two-letter country code, the region and city names,
-// and the decimal coordinates exactly as sent. a view with no known country has no place
+// the postal code and metro code, and the decimal coordinates exactly as sent. a view with no known country has no
+// place
 export type Place = {
 	country: string
 	region: string | null
 	city: string | null
+	postalCode: string | null
+	metroCode: string | null
 	latitude: string | null
 	longitude: string | null
 }
@@ -141,13 +141,15 @@ export type DashboardTrend = z.infer<typeof dashboardTrend>
 const dashboardWord = z.object({ word: z.string(), ...dashboardCountFields })
 export type DashboardWord = z.infer<typeof dashboardWord>
 
-// one map pin: a shown city, or a country's remainder at its center, with its people, its views or plays, and the
-// items viewed or played there
+// one map pin: a place at its finest known level, a postal code or a city at Cloudflare's coordinates, or a country at
+// its center, with its people, its views or plays, and the items viewed or played there. a snapshot built before
+// postal codes were counted has no postalCode
 const dashboardPin = z.object({
 	placeLevel: z.enum(["city", "country"]),
 	country: z.string(),
 	region: z.string().nullable(),
 	city: z.string().nullable(),
+	postalCode: z.string().nullable().optional(),
 	latitude: z.number().nullable(),
 	longitude: z.number().nullable(),
 	peopleCount: z.number(),

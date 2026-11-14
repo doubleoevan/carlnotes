@@ -81,9 +81,9 @@ tap instead: the details open in a sheet with a button to the item's page.
 
 ## The map
 
-A city gets its own pin once ten different people visited, or played, an item from there. Smaller places count toward
-their country, whose pin sits at the country's center. Pins close together share one pin with their total. Click or tap
-a shared pin to zoom in to its places. Click or tap one place's pin to list the 20 items visited or played most there,
+Every place where someone visited, or played, an item gets its own pin, down to the postal code. A pin sits where our
+network provider places it, or at its country's center if it gives no spot. Pins close together share one pin with
+their total. Click or tap a shared pin to zoom in to its places. Click or tap one place's pin to list the 20 items visited or played most there,
 each with how many times.
 
 ## Who sees what

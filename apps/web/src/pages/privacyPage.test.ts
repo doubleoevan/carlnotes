@@ -22,10 +22,10 @@ test("the policy says Café and team visits are counted like topic views, with n
 	expect(privacyPageSource).toContain("sets nothing on your device")
 })
 
-test("the policy says visitors are charted by place with no IP address stored and a ten-person city minimum", () => {
+test("the policy says visitors are charted by place down to the postal code, with no IP address stored", () => {
 	expect(privacyPageSource).toContain("Specials pages chart visits and plays by day and by place.")
+	expect(privacyPageSource).toContain("the country, region, city, and postal code")
 	expect(privacyPageSource).toContain("never your IP address")
-	expect(privacyPageSource).toContain("A city shows on a map only after ten different people have visited from it.")
 })
 
 test("the additions leave the existing policy whole", () => {

@@ -50,9 +50,11 @@ people can be counted across days, places, and items without storing who they we
 
 ### Requirement: A place is read only from a trusted Cloudflare hop
 
-The place SHALL be the country, region, city, latitude, and longitude in Cloudflare's geolocation headers, read only
-if the request arrived through a trusted Cloudflare hop. Latitude and longitude SHALL be stored exactly as sent. A
-request with no trusted place SHALL count under an unknown place, which counts in totals and gets no pin.
+The place SHALL be the country, region, city, postal code, metro code, latitude, and longitude in Cloudflare's
+geolocation headers, read only if the request arrived through a trusted Cloudflare hop. The postal code, the metro
+code, latitude, and longitude SHALL be stored exactly as sent, and a code that does not match its pattern SHALL be
+dropped. Two postal codes in one city SHALL count as two places. A request with no trusted place SHALL count under an
+unknown place, which counts in totals and gets no pin.
 
 #### Scenario: A forged header is ignored
 
@@ -62,7 +64,7 @@ request with no trusted place SHALL count under an unknown place, which counts i
 #### Scenario: The mobile app's requests have places
 
 - **WHEN** the mobile app opens a topic through carlnotes.com
-- **THEN** the view counts under the city Cloudflare reported
+- **THEN** the view counts under the city and postal code Cloudflare reported
 
 ### Requirement: No address or individual event is stored
 
@@ -89,22 +91,6 @@ Daily count rows older than 400 days SHALL be deleted by the nightly run.
 - **WHEN** the nightly run finishes on a day 401 days after a counted day
 - **THEN** that counted day's rows are gone
 
-### Requirement: A city shows only with ten distinct people
-
-A city SHALL be shown for an item and format only if at least ten distinct people from it are counted, after access
-filtering. Smaller groups SHALL count toward their country. If a country's remainder would be between one and nine
-people, its smallest shown city SHALL also count toward the country, until the remainder is zero or at least ten.
-
-#### Scenario: One visitor in a small town is never pinned
-
-- **WHEN** one person in a small town opens a public topic
-- **THEN** the map counts them in their country's pin and shows no pin for the town
-
-#### Scenario: A small remainder cannot be found by subtraction
-
-- **WHEN** a country has one city with 12 people and another with 3
-- **THEN** the map shows only the country pin, with 15
-
 ### Requirement: The all-time counters stay the visitor number
 
 The existing all-time viewer and listener counters SHALL stay the source of the Visitors and Listeners counts on
@@ -115,3 +101,19 @@ summary strip and charts count from the daily counts over their own ranges.
 
 - **WHEN** the daily counts start counting
 - **THEN** every topic's Visitors count keeps rising from its existing value
+
+### Requirement: Every place shows as its own pin
+
+Each place SHALL show on the map as its own pin for an item and format, with any number of distinct people, one
+included, at its finest known level: its postal code, then its city, then its country. A place SHALL sit at
+Cloudflare's coordinates if it has them, else at its country's center. No place SHALL roll into its country.
+
+#### Scenario: One visitor in a small town is pinned
+
+- **WHEN** one person in a small town opens a public topic
+- **THEN** the map shows a pin for the town's postal code with one visitor
+
+#### Scenario: Two postal codes in one city count apart
+
+- **WHEN** a city has 12 people in one postal code and 3 in another
+- **THEN** the map's data holds a place with 12 and a place with 3, and no country place
