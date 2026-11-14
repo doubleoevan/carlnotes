@@ -93,10 +93,15 @@ await importUiServerAtStartup()
 // log the process's connection pool, event loop delay, and Redis gauges once a minute
 startRuntimeGauges({ processName: "api", readPoolGauges, readExtraGauges: readRedisExtraGauges })
 
+// the hosts the Specials map loads its images from
+const GOOGLE_MAPS_IMAGE_ORIGINS =
+	"https://*.googleapis.com https://*.gstatic.com https://*.google.com https://*.googleusercontent.com"
+
 // the default policy, used unless a route sets its own. images may come from a composer's local preview,
-// github, and an avatar's photo host. frames may come from the shared frame sources
+// github, an avatar's photo host, and Google Maps' tiles, icons, and cursors. frames may come from the shared frame
+// sources
 const CONTENT_SECURITY_POLICY = toContentSecurityPolicy([
-	`img-src 'self' blob: data: https://raw.githubusercontent.com ${[...PROVIDER_PHOTO_ORIGINS].join(" ")}`,
+	`img-src 'self' blob: data: https://raw.githubusercontent.com ${GOOGLE_MAPS_IMAGE_ORIGINS} ${[...PROVIDER_PHOTO_ORIGINS].join(" ")}`,
 	FRAME_SOURCE_DIRECTIVE,
 	"frame-ancestors 'none'",
 ])

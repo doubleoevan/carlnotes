@@ -327,6 +327,20 @@ test("the content security policy allows every provider photo host the avatar re
 	}
 })
 
+// the Specials map draws Google's tiles, icons, and cursors, so the policy has to allow their hosts
+test("the content security policy allows Google Maps' image hosts", async () => {
+	const response = await request("/api/health")
+	const imageSources = response.contentSecurityPolicy?.split(";")[0] ?? ""
+	for (const mapsOrigin of [
+		"https://*.googleapis.com",
+		"https://*.gstatic.com",
+		"https://*.google.com",
+		"https://*.googleusercontent.com",
+	]) {
+		expect(imageSources).toContain(mapsOrigin)
+	}
+})
+
 // signup renders the Turnstile challenge in an iframe from Cloudflare, so the policy has to allow that origin. its
 // frame-src is the directive that the component browser's policy shares
 test("the content security policy allows the shared frame sources, the Turnstile challenge among them", async () => {

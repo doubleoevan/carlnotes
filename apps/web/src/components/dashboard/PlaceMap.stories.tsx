@@ -1,11 +1,12 @@
 // the Dashboard map on its card: with no Google Maps key it draws the outline map, where nearby places share one pin
 // with their count, the way the MCP view and a self-hosted site draw it
 
+import { fetchDashboardMapSettings } from "@carlnotes/client/dashboardClient"
 import { DASHBOARD_CHART_IMAGE_LABELS } from "@carlnotes/core/lib/dashboardCharts"
 import { STORY_DASHBOARD_PINS } from "@carlnotes/core/lib/dashboardStories"
 import { toChartSeriesColors } from "@carlnotes/nightshift/chartTheme"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
-import { expect, fn, within } from "storybook/test"
+import { expect, fn, mocked, waitFor, within } from "storybook/test"
 import { OutlineMap } from "./OutlineMap"
 import { PlaceMap } from "./PlaceMap"
 
@@ -33,6 +34,19 @@ export const WithoutGoogleMapsKey: Story = {
 	play: async ({ canvasElement }) => {
 		const canvas = within(canvasElement)
 		await expect(await canvas.findByRole("img", { name: DASHBOARD_CHART_IMAGE_LABELS.map })).toBeVisible()
+	},
+}
+
+/** The page's map with a Google Maps key and Map ID, whose box keeps its height around Google's map. */
+export const WithGoogleMapsKey: Story = {
+	beforeEach: () => {
+		mocked(fetchDashboardMapSettings).mockResolvedValue({ apiKey: "story-key", mapId: "story-map-id" })
+	},
+	play: async ({ canvasElement }) => {
+		await waitFor(() => {
+			const mapBox = canvasElement.querySelector("[data-place-map]")
+			expect(mapBox?.getBoundingClientRect().height).toBeGreaterThan(0)
+		})
 	},
 }
 

@@ -67,6 +67,9 @@ function LoadedPlaceMap(props: DashboardChartProps<DashboardPin[]>) {
 	)
 }
 
+// the Google map filling its wrapper's box
+const MAP_FILL_STYLE = { width: "100%", height: "100%" }
+
 // the map's box as a loading shape
 function MapPlaceholder() {
 	return <div className={SKELETON_SHAPE_CLASS} style={DASHBOARD_MAP_BOX} />
@@ -86,29 +89,31 @@ function GooglePlaceMap({
 	const [zoom, setZoom] = useState(STARTING_ZOOM)
 
 	// the map in the page's color mode, with Google's controls: map or satellite with terrain and labels, Street View,
-	// full screen, and the camera's zoom and pan
+	// full screen, and the camera's zoom and pan. the box and its corners sit on a wrapper, because the map drops its
+	// style if it also has a class
 	return (
 		<APIProvider apiKey={mapSettings.apiKey}>
-			<GoogleMap
-				mapId={mapSettings.mapId}
-				colorScheme={colorMode === "dark" ? ColorScheme.DARK : ColorScheme.LIGHT}
-				defaultCenter={center}
-				defaultZoom={zoom}
-				gestureHandling="cooperative"
-				mapTypeControl
-				streetViewControl
-				fullscreenControl
-				cameraControl
-				onZoomChanged={(event) => {
-					setZoom(event.detail.zoom)
-					setOpenPin(null)
-				}}
-				onIdle={(event) => setCenter(event.map.getCenter()?.toJSON() ?? center)}
-				style={DASHBOARD_MAP_BOX}
-				className="overflow-hidden rounded-md"
-			>
-				<GooglePlacePins {...chartProps} zoom={zoom} openPin={openPin} onOpenPinChange={setOpenPin} />
-			</GoogleMap>
+			<div data-place-map className="overflow-hidden rounded-md" style={DASHBOARD_MAP_BOX}>
+				<GoogleMap
+					mapId={mapSettings.mapId}
+					colorScheme={colorMode === "dark" ? ColorScheme.DARK : ColorScheme.LIGHT}
+					defaultCenter={center}
+					defaultZoom={zoom}
+					gestureHandling="cooperative"
+					mapTypeControl
+					streetViewControl
+					fullscreenControl
+					cameraControl
+					onZoomChanged={(event) => {
+						setZoom(event.detail.zoom)
+						setOpenPin(null)
+					}}
+					onIdle={(event) => setCenter(event.map.getCenter()?.toJSON() ?? center)}
+					style={MAP_FILL_STYLE}
+				>
+					<GooglePlacePins {...chartProps} zoom={zoom} openPin={openPin} onOpenPinChange={setOpenPin} />
+				</GoogleMap>
+			</div>
 		</APIProvider>
 	)
 }
