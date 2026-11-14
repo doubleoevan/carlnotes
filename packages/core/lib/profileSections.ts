@@ -52,21 +52,6 @@ export const PROFILE_SECTIONS = {
 	profileTopicPosts: CardSection<ProfileTopicPostCard>
 }
 
-// the profile, whether the signed-in user is the person, and the person's own topics once they load
-type ToProfileTopicCountOptions = {
-	profile: Pick<ProfileResponse, "topics">
-	isOwnProfile: boolean
-	ownTopics: unknown[] | null | undefined
-}
-
-/**
- * Returns how many topics a profile's All Topics table lists: the person's own once they load, and null until then,
- * or the ones the profile shows anyone else.
- */
-export function toProfileTopicCount({ profile, isOwnProfile, ownTopics }: ToProfileTopicCountOptions): number | null {
-	return isOwnProfile ? (ownTopics?.length ?? null) : profile.topics.length
-}
-
 // the values of the profile's card sections, which start open
 export const PROFILE_SECTION_VALUES = Object.values(PROFILE_SECTIONS).map((profileSection) => profileSection.value)
 
@@ -87,19 +72,22 @@ type ProfilePodcastEpisodeCards = Pick<ProfileResponse, "profilePodcastEpisodes"
 
 /**
  * Returns the rows of the rank dialog for a profile's topics: the pinned topics, which lead the cards, and every
- * public topic, which is what its owner may pin.
+ * public topic the person owns, which is what they may pin.
  */
 export function toProfileTopicRankItems({ profileTopics, pinnedTopicCount }: ProfileTopicCards): ProfileRankItems {
 	const rankedItems = profileTopics.map((profileTopic) => ({ id: profileTopic.id, label: profileTopic.name }))
 	return {
 		pinnedItems: rankedItems.slice(0, pinnedTopicCount),
-		candidateItems: rankedItems.filter((_rankedItem, index) => profileTopics[index]?.isPublic),
+		candidateItems: rankedItems.filter((_rankedItem, index) => {
+			const profileTopic = profileTopics[index]
+			return profileTopic?.isPublic && profileTopic.isOwned
+		}),
 	}
 }
 
 /**
  * Returns the rows of the rank dialog for a profile's podcast episodes: the pinned ones, which lead the cards, and
- * every one of a public topic, each named by its title and its topic.
+ * every one of a public topic the person owns, each named by its title and its topic.
  */
 export function toProfilePodcastEpisodeRankItems({
 	profilePodcastEpisodes,
@@ -119,7 +107,10 @@ function toPodcastEpisodeCardRankItems(
 	}))
 	return {
 		pinnedItems: rankedItems.slice(0, pinnedCount),
-		candidateItems: rankedItems.filter((_rankedItem, index) => profilePodcastEpisodeCards[index]?.isTopicPublic),
+		candidateItems: rankedItems.filter((_rankedItem, index) => {
+			const profilePodcastEpisodeCard = profilePodcastEpisodeCards[index]
+			return profilePodcastEpisodeCard?.isTopicPublic && profilePodcastEpisodeCard.isTopicOwned
+		}),
 	}
 }
 
@@ -204,7 +195,3 @@ const PROFILE_RANKED_NOUNS: RankedNoun[] = ["topics", "films", "podcasts", "post
 export function toProfileRankedNouns(isOwnProfile: boolean): RankedNoun[] {
 	return isOwnProfile ? PROFILE_RANKED_NOUNS : []
 }
-
-// the line and the retry label of the person's own topics after their read fails
-export const TOPICS_LOAD_FAILED_LINE = "Topics didn't load."
-export const RETRY_LOADING_TOPICS_LABEL = "Retry loading topics"

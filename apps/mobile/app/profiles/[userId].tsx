@@ -1,4 +1,3 @@
-import { fetchActivity } from "@carlnotes/client/activityClient"
 import { showClientError } from "@carlnotes/client/apiClient"
 import { authClient } from "@carlnotes/client/authClient"
 import { fetchProfile } from "@carlnotes/client/profileClient"
@@ -7,7 +6,6 @@ import {
 	sendProfileOrderMoves,
 	toProfileRankDialogItems,
 	toProfileRankedNouns,
-	toProfileTopicCount,
 } from "@carlnotes/core/lib/profileSections"
 import {
 	type PinnedOrderMove,
@@ -54,7 +52,7 @@ const PROFILE_RANK_OPTION_ICONS: Record<RankedNoun, LucideIcon> = {
  * Shows a user's profile, topics, and teams.
  */
 export default function ProfileScreen() {
-	// load the profile and the current user's private activity
+	// load the profile, which includes the person's own table rows on their own profile
 	const { userId } = useLocalSearchParams<{ userId: string }>()
 	const { data: session } = authClient().useSession()
 	const [isEditing, setIsEditing] = useState(false)
@@ -63,11 +61,6 @@ export default function ProfileScreen() {
 	const [rankedNoun, setRankedNoun] = useState<RankedNoun | null>(null)
 	const isOwnProfile = session?.user.id === userId
 	const query = useQuery({ queryKey: ["profile", session?.user.id, userId], queryFn: () => fetchProfile(userId) })
-	const activity = useQuery({
-		queryKey: ["activity", session?.user.id],
-		queryFn: () => fetchActivity(),
-		enabled: isOwnProfile,
-	})
 	const profile = query.data
 
 	// count a loaded profile once per app runtime, as the web counts it once per tab
@@ -79,12 +72,9 @@ export default function ProfileScreen() {
 			}
 		}, [loadedProfileUserId]),
 	)
+	// refresh the profile, its own table rows included
 	function handleReload(): void {
-		// refresh the profile and its private activity together
 		void query.refetch()
-		if (isOwnProfile) {
-			void activity.refetch()
-		}
 	}
 
 	// block or unblock this person, then reload the profile
@@ -148,11 +138,7 @@ export default function ProfileScreen() {
 				query.isPending
 					? false
 					: profile && (
-							<ProfileHeader
-								profile={profile}
-								isOwnProfile={isOwnProfile}
-								topicCount={toProfileTopicCount({ profile, isOwnProfile, ownTopics: activity.data?.topics })}
-							/>
+							<ProfileHeader profile={profile} isOwnProfile={isOwnProfile} topicCount={profile.topics.length} />
 						)
 			}
 			// the owner starts a team, and a different user invites the profile user to one, in the plain style with the
@@ -176,7 +162,7 @@ export default function ProfileScreen() {
 			// the loading state draws both buttons' placeholders, so the row waits for the profile
 			topicButton={query.isPending ? undefined : <NewTopicButton />}
 		>
-			<ProfileContent query={query} activity={activity} isOwnProfile={isOwnProfile} onReload={handleReload} />
+			<ProfileContent query={query} isOwnProfile={isOwnProfile} onReload={handleReload} />
 			{isEditing && (
 				<Sheet title="Edit Café" onClose={() => setIsEditing(false)}>
 					<ProfileFields onUsernameChanged={handleReload} />
@@ -200,12 +186,10 @@ export default function ProfileScreen() {
 // show the two profile tables only after the profile request has resolved
 function ProfileContent({
 	query,
-	activity,
 	isOwnProfile,
 	onReload,
 }: {
 	query: ReturnType<typeof useQuery<Awaited<ReturnType<typeof fetchProfile>>>>
-	activity: ReturnType<typeof useQuery<Awaited<ReturnType<typeof fetchActivity>>>>
 	isOwnProfile: boolean
 	onReload: () => void
 }) {
@@ -223,13 +207,7 @@ function ProfileContent({
 	}
 	return (
 		<>
-			<ProfileSections
-				profile={profile}
-				isOwnProfile={isOwnProfile}
-				ownTopics={activity.data?.topics ?? null}
-				isOwnTopicsLoadFailed={Boolean(activity.error)}
-				onReload={onReload}
-			/>
+			<ProfileSections profile={profile} isOwnProfile={isOwnProfile} onReload={onReload} />
 			{/* the profile's visitors, read while this profile is the active route */}
 			<ViewerCountLine
 				viewerCountPage={{ kind: "profile", id: profile.userId }}

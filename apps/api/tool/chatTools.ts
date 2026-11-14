@@ -94,8 +94,9 @@ export function toSavedTopicPromptText(topicName: string): string {
 /**
  * Returns what carl reads after the topic's settings are saved.
  */
-export function toSavedTopicFieldsText(topicName: string): string {
-	return `Saved the settings for ${topicName}.`
+export function toSavedTopicFieldsText(topicName: string, defaultTeamName: string | null = null): string {
+	const defaultTeamText = defaultTeamName ? ` It is now on ${defaultTeamName}, the reader's default team.` : ""
+	return `Saved the settings for ${topicName}.${defaultTeamText}`
 }
 
 /**

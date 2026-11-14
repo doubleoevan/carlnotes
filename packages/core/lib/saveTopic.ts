@@ -99,7 +99,6 @@ export async function saveTopic<Attachment>({
 export const MISSING_FIELD_NOTES = {
 	name: "Please give the topic a title.",
 	prompt: "Please write Carl's prompt first.",
-	team: "Pick a team, create one, or set Visibility to private.",
 } as const
 
 // the way past the daily topic limit after that error's message, with a bigger plan only where one may be bought

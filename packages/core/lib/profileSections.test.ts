@@ -21,8 +21,8 @@ import {
 	toProfileRankDialogLabels,
 } from "./rankDialog"
 
-// a topic card with its name and whether its topic is public
-function toProfileTopicCard(id: string, isPublic: boolean): ProfileTopicCard {
+// a topic card with its name, whether its topic is public, and whether the person owns it
+function toProfileTopicCard(id: string, isPublic: boolean, isOwned = true): ProfileTopicCard {
 	return {
 		id,
 		name: `Topic ${id}`,
@@ -34,25 +34,36 @@ function toProfileTopicCard(id: string, isPublic: boolean): ProfileTopicCard {
 		reactionCount: 0,
 		latestPodcastEpisode: null,
 		isPublic,
+		isOwned,
 	}
 }
 
-test("the pinned topics are the first cards, and a private topic is no candidate", () => {
+test("the pinned topics are the first cards, and a private topic or a team topic is no candidate", () => {
 	const profileTopicRankItems = toProfileTopicRankItems({
-		profileTopics: [toProfileTopicCard("a", true), toProfileTopicCard("b", true), toProfileTopicCard("c", false)],
+		profileTopics: [
+			toProfileTopicCard("a", true),
+			toProfileTopicCard("b", true),
+			toProfileTopicCard("c", false),
+			toProfileTopicCard("d", true, false),
+		],
 		pinnedTopicCount: 1,
 	})
 	expect(profileTopicRankItems.pinnedItems).toEqual([{ id: "a", label: "Topic a" }])
 	expect(profileTopicRankItems.candidateItems.map((candidateItem) => candidateItem.id)).toEqual(["a", "b"])
 })
 
-// a podcast episode card or a film card with its title and whether its topic is public. the tests read only the fields
-// below
-const toProfilePodcastEpisodeCard = (id: string, isTopicPublic: boolean): ProfilePodcastEpisodeCard =>
+// a podcast episode card or a film card with its title, whether its topic is public, and whether the person owns its
+// topic. the tests read only the fields below
+const toProfilePodcastEpisodeCard = (
+	id: string,
+	isTopicPublic: boolean,
+	isTopicOwned = true,
+): ProfilePodcastEpisodeCard =>
 	({
 		podcastEpisode: { id, title: `Episode ${id}` },
 		topic: { id: `topic-${id}`, name: "Home espresso", path: "/topics/t", image: null },
 		isTopicPublic,
+		isTopicOwned,
 	}) as ProfilePodcastEpisodeCard
 
 // a profile with no card in any section
@@ -67,9 +78,13 @@ const EMPTY_PROFILE_CARDS = {
 	pinnedTopicPostCount: 0,
 }
 
-test("a podcast episode is named by its title and its topic, and only a public topic's is a candidate", () => {
+test("a podcast episode is named by its title and its topic, and only an owned public topic's is a candidate", () => {
 	const profilePodcastEpisodeRankItems = toProfilePodcastEpisodeRankItems({
-		profilePodcastEpisodes: [toProfilePodcastEpisodeCard("1", true), toProfilePodcastEpisodeCard("2", false)],
+		profilePodcastEpisodes: [
+			toProfilePodcastEpisodeCard("1", true),
+			toProfilePodcastEpisodeCard("2", false),
+			toProfilePodcastEpisodeCard("3", true, false),
+		],
 		pinnedPodcastEpisodeCount: 0,
 	})
 	expect(profilePodcastEpisodeRankItems.pinnedItems).toEqual([])

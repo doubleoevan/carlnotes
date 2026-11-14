@@ -22,6 +22,7 @@ import { isPodcastEpisodeRecordingConfigured } from "@carlnotes/server/podcastEp
 import { eq } from "drizzle-orm"
 import { isAllowed } from "../authorization"
 import type { AnalyticsProperties } from "../currentUser"
+import { addTopicToDefaultTeamOnVisibilityChange } from "../team/defaultTeam"
 import { clearVisitorTopicCaches } from "../topic/feedCaches"
 import { releaseHomeOrder } from "../topic/homeOrder"
 import { type PromptVersionOrigin, savePromptVersion } from "../topic/promptVersions"
@@ -38,7 +39,7 @@ export type UpdateTopicFieldsResult =
 	| TopicToolRejection
 	| DailyFrequencyRejection
 	| { status: "empty" }
-	| { status: "saved"; topicName: string }
+	| { status: "saved"; topicName: string; defaultTeamName: string | null }
 
 /**
  * Saves a new prompt and its version in one transaction, when the gate grants the user topic:edit.
@@ -105,12 +106,15 @@ export async function updateTopicFields({
 	topicFields,
 	promptVersionOrigin,
 	analyticsProperties,
+	isDefaultTeamApplied = true,
 }: {
 	userId: string | null
 	topicId: string
 	topicFields: UpdateTopicFieldsPayload & { isPodcastCommentsEnabled?: boolean }
 	promptVersionOrigin: PromptVersionOrigin
 	analyticsProperties?: AnalyticsProperties
+	// whether a topic made public or invite goes on its owner's default team if no team holds it
+	isDefaultTeamApplied?: boolean
 }): Promise<UpdateTopicFieldsResult> {
 	// drop the podcast switches if Podcast Episode recording is not configured
 	const { isPodcastEnabled, isPodcastCommentsEnabled, ...topicSettings } = topicFields
@@ -170,6 +174,15 @@ export async function updateTopicFields({
 	// draw again what was drawn from an image that went back to its uploader
 	await redrawUnpublishedImageFiles(topicId, uncheckedImageSubjects)
 
+	// a private topic made public or invite goes on its owner's default team, unless a team already holds it
+	const defaultTeamName = await addTopicToDefaultTeamOnVisibilityChange({
+		ownerId: editableTopic.topic.ownerId,
+		topicId,
+		previousVisibility: editableTopic.topic.visibility,
+		visibility: topicFields.visibility,
+		isDefaultTeamApplied,
+	})
+
 	// the topic as saved, and drop its cached visitor copies
 	const savedTopic = {
 		id: topicId,
@@ -216,7 +229,7 @@ export async function updateTopicFields({
 	if (isPodcastEnabled !== undefined && isPodcastEnabled !== editableTopic.topic.isPodcastEnabled) {
 		trackEvent("podcast_toggled", editableTopic.userId, { ...toolAnalyticsProperties, isEnabled: isPodcastEnabled })
 	}
-	return { status: "saved", topicName: savedTopic.name }
+	return { status: "saved", topicName: savedTopic.name, defaultTeamName }
 }
 
 /**

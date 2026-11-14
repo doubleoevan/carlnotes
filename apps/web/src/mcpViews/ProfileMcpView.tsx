@@ -48,9 +48,6 @@ export function ProfileMcpView({ mcpViewProfile }: { mcpViewProfile: McpViewProf
 				<ProfileSections
 					profile={profile}
 					isOwnProfile={false}
-					ownTopics={null}
-					isOwnTopicsLoadFailed={false}
-					onLoadOwnTopics={ignoreChange}
 					newsList={
 						newsPage && (
 							<McpViewProfileNewsList profile={profile} newsPage={newsPage} userId={session?.userId ?? null} />

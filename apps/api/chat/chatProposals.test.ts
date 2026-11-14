@@ -63,7 +63,7 @@ function stubAgreementAndSave(decision: agreement.AgreementDecision): {
 	const savedTopicFields: unknown[] = []
 	spyOn(topicTools, "updateTopicFields").mockImplementation(async ({ topicFields }) => {
 		savedTopicFields.push(topicFields)
-		return { status: "saved", topicName: "Espresso" }
+		return { status: "saved", topicName: "Espresso", defaultTeamName: null }
 	})
 	return { checkedWords, savedTopicFields }
 }

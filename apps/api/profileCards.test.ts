@@ -1,5 +1,6 @@
-// profile cards tests: the pinned rows lead, a visitor reads public topics alone, each other topic shows one film
-// and one podcast episode, and a profile and a team list every published Topic Post from one read of the posts
+// profile cards tests: the person's own pinned rows lead, a visitor reads public topics alone, the person's tiles and
+// table take their teams' topics, each other topic shows one film and one podcast episode, and a profile and a team
+// list every published Topic Post from one read of the posts
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import { topics } from "@carlnotes/db/schema/topics"
@@ -8,6 +9,7 @@ import * as topicCards from "./home/topicCards"
 import {
 	loadProfileCards,
 	loadProfilePodcastEpisodeIds,
+	loadProfileTableTopicRows,
 	loadProfileTopicPodcastEpisodeVideoIds,
 	loadProfileTopicPostCards,
 	loadProfileTopicRows,
@@ -23,15 +25,35 @@ afterEach(() => {
 	mock.restore()
 })
 
-test("a visitor's read takes public topics alone, and the person's own takes every topic", async () => {
+test("a visitor's tiles take public topics of the person and of public teams they lead, and the person's take all", async () => {
 	const sentQueries = stubConnectionPool(() => [])
 	await loadProfileTopicRows({ profileUserId: "user-1", includesNonPublicTopics: false })
 	await loadProfileTopicRows({ profileUserId: "user-1", includesNonPublicTopics: true })
 
-	// the first read filters on visibility, and the second on the owner alone
-	expect(sentQueries[0]?.text).toContain('"topics"."visibility" = $2')
-	expect(sentQueries[0]?.values).toEqual(["user-1", "public"])
+	// both reads take the topics the person owns, and the ones that teams they lead own or have shared in
+	for (const sentQuery of sentQueries) {
+		expect(sentQuery.text).toContain('"topics"."owner_id" = $1 or')
+		expect(sentQuery.text).toContain('"topics"."team_id" in (select "team_members"."team_id"')
+		expect(sentQuery.text).toContain('"topics"."id" in (select "topic_id" from "team_topics"')
+		expect(sentQuery.text).toContain('"team_members"."role" =')
+	}
+
+	// the visitor's read keeps public teams and public topics alone, and the person's keeps every one
+	expect(sentQueries[0]?.text).toContain('"teams"."is_public" =')
+	expect(sentQueries[0]?.text).toContain('"topics"."visibility" =')
+	expect(sentQueries[1]?.text).not.toContain('"teams"."is_public"')
 	expect(sentQueries[1]?.text).not.toContain('"topics"."visibility"')
+})
+
+test("the person's own table takes every topic of every team they are an active member of", async () => {
+	const sentQueries = stubConnectionPool(() => [])
+	await loadProfileTableTopicRows("user-1")
+
+	// the owned topics and every team's, leader or not, at every visibility
+	expect(sentQueries[0]?.text).toContain('"topics"."owner_id" = $1 or')
+	expect(sentQueries[0]?.text).toContain('"team_members"."is_active" =')
+	expect(sentQueries[0]?.text).not.toContain('"team_members"."role"')
+	expect(sentQueries[0]?.text).not.toContain('"topics"."visibility"')
 })
 
 // the profile order: the pinned ones by their position and the newest first at one position, then the unpinned ones most
@@ -39,10 +61,14 @@ test("a visitor's read takes public topics alone, and the person's own takes eve
 const PROFILE_ORDER_SQL =
 	'order by "topics"."profile_order" is null, "topics"."profile_order" asc, case when "topics"."profile_order" is null then "topics"."viewer_count" end desc, case when "topics"."profile_order" is null then "topics"."subscriber_count" end desc, "topics"."created_at" desc'
 
-test("topics read pinned first in their order, then most viewed, most followed, and newest", async () => {
+test("topics read the person's own pins first in their order, then most viewed, most followed, and newest", async () => {
 	const sentQueries = stubConnectionPool(() => [])
 	await loadProfileTopicRows({ profileUserId: "user-1", includesNonPublicTopics: false })
-	expect(sentQueries[0]?.text).toContain(PROFILE_ORDER_SQL)
+
+	// a pin counts only on a topic the person owns, so a team topic's pin by its owner does not lead
+	const ownPinPosition = 'case when "topics"."owner_id" = $11 then "topics"."profile_order" end'
+	expect(sentQueries[0]?.text).toContain(`order by ${ownPinPosition} is null`)
+	expect(sentQueries[0]?.values.slice(10, 14)).toEqual(["user-1", "user-1", "user-1", "user-1"])
 })
 
 test("a team's cards read its topics in the same order, and a team with none reads nothing", async () => {
@@ -154,9 +180,9 @@ function stubProfileFilms(): void {
 test("a visitor sees a person's films on public topics alone, and the person sees every film", async () => {
 	stubProfileFilms()
 	const visitorTopicRows = await loadProfileTopicRows({ profileUserId: "user-1", includesNonPublicTopics: false })
-	const visitorCards = await loadProfileCards({ topicRows: visitorTopicRows, userId: null })
+	const visitorCards = await loadProfileCards({ topicRows: visitorTopicRows, profileUserId: "user-1", userId: null })
 	const ownTopicRows = await loadProfileTopicRows({ profileUserId: "user-1", includesNonPublicTopics: true })
-	const ownCards = await loadProfileCards({ topicRows: ownTopicRows, userId: "user-1" })
+	const ownCards = await loadProfileCards({ topicRows: ownTopicRows, profileUserId: "user-1", userId: "user-1" })
 
 	// the visitor's section holds the public topic's film alone
 	expect(visitorCards.profileTopicPodcastEpisodeVideos.map((filmCard) => filmCard.podcastEpisode.id)).toEqual([
@@ -187,7 +213,7 @@ test("a podcast episode in both sections is read once, and each section keeps it
 		return text.includes('from "episodes"') ? (isFilmRead ? filmRows : filmRows.toReversed()) : []
 	})
 	const topicRows = [{ id: "topic-public", visibility: "public", profileOrder: null }] as never
-	const profileCards = await loadProfileCards({ topicRows, userId: null })
+	const profileCards = await loadProfileCards({ topicRows, profileUserId: "user-1", userId: null })
 
 	// one read of the cards, each podcast episode once
 	expect(topicCards.loadPodcastEpisodeCards).toHaveBeenCalledTimes(1)

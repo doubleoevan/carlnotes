@@ -28,6 +28,9 @@ export const teamSummary = teamRowFields.extend({
 	role: z.enum(teamRoles),
 	// whether the user is the team's only active leader, whose leave toggle points at the members instead
 	isOnlyLeader: z.boolean(),
+	// whether this is the user's default team, the led team they joined first, which a public or invite topic goes
+	// on. absent on a team the user does not lead
+	isDefaultTeam: z.boolean().optional(),
 	// who invited the user onto the team, for the summary's Invited by column. null joined on their own
 	invitedBy: profileIdentity.nullable(),
 	// the user's unseen mentions in the team's own chat room, latest first, counted on the name's badge

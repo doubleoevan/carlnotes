@@ -11,9 +11,11 @@ import type {
 import type { TopicPostCard } from "@carlnotes/contracts/topicPosts"
 import { db } from "@carlnotes/db"
 import { podcastEpisodes, topicPodcastEpisodeVideos } from "@carlnotes/db/schema/podcast"
+import { teamMembers, teams } from "@carlnotes/db/schema/teams"
+import { teamTopics } from "@carlnotes/db/schema/teamTopics"
 import { topicPosts } from "@carlnotes/db/schema/topicPosts"
 import { topics } from "@carlnotes/db/schema/topics"
-import { and, asc, desc, eq, inArray, isNotNull, type SQL, sql } from "drizzle-orm"
+import { and, asc, desc, eq, inArray, isNotNull, or, type SQL, sql } from "drizzle-orm"
 import type { AnyPgColumn } from "drizzle-orm/pg-core"
 import { isReadyFilmOfPodcastEpisode } from "./home/homeCardIds"
 import { loadPodcastEpisodeCards, toPodcastEpisodeCardList, toTopicCards } from "./home/topicCards"
@@ -26,8 +28,12 @@ const PODCAST_EPISODE_CANDIDATE_LIMIT = 500
 // whose profile it is, and whether its reader sees the person's topics that are not public
 type LoadProfileTopicRowsOptions = { profileUserId: string; includesNonPublicTopics: boolean }
 
-// the person's topics that the reader sees, in the profile's order, and who reads them
-type LoadProfileCardsOptions = { topicRows: (typeof topics.$inferSelect)[]; userId: string | null }
+// the topics that the profile's cards show, in the profile's order, whose profile it is, and who reads them
+type LoadProfileCardsOptions = {
+	topicRows: (typeof topics.$inferSelect)[]
+	profileUserId: string
+	userId: string | null
+}
 
 // the cards of a profile's topic, film, and podcast episode sections, each with how many of its first cards are pinned
 type ProfileCards = {
@@ -43,12 +49,17 @@ type ProfileCards = {
  * Loads the cards of a profile's topic, film, and podcast episode sections for the user or a visitor, from the
  * person's topics that the reader sees, in the profile's order.
  */
-export async function loadProfileCards({ topicRows, userId }: LoadProfileCardsOptions): Promise<ProfileCards> {
-	// the ids of the topics' podcast episodes and of their films that the sections show, read together
+export async function loadProfileCards({
+	topicRows,
+	profileUserId,
+	userId,
+}: LoadProfileCardsOptions): Promise<ProfileCards> {
+	// the ids of the topics' podcast episodes and of their films that the sections show, read together. only the
+	// person's own pins lead
 	const topicIds = topicRows.map((topicRow) => topicRow.id)
 	const [profilePodcastEpisodeIds, profileFilmIds] = await Promise.all([
-		loadProfilePodcastEpisodeIds(topicIds),
-		loadProfileTopicPodcastEpisodeVideoIds(topicIds),
+		loadProfilePodcastEpisodeIds(topicIds, profileUserId),
+		loadProfileTopicPodcastEpisodeVideoIds(topicIds, profileUserId),
 	])
 
 	// the topics' cards, beside one read of the cards of both sections' podcast episodes, each podcast episode once
@@ -58,19 +69,27 @@ export async function loadProfileCards({ topicRows, userId }: LoadProfileCardsOp
 		loadPodcastEpisodeCards([...new Set(sectionPodcastEpisodeIds)]),
 	])
 
-	// each section's cards in its ids' order, each with whether its topic is public
+	// each section's cards in its ids' order, each with whether its topic is public and whether the person owns it
 	const publicTopicIds = new Set(
 		topicRows.filter((topicRow) => topicRow.visibility === "public").map((topicRow) => topicRow.id),
+	)
+	const ownedTopicIds = new Set(
+		topicRows.filter((topicRow) => topicRow.ownerId === profileUserId).map((topicRow) => topicRow.id),
 	)
 	const toProfilePodcastEpisodeCards = (podcastEpisodeIds: string[]): ProfilePodcastEpisodeCard[] =>
 		toPodcastEpisodeCardList(podcastEpisodeCards, podcastEpisodeIds).map((podcastEpisodeCard) => ({
 			...podcastEpisodeCard,
 			isTopicPublic: publicTopicIds.has(podcastEpisodeCard.topic.id),
+			isTopicOwned: ownedTopicIds.has(podcastEpisodeCard.topic.id),
 		}))
 
 	return {
-		profileTopics: topicCards.map((topicCard) => ({ ...topicCard, isPublic: publicTopicIds.has(topicCard.id) })),
-		pinnedTopicCount: topicRows.filter((topicRow) => topicRow.profileOrder !== null).length,
+		profileTopics: topicCards.map((topicCard) => ({
+			...topicCard,
+			isPublic: publicTopicIds.has(topicCard.id),
+			isOwned: ownedTopicIds.has(topicCard.id),
+		})),
+		pinnedTopicCount: topicRows.filter((topicRow) => toOwnPinPosition(topicRow, profileUserId) !== null).length,
 		// the film cards, right before the podcast episode cards
 		profileTopicPodcastEpisodeVideos: toProfilePodcastEpisodeCards(profileFilmIds.podcastEpisodeIds),
 		pinnedTopicPodcastEpisodeVideoCount: profileFilmIds.pinnedTopicPodcastEpisodeVideoCount,
@@ -157,54 +176,136 @@ export async function loadProfileTopicPostCards(
 	}
 }
 
-// the profile order of topics: the pinned ones by their position, the newest first among those at one position, then
-// the home's trending order, most viewed, then most followed, then newest
-const PROFILE_TOPIC_ORDER = [
-	sql`${topics.profileOrder} is null`,
-	asc(topics.profileOrder),
-	sql`case when ${topics.profileOrder} is null then ${topics.viewerCount} end desc`,
-	sql`case when ${topics.profileOrder} is null then ${topics.subscriberCount} end desc`,
-	desc(topics.createdAt),
-]
+// the profile order of topics by a pin position: the pinned ones by their position, the newest first among those at
+// one position, then the home's trending order, most viewed, then most followed, then newest
+function toProfileTopicOrder(pinPosition: SQL | AnyPgColumn): SQL[] {
+	return [
+		sql`${pinPosition} is null`,
+		sql`${pinPosition} asc`,
+		sql`case when ${pinPosition} is null then ${topics.viewerCount} end desc`,
+		sql`case when ${pinPosition} is null then ${topics.subscriberCount} end desc`,
+		desc(topics.createdAt),
+	]
+}
+
+// the profile order of a team's topics, where each owner's pins count
+const PROFILE_TOPIC_ORDER = toProfileTopicOrder(topics.profileOrder)
+
+// a topic's pin position on a profile, which counts only on a topic that the person owns
+function toOwnPinPosition(topicRow: typeof topics.$inferSelect, profileUserId: string): number | null {
+	return topicRow.ownerId === profileUserId ? topicRow.profileOrder : null
+}
 
 /**
- * Loads a person's topics in their profile's order: the pinned ones in their order, then the home's trending order,
- * most viewed, then most followed, then newest. A reader who sees only public topics gets those alone.
+ * Loads the topics of a person's card sections in their profile's order: the topics they own, and the topics held by
+ * the teams they lead. A reader who sees only public topics gets the public ones alone, and a team's only if the team
+ * is public. The person's own pins lead in their order, then the home's trending order, most viewed, then most
+ * followed, then newest.
  */
 export function loadProfileTopicRows({
 	profileUserId,
 	includesNonPublicTopics,
 }: LoadProfileTopicRowsOptions): Promise<(typeof topics.$inferSelect)[]> {
-	const visibleTopicsFilter = includesNonPublicTopics
-		? eq(topics.ownerId, profileUserId)
-		: and(eq(topics.ownerId, profileUserId), eq(topics.visibility, "public"))
+	const ledTeamIds = toProfileTeamIdsQuery({
+		profileUserId,
+		isLeaderOnly: true,
+		isPublicOnly: !includesNonPublicTopics,
+	})
+	return loadTopicRowsInProfileOrder({
+		profileUserId,
+		topicFilter: and(
+			or(eq(topics.ownerId, profileUserId), toHeldTopicFilter(ledTeamIds)),
+			includesNonPublicTopics ? undefined : eq(topics.visibility, "public"),
+		),
+	})
+}
 
-	// the pinned topics lead in their order, and the rest follow in the home's trending order
+/**
+ * Loads the topics of the All Topics table on the person's own profile: every topic they own, and every topic held
+ * by a team they are an active member of, at every visibility, each once.
+ */
+export function loadProfileTableTopicRows(profileUserId: string): Promise<(typeof topics.$inferSelect)[]> {
+	const memberTeamIds = toProfileTeamIdsQuery({ profileUserId, isLeaderOnly: false, isPublicOnly: false })
+	return loadTopicRowsInProfileOrder({
+		profileUserId,
+		topicFilter: or(eq(topics.ownerId, profileUserId), toHeldTopicFilter(memberTeamIds)),
+	})
+}
+
+// the topics that match a filter, each once, with the person's own pins leading and the rest in the trending order
+function loadTopicRowsInProfileOrder({
+	profileUserId,
+	topicFilter,
+}: {
+	profileUserId: string
+	topicFilter: SQL | undefined
+}): Promise<(typeof topics.$inferSelect)[]> {
+	// only the person's own topics keep their pin position
+	const ownPinPosition = sql`case when ${topics.ownerId} = ${profileUserId} then ${topics.profileOrder} end`
 	return db
 		.select()
 		.from(topics)
-		.where(visibleTopicsFilter)
-		.orderBy(...PROFILE_TOPIC_ORDER)
+		.where(topicFilter)
+		.orderBy(...toProfileTopicOrder(ownPinPosition))
+}
+
+// the ids of the teams the person is an active member of, the led ones alone or the public ones alone if asked
+// biome-ignore lint/nursery/useExplicitReturnType: drizzle infers the select builder's type, which has no name to write here
+function toProfileTeamIdsQuery({
+	profileUserId,
+	isLeaderOnly,
+	isPublicOnly,
+}: {
+	profileUserId: string
+	isLeaderOnly: boolean
+	isPublicOnly: boolean
+}) {
+	// the person's active memberships, narrowed to the led or public teams if asked
+	return db
+		.select({ teamId: teamMembers.teamId })
+		.from(teamMembers)
+		.innerJoin(teams, eq(teams.id, teamMembers.teamId))
+		.where(
+			and(
+				eq(teamMembers.userId, profileUserId),
+				eq(teamMembers.isActive, true),
+				isLeaderOnly ? eq(teamMembers.role, "leader") : undefined,
+				isPublicOnly ? eq(teams.isPublic, true) : undefined,
+			),
+		)
+}
+
+// the topics that the teams hold: the ones they own, and the ones shared into them
+function toHeldTopicFilter(teamIds: ReturnType<typeof toProfileTeamIdsQuery>): SQL | undefined {
+	// a topic a team owns, or one shared into it
+	const sharedTopicIds = db
+		.select({ topicId: teamTopics.topicId })
+		.from(teamTopics)
+		.where(inArray(teamTopics.teamId, teamIds))
+	return or(inArray(topics.teamId, teamIds), inArray(topics.id, sharedTopicIds))
 }
 
 /**
  * Loads the ids of the published podcast episodes of the topics that a profile or a team shows: the pinned ones in
  * their order, the newest first among those at one position, then the most listened one of each topic with none shown
- * yet, newest first among ties.
+ * yet, newest first among ties. A profile passes its person, whose pins alone count.
  */
 export async function loadProfilePodcastEpisodeIds(
 	topicIds: string[],
+	pinOwnerUserId?: string,
 ): Promise<{ podcastEpisodeIds: string[]; pinnedPodcastEpisodeCount: number }> {
 	if (topicIds.length === 0) {
 		return { podcastEpisodeIds: [], pinnedPodcastEpisodeCount: 0 }
 	}
 
 	// the topics' published podcast episodes, the pinned ones first, then the most listened
+	const pinPosition = toPinPosition(podcastEpisodes.profileOrder, pinOwnerUserId)
 	const podcastEpisodeRows = await db
-		.select({ id: podcastEpisodes.id, topicId: podcastEpisodes.topicId, profileOrder: podcastEpisodes.profileOrder })
+		.select({ id: podcastEpisodes.id, topicId: podcastEpisodes.topicId, profileOrder: pinPosition })
 		.from(podcastEpisodes)
+		.innerJoin(topics, eq(topics.id, podcastEpisodes.topicId))
 		.where(toPublishedPodcastEpisodeFilter(topicIds))
-		.orderBy(...toProfilePodcastEpisodeOrder(podcastEpisodes.profileOrder))
+		.orderBy(...toProfilePodcastEpisodeOrder(pinPosition))
 		.limit(PODCAST_EPISODE_CANDIDATE_LIMIT)
 
 	// keep every pinned one, then the first read of each other topic
@@ -215,26 +316,27 @@ export async function loadProfilePodcastEpisodeIds(
 /**
  * Loads the ids of the published podcast episodes whose ready films a profile shows, from the topics that its reader
  * may open: the pinned films in their order, then the most listened one of each topic with none shown yet, newest
- * first among ties.
+ * first among ties. A profile passes its person, whose pins alone count.
  */
 export async function loadProfileTopicPodcastEpisodeVideoIds(
 	topicIds: string[],
+	pinOwnerUserId?: string,
 ): Promise<{ podcastEpisodeIds: string[]; pinnedTopicPodcastEpisodeVideoCount: number }> {
 	if (topicIds.length === 0) {
 		return { podcastEpisodeIds: [], pinnedTopicPodcastEpisodeVideoCount: 0 }
 	}
 
+	// on a profile, a film's pin counts only on a topic that the person owns
+	const pinPosition = toPinPosition(topicPodcastEpisodeVideos.profileOrder, pinOwnerUserId)
+
 	// the topics' published podcast episodes that have a ready film, the pinned films first, then the most listened
 	const filmRows = await db
-		.select({
-			id: podcastEpisodes.id,
-			topicId: podcastEpisodes.topicId,
-			profileOrder: topicPodcastEpisodeVideos.profileOrder,
-		})
+		.select({ id: podcastEpisodes.id, topicId: podcastEpisodes.topicId, profileOrder: pinPosition })
 		.from(podcastEpisodes)
 		.innerJoin(topicPodcastEpisodeVideos, isReadyFilmOfPodcastEpisode)
+		.innerJoin(topics, eq(topics.id, podcastEpisodes.topicId))
 		.where(toPublishedPodcastEpisodeFilter(topicIds))
-		.orderBy(...toProfilePodcastEpisodeOrder(topicPodcastEpisodeVideos.profileOrder))
+		.orderBy(...toProfilePodcastEpisodeOrder(pinPosition))
 		.limit(PODCAST_EPISODE_CANDIDATE_LIMIT)
 
 	// keep every pinned one, then the first read of each other topic
@@ -251,9 +353,16 @@ function toPublishedPodcastEpisodeFilter(topicIds: string[]): SQL | undefined {
 	)
 }
 
+// a podcast episode's or a film's pin position, which on a profile counts only on a topic that the person owns
+function toPinPosition(profileOrderColumn: AnyPgColumn, pinOwnerUserId: string | undefined): SQL<number | null> {
+	return pinOwnerUserId
+		? sql<number | null>`case when ${topics.ownerId} = ${pinOwnerUserId} then ${profileOrderColumn} end`
+		: sql<number | null>`${profileOrderColumn}`
+}
+
 // the profile order of podcast episodes by their own pins or by their films' pins: the pinned ones by their position,
 // then the most listened, newest first among ties
-function toProfilePodcastEpisodeOrder(profileOrderColumn: AnyPgColumn): SQL[] {
+function toProfilePodcastEpisodeOrder(profileOrderColumn: SQL): SQL[] {
 	return [
 		sql`${profileOrderColumn} is null`,
 		asc(profileOrderColumn),

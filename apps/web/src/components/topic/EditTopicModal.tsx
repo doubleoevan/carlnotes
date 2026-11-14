@@ -70,25 +70,17 @@ export function EditTopicModal({
 	// the id a failed Save already created, which the retry updates
 	const createdTopicIdRef = useRef<string | null>(null)
 
-	// a topic that is not private lives on a team, which the user picks unless a team they don't lead already holds it
-	const isTeamRequired = fields.visibility !== "private" && !topicTeam.isHeldElsewhere
-	const isTeamMissing = isTeamRequired && !topicTeam.isTeamChosen
-
 	// the required field the last save click found empty. the mark clears as soon as it is filled
-	const [missingField, setMissingField] = useState<"name" | "prompt" | "team" | null>(null)
+	const [missingField, setMissingField] = useState<"name" | "prompt" | null>(null)
 	const promptFieldRef = useRef<HTMLDivElement>(null)
-	const teamFieldRef = useRef<HTMLDivElement>(null)
 
 	// the first required field still empty, in the order the form shows them
-	const toMissingRequiredField = (): "name" | "prompt" | "team" | null => {
+	const toMissingRequiredField = (): "name" | "prompt" | null => {
 		if (!fields.name.trim()) {
 			return "name"
 		}
 		if (!fields.prompt.trim()) {
 			return "prompt"
-		}
-		if (isTeamMissing) {
-			return "team"
 		}
 		return null
 	}
@@ -99,7 +91,7 @@ export function EditTopicModal({
 		const missingRequiredField = toMissingRequiredField()
 		if (missingRequiredField) {
 			setMissingField(missingRequiredField)
-			const fieldTargets = { name: titleInputRef.current, prompt: promptFieldRef.current, team: teamFieldRef.current }
+			const fieldTargets = { name: titleInputRef.current, prompt: promptFieldRef.current }
 			fieldTargets[missingRequiredField]?.scrollIntoView({ behavior: "smooth", block: "center" })
 			toast.error(MISSING_FIELD_NOTES[missingRequiredField])
 			return
@@ -225,12 +217,8 @@ export function EditTopicModal({
 
 				{/* topic team and invite section. both are hidden for a private topic. */}
 				{fields.visibility !== "private" && (
-					<div ref={teamFieldRef} className="border-y py-4">
-						<TopicTeamSelect
-							teamField={topicTeam}
-							isTeamRequired={isTeamRequired}
-							isTeamMissing={missingField === "team" && isTeamMissing}
-						/>
+					<div className="border-y py-4">
+						<TopicTeamSelect teamField={topicTeam} />
 						<div className="bg-border my-4 h-px" />
 
 						{/* a topic that was never saved has no id, so it gets the invites without the link */}

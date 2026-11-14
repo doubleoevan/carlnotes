@@ -33,11 +33,14 @@ const VISIBILITY_METADATA = {
  */
 export function OwnerTopicsTable({
 	topics,
+	profileUserId,
 	onReloadPage,
 	canListSubscribers = false,
 	className,
 }: {
 	topics: OwnerTopic[]
+	// on a profile, the person whose rows show the owner's controls
+	profileUserId?: string
 	onReloadPage: () => void
 	canListSubscribers?: boolean
 	className?: string
@@ -50,6 +53,7 @@ export function OwnerTopicsTable({
 	return (
 		<SharedOwnerTopicsTable
 			topics={topics}
+			profileUserId={profileUserId}
 			canListSubscribers={canListSubscribers}
 			className={className}
 			onEmailChange={(topic, isEnabled) => void handleEmailChange(topic, isEnabled)}

@@ -58,6 +58,7 @@ beforeEach(() => {
 	updateTopicFieldsSpy = spyOn(topicTools, "updateTopicFields").mockResolvedValue({
 		status: "saved",
 		topicName: "Agents",
+		defaultTeamName: null,
 	})
 	addTopicSourceSpy = spyOn(topicSourceTools, "addTopicSource").mockResolvedValue({
 		status: "saved",

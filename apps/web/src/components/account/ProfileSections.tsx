@@ -1,5 +1,4 @@
 import { authClient } from "@carlnotes/client/authClient"
-import type { OwnerTopic } from "@carlnotes/contracts/activity"
 import type { NewsResponse } from "@carlnotes/contracts/news"
 import type { ProfileResponse } from "@carlnotes/contracts/profilePage"
 import {
@@ -7,17 +6,11 @@ import {
 	ProfileSections as SharedProfileSections,
 } from "@carlnotes/core/components/ProfileSections"
 import { useUpdatesOpener } from "@carlnotes/core/hooks/useUpdatesOpener"
-import {
-	PROFILE_SECTION_VALUES,
-	RETRY_LOADING_TOPICS_LABEL,
-	TOPICS_LOAD_FAILED_LINE,
-} from "@carlnotes/core/lib/profileSections"
+import { PROFILE_SECTION_VALUES } from "@carlnotes/core/lib/profileSections"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useNavigate } from "@tanstack/react-router"
 import { PAGE_SECTIONS_ELEMENTS } from "@/components/common/pageSectionsElements"
-import { TableSkeleton } from "@/components/layout/PageSkeleton"
 import { Accordion } from "@/components/primitives/accordion"
-import { Button } from "@/components/primitives/button"
 import { NewsList } from "@/components/social/NewsList"
 import { OwnerTopicsTable } from "@/components/table/OwnerTopicsTable"
 import { TeamsMembershipTable } from "@/components/table/TeamsMembershipTable"
@@ -31,9 +24,6 @@ import { FLUSH_FIRST_SECTION_CLASS } from "@/lib/styleClasses"
 export function ProfileSections({
 	profile,
 	isOwnProfile,
-	topics,
-	isTopicsLoadFailed,
-	onLoadTopics,
 	onReloadProfile,
 	firstNewsPage,
 }: {
@@ -41,9 +31,6 @@ export function ProfileSections({
 	// the first page of the week's news, if the server read it with the profile
 	firstNewsPage?: NewsResponse
 	isOwnProfile: boolean
-	topics: OwnerTopic[] | null
-	isTopicsLoadFailed: boolean
-	onLoadTopics: () => void
 	onReloadProfile: () => void
 }) {
 	const navigate = useNavigate()
@@ -55,9 +42,6 @@ export function ProfileSections({
 			<SharedProfileSections
 				profile={profile}
 				isOwnProfile={isOwnProfile}
-				ownTopics={topics}
-				isOwnTopicsLoadFailed={isTopicsLoadFailed}
-				onLoadOwnTopics={onLoadTopics}
 				newsList={
 					<NewsList
 						profileUserId={profile.userId}
@@ -66,7 +50,9 @@ export function ProfileSections({
 						firstPage={firstNewsPage}
 					/>
 				}
-				renderOwnerTopicsTable={(ownTopics) => <OwnerTopicsTable topics={ownTopics} onReloadPage={onLoadTopics} />}
+				renderOwnerTopicsTable={(ownTopics) => (
+					<OwnerTopicsTable topics={ownTopics} profileUserId={profile.userId} onReloadPage={onReloadProfile} />
+				)}
 				topicsTable={<TopicsTable topics={profile.topics} includesNonPublicTopics={profile.includesNonPublicTopics} />}
 				teamsTable={
 					<TeamsMembershipTable
@@ -96,16 +82,6 @@ export const PROFILE_SECTIONS_ELEMENTS: ProfileSectionsElements = {
 		>
 			{children}
 		</Accordion>
-	),
-	TableSkeleton,
-	// the failed load's line, then the retry
-	TopicsLoadFailed: ({ onRetry }) => (
-		<div className="flex flex-col items-start gap-3" aria-live="polite">
-			<p className="text-muted-foreground">{TOPICS_LOAD_FAILED_LINE}</p>
-			<Button variant="outline" aria-label={RETRY_LOADING_TOPICS_LABEL} onClick={onRetry}>
-				Try again
-			</Button>
-		</div>
 	),
 	NewTopicEmptyCard,
 }

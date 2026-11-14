@@ -1,4 +1,6 @@
 // the public profile: who a username belongs to, and the Topics they own.
+
+import type { OwnerTopic } from "@carlnotes/contracts/activity"
 import { toAvatarVersion } from "@carlnotes/contracts/avatars"
 import type { ProfileResponse } from "@carlnotes/contracts/profilePage"
 import { SEARCH_MIN_CHARS, type UserSearchRow } from "@carlnotes/contracts/search"
@@ -9,10 +11,16 @@ import { subscriptions, topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
 import { and, countDistinct, eq, isNotNull, like, ne, sql } from "drizzle-orm"
 import { Hono } from "hono"
+import { loadTopics } from "./activityTopics"
 import { isAllowed } from "./authorization"
 import { withAvatarVersion } from "./avatars"
 import { type AppEnv, currentUser } from "./currentUser"
-import { loadProfileCards, loadProfileTopicPostCards, loadProfileTopicRows } from "./profileCards"
+import {
+	loadProfileCards,
+	loadProfileTableTopicRows,
+	loadProfileTopicPostCards,
+	loadProfileTopicRows,
+} from "./profileCards"
 import { loadProfileTeamStatuses, loadPublicTeams, loadTeamSummaries } from "./team/helpers"
 import { toTopicTableRows } from "./topic/topicTableRows"
 import { hasUserBlock } from "./userBlocks"
@@ -79,8 +87,13 @@ export function toUserSearchQuery({
 /**
  * A user's public profile by id, or null if there is no such user.
  * An owner viewing their own profile sees their private and invite topics, which are hidden for everyone else except an admin.
+ * With includesOwnTopics, the person's own profile also returns their table rows with the owner's columns.
  */
-export async function loadProfile(profileUserId: string, userId: string | null): Promise<ProfileResponse | null> {
+export async function loadProfile(
+	profileUserId: string,
+	userId: string | null,
+	{ includesOwnTopics = false }: { includesOwnTopics?: boolean } = {},
+): Promise<ProfileResponse | null> {
 	// the person, whether the reader sees their topics that are not public, which only the person and an admin do, and
 	// whether the signed-in reader has blocked the person
 	const isOwnProfile = userId === profileUserId
@@ -102,26 +115,33 @@ export async function loadProfile(profileUserId: string, userId: string | null):
 		return null
 	}
 
-	// the person's topics that the reader sees, read once. the cards take them in the profile's order, and the topic
-	// table oldest first
-	const topicRows = await loadProfileTopicRows({ profileUserId: user.id, includesNonPublicTopics })
-	const oldestFirstTopicRows = topicRows.toSorted(
+	// the topics of the person's cards, and of their table. on their own profile the table lists every topic they own
+	// or a team of theirs holds. for anyone else it lists the cards' topics. the table lists them oldest first
+	const [topicRows, ownTableTopicRows] = await Promise.all([
+		loadProfileTopicRows({ profileUserId: user.id, includesNonPublicTopics }),
+		isOwnProfile ? loadProfileTableTopicRows(user.id) : null,
+	])
+	const oldestFirstTopicRows = (ownTableTopicRows ?? topicRows).toSorted(
 		(topicRowA, topicRowB) => topicRowA.createdAt.getTime() - topicRowB.createdAt.getTime(),
 	)
 
 	// the page's independent reads together: the cards of the topic, film, and podcast episode sections, the cards of
-	// every published Topic Post of the person, the subscriber count, the topic table, and the teams
-	const [profileCards, profileTopicPostCards, subscriberCount, profileTopics, profileTeams] = await Promise.all([
-		loadProfileCards({ topicRows, userId }),
-		// anyone but the person reads the posts of public topics alone
-		loadProfileTopicPostCards(user.id, isOwnProfile),
-		countDistinctSubscribers(user.id),
-		// the same row builder the team page uses
-		toTopicTableRows(oldestFirstTopicRows, userId),
-		// a user's own profile shows every team they belong to.
-		// other users only see the public teams they are a member of.
-		isOwnProfile ? loadTeamSummaries(user.id) : loadPublicTeams(user.id),
-	])
+	// every published Topic Post of the person, the subscriber count, the topic table, the teams, and the person's own
+	// table rows
+	const ownTopicIds = includesOwnTopics && isOwnProfile ? oldestFirstTopicRows.map((topicRow) => topicRow.id) : null
+	const [profileCards, profileTopicPostCards, subscriberCount, profileTopics, profileTeams, ownTopics] =
+		await Promise.all([
+			loadProfileCards({ topicRows, profileUserId: user.id, userId }),
+			// anyone but the person reads the posts of public topics alone
+			loadProfileTopicPostCards(user.id, isOwnProfile),
+			countDistinctSubscribers(user.id),
+			// the same row builder the team page uses
+			toTopicTableRows(oldestFirstTopicRows, userId),
+			// a user's own profile shows every team they belong to.
+			// other users only see the public teams they are a member of.
+			isOwnProfile ? loadTeamSummaries(user.id) : loadPublicTeams(user.id),
+			ownTopicIds && userId ? loadOwnProfileTopics(ownTopicIds, userId) : null,
+		])
 	return {
 		userId: user.id,
 		username: user.username,
@@ -132,10 +152,27 @@ export async function loadProfile(profileUserId: string, userId: string | null):
 		includesNonPublicTopics,
 		isBlocked: isUserBlocked,
 		topics: profileTopics,
+		ownTopics,
 		teams: profileTeams,
 		...profileCards,
 		...profileTopicPostCards,
 	}
+}
+
+// the person's own table rows in the table's order, oldest first. the topics they don't own show no month's cost or
+// scans, which only the owner sees
+async function loadOwnProfileTopics(topicIds: string[], userId: string): Promise<OwnerTopic[]> {
+	// load the rows, then put them back in the table's order
+	const ownerTopics = await loadTopics({ topicIds, signedInUserId: userId, mentionUserId: userId })
+	const ownerTopicById = new Map(ownerTopics.map((ownerTopic) => [ownerTopic.id, ownerTopic]))
+	return topicIds.flatMap((topicId) => {
+		const ownerTopic = ownerTopicById.get(topicId)
+		if (!ownerTopic) {
+			return []
+		}
+		// clear the cost and scans of a topic the person does not own
+		return ownerTopic.ownerUserId === userId ? [ownerTopic] : [{ ...ownerTopic, monthCostCents: 0, scans: [] }]
+	})
 }
 
 /**
@@ -162,7 +199,7 @@ export async function countDistinctSubscribers(userId: string, handle: DbHandle 
 export const profilesRoute = new Hono<AppEnv>()
 	// a profile does not require a session. but a session is required to show non-public topics to the owner or an admin.
 	.get("/profiles/:userId", async (context) => {
-		const profile = await loadProfile(context.req.param("userId"), currentUser(context))
+		const profile = await loadProfile(context.req.param("userId"), currentUser(context), { includesOwnTopics: true })
 		return profile ? context.json(profile) : context.json({ error: "not found" }, 404)
 	})
 	.get("/profiles/:userId/team-statuses", async (context) => {

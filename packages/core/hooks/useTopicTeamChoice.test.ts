@@ -1,6 +1,6 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import * as teamClient from "@carlnotes/client/teamClient"
-import { isTopicHeldElsewhere, saveTopicTeams } from "./useTopicTeamChoice"
+import { saveTopicTeams, toInitialTeamIds } from "./useTopicTeamChoice"
 
 // restore transport spies after each failure and retry scenario
 afterEach(() => mock.restore())
@@ -39,14 +39,19 @@ test("a rejected removal remains pending for retry", async () => {
 	expect(removeTopic).toHaveBeenCalledTimes(2)
 })
 
-test("a topic another team owns needs no team of the user's", () => {
-	// a member who leads only their own team edits a topic that a different team owns
-	const topic = { team: { teamId: "other", name: "Other", isPublic: true }, roomTeams: [] }
-	expect(isTopicHeldElsewhere(topic, [{ teamId: "mine" }])).toBe(true)
+// a new topic, or a private one that no team holds, starts on the default team, and a held or shared topic keeps its teams
+test("the Team field starts on the default team unless the topic already has its teams", () => {
+	const leaderTeams = [{ teamId: "newer" }, { teamId: "oldest", isDefaultTeam: true }]
+	expect(toInitialTeamIds({ topic: undefined, leaderTeams, holdingLeaderTeamIds: [] })).toEqual(["oldest"])
+	const privateTopic = { visibility: "private" as const, team: null, roomTeams: [] }
+	expect(toInitialTeamIds({ topic: privateTopic, leaderTeams, holdingLeaderTeamIds: [] })).toEqual(["oldest"])
 
-	// an owning team the user leads is theirs to keep or drop, so it alone does not count
-	expect(isTopicHeldElsewhere(topic, [{ teamId: "other" }])).toBe(false)
+	// a public topic on no team, and a private topic a team holds, keep what they have
+	const publicTopic = { ...privateTopic, visibility: "public" as const }
+	expect(toInitialTeamIds({ topic: publicTopic, leaderTeams, holdingLeaderTeamIds: [] })).toEqual([])
+	const heldTopic = { ...privateTopic, roomTeams: [{ teamId: "newer", name: "Newer" }] }
+	expect(toInitialTeamIds({ topic: heldTopic, leaderTeams, holdingLeaderTeamIds: ["newer"] })).toEqual(["newer"])
 
-	// a topic no team holds needs a team picked
-	expect(isTopicHeldElsewhere({ team: null, roomTeams: [] }, [{ teamId: "mine" }])).toBe(false)
+	// a user who leads no team starts on none
+	expect(toInitialTeamIds({ topic: undefined, leaderTeams: [], holdingLeaderTeamIds: [] })).toEqual([])
 })

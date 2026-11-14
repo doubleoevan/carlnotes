@@ -107,6 +107,7 @@ function toProfilePodcastEpisodeCard(podcastEpisodeId: string): ProfilePodcastEp
 		topic: { id: "topic-1", name: "Espresso", path: "/topics/topic-1/espresso", image: null },
 		reactionCount: 0,
 		isTopicPublic: true,
+		isTopicOwned: true,
 	}
 }
 

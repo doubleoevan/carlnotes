@@ -55,15 +55,17 @@ rewrites that field.
    button makes, and asks which to keep. Carl and the **Recommend** button share a limit of 30 suggestion rounds a day.
    After that, he proposes sources from what he knows and says they are unverified.
 4. **Who should see it.** Anyone, the people you invite, or only you. If you skip it, the topic is shared by invite.
-5. **Which team.** A public or invite topic goes on a team you lead. He names your teams and asks which one, unless the
-   draft already names one. With no team, or no team you lead, the topic is private.
+5. **Which team.** A public or invite topic goes on your default team, the team you lead that you joined first. Carl
+   says which team it is on and names your other teams in case you want one of them instead. If you lead no team, the
+   topic has no team.
 6. **Who reads along.** Up to 20 email addresses, one per person. You can skip this.
 7. **A file.** Attach a PDF, a spreadsheet, or notes with the paperclip. Carl reads it for that turn, and it waits in
    the draft. You can skip this.
 8. **The settings.** Up to 10 tags, how often to brew (daily, weekdays, or weekly), the time and day it brews, and how
    many findings a brew keeps (5, 10, 15, or 20). Say what you want or skip it. The defaults are weekly and 10 findings.
    If you ask for daily and your plan has no daily topics left, the save says so and keeps the draft for another try.
-9. **The read-back.** He reads the draft back and asks for a yes. Yes creates the topic.
+9. **The read-back.** He reads the draft back, its team and your other teams included, and asks for a yes. Yes creates
+   the topic.
 
 ## The draft card
 
@@ -76,7 +78,7 @@ topic without it, and a toast says so. **Clear chat** clears the conversation an
 ## After the yes
 
 Carl creates the topic with what the draft holds. Anything you skipped takes the editor's defaults: shared by invite on
-the team you picked, weekly on Wednesday at 9:00, and the top 10 findings per brew. The topic's page opens with **Carl
+your default team, weekly on Wednesday at 9:00, and the top 10 findings per brew. The topic's page opens with **Carl
 is Brewing…** already running. The people you named get their invites, and the files you attached upload to the topic as
 attachments. The panel stays where it is, so you can start the next topic. You can change the schedule and everything
 else on the topic page.

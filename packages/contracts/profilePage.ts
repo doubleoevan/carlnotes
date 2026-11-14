@@ -1,5 +1,6 @@
 // the profile page contract: the user, their topic table, and the teams they belong to
 import { z } from "zod"
+import { ownerTopic } from "./activity"
 import { podcastEpisodeCard, topicCard } from "./home"
 import { topic } from "./profiles"
 import { teamSummary } from "./teams"
@@ -11,13 +12,13 @@ export const PROFILE_TOPIC_LIMIT = 12
 export const PROFILE_TOPIC_PODCAST_EPISODE_VIDEO_LIMIT = 12
 export const PROFILE_PODCAST_EPISODE_LIMIT = 12
 
-// a topic's card on a profile, with whether the topic is public, which decides whether its owner may pin it
-const profileTopicCard = topicCard.extend({ isPublic: z.boolean() })
+// a topic's card on a profile, with whether the topic is public and whether the person owns it
+const profileTopicCard = topicCard.extend({ isPublic: z.boolean(), isOwned: z.boolean() })
 
 export type ProfileTopicCard = z.infer<typeof profileTopicCard>
 
-// a podcast episode's card on a profile, with whether its topic is public
-const profilePodcastEpisodeCard = podcastEpisodeCard.extend({ isTopicPublic: z.boolean() })
+// a podcast episode's card on a profile, with whether its topic is public and whether the person owns it
+const profilePodcastEpisodeCard = podcastEpisodeCard.extend({ isTopicPublic: z.boolean(), isTopicOwned: z.boolean() })
 
 export type ProfilePodcastEpisodeCard = z.infer<typeof profilePodcastEpisodeCard>
 
@@ -42,6 +43,8 @@ export const profileResponse = z.object({
 	// whether the signed-in user has blocked this person. false for a visitor and on the user's own profile
 	isBlocked: z.boolean(),
 	topics: z.array(topic),
+	// on the person's own profile, the table's topics with the owner's columns, and null for anyone else
+	ownTopics: z.array(ownerTopic).nullable().optional(),
 	// the teams this user belongs to, as the teams summary rows them. their own profile lists them all
 	teams: z.array(teamSummary),
 	// the person's topics the user may open, as cards: the pinned ones in their order, then the rest in the home's

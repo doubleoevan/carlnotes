@@ -32,6 +32,7 @@ export type OwnerTopicsTableElements = {
  */
 export function OwnerTopicsTable({
 	topics,
+	profileUserId,
 	canListSubscribers = false,
 	isPending = false,
 	className,
@@ -39,6 +40,9 @@ export function OwnerTopicsTable({
 	elements: { Text, Name, Visibility, EmailSwitch, SubscribersToggle, CostToggle, Detail, Table, EmptyCard },
 }: {
 	topics: OwnerTopic[]
+	// on a profile, the person whose rows show the email switch and the month's cost. the rows of topics they don't
+	// own show neither
+	profileUserId?: string
 	// the admin console lists each topic's followers
 	canListSubscribers?: boolean
 	// true while an email change saves
@@ -60,6 +64,9 @@ export function OwnerTopicsTable({
 		setOpenDetailByTopicId((previous) => ({ ...previous, [topicId]: undefined }))
 	}
 
+	// whether a row shows its owner's controls: every row, or on a profile only the person's own topics
+	const isOwnedRow = (topic: OwnerTopic): boolean => profileUserId === undefined || topic.ownerUserId === profileUserId
+
 	// the shared columns with this platform's cells
 	const columns = toOwnerTopicsTableColumns({
 		topics,
@@ -76,16 +83,18 @@ export function OwnerTopicsTable({
 				<Text>{String(topic.subscriberCount)}</Text>
 			),
 		renderVisibility: (topic) => <Visibility visibility={topic.visibility} />,
-		renderEmail: (topic) => (
-			<EmailSwitch topic={topic} isDisabled={isPending} onChange={(isEnabled) => onEmailChange(topic, isEnabled)} />
-		),
-		renderCost: (topic) => (
-			<CostToggle
-				topic={topic}
-				isOpen={openDetailByTopicId[topic.id] === "scans"}
-				onToggle={() => toggleDetail(topic.id, "scans")}
-			/>
-		),
+		renderEmail: (topic) =>
+			isOwnedRow(topic) && (
+				<EmailSwitch topic={topic} isDisabled={isPending} onChange={(isEnabled) => onEmailChange(topic, isEnabled)} />
+			),
+		renderCost: (topic) =>
+			isOwnedRow(topic) && (
+				<CostToggle
+					topic={topic}
+					isOpen={openDetailByTopicId[topic.id] === "scans"}
+					onToggle={() => toggleDetail(topic.id, "scans")}
+				/>
+			),
 	})
 	if (!topics.length) {
 		return <EmptyCard text="No topics yet." className={className} />

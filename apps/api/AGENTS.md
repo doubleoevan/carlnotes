@@ -105,14 +105,17 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   pattern the name and text searches match with, `canonicalJson.ts` for the json a keyed digest signs, `content.ts` for
   the blog under `content/blog/`, and `seed.ts`, the entry behind `bun run db:seed` over `@carlnotes/db/seed`).
   `profileCards.ts` reads the cards of a profile's and a team's three Featured sections in one profile order: the
-  topics, their podcast episodes, and the published Topic Posts, a person's own on a profile and those of the team's
-  topics on a team. Each pinned row leads, then one podcast episode and one Topic Post of each other topic. A profile
+  topics, their podcast episodes, and the published Topic Posts, a person's own and their led teams' on a profile and
+  those of the team's topics on a team. It also reads the person's own All Topics table, their topics and those of every
+  team they are on. On a profile only the person's own pins count. Each pinned row leads, then one podcast episode and one Topic Post of each other topic. A profile
   lists every Topic Post of its person after the pins, newest first, in `profileTopicPosts`, and an author's pinned
   Topic Posts have no limit. A profile also gets its films, the podcast episodes with a ready film, by the same rule
   over the films' own pins, right before its podcast episodes.
   `profileOrder.ts` is the four `profile-order` routes: a topic's, a podcast episode's, and
   `PATCH /api/podcast-episodes/:id/video/profile-order` for a ready film's, each for the topic's owner, and
   `PATCH /api/topic-posts/:id/profile-order` for a published Topic Post's author on a public topic.
+  `team/defaultTeam.ts` reads a user's default team, the Team of their oldest leader membership, which a public or
+  invite topic goes on when it is created or made public, unless a team already holds it.
   `team/teamPage.ts` reads a team's page, and `team/teamPageAccess.ts` reads who the page opens for, apart from the
   page so the viewer counts load it without the cards. The page's cards are those of the topics the reader may open:
   `loadTeamCards` for the topics, their podcast episodes, and every published Topic Post of them from one read of the

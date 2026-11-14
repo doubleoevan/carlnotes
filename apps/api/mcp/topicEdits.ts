@@ -110,7 +110,14 @@ export async function editTopic({
 
 	// the editor's check first. a rejected edit saves nothing, the team change included
 	const toolCalls = toEmptyChatTurnToolCalls()
-	const topicEditSaveBinding = { userId, topicId, origin: "mcp" as const, toolCalls, analyticsProperties }
+	const topicEditSaveBinding = {
+		userId,
+		topicId,
+		origin: "mcp" as const,
+		toolCalls,
+		analyticsProperties,
+		isDefaultTeamApplied: topicTeamChange === null,
+	}
 	const topicEditRejectionCall = await toTopicEditRejectionCall(topicEditSaveBinding, topicEdit)
 
 	// save through the chat's path, which lists each save and each rejection, then the team change

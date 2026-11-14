@@ -6,6 +6,7 @@ import { TERMS_OUTDATED_LINE } from "@carlnotes/contracts/terms"
 import {
 	addTopicSourcePayload,
 	type TopicDraft,
+	type TopicDraftTeam,
 	topicDraftTeamPayload,
 	topicSettingsShape,
 } from "@carlnotes/contracts/topicPayloads"
@@ -14,6 +15,7 @@ import { isPodcastEpisodeRecordingConfigured } from "@carlnotes/server/podcastEp
 import { type Tool, tool } from "ai"
 import { z } from "zod"
 import type { AnalyticsProperties } from "../currentUser"
+import { toDraftTeamWithDefault } from "../team/defaultTeam"
 import { deleteTopicDraft } from "../topic/topicDrafts"
 import { type ChatTurnToolCalls, CREATE_REJECTION_LINES, toRejectionToast } from "./chatTools"
 import {
@@ -24,11 +26,13 @@ import {
 } from "./topicDraftTools"
 import { toPodcastFieldDescription, toUpdateTopicFieldsShape } from "./topicTools"
 
-// what one new-topic turn's tools are bound to: the user, the turn's draft, and what the tools leave for the toast
+// what one new-topic turn's tools are bound to: the user, the turn's draft, the user's default team, and what the
+// tools leave for the toast
 export type NewTopicToolBinding = {
 	userId: string
 	toolCalls: ChatTurnToolCalls
 	topicDraft: TopicDraft
+	defaultTeam?: TopicDraftTeam | null
 	analyticsProperties: AnalyticsProperties
 }
 
@@ -65,10 +69,24 @@ export function toProposeNewTopicTool(): Tool {
 	})
 }
 
+/**
+ * Returns a new-topic chat's draft on its team: none if it is private, else the team it names, or the default team if
+ * it names none. In the chat, a null team means none is chosen yet, so a public or invite draft goes on the default
+ * team whenever the user leads one.
+ */
+export function toTopicDraftOnDefaultTeam(topicDraft: TopicDraft, defaultTeam: TopicDraftTeam | null): TopicDraft {
+	const team = toDraftTeamWithDefault({
+		visibility: topicDraft.visibility,
+		team: topicDraft.team ?? undefined,
+		defaultTeam,
+	})
+	return { ...topicDraft, team }
+}
+
 // the tool that writes the topic draft. each call replaces the fields it names and saves the whole of it for the card
-function toDraftTopicTool({ toolCalls, topicDraft }: NewTopicToolBinding): Tool {
+function toDraftTopicTool({ toolCalls, topicDraft, defaultTeam = null }: NewTopicToolBinding): Tool {
 	return tool({
-		description: `Write what the reader has settled into the topic draft shown beside this chat: the title, the prompt, the sources as option and value pairs, who may read it as public, invite, or private, the team it joins as the id and name from the reader's teams, the tags, how often it brews, the time of day it brews as HH:MM and the day a weekly brew runs, how many findings a brew keeps, or the invite emails.${toPodcastFieldDescription()} Name only the fields to change: a field you leave out keeps what the draft already holds, so clear one by naming it empty, sources, tags and invites as an empty list, the title and prompt as an empty string, and the team as null. Call it as soon as an answer settles.`,
+		description: `Write what the reader has settled into the topic draft shown beside this chat: the title, the prompt, the sources as option and value pairs, who may read it as public, invite, or private, the team it joins as the id and name from the reader's teams, which starts on the default team for a public or invite draft, the tags, how often it brews, the time of day it brews as HH:MM and the day a weekly brew runs, how many findings a brew keeps, or the invite emails.${toPodcastFieldDescription()} Name only the fields to change: a field you leave out keeps what the draft already holds, so clear one by naming it empty, sources, tags and invites as an empty list, and the title and prompt as an empty string. Call it as soon as an answer settles.`,
 		inputSchema: topicDraftFieldsPayload.extend(toUpdateTopicFieldsShape()),
 		execute: async (topicDraftFields) => {
 			toolCalls.count += 1
@@ -77,6 +95,8 @@ function toDraftTopicTool({ toolCalls, topicDraft }: NewTopicToolBinding): Tool 
 				topicDraft,
 				Object.fromEntries(Object.entries(topicDraftFields).filter(([, value]) => value !== undefined)),
 			)
+			// a public or invite draft goes on the default team unless it names another, and a private one on none
+			topicDraft.team = toTopicDraftOnDefaultTeam(topicDraft, defaultTeam).team
 
 			// a new topic's podcast starts on, on an instance where podcast episodes are recorded
 			if (isPodcastEpisodeRecordingConfigured() && topicDraft.isPodcastEnabled === undefined) {
@@ -113,10 +133,6 @@ export function toSuggestTopicSourcesTool({ userId, toolCalls }: NewTopicToolBin
 	})
 }
 
-// what createTopic returns for a public or invite draft that names no team
-export const TEAM_MISSING_TEXT =
-	"A public or invite topic goes on a team. Ask which of the reader's teams it goes on, or make it private, then create again. Nothing was created."
-
 /**
  * Creates the topic from the topic draft as it stands, listing the save or what stopped it for the toast, and returns
  * what carl reads.
@@ -128,11 +144,6 @@ export async function createTopicInChat({
 	analyticsProperties,
 }: NewTopicToolBinding): Promise<string> {
 	toolCalls.count += 1
-
-	// create nothing for a public or invite draft that names no team, and have carl ask which team
-	if (topicDraft.visibility !== "private" && !topicDraft.team) {
-		return TEAM_MISSING_TEXT
-	}
 	const createTopicFromDraftResult = await createTopicFromDraft({
 		userId,
 		topicDraft: topicDraft,

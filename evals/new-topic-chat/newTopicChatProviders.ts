@@ -52,6 +52,7 @@ async function writeCaseChatTurn(_renderedPrompt: string, context?: CallApiConte
 	// read the case's variables, and copy the draft that the draftTopic tool writes into
 	const newTopicChatVariables = context?.vars as NewTopicChatVariables
 	const { history, question } = newTopicChatVariables
+	const defaultTeam = LEADER_TEAMS[0] ?? null
 	const topicDraft = { ...newTopicChatVariables.topicDraft }
 
 	// bind the tools to the copied draft, as a chat turn binds the tools to the user's topic draft
@@ -60,6 +61,7 @@ async function writeCaseChatTurn(_renderedPrompt: string, context?: CallApiConte
 		toolCalls: toEmptyChatTurnToolCalls(),
 		topicDraft,
 		analyticsProperties: TEST_ANALYTICS_PROPERTIES,
+		defaultTeam,
 	}
 
 	// build the tools the new-topic chat binds, recording every call that the turn makes

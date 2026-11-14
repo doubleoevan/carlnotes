@@ -217,15 +217,14 @@ export async function buildNewTopicChatPrompt(
 	return { prompt, name, registryPrompt }
 }
 
-// whether any field the user can fill holds something
+// whether any field the user can fill holds something. the team starts on the default team, so it is not counted
 function isTopicDraftWritten(topicDraft: TopicDraft): boolean {
 	return Boolean(
 		topicDraft.name ||
 			topicDraft.prompt ||
 			topicDraft.sources.length > 0 ||
 			topicDraft.tags.length > 0 ||
-			topicDraft.inviteEmails.length > 0 ||
-			topicDraft.team,
+			topicDraft.inviteEmails.length > 0,
 	)
 }
 
@@ -266,7 +265,10 @@ function toTeamsBlock(leaderTeams?: TopicDraftTeam[]): string {
 	if (!leaderTeams || leaderTeams.length === 0) {
 		return "None."
 	}
-	return leaderTeams.map((leaderTeam) => `- ${leaderTeam.name} (teamId: ${leaderTeam.teamId})`).join("\n")
+	// the first team is the default team
+	return leaderTeams
+		.map((leaderTeam, i) => `- ${leaderTeam.name} (teamId: ${leaderTeam.teamId})${i === 0 ? ", the default team" : ""}`)
+		.join("\n")
 }
 
 // how many more topics the plan allows, in the words carl passes on

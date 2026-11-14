@@ -13,15 +13,7 @@ import { NEW_TEAM_OPTION, toTeamChoices } from "@/lib/topicTeamChoices"
 /**
  * The topic teams multiselect: the leader teams this topic may sit on, and a new team created on save.
  */
-export function TopicTeamSelect({
-	teamField,
-	isTeamRequired,
-	isTeamMissing,
-}: {
-	teamField: TopicTeamField
-	isTeamRequired?: boolean
-	isTeamMissing?: boolean
-}) {
+export function TopicTeamSelect({ teamField }: { teamField: TopicTeamField }) {
 	// the ids that tie each field label to its field
 	const teamsComboboxId = useId()
 	const newTeamNameInputId = useId()
@@ -29,9 +21,7 @@ export function TopicTeamSelect({
 		<div className="space-y-3">
 			{teamField.loadError && <p className="text-destructive text-sm">{teamField.loadError}</p>}
 			<div>
-				<FieldLabel htmlFor={teamsComboboxId} isRequired={isTeamRequired}>
-					Teams
-				</FieldLabel>
+				<FieldLabel htmlFor={teamsComboboxId}>Teams</FieldLabel>
 				<MultiCombobox
 					id={teamsComboboxId}
 					options={toTeamChoices(teamField.offeredTeams)}
@@ -40,14 +30,7 @@ export function TopicTeamSelect({
 					placeholder="Pick teams…"
 					emptyLabel="No teams to pick."
 					pinnedOption={NEW_TEAM_OPTION}
-					isRequired={isTeamRequired}
 				/>
-				{/* the note names the field a blocked save stopped on */}
-				{isTeamMissing && (
-					<p className="text-destructive mt-1 text-xs">
-						A public or invite topic lives on a team. Pick or create one, or set Visibility to private.
-					</p>
-				)}
 			</div>
 			{teamField.isNewTeamSelected && (
 				<>

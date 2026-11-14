@@ -2,13 +2,11 @@ import type { OwnerTopic } from "@carlnotes/contracts/activity"
 import type { ProfileResponse } from "@carlnotes/contracts/profilePage"
 import type { ComponentType, ReactNode } from "react"
 import { toSectionCountLabel } from "../lib/labels"
-import { PROFILE_SECTIONS, toProfileTopicCount } from "../lib/profileSections"
+import { PROFILE_SECTIONS } from "../lib/profileSections"
 import type { PageSectionsElements } from "./pageSectionsElements"
 
 export type ProfileSectionsElements = PageSectionsElements & {
-	// the person's own topics while they load, after their read fails, and while they have none
-	TableSkeleton: ComponentType
-	TopicsLoadFailed: ComponentType<{ onRetry: () => void }>
+	// the empty card of the person's own topics table
 	NewTopicEmptyCard: ComponentType
 }
 
@@ -19,9 +17,6 @@ export type ProfileSectionsElements = PageSectionsElements & {
 export function ProfileSections({
 	profile,
 	isOwnProfile,
-	ownTopics,
-	isOwnTopicsLoadFailed,
-	onLoadOwnTopics,
 	newsList,
 	renderOwnerTopicsTable,
 	topicsTable,
@@ -34,17 +29,11 @@ export function ProfileSections({
 		TopicPostCard,
 		Section,
 		EmptyCard,
-		TableSkeleton,
-		TopicsLoadFailed,
 		NewTopicEmptyCard,
 	},
 }: {
 	profile: ProfileResponse
 	isOwnProfile: boolean
-	// the person's own topics with their owner columns, or null until they load
-	ownTopics: OwnerTopic[] | null
-	isOwnTopicsLoadFailed: boolean
-	onLoadOwnTopics: () => void
 	newsList: ReactNode
 	renderOwnerTopicsTable: (ownTopics: OwnerTopic[]) => ReactNode
 	// the topics a visitor may read, which show while the profile has any
@@ -53,18 +42,13 @@ export function ProfileSections({
 	teamsTable: ReactNode
 	elements: ProfileSectionsElements
 }) {
-	// how many topics the table lists: the person's own once they load, or the ones the profile shows a visitor
-	const topicCount = toProfileTopicCount({ profile, isOwnProfile, ownTopics })
-
-	// the person's own topics in their load state, or the public topics a visitor reads
+	// the person's own topics with their owner columns, or the topics anyone else reads
+	const ownTopics = isOwnProfile ? (profile.ownTopics ?? null) : null
 	const toTopicsSectionContent = (): ReactNode => {
-		if (!isOwnProfile) {
-			return profile.topics.length > 0 ? topicsTable : <EmptyCard text="No public topics." />
+		if (ownTopics) {
+			return ownTopics.length > 0 ? renderOwnerTopicsTable(ownTopics) : <NewTopicEmptyCard />
 		}
-		if (ownTopics === null) {
-			return isOwnTopicsLoadFailed ? <TopicsLoadFailed onRetry={onLoadOwnTopics} /> : <TableSkeleton />
-		}
-		return ownTopics.length > 0 ? renderOwnerTopicsTable(ownTopics) : <NewTopicEmptyCard />
+		return profile.topics.length > 0 ? topicsTable : <EmptyCard text="No public topics." />
 	}
 	return (
 		<>
@@ -97,7 +81,7 @@ export function ProfileSections({
 				/>
 
 				{/* the two tables, each under its title with its count at the far right, as the card sections are */}
-				<Section value="topics" title="All Topics" countLabel={toSectionCountLabel(topicCount, "topic")}>
+				<Section value="topics" title="All Topics" countLabel={toSectionCountLabel(profile.topics.length, "topic")}>
 					{toTopicsSectionContent()}
 				</Section>
 				<Section value="teams" title="All Teams" countLabel={toSectionCountLabel(profile.teams.length, "team")}>

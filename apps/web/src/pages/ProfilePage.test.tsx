@@ -35,14 +35,7 @@ test("someone else's profile with no topics says so, as it does for no teams", a
 	// the sections' news reads through a query client, which a server render never fetches from
 	const html = await renderWithRouter(
 		<QueryClientProvider client={new QueryClient()}>
-			<ProfileSections
-				profile={emptyProfile}
-				isOwnProfile={false}
-				topics={null}
-				isTopicsLoadFailed={false}
-				onLoadTopics={() => {}}
-				onReloadProfile={() => {}}
-			/>
+			<ProfileSections profile={emptyProfile} isOwnProfile={false} onReloadProfile={() => {}} />
 		</QueryClientProvider>,
 	)
 	expect(html).toContain("Brews News</button>")
@@ -91,6 +84,7 @@ test("the server render holds the first page of the week's news and every Topic 
 		reactionCount: 0,
 		latestPodcastEpisode: null,
 		isPublic: true,
+		isOwned: true,
 	}))
 
 	// the first page the server read: five rows of a window that holds seven
@@ -106,9 +100,6 @@ test("the server render holds the first page of the week's news and every Topic 
 				profile={{ ...emptyProfile, profileTopics }}
 				firstNewsPage={firstNewsPage}
 				isOwnProfile={false}
-				topics={null}
-				isTopicsLoadFailed={false}
-				onLoadTopics={() => {}}
 				onReloadProfile={() => {}}
 			/>
 		</QueryClientProvider>,
@@ -127,6 +118,7 @@ const toFilmPodcastEpisodeCard = (id: string, title: string): ProfilePodcastEpis
 	topic: { id: "topic-1", name: "Home espresso", path: "/topics/topic-1/home-espresso", image: null },
 	reactionCount: 0,
 	isTopicPublic: true,
+	isTopicOwned: true,
 })
 
 // films lead the podcasts, a film card has the film's play button alone, and a podcast card whose episode has a film
@@ -141,14 +133,7 @@ test("Featured Films sits right before Featured Podcasts, and a profile with no 
 	const toSectionsHtml = (sectionsProfile: ProfileResponse): Promise<string> =>
 		renderWithRouter(
 			<QueryClientProvider client={new QueryClient()}>
-				<ProfileSections
-					profile={sectionsProfile}
-					isOwnProfile={false}
-					topics={null}
-					isTopicsLoadFailed={false}
-					onLoadTopics={() => {}}
-					onReloadProfile={() => {}}
-				/>
+				<ProfileSections profile={sectionsProfile} isOwnProfile={false} onReloadProfile={() => {}} />
 			</QueryClientProvider>,
 		)
 	const html = await toSectionsHtml(profile)
@@ -190,15 +175,13 @@ test("Featured Posts lists every Topic Post with the whole count, and the page h
 		reactionCount: 0,
 		path: `/topics/topic-1/home-espresso/posts/post-${i + 1}/card-post-${i + 1}`,
 		isTopicPublic: true,
+		isTopicOwned: true,
 	}))
 	const html = await renderWithRouter(
 		<QueryClientProvider client={new QueryClient()}>
 			<ProfileSections
 				profile={{ ...emptyProfile, profileTopicPosts, pinnedTopicPostCount: 13 }}
 				isOwnProfile={false}
-				topics={null}
-				isTopicsLoadFailed={false}
-				onLoadTopics={() => {}}
 				onReloadProfile={() => {}}
 			/>
 		</QueryClientProvider>,

@@ -23,7 +23,12 @@ import {
 	toOpenNewTopicChatTool,
 	toTopicEditPreviewTools,
 } from "../tool/chatTools"
-import { toNewTopicChatTools, toProposeNewTopicTool, toSuggestTopicSourcesTool } from "../tool/newTopicChatTools"
+import {
+	toNewTopicChatTools,
+	toProposeNewTopicTool,
+	toSuggestTopicSourcesTool,
+	toTopicDraftOnDefaultTeam,
+} from "../tool/newTopicChatTools"
 import { loadTopicDraft } from "../topic/topicDrafts"
 import { resolveChatAttachments } from "./chatAttachmentParts"
 import type { ChatPage } from "./chatPages"
@@ -143,6 +148,7 @@ export async function answerChatTurn(
 					toolCalls,
 					analyticsProperties,
 					topicDraft,
+					leaderTeams: authorization.leaderTeams,
 				})),
 		podcastEpisodeChapter,
 		topicPost,
@@ -246,7 +252,7 @@ export function toAttachmentRejectionResponse(context: Context, rejection: ChatA
 }
 
 // load the topic draft that a new-topic chat turn starts from: the stored draft over the browser's copy, with the
-// browser's team if it names one the user leads
+// browser's team if it names one the user leads, or else on the default team if it is public or invite
 async function loadNewTopicChatDraft({
 	userId,
 	browserTopicDraft,
@@ -255,14 +261,14 @@ async function loadNewTopicChatDraft({
 	userId: string
 	browserTopicDraft?: TopicDraft
 	leaderTeams?: TopicDraftTeam[]
-}): Promise<TopicDraft | undefined> {
+}): Promise<TopicDraft> {
 	// the saved draft, and the team the browser names if the user leads it
 	const storedTopicDraft = await loadTopicDraft(userId)
 	const browserLeaderTeam = toLeaderTeam(browserTopicDraft?.team, leaderTeams)
-	if (!storedTopicDraft) {
-		return browserTopicDraft && { ...browserTopicDraft, team: browserLeaderTeam }
-	}
-	return { ...storedTopicDraft, team: browserLeaderTeam ?? storedTopicDraft.team }
+	const topicDraft = storedTopicDraft
+		? { ...storedTopicDraft, team: browserLeaderTeam ?? storedTopicDraft.team }
+		: { ...(browserTopicDraft ?? EMPTY_TOPIC_DRAFT), team: browserLeaderTeam }
+	return toTopicDraftOnDefaultTeam(topicDraft, leaderTeams[0] ?? null)
 }
 
 /**
@@ -295,6 +301,8 @@ type ToChatTurnToolsOptions = {
 	toolCalls: ChatTurnToolCalls
 	analyticsProperties: AnalyticsProperties
 	topicDraft?: TopicDraft
+	// the teams the user leads, the default team first
+	leaderTeams?: TopicDraftTeam[]
 }
 
 // pick a chat turn's tools: the draft tools for the new-topic chat, the preview tools for an editor on a topic,
@@ -306,11 +314,18 @@ function toChatTurnTools({
 	toolCalls,
 	analyticsProperties,
 	topicDraft,
+	leaderTeams = [],
 }: ToChatTurnToolsOptions): ChatTurnTools {
 	if (page.newTopic) {
 		// copy the empty topic draft. the tools write into this object, and EMPTY_TOPIC_DRAFT is frozen
 		const chatTurnTopicDraft = topicDraft ?? { ...EMPTY_TOPIC_DRAFT }
-		const newTopicToolBinding = { userId, toolCalls, topicDraft: chatTurnTopicDraft, analyticsProperties }
+		const newTopicToolBinding = {
+			userId,
+			toolCalls,
+			topicDraft: chatTurnTopicDraft,
+			defaultTeam: leaderTeams[0] ?? null,
+			analyticsProperties,
+		}
 		return {
 			tools: toNewTopicChatTools(newTopicToolBinding),
 			suggestSourcesTool: toSuggestTopicSourcesTool(newTopicToolBinding),

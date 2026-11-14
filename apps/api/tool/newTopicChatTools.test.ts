@@ -1,17 +1,15 @@
-// new-topic chat tool tests for the tool list, the draft writes, the team check before an agreed create, and the
-// tool text
+// new-topic chat tool tests for the tool list, the draft writes, the default team, and the tool text
 import { expect, test } from "bun:test"
 import { EMPTY_TOPIC_DRAFT, type TopicDraft } from "@carlnotes/contracts/topicPayloads"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import { TEST_ANALYTICS_PROPERTIES } from "../analyticsTestFixtures"
 import { toEmptyChatTurnToolCalls } from "./chatTools"
 import {
-	createTopicInChat,
-	TEAM_MISSING_TEXT,
 	toCreateTopicReason,
 	toCreateTopicText,
 	toNewTopicChatTools,
 	toSuggestionsText,
+	toTopicDraftOnDefaultTeam,
 } from "./newTopicChatTools"
 
 // the new-topic chat's saving tools are draftTopic alone: no tool creates the topic, and the suggestion tool is bound
@@ -27,18 +25,35 @@ test("the new-topic chat offers draftTopic and no create tool, without the sugge
 	expect(Object.keys(newTopicTools)).toEqual(["draftTopic"])
 })
 
-// a public or invite draft that names no team is not created, and carl is told to ask which team the topic goes on
-test("an agreed create asks for a team before it creates a public or invite topic", async () => {
+// a public or invite draft starts on the default team, another led team replaces it, and a private draft has none
+test("draftTopic puts a public or invite draft on the default team unless it names another", async () => {
 	const toolCalls = toEmptyChatTurnToolCalls()
-	const topicDraft: TopicDraft = { ...EMPTY_TOPIC_DRAFT, name: "Hoops", prompt: "Pickup games", visibility: "invite" }
-	const createTopicText = await createTopicInChat({
+	const topicDraft: TopicDraft = { ...EMPTY_TOPIC_DRAFT }
+	const defaultTeam = { teamId: "team-1", name: "Hoopers" }
+	const newTopicTools = toNewTopicChatTools({
 		userId: "user-1",
 		toolCalls,
 		topicDraft,
 		analyticsProperties: TEST_ANALYTICS_PROPERTIES,
+		defaultTeam,
 	})
-	expect(createTopicText).toBe(TEAM_MISSING_TEXT)
-	expect(toolCalls.topicSaves).toEqual([])
+	const toolCallOptions = { toolCallId: "call-1", messages: [], context: undefined }
+
+	// an invite draft goes on the default team, and a team the user names replaces it
+	await newTopicTools.draftTopic?.execute?.({ name: "Hoops", visibility: "invite" }, toolCallOptions)
+	expect(topicDraft.team).toEqual(defaultTeam)
+	await newTopicTools.draftTopic?.execute?.({ team: { teamId: "team-2", name: "Ballers" } }, toolCallOptions)
+	expect(topicDraft.team).toEqual({ teamId: "team-2", name: "Ballers" })
+
+	// a private draft goes on no team
+	await newTopicTools.draftTopic?.execute?.({ visibility: "private" }, toolCallOptions)
+	expect(topicDraft.team).toBeNull()
+})
+
+// a user who leads no team gets a public draft on no team
+test("toTopicDraftOnDefaultTeam leaves a draft on no team for a user who leads none", () => {
+	const topicDraft: TopicDraft = { ...EMPTY_TOPIC_DRAFT, visibility: "public" }
+	expect(toTopicDraftOnDefaultTeam(topicDraft, null).team).toBeNull()
 })
 
 // draftTopic writes the named fields alone, and an empty value clears a field as the description promises

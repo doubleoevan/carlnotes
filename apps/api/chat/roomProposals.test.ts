@@ -43,6 +43,7 @@ test("the member a chat room preview was shown to agrees, and the edit is applie
 	const updateTopicFieldsSpy = spyOn(topicTools, "updateTopicFields").mockResolvedValue({
 		status: "saved",
 		topicName: "Agents",
+		defaultTeamName: null,
 	})
 	const toolCalls = toEmptyChatTurnToolCalls()
 	const chatProposalResult = await answerChatRoomProposal({

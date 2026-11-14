@@ -24,13 +24,23 @@ import { TopicScansTable } from "./TopicScansTable"
 /**
  * Renders the web's owner topic table, with a topic's scans in a native sheet.
  */
-export function OwnerTopicsTable({ topics, onReloadPage }: { topics: OwnerTopic[]; onReloadPage: () => void }) {
+export function OwnerTopicsTable({
+	topics,
+	profileUserId,
+	onReloadPage,
+}: {
+	topics: OwnerTopic[]
+	// on a profile, the person whose rows show the owner's controls
+	profileUserId?: string
+	onReloadPage: () => void
+}) {
 	// an email change saves, then the page reloads, and a failed one stays under the table
 	const mutation = usePageMutation(onReloadPage)
 	return (
 		<View className="gap-2">
 			<SharedOwnerTopicsTable
 				topics={topics}
+				profileUserId={profileUserId}
 				isPending={mutation.isPending}
 				onEmailChange={(topic, isEnabled) =>
 					void mutation.run(() => sendSubscriptionEmail(topic.id, isEnabled, topic.ownerUserId))

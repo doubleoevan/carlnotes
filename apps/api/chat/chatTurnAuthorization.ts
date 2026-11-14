@@ -23,7 +23,7 @@ export type ChatTurnAuthorization =
 			isTopicOwner: boolean
 			isPersisted: boolean
 			canEditTopic: boolean
-			// how many more topics the plan allows, and the teams that carl may put the topic on.
+			// how many more topics the plan allows, and the teams that carl may put the topic on, the default team first.
 			// both are set only on the new-topic chat
 			topicsRemaining?: number
 			leaderTeams?: TopicDraftTeam[]
@@ -190,9 +190,10 @@ export async function authorizeNewTopicChatTurn(userId: string | null): Promise<
 		isPersisted: isPersistAllowed,
 		canEditTopic: false,
 		topicsRemaining: remainingTopics,
-		// the teams that the user leads, which carl may put the topic on
+		// the teams that the user leads, which carl may put the topic on, the default team first
 		leaderTeams: teamSummaries
 			.filter((teamSummary) => isLeaderRole(teamSummary.role))
+			.toSorted((teamSummaryA, teamSummaryB) => Number(teamSummaryB.isDefaultTeam) - Number(teamSummaryA.isDefaultTeam))
 			.map((teamSummary) => ({ teamId: teamSummary.teamId, name: teamSummary.name })),
 	}
 }

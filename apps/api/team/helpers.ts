@@ -20,6 +20,7 @@ import { isLeaderRole } from "../authorization"
 import { toProfileIdentity } from "../avatars"
 import { loadTeamChatMentions } from "../chat/mentions"
 import { startOfUtcMonth } from "../topic/quotas"
+import { loadDefaultTeam } from "./defaultTeam"
 import { loadTeamTopics } from "./teamPage"
 
 // the users table under a second name, so an invitation can join its sender beside its invitee
@@ -210,13 +211,17 @@ export async function loadTeamSummaries(userId: string): Promise<TeamSummary[]> 
 		teamLeaderRows.map((teamLeaderRow) => [teamLeaderRow.teamId, teamLeaderRow.leaderCount]),
 	)
 
-	// what each team's topics cost this month, and the user's unseen team chat room mentions
-	const spendByTeamId = await toSpendByTeamId(teamIds)
-	const mentionsByTeamId = await loadTeamChatMentions(userId, teamIds)
+	// what each team's topics cost this month, the user's unseen team chat room mentions, and their default team
+	const [spendByTeamId, mentionsByTeamId, defaultTeam] = await Promise.all([
+		toSpendByTeamId(teamIds),
+		loadTeamChatMentions(userId, teamIds),
+		loadDefaultTeam(userId),
+	])
 	return teamRows.map(({ avatarKey, inviter, ...row }) => ({
 		...row,
 		invitedBy: toProfileIdentity(inviter),
 		isOnlyLeader: isLeaderRole(row.role) && (leaderCountByTeamId.get(row.teamId) ?? 0) <= 1,
+		isDefaultTeam: row.teamId === defaultTeam?.teamId,
 		memberCount: countsByTeamId.get(row.teamId)?.memberCount ?? 1,
 		topicCount: countsByTeamId.get(row.teamId)?.topicCount ?? 0,
 		avatarVersion: toAvatarKeyVersion(avatarKey),

@@ -29,7 +29,7 @@ const activityScan = z.object({
 export type ActivityScan = z.infer<typeof activityScan>
 
 // one owned-Topic row on the Activity page, including its month Scans for the sub-table
-const ownerTopic = z.object({
+export const ownerTopic = z.object({
 	id: z.string(),
 	name: z.string(),
 	// who may see the topic, shown with the same icon the topic page's info card uses

@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change chat-topic-creation. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: A private conversation bound to no Topic makes one
 The api SHALL serve a private chat conversation bound to no Topic and no Team at `GET`, `DELETE`, and `POST /api/chat/new-topic`, for a signed-in user. Its chat turns SHALL be saved in `chat_turns` with no Topic and no Team, metered against the user's monthly spend budget, kept when the gate grants `chat:persist` or a Topic Tool fired, and cleared the way a Topic conversation is. The `POST` route SHALL sit under the per-caller rate limit. The conversation payload SHALL say whether the user owns no Topic yet.
 
@@ -131,36 +133,6 @@ SHALL keep opening its picker, whose New topic option opens the same dialog.
 - **WHEN** a signed-in user presses New Topic and picks making it themselves
 - **THEN** the create form opens in place of the dialog
 
-### Requirement: The wizard asks which team the Topic joins
-The `chat-new-topic.md` prompt SHALL list the teams the user leads, and SHALL tell Carl that a public or invite Topic
-goes on one of them. After the visibility step, unless the draft is private or already names a team, Carl SHALL name the
-user's teams and ask which one the Topic goes on, writing the pick into the draft's `team` field, `{ teamId, name }`,
-with `draftTopic`. A user who wants no team, or who leads none, SHALL get a private Topic: Carl says so and writes the
-visibility as private. Carl's read-back before the yes SHALL include the team.
-
-The chat's create tool SHALL NOT create a public or invite draft that names no team. It SHALL return a line telling Carl
-to ask which team the Topic goes on, or to make it private, and SHALL create nothing.
-
-The Topic Draft SHALL hold a `team` that defaults to none, the draft card SHALL show its name, and
-`createTopicFromDraft` SHALL add the created Topic to it through the leader-only add-to-team path, reporting a rejected
-add beside the created Topic.
-
-#### Scenario: A leader team is picked
-- **WHEN** a user who leads a team makes a public Topic and picks that team
-- **THEN** the card shows the team, and the created Topic is on it
-
-#### Scenario: The user leads no team
-- **WHEN** a user on no team, or a member of teams they do not lead, makes a Topic with Carl
-- **THEN** Carl says the Topic will be private, and it is created private on no team
-
-#### Scenario: A shared draft with no team is not created
-- **WHEN** Carl calls the create tool on a public or invite draft that names no team
-- **THEN** no Topic is created, and the tool tells Carl to ask which team or to make it private
-
-#### Scenario: The add is rejected at the save
-- **WHEN** the draft names a team the user no longer leads
-- **THEN** the Topic is created, an error toast says it was not added to the team, and Carl says so
-
 ### Requirement: The team page's New topic option offers the chat
 The New topic option at the end of the team page's Add Topic picker SHALL open the chooser, its form choice SHALL open the create form with the team preset as today, and its Build with Carl choice SHALL open the new-topic chat with that team already on the draft, so Carl keeps it without asking.
 
@@ -244,3 +216,40 @@ same new topic dialog and SHALL send a visitor to sign up first.
 - **WHEN** a visitor opens the actions menu on the plans page and picks New topic
 - **THEN** the sign-up page opens
 
+### Requirement: A shared draft starts on the default team
+
+The `chat-new-topic.md` prompt SHALL list the teams the user leads, the default team first and marked. A public or
+invite draft SHALL go on the default team when the chat loads it and when `draftTopic` writes it, unless it names
+another led team. Carl SHALL NOT ask which team the Topic goes on. A private draft holds no team, and a user who leads
+no team gets the Topic at the visibility they chose on no team.
+
+#### Scenario: A public draft goes on the default team
+
+- **WHEN** a user who leads two teams makes a Topic public with Carl
+- **THEN** the draft is on the led team they joined first, and Carl does not ask which team
+
+#### Scenario: The user leads no team
+
+- **WHEN** a user on no team, or a member of teams they do not lead, makes a public Topic with Carl
+- **THEN** the Topic is created public on no team
+
+### Requirement: Carl's read-back names the draft's team
+
+Carl SHALL say which team a shared draft is on and, if the user leads other teams, name them as the teams it could go
+on instead, without asking first. His read-back before the yes SHALL do the same. A user who picks another team gets
+it written with `draftTopic` as `{ teamId, name }`.
+
+#### Scenario: Another led team is offered and picked
+
+- **WHEN** Carl names the default team and the user asks for their other team
+- **THEN** the card shows that team, and the created Topic is on it
+
+### Requirement: The draft holds its team
+
+The Topic Draft SHALL hold a `team`, the draft card SHALL show its name, and `createTopicFromDraft` SHALL add the
+created Topic to it through the leader-only add-to-team path, reporting a rejected add beside the created Topic.
+
+#### Scenario: The add is rejected at the save
+
+- **WHEN** the draft names a team the user no longer leads
+- **THEN** the Topic is created, an error toast says it was not added to the team, and Carl says so

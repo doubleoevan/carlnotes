@@ -1,8 +1,6 @@
-import { fetchActivity } from "@carlnotes/client/activityClient"
 import { authClient } from "@carlnotes/client/authClient"
 import { fetchProfile, fetchProfileTeamStatuses } from "@carlnotes/client/profileClient"
 import { fetchAddableTopics } from "@carlnotes/client/topicClient"
-import type { OwnerTopic } from "@carlnotes/contracts/activity"
 import { type ProfileResponse, toProfilePageTitle } from "@carlnotes/contracts/profilePage"
 import type { ProfileTeamStatus } from "@carlnotes/contracts/profiles"
 import { toProfileChatContext } from "@carlnotes/core/lib/chatConversations"
@@ -11,7 +9,6 @@ import {
 	sendProfileOrderMoves,
 	toProfileRankDialogItems,
 	toProfileRankedNouns,
-	toProfileTopicCount,
 } from "@carlnotes/core/lib/profileSections"
 import {
 	type PinnedOrderMove,
@@ -112,28 +109,11 @@ export function ProfilePage() {
 
 	// a user on their own profile manages their topics in the owner topics table
 	const isOwnProfile = Boolean(session) && session?.user.id === profile?.userId
-	const [topics, setTopics] = useState<OwnerTopic[] | null>(null)
-	const [isTopicsLoadFailed, setIsTopicsLoadFailed] = useState(false)
-	const handleLoadTopics = useCallback(async (): Promise<void> => {
-		setIsTopicsLoadFailed(false)
-		try {
-			setTopics((await fetchActivity()).topics)
-		} catch {
-			setIsTopicsLoadFailed(true)
-		}
-	}, [])
 
 	// reload the profile after a change to its teams or topics
 	const handleReloadProfile = useCallback(async (): Promise<void> => {
 		setProfile(await fetchProfile(userId))
 	}, [userId])
-
-	// load a user's own topics
-	useEffect(() => {
-		if (isOwnProfile) {
-			handleLoadTopics().catch((error) => console.error("own topics load failed", error))
-		}
-	}, [isOwnProfile, handleLoadTopics])
 
 	// load the user's teams, each with the profile user's status there
 	const [profileTeamStatuses, setProfileTeamStatuses] = useState<ProfileTeamStatus[] | null>(null)
@@ -252,7 +232,7 @@ export function ProfilePage() {
 			    user to one */}
 			<ProfilePageHeader
 				profile={profile}
-				topicCount={toProfileTopicCount({ profile, isOwnProfile, ownTopics: topics })}
+				topicCount={profile.topics.length}
 				profileTeamStatuses={profileTeamStatuses}
 				onLoadProfileTeamStatuses={handleLoadProfileTeamStatuses}
 				onNewTopic={openNewTopicDialog}
@@ -276,10 +256,7 @@ export function ProfilePage() {
 			)}
 			<ProfileSections
 				profile={profile}
-				topics={topics}
-				isTopicsLoadFailed={isTopicsLoadFailed}
 				isOwnProfile={isOwnProfile}
-				onLoadTopics={handleLoadTopics}
 				onReloadProfile={handleReloadProfile}
 				firstNewsPage={loadedProfile?.userId === profile.userId ? loadedNewsPage : undefined}
 			/>

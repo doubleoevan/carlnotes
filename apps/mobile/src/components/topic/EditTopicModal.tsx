@@ -80,9 +80,6 @@ export function EditTopicModal({
 		if (!fields.prompt.trim()) {
 			throw new Error(MISSING_FIELD_NOTES.prompt)
 		}
-		if (fields.visibility !== "private" && !topicTeam.isTeamChosen) {
-			throw new Error(topicTeam.loadError ?? MISSING_FIELD_NOTES.team)
-		}
 		const parsed = updateTopicPayload.safeParse(toUpdateTopicPayload(fields))
 		if (!parsed.success) {
 			throw new Error(parsed.error.issues[0]?.message ?? "Check the topic fields.")

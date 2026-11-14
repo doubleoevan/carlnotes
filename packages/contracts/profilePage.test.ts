@@ -56,6 +56,7 @@ const profileFixture: ProfileResponse = {
 			reactionCount: 2,
 			latestPodcastEpisode: null,
 			isPublic: true,
+			isOwned: true,
 		},
 	],
 	pinnedTopicCount: 1,

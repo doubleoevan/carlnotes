@@ -1,10 +1,11 @@
 // the mcp tools that edit and create a topic: edit_topic, which takes the edit carl proposes in chat and saves it
 // through the chat's own save path, the source suggestions, and the create
 import { toEditableTopicDraft } from "@carlnotes/contracts/topicEdits"
-import { createTopicPayload, proposeTopicEditPayload } from "@carlnotes/contracts/topicPayloads"
+import { createTopicPayload, proposeTopicEditPayload, topicDraftTeamPayload } from "@carlnotes/contracts/topicPayloads"
 import type { CallToolResult } from "@modelcontextprotocol/server"
 import { z } from "zod"
 import type { AnalyticsProperties } from "../currentUser"
+import { loadDefaultTeam, toDraftTeamWithDefault } from "../team/defaultTeam"
 import { toRejectionText } from "../tool/chatTools"
 import { toCreateTopicText, toSuggestionsText } from "../tool/newTopicChatTools"
 import { createTopicFromDraft, suggestTopicDraftSources } from "../tool/topicDraftTools"
@@ -22,6 +23,13 @@ import {
 import { loadTopicDraftMcpViewOptions } from "./topicDraftMcpViewOptions"
 import { type EditTopicResult, editTopic, toEditableTopicFields } from "./topicEdits"
 import { toMcpViewToolMeta } from "./uiResources"
+
+// what create_topic takes: a draft whose team, if left out, is the user's default team for a public or invite topic,
+// and the confirmation a preview returned. null puts the topic on no team
+const createTopicToolPayload = createTopicPayload.extend({
+	team: topicDraftTeamPayload.nullable().optional(),
+	confirmation: z.string().max(200).optional(),
+})
 
 // what edit_topic takes: the topic, the edit carl proposes in chat, and the confirmation a preview returned
 const editTopicPayload = proposeTopicEditPayload.extend({
@@ -97,14 +105,26 @@ export function registerTopicEditTools({ mcpServer, toolCaller, routeTopicId }: 
 		"create_topic",
 		{
 			title: "Create a topic",
-			description: `Preview a CarlNotes Topic Draft for the connected account from a name, prompt, sources as option and value pairs, invite emails, visibility, team, tags, brew frequency, and finding limit.${toPodcastFieldDescription()} Call only when the user chooses to start a Topic. The first call creates nothing and returns the draft and a confirmation. Show the draft and wait for the user to confirm, then repeat the same fields with that confirmation. Creation uses the existing Topic Draft limits and starts its first brew. For a new send destination, set visibility private, team null, inviteEmails empty, and default Coffee Break on when the view's account budget permits it. Other unsaid fields use the editor's defaults: shared by invite, weekly on Wednesday, ten findings. Use it when the user asks Carl or CarlNotes for a new topic, with phrases like create a topic, start a topic, or have Carl track this.`,
-			inputSchema: createTopicPayload.extend({ confirmation: z.string().max(200).optional() }),
+			description: `Preview a CarlNotes Topic Draft for the connected account from a name, prompt, sources as option and value pairs, invite emails, visibility, team, tags, brew frequency, and finding limit.${toPodcastFieldDescription()} Call only when the user chooses to start a Topic. The first call creates nothing and returns the draft and a confirmation. Show the draft and wait for the user to confirm, then repeat the same fields with that confirmation. Creation uses the existing Topic Draft limits and starts its first brew. A public or invite topic goes on the user's default team, the led team they joined first, unless team names another or is null for no team. For a new send destination, set visibility private, team null, inviteEmails empty, and default Coffee Break on when the view's account budget permits it. Other unsaid fields use the editor's defaults: shared by invite, weekly on Wednesday, ten findings. Use it when the user asks Carl or CarlNotes for a new topic, with phrases like create a topic, start a topic, or have Carl track this.`,
+			inputSchema: createTopicToolPayload,
 			annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
 			_meta: toMcpViewToolMeta("topic"),
 		},
-		async ({ confirmation, ...topicDraft }) => {
+		async ({ confirmation, ...topicDraftFields }) => {
 			if (toolCaller.kind !== "user") {
 				return toTextResult(CONNECT_ACCOUNT_TEXT)
+			}
+
+			// a public or invite draft that leaves out its team goes on the user's default team
+			const isDefaultTeamNeeded = topicDraftFields.visibility !== "private" && topicDraftFields.team === undefined
+			const defaultTeam = isDefaultTeamNeeded ? await loadDefaultTeam(toolCaller.userId) : null
+			const topicDraft = {
+				...topicDraftFields,
+				team: toDraftTeamWithDefault({
+					visibility: topicDraftFields.visibility,
+					team: topicDraftFields.team,
+					defaultTeam,
+				}),
 			}
 
 			// preview the shared Topic Draft before any creation, source resolution, quota use, or Scan

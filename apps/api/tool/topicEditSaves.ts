@@ -36,6 +36,8 @@ export type TopicEditSaveBinding = {
 	origin: PromptVersionOrigin
 	toolCalls: ChatTurnToolCalls
 	analyticsProperties?: AnalyticsProperties
+	// false if the edit names its own team change, so a topic made public or invite skips the default team
+	isDefaultTeamApplied?: boolean
 }
 
 /**
@@ -172,7 +174,7 @@ async function saveTopicPromptEdit(
  * result text.
  */
 async function saveTopicFieldsEdit(
-	{ userId, topicId, origin, toolCalls, analyticsProperties }: TopicEditSaveBinding,
+	{ userId, topicId, origin, toolCalls, analyticsProperties, isDefaultTeamApplied }: TopicEditSaveBinding,
 	topicFields: Parameters<typeof updateTopicFields>[0]["topicFields"],
 ): Promise<string> {
 	// count the call before the write. a failed write still counts
@@ -183,6 +185,7 @@ async function saveTopicFieldsEdit(
 		topicFields,
 		promptVersionOrigin: origin,
 		analyticsProperties,
+		isDefaultTeamApplied,
 	})
 	if (updateTopicFieldsResult.status !== "saved") {
 		toolCalls.topicSaveRejections.push(
@@ -192,7 +195,7 @@ async function saveTopicFieldsEdit(
 	}
 	// list the save for the toast
 	toolCalls.topicSaves.push("Carl saved the topic's settings.")
-	return toSavedTopicFieldsText(updateTopicFieldsResult.topicName)
+	return toSavedTopicFieldsText(updateTopicFieldsResult.topicName, updateTopicFieldsResult.defaultTeamName)
 }
 
 /**

@@ -138,3 +138,10 @@ export const TEST_OWNER_TOPICS: OwnerTopic[] = [
 		latestPodcastEpisode: null,
 	},
 ]
+
+// a person's own profile topics: theirs, and last a team topic that another member owns, whose row shows no owner's
+// controls
+export const TEST_OWN_PROFILE_TOPICS: OwnerTopic[] = TEST_OWNER_TOPICS.map((ownerTopic, i) => ({
+	...ownerTopic,
+	ownerUserId: i === TEST_OWNER_TOPICS.length - 1 ? "user-vienna" : "user-carl",
+}))

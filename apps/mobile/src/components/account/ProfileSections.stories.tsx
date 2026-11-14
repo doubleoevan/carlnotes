@@ -1,4 +1,4 @@
-import { TEST_OWNER_TOPICS } from "@carlnotes/contracts/activityTestFixtures"
+import { TEST_OWN_PROFILE_TOPICS } from "@carlnotes/contracts/activityTestFixtures"
 import { toTestProfile } from "@carlnotes/contracts/profileTestFixtures"
 import { EMPTY_NEWS_STORY } from "@carlnotes/core/lib/newsStories"
 import type { Meta, StoryObj } from "@storybook/react-native"
@@ -12,8 +12,8 @@ function toStoryQueryClient(profileUserId: string): QueryClient {
 	return queryClient
 }
 
-// another person's public topics and teams, their profile with neither, and the user's own profile while its topics
-// load and after they fail, as on the web
+// another person's public topics and teams, their profile with neither, and the user's own profile with their topics,
+// with a team topic another member owns, and with none, as on the web
 const meta: Meta<typeof ProfileSections> = {
 	title: "Account/ProfileSections",
 	component: ProfileSections,
@@ -21,8 +21,6 @@ const meta: Meta<typeof ProfileSections> = {
 	args: {
 		profile: toTestProfile(),
 		isOwnProfile: false,
-		ownTopics: null,
-		isOwnTopicsLoadFailed: false,
 		onReload: () => undefined,
 	},
 	decorators: [
@@ -37,7 +35,9 @@ export default meta
 type Story = StoryObj<typeof meta>
 export const Visitor: Story = {}
 export const VisitorEmpty: Story = { args: { profile: toTestProfile({ topics: [], teams: [] }) } }
-export const OwnTopics: Story = { args: { isOwnProfile: true, ownTopics: TEST_OWNER_TOPICS } }
-export const OwnTopicsLoading: Story = { args: { isOwnProfile: true } }
-export const OwnTopicsLoadFailed: Story = { args: { isOwnProfile: true, isOwnTopicsLoadFailed: true } }
-export const OwnNoTopics: Story = { args: { isOwnProfile: true, ownTopics: [], profile: toTestProfile({ teams: [] }) } }
+export const OwnTopics: Story = {
+	args: { isOwnProfile: true, profile: toTestProfile({ ownTopics: TEST_OWN_PROFILE_TOPICS }) },
+}
+export const OwnNoTopics: Story = {
+	args: { isOwnProfile: true, profile: toTestProfile({ ownTopics: [], topics: [], teams: [] }) },
+}

@@ -30,10 +30,7 @@ export type TopicTeamField = {
 	setIsNewTeamPublic: (value: boolean) => void
 	pendingInvites: PendingInvite[]
 	setPendingInvites: (invites: PendingInvite[]) => void
-	// whether a team the user doesn't lead already holds the topic, whether the save may go ahead, the write after it,
-	// and the load state
-	isHeldElsewhere: boolean
-	isTeamChosen: boolean
+	// the write after the save, and the load state
 	assignTopicTeam: (topicId: string) => Promise<void>
 	loadError: string | null
 	isLoading: boolean
@@ -77,17 +74,10 @@ export function useTopicTeamChoice(
 					.map((team) => team.teamId)
 					.filter((teamId) => holdingTeamIds.includes(teamId))
 				savedTeamIds.current = new Set(holdingLeaderTeamIds)
-				// an existing topic starts on the leader teams that hold it. a new one takes the first team led, never none
-				setSelectedTeamIds((chosen) => {
-					if (chosen.length > 0) {
-						return chosen
-					}
-					// an existing topic keeps the teams holding it
-					if (topic) {
-						return holdingLeaderTeamIds
-					}
-					return leaderTeams[0] ? [leaderTeams[0].teamId] : []
-				})
+				// a selection made before the load stays, and an empty one starts on the topic's initial teams
+				setSelectedTeamIds((chosen) =>
+					chosen.length > 0 ? chosen : toInitialTeamIds({ topic, leaderTeams, holdingLeaderTeamIds }),
+				)
 			})
 			// a failed load shows its note in place of the teams
 			.catch(() => {
@@ -109,12 +99,6 @@ export function useTopicTeamChoice(
 	// what the field actually selected: the real teams, and whether the New team row is on
 	const selectedRealTeamIds = selectedTeamIds.filter((teamId) => teamId !== NEW_TEAM_CHOICE)
 	const isNewTeamSelected = selectedTeamIds.includes(NEW_TEAM_CHOICE)
-
-	// a non-private topic must land on a team: a led one selected, a new one named, or one held where the user can't manage
-	const isHeldElsewhere = teams !== null && isTopicHeldElsewhere(topic, teams)
-	const isTeamChosen =
-		teams !== null &&
-		(selectedRealTeamIds.length > 0 || isHeldElsewhere || (isNewTeamSelected && newTeamName.trim() !== ""))
 
 	// apply the selection once the topic is saved: create the named team, add the newly picked, drop the unpicked
 	const assignTopicTeam = async (topicId: string): Promise<void> => {
@@ -205,8 +189,6 @@ export function useTopicTeamChoice(
 		setIsNewTeamPublic,
 		pendingInvites,
 		setPendingInvites,
-		isHeldElsewhere,
-		isTeamChosen,
 		assignTopicTeam,
 	}
 }
@@ -249,17 +231,25 @@ export async function saveTopicTeams({
 }
 
 /**
- * Returns whether a team the user doesn't lead already holds the topic: its owning team, or a team of the user's that
- * shares it. Such a team keeps the topic on a team whatever the user's own teams are set to.
+ * Returns the teams a topic's Team field starts on. An existing topic starts on the led teams that hold it. A new topic,
+ * or a private one no team holds, starts on the default team, which the user may change to another led team or to none.
  */
-export function isTopicHeldElsewhere(
-	topic: Pick<TopicResponse, "team" | "roomTeams"> | undefined,
-	leaderTeams: { teamId: string }[],
-): boolean {
-	// the owning team and every holding team of the user's, less the ones the user leads
-	const holdingTeamIds = [
-		...(topic?.team ? [topic.team.teamId] : []),
-		...(topic?.roomTeams ?? []).map((team) => team.teamId),
-	]
-	return holdingTeamIds.some((teamId) => !leaderTeams.some((team) => team.teamId === teamId))
+export function toInitialTeamIds({
+	topic,
+	leaderTeams,
+	holdingLeaderTeamIds,
+}: {
+	// the topic, the user's led teams, and the ones among them that already hold it
+	topic: Pick<TopicResponse, "visibility" | "team" | "roomTeams"> | undefined
+	leaderTeams: Pick<TeamSummary, "teamId" | "isDefaultTeam">[]
+	holdingLeaderTeamIds: string[]
+}): string[] {
+	// an existing topic that a team holds, or that is already public or invite, keeps its teams
+	if (topic && (topic.visibility !== "private" || topic.team || topic.roomTeams.length > 0)) {
+		return holdingLeaderTeamIds
+	}
+
+	// anything else starts on the default team, if the user leads one
+	const defaultTeam = leaderTeams.find((team) => team.isDefaultTeam) ?? leaderTeams[0]
+	return defaultTeam ? [defaultTeam.teamId] : []
 }

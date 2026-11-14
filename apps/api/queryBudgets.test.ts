@@ -239,19 +239,19 @@ test("the topic page reads its podcast episodes' films once", async () => {
 
 // a profile reads the person's topics once, for the cards and the topic table, and stays inside its maximum
 test("a profile reads the person's topics once inside its maximum", async () => {
-	// the person, and the one public topic they own
+	// the person, and the one public topic they own or a team they lead holds
 	restoreConnectionPool()
 	sentQueries = stubConnectionPool((sentQuery) => {
 		if (sentQuery.text.includes('"avatar_key" from "users" where "users"."id" = $1')) {
 			return [["owner-1", "Owner", new Date("2026-10-01T00:00:00Z"), null, null]]
 		}
-		return sentQuery.text.includes('from "topics" where ("topics"."owner_id" = $1') ? [TOPIC_ROW] : []
+		return sentQuery.text.includes('from "topics" where (("topics"."owner_id" = $1') ? [TOPIC_ROW] : []
 	})
 
 	// a visitor's load, with one read of the topics among its queries
 	const { response, queryCount } = await requestAsUser("/api/profiles/owner-1", null)
 	const topicReads = sentQueries.filter((sentQuery) =>
-		sentQuery.text.includes('from "topics" where ("topics"."owner_id"'),
+		sentQuery.text.includes('from "topics" where (("topics"."owner_id"'),
 	)
 	expect(response.status).toBe(200)
 	expect(topicReads).toHaveLength(1)
