@@ -91,8 +91,7 @@ export async function createTopicFromDraft({
 			visibility: topicDraft.visibility,
 			maxTopicFindings: topicDraft.maxTopicFindings,
 			isPodcastEnabled: topicDraft.isPodcastEnabled,
-			// a private topic goes on no team
-			draftTeamId: topicDraft.visibility === "private" ? undefined : topicDraft.team?.teamId,
+			draftTeamId: topicDraft.team?.teamId,
 			inviteEmails: topicDraft.inviteEmails,
 			sources: topicSources,
 		},

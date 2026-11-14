@@ -28,8 +28,8 @@ export async function loadDefaultTeam(userId: string): Promise<TopicDraftTeam | 
 }
 
 /**
- * Returns the team a draft goes on: none for a private draft, else the team it names, which may be no team, or the
- * default team if it names none.
+ * Returns the team a draft goes on: the team it names, which may be no team, or the default team if a public or
+ * invite draft names none.
  */
 export function toDraftTeamWithDefault({
 	visibility,
@@ -41,11 +41,12 @@ export function toDraftTeamWithDefault({
 	team: TopicDraftTeam | null | undefined
 	defaultTeam: TopicDraftTeam | null
 }): TopicDraftTeam | null {
-	// a private draft goes on no team, and any other on the team it names, or on the default one if it names none
-	if (visibility === "private") {
-		return null
+	// a draft that names a team, or no team, keeps it
+	if (team !== undefined) {
+		return team
 	}
-	return team === undefined ? defaultTeam : team
+	// a draft that names none goes on the default team, unless it is private
+	return visibility === "private" ? null : defaultTeam
 }
 
 /**

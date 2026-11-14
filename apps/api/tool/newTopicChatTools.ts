@@ -75,6 +75,10 @@ export function toProposeNewTopicTool(): Tool {
  * team whenever the user leads one.
  */
 export function toTopicDraftOnDefaultTeam(topicDraft: TopicDraft, defaultTeam: TopicDraftTeam | null): TopicDraft {
+	// a private draft in the chat holds no team
+	if (topicDraft.visibility === "private") {
+		return { ...topicDraft, team: null }
+	}
 	const team = toDraftTeamWithDefault({
 		visibility: topicDraft.visibility,
 		team: topicDraft.team ?? undefined,

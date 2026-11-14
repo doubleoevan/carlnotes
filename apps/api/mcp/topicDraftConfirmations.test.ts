@@ -97,8 +97,9 @@ test("preview does no creation or suggestions; confirmation calls the existing p
 	expect(JSON.stringify(refused)).toContain("plan's topic limit")
 })
 
-// a public draft that leaves out its team previews on the default team, and a draft that names no team keeps none
-test("create_topic puts a public draft on the default team unless it names none", async () => {
+// a public draft that leaves out its team previews on the default team, a draft that names no team keeps none, and a
+// private draft keeps the team it names
+test("create_topic puts a public draft on the default team unless it names none, and a private one on its own", async () => {
 	spyOn(draftOptions, "loadTopicDraftMcpViewOptions").mockResolvedValue({
 		knownTags: [],
 		isPodcastEnabledByDefault: true,
@@ -115,6 +116,13 @@ test("create_topic puts a public draft on the default team unless it names none"
 	// a draft that names no team keeps none
 	const previewWithoutTeam = await handler({ ...publicDraft, team: null })
 	expect(previewWithoutTeam.structuredContent).toMatchObject({ afterTopicDraft: { team: null } })
+
+	// a private draft keeps the team it names, and gets no default team
+	const namedTeam = { teamId: "team-2", name: "Cuppers" }
+	const privatePreview = await handler({ ...draftWithoutTeam, team: namedTeam })
+	expect(privatePreview.structuredContent).toMatchObject({ afterTopicDraft: { team: namedTeam } })
+	const privatePreviewWithoutTeam = await handler(draftWithoutTeam)
+	expect(privatePreviewWithoutTeam.structuredContent).toMatchObject({ afterTopicDraft: { team: null } })
 })
 
 // register the topic edit tools for the owner's client, and return the create_topic handler
