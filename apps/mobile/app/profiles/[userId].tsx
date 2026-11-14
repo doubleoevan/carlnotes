@@ -1,6 +1,8 @@
 import { showClientError } from "@carlnotes/client/apiClient"
 import { authClient } from "@carlnotes/client/authClient"
 import { fetchProfile } from "@carlnotes/client/profileClient"
+import type { ProfileAudience } from "@carlnotes/contracts/profiles"
+import { useProfileAudience } from "@carlnotes/core/hooks/useProfileAudience"
 import { sendProfileViewOnce } from "@carlnotes/core/lib/pageViews"
 import {
 	sendProfileOrderMoves,
@@ -60,7 +62,15 @@ export default function ProfileScreen() {
 	// which of the owner's rank sheets is open, or null if none is
 	const [rankedNoun, setRankedNoun] = useState<RankedNoun | null>(null)
 	const isOwnProfile = session?.user.id === userId
-	const query = useQuery({ queryKey: ["profile", session?.user.id, userId], queryFn: () => fetchProfile(userId) })
+
+	// the audience the page shows to, which an admin on someone else's profile switches to the visitor audience. the
+	// person's profile for the last audience stays on screen while the next one loads
+	const profileAudience = useProfileAudience({ profileUserId: userId, isOwnProfile })
+	const query = useQuery({
+		queryKey: ["profile", session?.user.id, userId, profileAudience.audience],
+		queryFn: () => fetchProfile(userId, profileAudience.audience),
+		placeholderData: (previousProfile) => (previousProfile?.userId === userId ? previousProfile : undefined),
+	})
 	const profile = query.data
 
 	// count a loaded profile once per app runtime, as the web counts it once per tab
@@ -162,7 +172,13 @@ export default function ProfileScreen() {
 			// the loading state draws both buttons' placeholders, so the row waits for the profile
 			topicButton={query.isPending ? undefined : <NewTopicButton />}
 		>
-			<ProfileContent query={query} isOwnProfile={isOwnProfile} onReload={handleReload} />
+			<ProfileContent
+				query={query}
+				isOwnProfile={isOwnProfile}
+				audience={profileAudience.audience}
+				onAudienceChange={profileAudience.changeAudience}
+				onReload={handleReload}
+			/>
 			{isEditing && (
 				<Sheet title="Edit Café" onClose={() => setIsEditing(false)}>
 					<ProfileFields onUsernameChanged={handleReload} />
@@ -187,10 +203,14 @@ export default function ProfileScreen() {
 function ProfileContent({
 	query,
 	isOwnProfile,
+	audience,
+	onAudienceChange,
 	onReload,
 }: {
 	query: ReturnType<typeof useQuery<Awaited<ReturnType<typeof fetchProfile>>>>
 	isOwnProfile: boolean
+	audience: ProfileAudience
+	onAudienceChange?: (audience: ProfileAudience) => void
 	onReload: () => void
 }) {
 	const profile = query.data
@@ -207,7 +227,13 @@ function ProfileContent({
 	}
 	return (
 		<>
-			<ProfileSections profile={profile} isOwnProfile={isOwnProfile} onReload={onReload} />
+			<ProfileSections
+				profile={profile}
+				isOwnProfile={isOwnProfile}
+				audience={audience}
+				onAudienceChange={onAudienceChange}
+				onReload={onReload}
+			/>
 			{/* the profile's visitors, read while this profile is the active route */}
 			<ViewerCountLine
 				viewerCountPage={{ kind: "profile", id: profile.userId }}

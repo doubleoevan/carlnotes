@@ -1,6 +1,7 @@
-// profile cards tests: the person's own pinned rows lead, a visitor reads public topics alone, the person's tiles and
-// table take their teams' topics, each other topic shows one film and one podcast episode, and a profile and a team
-// list every published Topic Post from one read of the posts
+// profile cards tests: the person's own pinned rows lead, a visitor reads public topics alone and no hidden membership,
+// the person's tiles and table take their teams' topics but another member's unconverted private one, each other topic
+// shows one film and one podcast episode, and a profile and a team list every published Topic Post from one read of the
+// posts
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import { topics } from "@carlnotes/db/schema/topics"
@@ -25,35 +26,55 @@ afterEach(() => {
 	mock.restore()
 })
 
-test("a visitor's tiles take public topics of the person and of public teams they lead, and the person's take all", async () => {
+test("a visitor's tiles take public topics of the person and of public teams that show the membership", async () => {
 	const sentQueries = stubConnectionPool(() => [])
-	await loadProfileTopicRows({ profileUserId: "user-1", includesNonPublicTopics: false })
-	await loadProfileTopicRows({ profileUserId: "user-1", includesNonPublicTopics: true })
+	await loadProfileTopicRows({ profileUserId: "user-1", profileReader: "visitor" })
+	await loadProfileTopicRows({ profileUserId: "user-1", profileReader: "person" })
 
 	// both reads take the topics the person owns, and the ones that teams they lead own or have shared in
 	for (const sentQuery of sentQueries) {
-		expect(sentQuery.text).toContain('"topics"."owner_id" = $1 or')
+		expect(sentQuery.text).toContain('"topics"."owner_id" = $1')
 		expect(sentQuery.text).toContain('"topics"."team_id" in (select "team_members"."team_id"')
 		expect(sentQuery.text).toContain('"topics"."id" in (select "topic_id" from "team_topics"')
 		expect(sentQuery.text).toContain('"team_members"."role" =')
 	}
 
-	// the visitor's read keeps public teams and public topics alone, and the person's keeps every one
+	// the visitor's read keeps public topics, and public teams that show the membership
 	expect(sentQueries[0]?.text).toContain('"teams"."is_public" =')
+	expect(sentQueries[0]?.text).toContain('"team_members"."is_member_visible" =')
 	expect(sentQueries[0]?.text).toContain('"topics"."visibility" =')
+	expect(sentQueries[0]?.text).not.toContain('"topic_personal_source_contexts"')
+
+	// the person's read keeps every team, and leaves out another member's unconverted private topic
 	expect(sentQueries[1]?.text).not.toContain('"teams"."is_public"')
-	expect(sentQueries[1]?.text).not.toContain('"topics"."visibility"')
+	expect(sentQueries[1]?.text).not.toContain('"team_members"."is_member_visible"')
+	expect(sentQueries[1]?.text).toContain('"topics"."visibility" <>')
+	expect(sentQueries[1]?.text).toContain(
+		'"topics"."id" not in (select "topic_id" from "topic_personal_source_contexts"',
+	)
+})
+
+test("an admin's tiles take the person's own private topic only once its Personal sources text is converted", async () => {
+	const sentQueries = stubConnectionPool(() => [])
+	await loadProfileTopicRows({ profileUserId: "user-1", profileReader: "admin" })
+
+	// the person's own topics, every one but an unconverted private one, and every team's as the person reads them
+	expect(sentQueries[0]?.text).toContain(
+		'("topics"."owner_id" = $1 and ("topics"."visibility" <> $2 or "topics"."id" not in',
+	)
+	expect(sentQueries[0]?.text).not.toContain('"teams"."is_public"')
 })
 
 test("the person's own table takes every topic of every team they are an active member of", async () => {
 	const sentQueries = stubConnectionPool(() => [])
 	await loadProfileTableTopicRows("user-1")
 
-	// the owned topics and every team's, leader or not, at every visibility
+	// the owned topics and every team's, leader or not, but another member's unconverted private topic
 	expect(sentQueries[0]?.text).toContain('"topics"."owner_id" = $1 or')
 	expect(sentQueries[0]?.text).toContain('"team_members"."is_active" =')
 	expect(sentQueries[0]?.text).not.toContain('"team_members"."role"')
-	expect(sentQueries[0]?.text).not.toContain('"topics"."visibility"')
+	expect(sentQueries[0]?.text).toContain('"topics"."visibility" <>')
+	expect(sentQueries[0]?.text).toContain('"topic_personal_source_contexts"')
 })
 
 // the profile order: the pinned ones by their position and the newest first at one position, then the unpinned ones most
@@ -63,12 +84,12 @@ const PROFILE_ORDER_SQL =
 
 test("topics read the person's own pins first in their order, then most viewed, most followed, and newest", async () => {
 	const sentQueries = stubConnectionPool(() => [])
-	await loadProfileTopicRows({ profileUserId: "user-1", includesNonPublicTopics: false })
+	await loadProfileTopicRows({ profileUserId: "user-1", profileReader: "visitor" })
 
 	// a pin counts only on a topic the person owns, so a team topic's pin by its owner does not lead
-	const ownPinPosition = 'case when "topics"."owner_id" = $11 then "topics"."profile_order" end'
+	const ownPinPosition = 'case when "topics"."owner_id" = $14 then "topics"."profile_order" end'
 	expect(sentQueries[0]?.text).toContain(`order by ${ownPinPosition} is null`)
-	expect(sentQueries[0]?.values.slice(10, 14)).toEqual(["user-1", "user-1", "user-1", "user-1"])
+	expect(sentQueries[0]?.values.slice(13, 17)).toEqual(["user-1", "user-1", "user-1", "user-1"])
 })
 
 test("a team's cards read its topics in the same order, and a team with none reads nothing", async () => {
@@ -179,9 +200,9 @@ function stubProfileFilms(): void {
 
 test("a visitor sees a person's films on public topics alone, and the person sees every film", async () => {
 	stubProfileFilms()
-	const visitorTopicRows = await loadProfileTopicRows({ profileUserId: "user-1", includesNonPublicTopics: false })
+	const visitorTopicRows = await loadProfileTopicRows({ profileUserId: "user-1", profileReader: "visitor" })
 	const visitorCards = await loadProfileCards({ topicRows: visitorTopicRows, profileUserId: "user-1", userId: null })
-	const ownTopicRows = await loadProfileTopicRows({ profileUserId: "user-1", includesNonPublicTopics: true })
+	const ownTopicRows = await loadProfileTopicRows({ profileUserId: "user-1", profileReader: "person" })
 	const ownCards = await loadProfileCards({ topicRows: ownTopicRows, profileUserId: "user-1", userId: "user-1" })
 
 	// the visitor's section holds the public topic's film alone

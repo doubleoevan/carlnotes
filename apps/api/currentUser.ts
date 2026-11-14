@@ -1,6 +1,7 @@
 // the single place that resolves the current user. every per-user query goes through here
 import type { AnalyticsEntryPoint } from "@carlnotes/contracts/analyticsEvents"
 import { type ClientTelemetry, toClientTelemetry } from "@carlnotes/contracts/clientTelemetry"
+import type { ProfileAudience } from "@carlnotes/contracts/profiles"
 import type { Context } from "hono"
 import type { RateLimitInfo } from "hono-rate-limiter"
 import type { SessionUser } from "./auth"
@@ -29,6 +30,11 @@ export type AppContext = Context<AppEnv>
 // resolves the signed-in user's id from the session set on the request context. null if unauthenticated
 export function currentUser(context: AppContext): string | null {
 	return context.get("user")?.id ?? null
+}
+
+// resolves the signed-in user's id for a profile read. null in the visitor audience
+export function currentProfileAudienceUser(context: AppContext, audience: ProfileAudience): string | null {
+	return audience === "visitor" ? null : currentUser(context)
 }
 
 // resolves the id of the request's session. null if unauthenticated

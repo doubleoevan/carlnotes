@@ -57,11 +57,11 @@ const MAX_TOPIC_PAGE_WITHOUT_RELATED_TOPICS_QUERIES = 21
 const MAX_TOPIC_PAGE_QUERIES = MAX_TOPIC_PAGE_WITHOUT_RELATED_TOPICS_QUERIES + 4
 const MAX_RELATED_TOPICS_QUERIES = 7
 
-// one visitor's profile load of a person with one public topic sends 14 reads on this fixture: the person, their
+// one visitor's profile load of a person with one public topic sends 15 reads on this fixture: the person, their
 // topics, the ids of the topics' podcast episodes and of their films, the Topic Posts, the subscriber count, the
-// teams, the topic table's kept and seen counts and latest podcast episodes, and the topic cards' owners, team links,
-// reactions, and latest podcast episodes
-const MAX_PROFILE_QUERIES = 14
+// teams, the topic table's kept and seen counts, latest podcast episodes, and owners, and the topic cards' owners, team
+// links, reactions, and latest podcast episodes
+const MAX_PROFILE_QUERIES = 15
 
 // a public topic owned by someone else
 const TOPIC_ROW = toTableRow(topics, {

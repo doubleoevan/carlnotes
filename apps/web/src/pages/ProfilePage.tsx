@@ -2,7 +2,8 @@ import { authClient } from "@carlnotes/client/authClient"
 import { fetchProfile, fetchProfileTeamStatuses } from "@carlnotes/client/profileClient"
 import { fetchAddableTopics } from "@carlnotes/client/topicClient"
 import { type ProfileResponse, toProfilePageTitle } from "@carlnotes/contracts/profilePage"
-import type { ProfileTeamStatus } from "@carlnotes/contracts/profiles"
+import type { ProfileAudience, ProfileTeamStatus } from "@carlnotes/contracts/profiles"
+import { useProfileAudience } from "@carlnotes/core/hooks/useProfileAudience"
 import { toProfileChatContext } from "@carlnotes/core/lib/chatConversations"
 import { sendProfileViewOnce } from "@carlnotes/core/lib/pageViews"
 import {
@@ -20,7 +21,7 @@ import { REQUEST_FAILED_TEXT } from "@carlnotes/core/lib/sessionCopy"
 import { toggleUserBlock, toUserBlockLabel } from "@carlnotes/core/lib/userBlocks"
 import { getRouteApi, useNavigate } from "@tanstack/react-router"
 import { Ban, Clapperboard, ListOrdered, type LucideIcon, NotebookPen, Pencil, Plus, Users } from "lucide-react"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { EditProfileModal } from "@/components/account/EditProfileModal"
 import { ProfileHeader } from "@/components/account/ProfileHeader"
@@ -110,10 +111,37 @@ export function ProfilePage() {
 	// a user on their own profile manages their topics in the owner topics table
 	const isOwnProfile = Boolean(session) && session?.user.id === profile?.userId
 
-	// reload the profile after a change to its teams or topics
+	// read the profile for an audience. a read that a later read replaced returns undefined, so it never shows
+	const profileReadRef = useRef(0)
+	const readLatestProfile = useCallback(
+		async (audience: ProfileAudience): Promise<ProfileResponse | null | undefined> => {
+			profileReadRef.current += 1
+			const profileRead = profileReadRef.current
+			const fetchedProfile = await fetchProfile(userId, audience)
+			return profileRead === profileReadRef.current ? fetchedProfile : undefined
+		},
+		[userId],
+	)
+
+	// the audience the page shows to, which an admin on someone else's profile switches to the visitor audience. the
+	// profile is read again for the chosen audience, and the last audience's profile stays on screen until then
+	const profileAudience = useProfileAudience({
+		profileUserId: userId,
+		isOwnProfile,
+		onAudienceChange: (audience) => {
+			readLatestProfile(audience)
+				.then((fetchedProfile) => fetchedProfile && setProfile(fetchedProfile))
+				.catch(() => toast.error(REQUEST_FAILED_TEXT))
+		},
+	})
+
+	// reload the profile after a change to its teams or topics, for the page's audience
 	const handleReloadProfile = useCallback(async (): Promise<void> => {
-		setProfile(await fetchProfile(userId))
-	}, [userId])
+		const fetchedProfile = await readLatestProfile(profileAudience.audience)
+		if (fetchedProfile !== undefined) {
+			setProfile(fetchedProfile)
+		}
+	}, [readLatestProfile, profileAudience.audience])
 
 	// load the user's teams, each with the profile user's status there
 	const [profileTeamStatuses, setProfileTeamStatuses] = useState<ProfileTeamStatus[] | null>(null)
@@ -160,7 +188,7 @@ export function ProfilePage() {
 		}
 		try {
 			await toggleUserBlock({ userId: profile.userId, isUserBlocked: profile.isBlocked })
-			reloadProfilePage()
+			await handleReloadProfile()
 		} catch {
 			toast.error(REQUEST_FAILED_TEXT)
 		}
@@ -257,6 +285,8 @@ export function ProfilePage() {
 			<ProfileSections
 				profile={profile}
 				isOwnProfile={isOwnProfile}
+				audience={profileAudience.audience}
+				onAudienceChange={profileAudience.changeAudience}
 				onReloadProfile={handleReloadProfile}
 				firstNewsPage={loadedProfile?.userId === profile.userId ? loadedNewsPage : undefined}
 			/>

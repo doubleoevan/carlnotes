@@ -3,7 +3,7 @@
 
 import type { ApiRouteContract } from "./apiRouteContracts"
 import { commentMentionsSeenPayload, unseenCommentMentionsResponse } from "./commentMentions"
-import { newsQuery, newsResponse } from "./news"
+import { newsQuery, newsResponse, profileNewsQuery } from "./news"
 import { adminReportCountResponse } from "./reports"
 import { idParam, multipartFile, okResponse, userIdParam } from "./routeShapes"
 import {
@@ -87,7 +87,7 @@ export const socialRouteContracts: Record<string, ApiRouteContract> = {
 		method: "GET",
 		path: "/api/profiles/:userId/news",
 		params: userIdParam,
-		query: newsQuery,
+		query: profileNewsQuery,
 		response: newsResponse,
 	},
 	// a Topic's Topic Posts, one post's read, and its author's writes

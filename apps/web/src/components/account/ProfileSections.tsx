@@ -1,11 +1,12 @@
 import { authClient } from "@carlnotes/client/authClient"
 import type { NewsResponse } from "@carlnotes/contracts/news"
 import type { ProfileResponse } from "@carlnotes/contracts/profilePage"
+import type { ProfileAudience } from "@carlnotes/contracts/profiles"
 import {
 	type ProfileSectionsElements,
 	ProfileSections as SharedProfileSections,
 } from "@carlnotes/core/components/ProfileSections"
-import { useUpdatesOpener } from "@carlnotes/core/hooks/useUpdatesOpener"
+import { useProfileUpdatesOpener } from "@carlnotes/core/hooks/useUpdatesOpener"
 import { PROFILE_SECTION_VALUES } from "@carlnotes/core/lib/profileSections"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useNavigate } from "@tanstack/react-router"
@@ -24,6 +25,8 @@ import { FLUSH_FIRST_SECTION_CLASS } from "@/lib/styleClasses"
 export function ProfileSections({
 	profile,
 	isOwnProfile,
+	audience,
+	onAudienceChange,
 	onReloadProfile,
 	firstNewsPage,
 }: {
@@ -31,12 +34,20 @@ export function ProfileSections({
 	// the first page of the week's news, if the server read it with the profile
 	firstNewsPage?: NewsResponse
 	isOwnProfile: boolean
+	// the page's audience, and for an admin on someone else's profile, the news card's select that changes it
+	audience?: ProfileAudience
+	onAudienceChange?: (audience: ProfileAudience) => void
 	onReloadProfile: () => void
 }) {
 	const navigate = useNavigate()
 	const { data: session } = authClient().useSession()
-	// carl's line for the day is written from the reader's own unread Findings, so it shows on their own profile alone
-	const opener = useUpdatesOpener(isOwnProfile ? (session?.user.id ?? null) : null)
+	// carl's line for the day shows on the person's own profile, and to an admin on anyone else's without writing one
+	const opener = useProfileUpdatesOpener({
+		profileUserId: profile.userId,
+		userId: session?.user.id ?? null,
+		includesNonPublicTopics: profile.includesNonPublicTopics,
+		audience,
+	})
 	return (
 		<div className="mt-2">
 			<SharedProfileSections
@@ -47,13 +58,17 @@ export function ProfileSections({
 						profileUserId={profile.userId}
 						userId={session?.user.id ?? null}
 						opener={opener}
+						audience={audience}
+						onAudienceChange={onAudienceChange}
 						firstPage={firstNewsPage}
 					/>
 				}
 				renderOwnerTopicsTable={(ownTopics) => (
 					<OwnerTopicsTable topics={ownTopics} profileUserId={profile.userId} onReloadPage={onReloadProfile} />
 				)}
-				topicsTable={<TopicsTable topics={profile.topics} includesNonPublicTopics={profile.includesNonPublicTopics} />}
+				topicsTable={
+					<TopicsTable topics={profile.topics} includesNonPublicTopics={profile.includesNonPublicTopics} isOwnerShown />
+				}
 				teamsTable={
 					<TeamsMembershipTable
 						teams={profile.teams}

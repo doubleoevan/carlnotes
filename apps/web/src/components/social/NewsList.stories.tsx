@@ -1,13 +1,15 @@
-// the news list: a full week in numbered pages, a Podcast Episode with a film, a quiet hour, a closed list, and a
-// profile's rows as another reader
+// the news list: a full week in numbered pages, a Podcast Episode with a film, a quiet hour, a closed list, a profile's
+// rows as another reader, and an admin's two audiences of someone's profile
+
 import { fetchNews, fetchProfileNews } from "@carlnotes/client/newsClient"
 import { fetchPodcastEpisode } from "@carlnotes/client/podcastEpisodeClient"
 import { fetchTopicPost } from "@carlnotes/client/topicPostClient"
+import { PROFILE_AUDIENCE_LABELS } from "@carlnotes/contracts/profiles"
 import { EMPTY_NEWS_STORY, toNewsStoryPage } from "@carlnotes/core/lib/newsStories"
 import { PODCAST_STORY_FILM_EPISODE } from "@carlnotes/core/lib/podcastEpisodeStories"
 import { TOPIC_POST_DISCUSSION_STORY } from "@carlnotes/core/lib/topicPostStories"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
-import { expect, mocked, within } from "storybook/test"
+import { expect, fn, mocked, within } from "storybook/test"
 import { NewsList } from "./NewsList"
 
 const meta = {
@@ -95,5 +97,42 @@ export const Profile: Story = {
 	play: async ({ canvas }) => {
 		await expect(await canvas.findByText("12 reactions on Evan's hot take")).toBeInTheDocument()
 		await expect(canvas.getByRole("heading", { name: "Brews News" })).toBeInTheDocument()
+	},
+}
+
+// an admin reads someone else's profile as the person does, with the person's stored opener, and the highlighted
+// select changes the whole page's audience
+export const AdminView: Story = {
+	args: { profileUserId: "user-evan", userId: "user-laura", audience: "user", onAudienceChange: fn() },
+	parameters: { session: "admin" },
+	play: async ({ args, canvas, userEvent }) => {
+		const audienceSelect = await canvas.findByRole("combobox", { name: "Profile view" })
+		await expect(audienceSelect).toHaveTextContent(PROFILE_AUDIENCE_LABELS.user)
+		await expect(canvas.getByText(/Espresso had a loud week/)).toBeInTheDocument()
+
+		// choosing the visitor audience asks the page to change its audience
+		await userEvent.click(audienceSelect)
+		await userEvent.click(await within(document.body).findByRole("option", { name: PROFILE_AUDIENCE_LABELS.visitor }))
+		await expect(args.onAudienceChange).toHaveBeenCalledWith("visitor")
+	},
+}
+
+// the visitor audience an admin chose: the news a visitor reads, with no opener
+export const AdminVisitorView: Story = {
+	args: {
+		profileUserId: "user-evan",
+		userId: "user-laura",
+		opener: null,
+		audience: "visitor",
+		onAudienceChange: fn(),
+	},
+	parameters: { session: "admin" },
+	play: async ({ canvas }) => {
+		const audienceSelect = await canvas.findByRole("combobox", { name: "Profile view" })
+		await expect(audienceSelect).toHaveTextContent(PROFILE_AUDIENCE_LABELS.visitor)
+		await expect(mocked(fetchProfileNews)).toHaveBeenCalledWith(
+			"user-evan",
+			expect.objectContaining({ audience: "visitor" }),
+		)
 	},
 }

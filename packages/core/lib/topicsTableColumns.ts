@@ -2,7 +2,7 @@ import type { Topic } from "@carlnotes/contracts/profiles"
 import { toCountLabel } from "@carlnotes/contracts/text"
 import type { ReactNode } from "react"
 import type { TableColumn } from "../components/DataTable"
-import { toMonthYearLabel } from "./labels"
+import { toMonthYearLabel, toTopicOwnerName } from "./labels"
 
 /**
  * Returns a topic's kept and seen counts as its table cell shows them, kept first.
@@ -11,8 +11,12 @@ export function toKeptOverSeenLabel(topic: Pick<Topic, "keptCount" | "seenCount"
 	return `${topic.keptCount.toLocaleString()} / ${topic.seenCount.toLocaleString()}`
 }
 
+// what the Owner column's header says, on a profile's two topic tables
+export const TOPIC_OWNER_TOOLTIP = "The topic's team, or else its owner"
+
 export const topicSortValues = {
 	topic: (topic: Topic) => topic.name,
+	owner: toTopicOwnerName,
 	created: (topic: Topic) => topic.createdAt,
 	updated: (topic: Topic) => topic.updatedAt,
 	kept: (topic: Topic) => (topic.seenCount > 0 ? topic.keptCount / topic.seenCount : 0),
@@ -30,6 +34,7 @@ export function toTopicsTableColumns({
 	topicTooltip,
 	renderText,
 	renderName,
+	renderOwner,
 	renderVisibility,
 	renderInfo,
 	renderEmail,
@@ -42,6 +47,8 @@ export function toTopicsTableColumns({
 	// the cell renderers each app supplies with its own elements
 	renderText: (text: string) => ReactNode
 	renderName: (topic: Topic) => ReactNode
+	// the Owner column's link, or undefined for a table without the column
+	renderOwner?: (topic: Topic) => ReactNode
 	renderVisibility: (topic: Topic) => ReactNode
 	renderInfo: (topic: Topic) => ReactNode
 	renderEmail: (topic: Topic) => ReactNode
@@ -62,6 +69,9 @@ export function toTopicsTableColumns({
 			render: renderName,
 			footer: renderText("Total"),
 		},
+		...(renderOwner
+			? [{ key: "owner", label: "Owner", width: 176, tooltip: TOPIC_OWNER_TOOLTIP, render: renderOwner }]
+			: []),
 		{ key: "created", label: "Created", width: 112, render: (topic) => renderText(toMonthYearLabel(topic.createdAt)) },
 		{ key: "updated", label: "Updated", width: 112, render: (topic) => renderText(toMonthYearLabel(topic.updatedAt)) },
 	]

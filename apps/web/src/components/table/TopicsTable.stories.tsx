@@ -9,10 +9,15 @@ import { LATEST_PODCAST_EPISODE_FIXTURE } from "../../../.storybook/fixtures/pod
 import { PAGED_TOPIC_NAMES, toStoryTopic } from "../../../.storybook/fixtures/topics"
 import { TopicsTable } from "./TopicsTable"
 
-// someone else's public topics, none of which the user subscribes to
+// someone else's public topics, none of which the user subscribes to, one of them on a team they lead
 const profileTopics: Topic[] = [
 	toStoryTopic({ id: "topic-robot-vacuums", name: "Robot vacuums", keptCount: 12, seenCount: 96, subscriberCount: 8 }),
-	toStoryTopic({ id: "topic-home-espresso", name: "Home espresso", createdAt: "2026-05-18T12:00:00.000Z" }),
+	toStoryTopic({
+		id: "topic-home-espresso",
+		name: "Home espresso",
+		createdAt: "2026-05-18T12:00:00.000Z",
+		team: { teamId: "team-design-guild", name: "Design Guild", avatarVersion: null },
+	}),
 	toStoryTopic({ id: "topic-trail-running", name: "Trail running shoes", keptCount: 40, seenCount: 310 }),
 ]
 
@@ -52,6 +57,7 @@ const meta = {
 	argTypes: {
 		topics: { control: "object" },
 		includesNonPublicTopics: { control: "boolean" },
+		isOwnerShown: { control: "boolean" },
 		topicTooltip: { control: "text" },
 		className: { control: "text" },
 		onRemoveTopic: { control: false },
@@ -66,13 +72,14 @@ const meta = {
 export default meta
 type Story = StoryObj<typeof meta>
 
-// someone else's profile: public topics only, so no Visibility column, and no Emails column without a subscription
-export const Profile: Story = {}
+// someone else's profile: public topics only, so no Visibility column, no Emails column without a subscription, and
+// each topic's team or owner
+export const Profile: Story = { args: { isOwnerShown: true } }
 
 // an admin reading another user's profile: every visibility, so the Visibility column, and the Emails column for the
 // admin's own subscriptions. the user's own profile shows OwnerTopicsTable instead
 export const AdminProfile: Story = {
-	args: { topics: adminProfileTopics, includesNonPublicTopics: true },
+	args: { topics: adminProfileTopics, includesNonPublicTopics: true, isOwnerShown: true },
 	parameters: { session: "admin" },
 }
 

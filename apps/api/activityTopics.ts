@@ -12,11 +12,15 @@ import { loadTopicChatMentions } from "./chat/mentions"
 import { loadLatestPodcastEpisodeSummaries } from "./podcast/podcastEpisodeShapes"
 import { startOfUtcMonth } from "./topic/quotas"
 import { isActiveNonOwnerTopicSubscription } from "./topic/subscriberCounts"
+import { loadTopicOwners, type TopicOwner } from "./topic/topicOwners"
 
 // the topic rows that toActivityTopics reads
 type TopicRow = {
 	id: string
 	ownerId: string
+	// the owner, and the team that owns the topic if the signed-in user may see it named
+	owner: TopicOwner["owner"]
+	team: TopicOwner["team"]
 	name: string
 	visibility: OwnerTopic["visibility"]
 	frequency: OwnerTopic["frequency"]
@@ -77,21 +81,28 @@ export async function loadTopics({
 		return []
 	}
 
-	// the topic rows themselves and their scan history this month
+	// the topic rows themselves with their owner and owning team, and their scan history this month
 	const monthStart = startOfUtcMonth(new Date())
-	const topicRows = await db
-		.select({
-			id: topics.id,
-			ownerId: topics.ownerId,
-			name: topics.name,
-			visibility: topics.visibility,
-			imageHash: topics.imageHash,
-			frequency: topics.frequency,
-			createdAt: topics.createdAt,
-			updatedAt: topics.updatedAt,
-		})
-		.from(topics)
-		.where(inArray(topics.id, topicIds))
+	const [topicRowsWithoutOwners, topicOwners] = await Promise.all([
+		db
+			.select({
+				id: topics.id,
+				ownerId: topics.ownerId,
+				name: topics.name,
+				visibility: topics.visibility,
+				imageHash: topics.imageHash,
+				frequency: topics.frequency,
+				createdAt: topics.createdAt,
+				updatedAt: topics.updatedAt,
+			})
+			.from(topics)
+			.where(inArray(topics.id, topicIds)),
+		loadTopicOwners(topicIds, signedInUserId),
+	])
+	const topicRows = topicRowsWithoutOwners.flatMap((topicRow) => {
+		const topicOwner = topicOwners.get(topicRow.id)
+		return topicOwner ? [{ ...topicRow, ...topicOwner }] : []
+	})
 	const monthScanRows = await db
 		.select({
 			id: scans.id,
@@ -182,6 +193,8 @@ export function toActivityTopics({
 		return {
 			id: topic.id,
 			ownerUserId: topic.ownerId,
+			owner: topic.owner,
+			team: topic.team,
 			name: topic.name,
 			visibility: topic.visibility,
 			frequency: topic.frequency,

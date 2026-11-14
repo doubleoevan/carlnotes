@@ -1,4 +1,5 @@
-import type { Topic } from "@carlnotes/contracts/profiles"
+import type { ProfileIdentity, Topic } from "@carlnotes/contracts/profiles"
+import type { TeamIdentity } from "@carlnotes/contracts/teamIdentity"
 import type { ComponentType, ReactNode } from "react"
 import { useTopicEmails } from "../hooks/useTopicEmails"
 import { toTopicsTableColumns } from "../lib/topicsTableColumns"
@@ -10,6 +11,9 @@ export type TopicsTableElements = {
 	Text: ComponentType<{ children: string }>
 	ErrorText: ComponentType<{ children: string }>
 	NameLink: ComponentType<{ topic: Topic }>
+	// the Owner column's links on a profile: the topic's team, or else its owner
+	TeamLink: ComponentType<{ team: TeamIdentity }>
+	UserProfileLink: ComponentType<{ user: ProfileIdentity }>
 	Visibility: ComponentType<{ visibility: Topic["visibility"] }>
 	// the kept-over-seen cell, which opens the topic's info
 	TopicInfo: ComponentType<{ topic: Topic }>
@@ -18,19 +22,33 @@ export type TopicsTableElements = {
 }
 
 /**
- * Renders a profile's or a team's topics with their dates, followers, kept findings, and email switches, and on a team
- * the active switch and the remove button.
+ * Renders a profile's or a team's topics with their dates, followers, kept findings, and email switches, on a profile
+ * each one's team or owner, and on a team the active switch and the remove button.
  */
 export function TopicsTable({
 	topics,
 	includesNonPublicTopics,
+	isOwnerShown = false,
 	topicTooltip,
 	onRemoveTopic,
 	className,
-	elements: { Table, Text, ErrorText, NameLink, Visibility, TopicInfo, Switch, RemoveButton },
+	elements: {
+		Table,
+		Text,
+		ErrorText,
+		NameLink,
+		TeamLink,
+		UserProfileLink,
+		Visibility,
+		TopicInfo,
+		Switch,
+		RemoveButton,
+	},
 }: {
 	topics: Topic[]
 	includesNonPublicTopics: boolean
+	// a profile's table names each topic's team or owner
+	isOwnerShown?: boolean
 	topicTooltip?: string
 	// a team leader's remove, which the app confirms before calling
 	onRemoveTopic?: (topic: Topic) => void
@@ -46,6 +64,9 @@ export function TopicsTable({
 		topicTooltip,
 		renderText: (text) => <Text>{text}</Text>,
 		renderName: (topic) => <NameLink topic={topic} />,
+		renderOwner: isOwnerShown
+			? (topic) => (topic.team ? <TeamLink team={topic.team} /> : <UserProfileLink user={topic.owner} />)
+			: undefined,
 		renderVisibility: (topic) => <Visibility visibility={topic.visibility} />,
 		renderInfo: (topic) => <TopicInfo topic={topic} />,
 		renderEmail: (topic) => (

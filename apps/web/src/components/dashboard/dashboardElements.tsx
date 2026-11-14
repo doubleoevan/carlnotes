@@ -14,11 +14,7 @@ import { AccordionSection } from "@/components/common/AccordionSection"
 import { Accordion } from "@/components/primitives/accordion"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/primitives/select"
 import { TableCard } from "@/components/table/TableCard"
-import { SECTIONS_UNDER_AVATAR_HEADER_CLASS, SKELETON_SHAPE_CLASS } from "@/lib/styleClasses"
-
-// a highlighted select: the primary fill, as a page's highlighted button, with its chevron in the text over it
-const HIGHLIGHTED_SELECT_CLASS =
-	"bg-primary text-primary-foreground hover:bg-primary/90 border-transparent [&_svg]:text-primary-foreground! [&_svg]:opacity-100"
+import { HIGHLIGHTED_SELECT_CLASS, SECTIONS_UNDER_AVATAR_HEADER_CLASS, SKELETON_SHAPE_CLASS } from "@/lib/styleClasses"
 
 /**
  * Returns the web's Dashboard elements with a chart renderer set.

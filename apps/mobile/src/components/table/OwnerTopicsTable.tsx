@@ -11,9 +11,11 @@ import { Fragment } from "react"
 import { View } from "react-native"
 import { PreferenceSwitch } from "@/components/common/PreferenceSwitch"
 import { Sheet } from "@/components/common/Sheet"
+import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
+import { TeamLink } from "@/components/team/TeamLink"
 import { TopicVisibility } from "@/components/topic/TopicInfo"
 import { usePageMutation } from "@/hooks/usePageMutation"
 import { DataTable } from "./DataTable"
@@ -56,6 +58,8 @@ export function OwnerTopicsTable({
 const OWNER_TOPICS_TABLE_ELEMENTS: OwnerTopicsTableElements = {
 	Text: ({ children }) => <Text className="text-sm text-muted-foreground">{children}</Text>,
 	Name: ({ topic }) => <TopicNameLink topic={topic} />,
+	TeamLink,
+	UserProfileLink,
 	Visibility: ({ visibility }) => <TopicVisibility visibility={visibility} />,
 	EmailSwitch: ({ topic, isDisabled, onChange }) => (
 		<PreferenceSwitch

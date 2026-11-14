@@ -1,12 +1,14 @@
-// the updates opener: the daily cache, a scoped opener, a rejected reservation, a failed call, and a slow call
+// the updates opener: the daily cache, a scoped opener, a rejected reservation, a failed call, a slow call, and the
+// stored opener an admin reads
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import type { UpdatesFinding } from "@carlnotes/contracts/updates"
+import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as redis from "@carlnotes/db/redis"
 import * as litellm from "@carlnotes/models/litellm"
 import * as spendReservations from "@carlnotes/models/spendReservations"
 import * as updatesOpenerWriter from "@carlnotes/pipeline/updatesOpener"
 import * as monitoring from "@carlnotes/server/monitoring"
-import { loadUpdatesOpener } from "./updatesOpener"
+import { loadUpdatesOpener, readStoredUpdatesOpener } from "./updatesOpener"
 
 // the Findings an opener is written from
 const UPDATES_FINDINGS = [{ topicName: "Espresso", title: "Dialing in" }] as UpdatesFinding[]
@@ -40,8 +42,9 @@ beforeEach(() => {
 	writeSpy = spyOn(updatesOpenerWriter, "writeUpdatesOpener").mockResolvedValue("Carl's line.")
 })
 
-// put the spies back after each test
+// put the connection pool and the spies back after each test
 afterEach(() => {
+	restoreConnectionPool()
 	mock.restore()
 })
 
@@ -196,4 +199,21 @@ test("a read with no Finding returns the day's stored opener and never writes on
 	expect(await loadUpdatesOpener(emptyOptions)).toBe("Carl's line.")
 	expect(storedOpeners.size).toBe(1)
 	expect(writeSpy).toHaveBeenCalledTimes(1)
+})
+
+test("the stored opener reads the day's cache, and returns null if the user has an unconverted private Topic", async () => {
+	const readSpy = spyOn(redis, "readRedisJson").mockResolvedValue("Carl's stored line.")
+
+	// no private Topic to convert reads the cache
+	stubConnectionPool(() => [])
+	expect(await readStoredUpdatesOpener("user-1")).toBe("Carl's stored line.")
+
+	// an unconverted private Topic keeps the opener and reads no cache
+	readSpy.mockClear()
+	const sentQueries = stubConnectionPool(() => [{ id: "topic-private" }])
+	expect(await readStoredUpdatesOpener("user-1")).toBeNull()
+	expect(readSpy).not.toHaveBeenCalled()
+	expect(sentQueries[0]?.text).toContain(
+		'not "topics"."id" not in (select "topic_id" from "topic_personal_source_contexts"',
+	)
 })

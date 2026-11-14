@@ -12,6 +12,9 @@ import { activityRoute, loadInvitedTopicSubscriptions, toSubscriptionRows } from
 import { toActivityTopics, toCents } from "./activityTopics"
 import { toSignedInApp } from "./testSession"
 
+// the owner every owned topic row names
+const OWNER = { userId: "owner-1", username: "owner", avatarSource: "generated", avatarVersion: null }
+
 // put the connection pool's own query back after each test
 afterEach(() => {
 	restoreConnectionPool()
@@ -31,6 +34,8 @@ test("toActivityTopics groups scans per topic and sums their cents", () => {
 		{
 			id: "t1",
 			ownerId: "owner-1",
+			owner: OWNER,
+			team: null,
 			name: "Agents",
 			visibility: "public" as const,
 			frequency: "daily" as const,
@@ -40,6 +45,8 @@ test("toActivityTopics groups scans per topic and sums their cents", () => {
 		{
 			id: "t2",
 			ownerId: "owner-1",
+			owner: OWNER,
+			team: null,
 			name: "Quiet",
 			visibility: "private" as const,
 			frequency: "weekly" as const,
@@ -124,6 +131,8 @@ function ownedTopicRow(topicId: string): Parameters<typeof toActivityTopics>[0][
 	return {
 		id: topicId,
 		ownerId: "owner-1",
+		owner: OWNER,
+		team: null,
 		name: `topic ${topicId}`,
 		visibility: "public",
 		frequency: "weekly",

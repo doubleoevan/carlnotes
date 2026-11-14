@@ -10,10 +10,12 @@ import { X } from "lucide-react"
 import { type ComponentProps, useState } from "react"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { NoteIcon } from "@/components/branding/NoteIcon"
+import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { Button } from "@/components/primitives/button"
 import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Switch } from "@/components/primitives/switch"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
+import { TeamLink } from "@/components/team/TeamLink"
 import { TopicInfo } from "@/components/topic/TopicInfo"
 import { useConfirmDialog } from "@/hooks/useConfirmDialog"
 import { POPOVER_PANEL_CLASS, STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
@@ -29,12 +31,14 @@ import { TopicNameLink } from "./TopicNameLink"
 export function TopicsTable({
 	topics,
 	includesNonPublicTopics,
+	isOwnerShown,
 	topicTooltip,
 	onRemoveTopic,
 	className,
 }: {
 	topics: Topic[]
 	includesNonPublicTopics: boolean
+	isOwnerShown?: boolean
 	topicTooltip?: string
 	onRemoveTopic?: (topic: Topic) => void
 	className?: string
@@ -49,6 +53,7 @@ export function TopicsTable({
 			<SharedTopicsTable
 				topics={topics}
 				includesNonPublicTopics={includesNonPublicTopics}
+				isOwnerShown={isOwnerShown}
 				topicTooltip={topicTooltip}
 				onRemoveTopic={onRemoveTopic && handleRemoveTopic}
 				className={className}
@@ -128,6 +133,8 @@ export const TOPICS_TABLE_ELEMENTS: TopicsTableElements = {
 	Text: ({ children }) => <span className="text-muted-foreground">{children}</span>,
 	ErrorText: ({ children }) => <p className="text-destructive text-sm">{children}</p>,
 	NameLink: TopicNameLink,
+	TeamLink: ({ team }) => <TeamLink team={team} label="" className="whitespace-nowrap" />,
+	UserProfileLink: ({ user }) => <UserProfileLink user={user} className="whitespace-nowrap" />,
 	Visibility: TopicVisibility,
 	TopicInfo: TopicPopover,
 	Switch: ({ label, isChecked, isDisabled, onChange }) => (

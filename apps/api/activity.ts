@@ -1,10 +1,9 @@
 // the Activity page's payload, the user's own or, for an admin, any user's
 
 import type { ActivityResponse, MonthlySpend, SubscriptionRow } from "@carlnotes/contracts/activity"
-import { toAvatarKeyVersion, toAvatarVersion } from "@carlnotes/contracts/avatars"
+import { toAvatarVersion } from "@carlnotes/contracts/avatars"
 import { toCentsFromDollars } from "@carlnotes/contracts/plans"
 import type { PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
-import type { TeamIdentity } from "@carlnotes/contracts/teamIdentity"
 import { db } from "@carlnotes/db"
 import { loadUserEmail, toPendingTopicInviteFilter } from "@carlnotes/db/inviteFilters"
 import { loadMonthlyBudgetCutoffs } from "@carlnotes/db/monthlyBudgetCutoffs"
@@ -16,7 +15,7 @@ import { and, desc, eq, isNotNull, isNull, ne, or, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { loadOwnedTopics } from "./activityTopics"
 import { isAdminRole, isAllowed, monthlySpendDollars, userBudgetCents } from "./authorization"
-import { toProfileIdentity, withAvatarVersion } from "./avatars"
+import { toProfileIdentity, toTeamIdentity, withAvatarVersion } from "./avatars"
 import type { AppEnv } from "./currentUser"
 import { loadLatestPodcastEpisodeSummaries } from "./podcast/podcastEpisodeShapes"
 
@@ -254,23 +253,6 @@ export async function loadInvitedTopicSubscriptions(userId: string): Promise<Sub
 		isEmailEnabled: false,
 		inviteId: scanRow.inviteId,
 	}))
-}
-
-// the owning team's joined columns as the team's identity, null if the topic is not on a team
-function toTeamIdentity(team: {
-	// null on a topic no team owns
-	teamId: string | null
-	name: string | null
-	avatarKey: string | null
-	isPublic: boolean | null
-	// set only where the user is an active member, which is what lets a private team be named
-	memberUserId: string | null
-}): TeamIdentity | null {
-	// a private team is named to its own members alone, so an outside subscriber or invitee sees the owner instead
-	if (team.teamId === null || team.name === null || (!team.isPublic && team.memberUserId === null)) {
-		return null
-	}
-	return { teamId: team.teamId, name: team.name, avatarVersion: toAvatarKeyVersion(team.avatarKey) }
 }
 
 /**

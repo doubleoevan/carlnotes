@@ -7,6 +7,10 @@ import { toTestProfileIdentity } from "./teamTestFixtures"
 const CARLOS = toTestProfileIdentity("carlos")
 const EVAN = toTestProfileIdentity("evan")
 
+// the people whose own topics the Activity page and a profile list
+const VIENNA = toTestProfileIdentity("vienna")
+const CARL = toTestProfileIdentity("carl")
+
 // a team topic followed with emails on, a follow switched off, and a topic invite the user has not answered
 export const TEST_SUBSCRIPTIONS: SubscriptionRow[] = [
 	{
@@ -92,6 +96,8 @@ export const TEST_OWNER_TOPICS: OwnerTopic[] = [
 		monthCostCents: 86,
 		monthEmailCount: 9,
 		ownerUserId: "user-vienna",
+		owner: VIENNA,
+		team: null,
 		isEmailEnabled: true,
 		scans: [
 			{
@@ -132,6 +138,8 @@ export const TEST_OWNER_TOPICS: OwnerTopic[] = [
 		monthCostCents: 0,
 		monthEmailCount: 0,
 		ownerUserId: "user-vienna",
+		owner: VIENNA,
+		team: null,
 		isEmailEnabled: false,
 		scans: [],
 		chatMentions: [],
@@ -140,8 +148,14 @@ export const TEST_OWNER_TOPICS: OwnerTopic[] = [
 ]
 
 // a person's own profile topics: theirs, and last a team topic that another member owns, whose row shows no owner's
-// controls
-export const TEST_OWN_PROFILE_TOPICS: OwnerTopic[] = TEST_OWNER_TOPICS.map((ownerTopic, i) => ({
-	...ownerTopic,
-	ownerUserId: i === TEST_OWNER_TOPICS.length - 1 ? "user-vienna" : "user-carl",
-}))
+// controls and names its team
+export const TEST_OWN_PROFILE_TOPICS: OwnerTopic[] = TEST_OWNER_TOPICS.map((ownerTopic, i) =>
+	i === TEST_OWNER_TOPICS.length - 1
+		? {
+				...ownerTopic,
+				ownerUserId: VIENNA.userId,
+				owner: VIENNA,
+				team: { teamId: "team-design-guild", name: "Design Guild", avatarVersion: null },
+			}
+		: { ...ownerTopic, ownerUserId: CARL.userId, owner: CARL },
+)

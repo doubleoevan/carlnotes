@@ -1,5 +1,6 @@
 // the api client for the news: the signed-in user's own, and a profile's as its reader may see it
 import { type NewsResponse, type NewsWindow, newsResponse } from "@carlnotes/contracts/news"
+import type { ProfileAudience } from "@carlnotes/contracts/profiles"
 import { apiClient, readApiResponse } from "./apiClient"
 
 // the window and the page to read, and the cursor an earlier page of the window returned
@@ -17,13 +18,16 @@ export async function fetchNews(query: NewsPageQuery): Promise<NewsResponse> {
 }
 
 /**
- * Fetches one page of a profile's news. The person reads it whole, and anyone else its public rows. A failed read
- * throws an error.
+ * Fetches one page of a profile's news. The person and an admin read it whole, and anyone else, or the visitor audience,
+ * its public rows. A failed read throws an error.
  */
-export async function fetchProfileNews(profileUserId: string, query: NewsPageQuery): Promise<NewsResponse> {
+export async function fetchProfileNews(
+	profileUserId: string,
+	{ audience, ...query }: NewsPageQuery & { audience?: ProfileAudience },
+): Promise<NewsResponse> {
 	const response = await apiClient().api.profiles[":userId"].news.$get({
 		param: { userId: profileUserId },
-		query: toNewsQuery(query),
+		query: { ...toNewsQuery(query), audience },
 	})
 	if (!response.ok) {
 		throw new Error(`profile news read failed: ${response.status}`)

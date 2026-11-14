@@ -14,7 +14,7 @@ import {
 	usernamePayload,
 } from "./payloads"
 import { profileResponse } from "./profilePage"
-import { billingState, profileTeamStatusesResponse } from "./profiles"
+import { billingState, profileQuery, profileTeamStatusesResponse } from "./profiles"
 import { pushDeviceDeletePayload, pushDevicePayload, pushPreferencePayload } from "./pushDevices"
 import {
 	appSignupChallengeResponse,
@@ -100,6 +100,7 @@ export const accountRouteContracts: Record<string, ApiRouteContract> = {
 		method: "GET",
 		path: "/api/profiles/:userId",
 		params: userIdParam,
+		query: profileQuery,
 		response: profileResponse,
 	},
 	"profileClient.fetchProfileTeamStatuses": {

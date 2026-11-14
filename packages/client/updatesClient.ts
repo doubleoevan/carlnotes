@@ -13,3 +13,17 @@ export async function fetchUpdatesOpener(): Promise<string | null> {
 	}
 	return (await readApiResponse(updatesOpenerResponse, response)).opener
 }
+
+/**
+ * Fetches the person's stored opener for today, or null without one. Only an admin may read it, and the read
+ * writes no opener.
+ */
+export async function fetchProfileUpdatesOpener(userId: string): Promise<string | null> {
+	const response = await apiClient().api.profiles[":userId"].opener.$get({ param: { userId } })
+
+	// throw an error if the request fails
+	if (!response.ok) {
+		throw new Error(`profile updates opener failed: ${response.status}`)
+	}
+	return (await readApiResponse(updatesOpenerResponse, response)).opener
+}

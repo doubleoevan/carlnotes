@@ -20,6 +20,7 @@ import {
 import { type ComponentProps, useState } from "react"
 import { Pressable, View } from "react-native"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { ChoiceSelect } from "@/components/common/ChoiceSelect"
 import { DotSeparatedTexts } from "@/components/common/DotSeparatedTexts"
 import { Pagination } from "@/components/common/Pagination"
 import { SkeletonPulse } from "@/components/common/SkeletonPulse"
@@ -90,6 +91,17 @@ export const NEWS_LIST_ELEMENTS: NewsListElements = {
 		>
 			<Text>{children}</Text>
 		</Button>
+	),
+	AudienceSelect: ({ label, value, options, onChange }) => (
+		<View className="mb-4 self-start">
+			<ChoiceSelect
+				label={label}
+				value={value}
+				options={options}
+				isHighlighted
+				onChange={(selectedValue) => onChange(selectedValue as typeof value)}
+			/>
+		</View>
 	),
 	List: ({ children }) => <View>{children}</View>,
 	Row: NewsEventRow,

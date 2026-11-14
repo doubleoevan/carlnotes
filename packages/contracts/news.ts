@@ -2,6 +2,7 @@
 import { z } from "zod"
 import { reactionTypes } from "./enums"
 import { podcastEpisode } from "./podcast"
+import { profileQuery } from "./profiles"
 import { topicImageUrls } from "./topicImages"
 
 // the windows a news read covers, measured back from the request, in the order the picker offers them
@@ -95,6 +96,9 @@ export const newsQuery = z.object({
 	page: z.coerce.number().int().min(1).max(NEWS_MAX_PAGE).default(1),
 	cursor: z.string().max(256).optional(),
 })
+
+// a profile's news read's query, which also names the profile's audience
+export const profileNewsQuery = newsQuery.extend(profileQuery.shape)
 
 /**
  * Returns what a window with no News Event reads as.

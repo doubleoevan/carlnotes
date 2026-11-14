@@ -315,3 +315,10 @@ export const SCAN_RUNNING_LABEL = "Carl is Brewing…"
 export function toSectionCountLabel(count: number | null | undefined, noun: string): string | undefined {
 	return count ? toCountLabel(count, noun) : undefined
 }
+
+/**
+ * Returns the name a topic's owner column shows and sorts by: its team's, or else its owner's username.
+ */
+export function toTopicOwnerName(row: { team: { name: string } | null; owner: { username: string } }): string {
+	return row.team?.name ?? row.owner.username
+}

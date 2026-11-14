@@ -3,24 +3,26 @@
 import type { OwnerTopic } from "@carlnotes/contracts/activity"
 import { toAvatarVersion } from "@carlnotes/contracts/avatars"
 import type { ProfileResponse } from "@carlnotes/contracts/profilePage"
+import { profileQuery } from "@carlnotes/contracts/profiles"
 import { SEARCH_MIN_CHARS, type UserSearchRow } from "@carlnotes/contracts/search"
 import { toNormalizedUsername } from "@carlnotes/contracts/usernames"
 import { type DbHandle, db } from "@carlnotes/db"
 import { toNotUserBlockedAuthorFilter } from "@carlnotes/db/contentFilters"
 import { subscriptions, topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
+import { zValidator } from "@hono/zod-validator"
 import { and, countDistinct, eq, isNotNull, like, ne, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { loadTopics } from "./activityTopics"
-import { isAllowed } from "./authorization"
 import { withAvatarVersion } from "./avatars"
-import { type AppEnv, currentUser } from "./currentUser"
+import { type AppEnv, currentProfileAudienceUser, currentUser } from "./currentUser"
 import {
 	loadProfileCards,
 	loadProfileTableTopicRows,
 	loadProfileTopicPostCards,
 	loadProfileTopicRows,
 } from "./profileCards"
+import { loadProfileReader } from "./profileReader"
 import { loadProfileTeamStatuses, loadPublicTeams, loadTeamSummaries } from "./team/helpers"
 import { toTopicTableRows } from "./topic/topicTableRows"
 import { hasUserBlock } from "./userBlocks"
@@ -94,10 +96,9 @@ export async function loadProfile(
 	userId: string | null,
 	{ includesOwnTopics = false }: { includesOwnTopics?: boolean } = {},
 ): Promise<ProfileResponse | null> {
-	// the person, whether the reader sees their topics that are not public, which only the person and an admin do, and
-	// whether the signed-in reader has blocked the person
+	// the person, who reads the profile, and whether the signed-in reader has blocked the person
 	const isOwnProfile = userId === profileUserId
-	const [[user], includesNonPublicTopics, isUserBlocked] = await Promise.all([
+	const [[user], profileReader, isUserBlocked] = await Promise.all([
 		db
 			.select({
 				id: users.id,
@@ -108,7 +109,7 @@ export async function loadProfile(
 			})
 			.from(users)
 			.where(eq(users.id, profileUserId)),
-		isOwnProfile || (userId !== null && isAllowed(userId, "admin:console")),
+		loadProfileReader(profileUserId, userId),
 		userId !== null && !isOwnProfile && hasUserBlock(userId, profileUserId),
 	])
 	if (!user) {
@@ -118,7 +119,7 @@ export async function loadProfile(
 	// the topics of the person's cards, and of their table. on their own profile the table lists every topic they own
 	// or a team of theirs holds. for anyone else it lists the cards' topics. the table lists them oldest first
 	const [topicRows, ownTableTopicRows] = await Promise.all([
-		loadProfileTopicRows({ profileUserId: user.id, includesNonPublicTopics }),
+		loadProfileTopicRows({ profileUserId: user.id, profileReader }),
 		isOwnProfile ? loadProfileTableTopicRows(user.id) : null,
 	])
 	const oldestFirstTopicRows = (ownTableTopicRows ?? topicRows).toSorted(
@@ -149,7 +150,7 @@ export async function loadProfile(
 		avatarVersion: toAvatarVersion(user),
 		joinedAt: user.createdAt.toISOString(),
 		subscriberCount,
-		includesNonPublicTopics,
+		includesNonPublicTopics: profileReader !== "visitor",
 		isBlocked: isUserBlocked,
 		topics: profileTopics,
 		ownTopics,
@@ -197,9 +198,11 @@ export async function countDistinctSubscribers(userId: string, handle: DbHandle 
 
 // the public profile routes: the profile page and the profile's team statuses
 export const profilesRoute = new Hono<AppEnv>()
-	// a profile does not require a session. but a session is required to show non-public topics to the owner or an admin.
-	.get("/profiles/:userId", async (context) => {
-		const profile = await loadProfile(context.req.param("userId"), currentUser(context), { includesOwnTopics: true })
+	// a profile does not require a session. but a session is required to show non-public topics to the owner or an
+	// admin, and the visitor audience reads the profile with none
+	.get("/profiles/:userId", zValidator("query", profileQuery), async (context) => {
+		const userId = currentProfileAudienceUser(context, context.req.valid("query").audience)
+		const profile = await loadProfile(context.req.param("userId"), userId, { includesOwnTopics: true })
 		return profile ? context.json(profile) : context.json({ error: "not found" }, 404)
 	})
 	.get("/profiles/:userId/team-statuses", async (context) => {

@@ -1,5 +1,5 @@
-// the news routes: a session for the user's own news, the window and the cursor, a profile's news for anyone, a
-// visitor's cached first page, and the read limit
+// the news routes: a session for the user's own news, the window and the cursor, a profile's news for anyone, the
+// visitor audience, a visitor's cached first page, and the read limit
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import type { NewsResponse } from "@carlnotes/contracts/news"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
@@ -82,6 +82,23 @@ test("a session reads another person's news under its own id", async () => {
 	const readSpy = spyOn(news, "readNews").mockResolvedValue(NEWS_RESULT)
 	await toSignedInApp(newsRoute, "news-user-5").request("/profiles/profile-user-1/news")
 	expect(readSpy.mock.calls[0]?.[0]).toMatchObject({ profileUserId: "profile-user-1", userId: "news-user-5" })
+})
+
+test("a session in the visitor audience reads a profile's news as a visitor, from the visitor's cache", async () => {
+	stubConnectionPool(() => [["profile-user-1"]])
+	const readSpy = spyOn(news, "readNews").mockResolvedValue(NEWS_RESULT)
+	const cacheSpy = spyOn(redis, "cacheJson")
+	await toSignedInApp(newsRoute, "news-admin-1").request("/profiles/profile-user-1/news?audience=visitor")
+	expect(readSpy.mock.calls[0]?.[0]).toEqual({ profileUserId: "profile-user-1", userId: null, window: "week", page: 1 })
+	expect(cacheSpy.mock.calls[0]?.[0].key).toBe("visitor-news:profile-user-1:week")
+})
+
+test("a audience the select does not offer is invalid input", async () => {
+	stubConnectionPool(() => [["profile-user-1"]])
+	const readSpy = spyOn(news, "readNews").mockResolvedValue(NEWS_RESULT)
+	const response = await newsRoute.request("/profiles/profile-user-1/news?audience=owner")
+	expect(response.status).toBe(400)
+	expect(readSpy).not.toHaveBeenCalled()
 })
 
 test("a visitor's first page is cached by the profile and the window for a minute", async () => {

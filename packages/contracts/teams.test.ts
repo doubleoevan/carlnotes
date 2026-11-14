@@ -62,6 +62,8 @@ const TEAM_PAGE: TeamPageResponse = {
 				chapterCount: 2,
 				image: null,
 			},
+			owner: { userId: "user-ava", username: "ava", avatarSource: null, avatarVersion: null },
+			team: { teamId: "team-design-guild", name: "Design Guild", avatarVersion: null },
 		},
 	],
 	topicCards: [],

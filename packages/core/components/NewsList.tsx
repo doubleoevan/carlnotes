@@ -12,6 +12,7 @@ import {
 	toEmptyNewsText,
 } from "@carlnotes/contracts/news"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
+import { PROFILE_AUDIENCE_LABELS, type ProfileAudience, profileAudiences } from "@carlnotes/contracts/profiles"
 import type { ComponentType, ReactNode } from "react"
 import type { NewsPageLoader } from "../hooks/useNews"
 import { useNewsList } from "../hooks/useNewsList"
@@ -39,15 +40,20 @@ export type NewsListRowProps = {
 }
 
 // the platform elements of the news: the card, the heading that opens and closes the list with the window picker
-// beside it, carl's opener, the picker
-// and one of its options, the rows' list, one row, a line of text with an optional retry, the placeholder while a page
-// loads, and the page buttons under the rows
+// beside it, carl's opener, the picker and one of its options, an admin's highlighted audience select, the rows' list, one
+// row, a line of text with an optional retry, the placeholder while a page loads, and the page buttons under the rows
 export type NewsListElements = {
 	Card: ComponentType<{ children: ReactNode }>
 	Heading: ComponentType<{ picker: ReactNode; isExpanded: boolean; onToggle: () => void; children: ReactNode }>
 	Opener: ComponentType<{ children: ReactNode }>
 	WindowPicker: ComponentType<{ label: string; children: ReactNode }>
 	WindowOption: ComponentType<{ isSelected: boolean; onSelect: () => void; children: ReactNode }>
+	AudienceSelect: ComponentType<{
+		label: string
+		value: ProfileAudience
+		options: { value: ProfileAudience; label: string }[]
+		onChange: (audience: ProfileAudience) => void
+	}>
 	List: ComponentType<{ children: ReactNode }>
 	Row: ComponentType<NewsListRowProps>
 	Notice: ComponentType<{ onRetry?: () => void; children: ReactNode }>
@@ -68,6 +74,10 @@ type NewsListProps = {
 	userId: string | null
 	// carl's line for the day, which shows above the rows
 	opener?: string | null
+	// the profile's audience, and for an admin on someone else's profile, the select's change of the whole page's
+	// audience
+	audience?: ProfileAudience
+	onAudienceChange?: (audience: ProfileAudience) => void
 	// the first page of the first window's news, if it is already read, and that window, the week unless named
 	firstPage?: NewsResponse
 	firstWindow?: NewsWindow
@@ -79,12 +89,13 @@ type NewsListProps = {
 
 /**
  * Shows the news of a window under its title, as the search results list their rows: numbered, five to a page, with
- * the page buttons under the card. The picker beside the title chooses the week, the day, or the hour.
+ * the page buttons under the card. The picker beside the title chooses the week, the day, or the hour. An admin
+ * reading someone else's profile sees a select above the rows between the user audience and the visitor audience.
  */
-export function NewsList({ opener, elements, ...newsListOptions }: NewsListProps) {
+export function NewsList({ opener, onAudienceChange, elements, ...newsListOptions }: NewsListProps) {
 	const { userId } = newsListOptions
 	const newsList = useNewsList(newsListOptions)
-	const { Card, Heading, Opener, WindowPicker, WindowOption, Pagination } = elements
+	const { Card, Heading, Opener, WindowPicker, WindowOption, AudienceSelect, Pagination } = elements
 	return (
 		<>
 			<Card>
@@ -108,6 +119,17 @@ export function NewsList({ opener, elements, ...newsListOptions }: NewsListProps
 					{NEWS_TITLE}
 				</Heading>
 				{/* a closed list shows its heading alone */}
+				{newsList.isExpanded && onAudienceChange && (
+					<AudienceSelect
+						label="Profile view"
+						value={newsListOptions.audience ?? "user"}
+						options={profileAudiences.map((profileAudience) => ({
+							value: profileAudience,
+							label: PROFILE_AUDIENCE_LABELS[profileAudience],
+						}))}
+						onChange={onAudienceChange}
+					/>
+				)}
 				{newsList.isExpanded && opener && <Opener>{opener}</Opener>}
 				{newsList.isExpanded && (
 					<NewsRows

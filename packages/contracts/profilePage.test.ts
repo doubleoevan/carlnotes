@@ -24,6 +24,8 @@ const profileFixture: ProfileResponse = {
 			subscriberCount: 4,
 			isEmailEnabled: null,
 			latestPodcastEpisode: null,
+			owner: { userId: "user-1", username: "evan", avatarSource: "generated", avatarVersion: null },
+			team: null,
 		},
 	],
 	teams: [

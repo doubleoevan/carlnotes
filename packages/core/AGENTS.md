@@ -85,7 +85,9 @@ the in-place section fixtures. Personal sources stay outside the fetched Source 
   dropdown, which the web page and the mobile app's screen share, `useTeams.ts`, the signed-in user's teams and team
   invites read once per account, `useTopicPostView.ts`, a Topic Post page's view sent once its published Topic Post
   loads, `useNews.ts`, one page of a window of the signed-in user's news or of a profile's, `useNewsList.ts`, a
-  news list's window, page, and open state, and `useUpdatesOpener.ts`, the day's opener above the user's own news;
+  news list's window, page, and open state, which a change of the profile's audience resets, `useUpdatesOpener.ts`,
+  the day's opener above the user's own news, and a person's stored opener for an admin on their profile, and
+  `useProfileAudience.ts`, the audience an admin shows someone else's profile to, the user or a visitor;
   `useYourTopicsPages.ts`, the home's Your topics five to a page, the first from the home payload;
   `useUserBlocks.ts`, the user's user block list and the unblock that shortens the list once the server
   accepts; `useNow.ts`, the current time re-read on a tick for relative labels, one clock per list; `useAvatar.ts`, the

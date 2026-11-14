@@ -1,5 +1,7 @@
-// the topic edit modal's teams field: every leader team is on offer, and the New team row is pinned beside them
+// the topic edit modal's teams field: every leader team is on offer with the default team marked, and the New team row
+// is pinned beside them
 import { expect, test } from "bun:test"
+import { toDefaultTeamAddedText } from "@carlnotes/core/lib/topicTeamChoices"
 import { NEW_TEAM_OPTION, toTeamChoices } from "./topicTeamChoices"
 
 // two teams the user leads
@@ -21,4 +23,11 @@ test("no leader teams leaves only the pinned new team row", () => {
 	// and the same before the teams have answered. a slow load never offers a wrong default
 	expect(toTeamChoices(null)).toEqual([])
 	expect(NEW_TEAM_OPTION).toEqual({ value: "new", label: "New team…" })
+})
+
+// the default team's option says so, and a save that adds it names it
+test("the default team is marked", () => {
+	const teamChoices = toTeamChoices(LED_TEAMS.map((team, index) => ({ ...team, isDefaultTeam: index === 0 })))
+	expect(teamChoices.map((choice) => choice.label)).toEqual(["Kickin it (default)", "Hot Tub Writing club"])
+	expect(toDefaultTeamAddedText("Kickin it")).toBe("Added to Kickin it, your default team.")
 })

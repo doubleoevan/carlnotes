@@ -10,8 +10,10 @@ import { ownerTopicSortValues } from "@carlnotes/core/lib/ownerTopicsTableColumn
 import { cn } from "@carlnotes/nightshift/classNames"
 import { ChevronDown, Globe, Lock, Mail } from "lucide-react"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
+import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { Switch } from "@/components/primitives/switch"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
+import { TeamLink } from "@/components/team/TeamLink"
 import { STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
 import { SUBTABLE_CARD_CLASS, TABLE_CLASS, TABLE_SCROLL_CLASS } from "@/lib/tableClasses"
 import { DATA_TABLE_ELEMENTS, DataTable } from "./DataTable"
@@ -76,6 +78,8 @@ const OWNER_TABLE_ELEMENTS: DataTableElements = {
 const OWNER_TOPICS_TABLE_ELEMENTS: OwnerTopicsTableElements = {
 	Text: ({ children }) => <span>{children}</span>,
 	Name: ({ topic }) => <TopicNameLink topic={topic} />,
+	TeamLink: ({ team }) => <TeamLink team={team} label="" className="whitespace-nowrap" />,
+	UserProfileLink: ({ user }) => <UserProfileLink user={user} className="whitespace-nowrap" />,
 	Visibility: ({ visibility }) => <TopicVisibility visibility={visibility} />,
 	EmailSwitch: ({ topic, isDisabled, onChange }) => (
 		<Switch

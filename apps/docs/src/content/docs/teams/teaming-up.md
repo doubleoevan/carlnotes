@@ -41,11 +41,14 @@ team member. On an episode page, **Add topic to team** in the actions menu opens
 On a topic page that shows **Join Team** instead of Team Up, the same actions-menu option opens the list.
 
 A new public or invite topic starts on your default team, the team you lead that you joined first. The topic form's
-**Team** field starts there, and you can pick another team you lead or clear it for no team. Making a private topic
-public or invite through Carl or an AI app puts it on your default team too, unless a team already holds it.
+**Team** field starts there and marks it **(default)**, and you can pick another team you lead or clear it for no
+team. Making a private topic public or invite through Carl or an AI app puts it on your default team too, unless a
+team already holds it. A save that adds your default team says so.
 
 Your Café shows the topics of the teams you lead beside your own, and your **All Topics** table lists the topics of
-every team you are on. Only you can feature the topics you own.
+every team you are on. The table's **Owner** column names each topic's team, or else its owner. Visitors see a team's
+topics on your Café only if the team is public and shows your membership. A private topic another member owns joins
+your table once its Personal sources text is converted. Only you can feature the topics you own.
 
 An invited person sees the invite on their profile page. To accept, they switch it to **Active**.
 

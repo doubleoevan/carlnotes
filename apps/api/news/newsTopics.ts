@@ -2,11 +2,10 @@
 // Topics they follow, narrowed to what the reader may open
 
 import { db } from "@carlnotes/db"
-import { toConvertedPersonalSourcesFilter } from "@carlnotes/db/personalSourcesAuthority"
-import { teamMembers, teams } from "@carlnotes/db/schema/teams"
-import { teamTopics } from "@carlnotes/db/schema/teamTopics"
 import { subscriptions, topics } from "@carlnotes/db/schema/topics"
-import { and, eq, inArray, ne, or } from "drizzle-orm"
+import { and, eq, ne } from "drizzle-orm"
+import { type ProfileReader, toOwnTopicFilter } from "../profileReader"
+import { toMemberTeamIdsQuery, toTeamTopicFilter } from "../team/memberTeamTopics"
 
 // the groups of a person's news, in the order the news reads them
 export const newsGroups = ["own", "team", "followed"] as const
@@ -16,24 +15,28 @@ export type NewsGroup = (typeof newsGroups)[number]
 // each group's Topic ids. a Topic is in the first group it fits
 export type NewsTopicIds = Record<NewsGroup, string[]>
 
-// whose news it is, and whether the reader is that person
-type LoadNewsTopicIdsOptions = { profileUserId: string; isOwnNews: boolean }
+// whose news it is, and who reads it
+type LoadNewsTopicIdsOptions = { profileUserId: string; profileReader: ProfileReader }
+
+// whose Teams, and whether the reader sees public Topics of public Teams that show the membership alone
+type LoadTeamTopicRowsOptions = { profileUserId: string; isPublicOnly: boolean }
 
 /**
- * Loads the Topic ids of a person's three news groups. The person reads every Topic of theirs they may open. Anyone
- * else reads the public Topics the person owns and those of public Teams that show the person's membership, and no
- * Topic the person follows.
+ * Loads the Topic ids of a person's three news groups. The person reads every Topic of theirs they may open, and an
+ * admin the same but a private Topic the person owns whose Personal sources text is not converted. A visitor reads the
+ * public Topics the person owns and those of public Teams that show the person's membership, and no Topic the person
+ * follows.
  */
-export async function loadNewsTopicIds({ profileUserId, isOwnNews }: LoadNewsTopicIdsOptions): Promise<NewsTopicIds> {
-	// anyone but the person reads public Topics alone
-	const publicTopicFilter = isOwnNews ? undefined : eq(topics.visibility, "public")
+export async function loadNewsTopicIds({
+	profileUserId,
+	profileReader,
+}: LoadNewsTopicIdsOptions): Promise<NewsTopicIds> {
+	// a visitor reads public Topics alone
+	const isPublicOnly = profileReader === "visitor"
 	const [ownTopicRows, teamTopicRows, followedTopicRows] = await Promise.all([
-		db
-			.select({ id: topics.id })
-			.from(topics)
-			.where(and(eq(topics.ownerId, profileUserId), publicTopicFilter)),
-		loadTeamTopicRows({ profileUserId, isOwnNews }),
-		isOwnNews ? loadFollowedTopicRows(profileUserId) : [],
+		db.select({ id: topics.id }).from(topics).where(toOwnTopicFilter(profileUserId, profileReader)),
+		loadTeamTopicRows({ profileUserId, isPublicOnly }),
+		isPublicOnly ? [] : loadFollowedTopicRows(profileUserId),
 	])
 	return toNewsTopicIds(
 		ownTopicRows.map((topicRow) => topicRow.id),
@@ -60,33 +63,14 @@ export function toNewsTopicIds(
 	}
 }
 
-// the Topics the person's active Teams own or hold through a share. anyone but the person reads only the public Topics
-// of public Teams that show the person's membership
-function loadTeamTopicRows({ profileUserId, isOwnNews }: LoadNewsTopicIdsOptions): Promise<{ id: string }[]> {
-	const memberTeamIds = db
-		.select({ teamId: teamMembers.teamId })
-		.from(teamMembers)
-		.innerJoin(teams, eq(teams.id, teamMembers.teamId))
-		.where(
-			and(
-				eq(teamMembers.userId, profileUserId),
-				eq(teamMembers.isActive, true),
-				isOwnNews ? undefined : and(eq(teams.isPublic, true), eq(teamMembers.isMemberVisible, true)),
-			),
-		)
-	const sharedTopicIds = db
-		.select({ topicId: teamTopics.topicId })
-		.from(teamTopics)
-		.where(inArray(teamTopics.teamId, memberTeamIds))
-
-	// a private Topic another member owns stays out of the person's read until its generated text is converted
-	const visibleTopicFilter = isOwnNews
-		? or(ne(topics.visibility, "private"), toConvertedPersonalSourcesFilter())
-		: eq(topics.visibility, "public")
+// the Topics the person's active Teams own or hold through a share, narrowed if asked to public Topics of public
+// Teams that show the membership
+function loadTeamTopicRows({ profileUserId, isPublicOnly }: LoadTeamTopicRowsOptions): Promise<{ id: string }[]> {
+	const memberTeamIds = toMemberTeamIdsQuery({ profileUserId, isLeaderOnly: false, isPublicOnly })
 	return db
 		.select({ id: topics.id })
 		.from(topics)
-		.where(and(or(inArray(topics.teamId, memberTeamIds), inArray(topics.id, sharedTopicIds)), visibleTopicFilter))
+		.where(toTeamTopicFilter({ teamIds: memberTeamIds, isPublicOnly }))
 }
 
 // the Topics the person actively subscribes to that have not turned private

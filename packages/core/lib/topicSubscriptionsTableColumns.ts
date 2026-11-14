@@ -1,12 +1,12 @@
 import type { SubscriptionRow } from "@carlnotes/contracts/activity"
 import type { ReactNode } from "react"
 import type { TableColumn } from "../components/DataTable"
-import { toMonthYearLabel } from "./labels"
+import { toMonthYearLabel, toTopicOwnerName } from "./labels"
 
 // subscription tables start with the newest followed topic and share every other sort
 export const subscriptionSortValues = {
 	name: (row: SubscriptionRow) => row.name,
-	owner: (row: SubscriptionRow) => row.team?.name ?? row.owner.username,
+	owner: toTopicOwnerName,
 	subscribed: (row: SubscriptionRow) => row.subscribedAt,
 	active: (row: SubscriptionRow) => (row.isActive ? 1 : 0),
 	emails: (row: SubscriptionRow) => (row.isEmailEnabled ? 1 : 0),

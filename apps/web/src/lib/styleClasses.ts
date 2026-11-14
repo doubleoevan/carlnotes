@@ -295,6 +295,13 @@ export const PAGE_BUTTON_ROW_CLASS = "mt-1 mb-4 flex flex-wrap items-start justi
 export const NEWS_HEADING_ROW_CLASS = "flex flex-wrap items-center justify-between gap-x-4 gap-y-2"
 
 /**
+ * A highlighted select's trigger: the primary fill, as a page's highlighted button, with its chevron in the text over
+ * it.
+ */
+export const HIGHLIGHTED_SELECT_CLASS =
+	"bg-primary text-primary-foreground hover:bg-primary/90 border-transparent [&_svg]:text-primary-foreground! [&_svg]:opacity-100"
+
+/**
  * The row at the top of a page shell, with the page title at the left and the page's action at the right.
  */
 export const PAGE_HEADER_CLASS = "flex items-center justify-between gap-4"

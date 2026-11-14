@@ -111,6 +111,7 @@ function McpViewProfileTopicsTable({ profile }: { profile: ProfileResponse }) {
 		<TopicsTable
 			topics={topics}
 			includesNonPublicTopics={profile.includesNonPublicTopics}
+			isOwnerShown
 			elements={MCP_VIEW_TOPICS_TABLE_ELEMENTS}
 		/>
 	)

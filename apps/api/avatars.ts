@@ -2,9 +2,10 @@
 // upload is checked, stored as the server's own resized re-encode, and shown to its uploader alone if its image
 // moderation could not run
 
-import { toAvatarVersion } from "@carlnotes/contracts/avatars"
+import { toAvatarKeyVersion, toAvatarVersion } from "@carlnotes/contracts/avatars"
 import type { ModerationCategory } from "@carlnotes/contracts/moderation"
 import type { ProfileIdentity } from "@carlnotes/contracts/profiles"
+import type { TeamIdentity } from "@carlnotes/contracts/teamIdentity"
 import { db } from "@carlnotes/db"
 import {
 	AVATAR_EXTENSIONS,
@@ -240,4 +241,24 @@ export function toProfileIdentity(profileColumns: JoinedProfileColumns | null): 
 		avatarSource: profileColumns.avatarSource,
 		avatarVersion: toAvatarVersion(profileColumns),
 	}
+}
+
+/**
+ * Returns a topic's left-joined owning team as its identity, or null if no team owns the topic or the team is private
+ * and the user is not one of its active members.
+ */
+export function toTeamIdentity(team: {
+	// null on a topic no team owns
+	teamId: string | null
+	name: string | null
+	avatarKey: string | null
+	isPublic: boolean | null
+	// set only where the user is an active member, which is what lets a private team be named
+	memberUserId: string | null
+}): TeamIdentity | null {
+	// name a private team to its active members alone
+	if (team.teamId === null || team.name === null || (!team.isPublic && team.memberUserId === null)) {
+		return null
+	}
+	return { teamId: team.teamId, name: team.name, avatarVersion: toAvatarKeyVersion(team.avatarKey) }
 }

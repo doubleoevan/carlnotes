@@ -107,7 +107,12 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   `profileCards.ts` reads the cards of a profile's and a team's three Featured sections in one profile order: the
   topics, their podcast episodes, and the published Topic Posts, a person's own and their led teams' on a profile and
   those of the team's topics on a team. It also reads the person's own All Topics table, their topics and those of every
-  team they are on. On a profile only the person's own pins count. Each pinned row leads, then one podcast episode and one Topic Post of each other topic. A profile
+  team they are on. A visitor sees a team's topics only through a public team that shows the person's membership, and a
+  private topic another member owns stays out until its Personal sources text is converted. `team/memberTeamTopics.ts`
+  holds that membership query and topic filter, which `news/newsTopics.ts` shares. `profileReader.ts` decides who reads
+  a profile, the person, an admin, or a visitor, and filters the person's own topics for each: an admin reads all but
+  a private topic whose Personal sources text is not converted. `topic/topicOwners.ts` reads each
+  table row's owner and team for the Owner column. On a profile only the person's own pins count. Each pinned row leads, then one podcast episode and one Topic Post of each other topic. A profile
   lists every Topic Post of its person after the pins, newest first, in `profileTopicPosts`, and an author's pinned
   Topic Posts have no limit. A profile also gets its films, the podcast episodes with a ready film, by the same rule
   over the films' own pins, right before its podcast episodes.
@@ -212,14 +217,16 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   and purges its author's profile page). `topicPostsRoute.test.ts` and `topicPostEditsRoute.test.ts`, the published
   edits, share the draft and the stubbed reads and writes in `topicPostsRouteTestFixtures.ts`.
 - `news/` — a person's news: `newsRoute.ts` (`GET /api/news`, the signed-in user's own, and
-  `GET /api/profiles/:userId/news`, a profile's as anyone may read it, both under the social read limit),
-  `readNews.ts` (one numbered page of a window, whose first read fixes the window's end and each group's row count in
-  the cursor that a later page passes back), `newsTopics.ts` (the Topic ids of the three groups in order: the person's
-  own Topics, their Teams' Topics, and the Topics they follow, each Topic in the first group that holds it, narrowed
-  for anyone else to the person's public rows), `newsEventRows.ts` (one group's Podcast Episodes, Topic Posts,
-  Comments, reactions, and Findings inside the window, newest first), `newsEventColumns.ts` (the one set of columns
-  every kind of row selects, so the six reads union together), and `newsPodcastEpisodes.ts` (the Podcast
-  Episodes that a page's rows play). `bun run smoke:news` runs `news.smoke.ts` against the dev database.
+  `GET /api/profiles/:userId/news`, a profile's as anyone may read it, or as a visitor with the `audience=visitor` that
+  an admin's select sends, both under the social read limit), `readNews.ts` (one numbered page of a window, whose first
+  read fixes the window's end and each group's row count in the cursor that a later page passes back, read whole by the
+  person and an admin), `newsTopics.ts` (the Topic ids of the three groups in order: the person's own Topics, their
+  Teams' Topics, and the Topics they follow, each Topic in the first group that holds it, narrowed for anyone else to
+  the person's public rows), `newsEventRows.ts` (one group's Podcast Episodes, Topic Posts, Comments, reactions, and
+  Findings inside the window, newest first), `newsEventColumns.ts` (the one set of columns every kind of row selects, so
+  the six reads union together), and `newsPodcastEpisodes.ts` (the Podcast Episodes that a page's rows play).
+  `bun run smoke:news` runs `news.smoke.ts` against the dev database over the people, Teams, Topics, and events that
+  `newsSmokeFixtures.ts` seeds.
 - `dashboard/` — the Dashboard pages' reads: `dashboardsRoute.ts` (`GET /api/dashboards/:dashboardKind/:subjectId`, one
   chart selection's snapshot at the user's or visitor's access, shared at the edge under the Dashboard's cache tag for a
   public read and never cached for a full one, `GET /api/dashboards/map-settings`, the Google Maps key and Map ID for
@@ -268,7 +275,7 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   defaulting to the caller or the caller's first team, with the summary, Carl's fenced paragraph, the day, and the page
   url, and the read for the dashboard MCP view), `updatesTool.ts` (`read_updates`, the one reader of the updates list;
   `topic/updatesRoute.ts` is `GET /api/updates/opener`, the day's opener alone for the signed-in home, which marks no
-  Finding read), `topicContextTool.ts` (`read_topic_context`), `topicContextResults.ts` (the Findings and excerpts it
+  Finding read, and `GET /api/profiles/:userId/opener`, a person's stored opener for an admin, with no model call), `topicContextTool.ts` (`read_topic_context`), `topicContextResults.ts` (the Findings and excerpts it
   returns), `uiResources.ts` (the MCP Apps view resources, each html written from the bundle `build:ui` makes in
   `apps/web/dist/mcp-views`, with the dashboard MCP view's own script and the script every other MCP view shares, every
   stored bundle's version read back from object storage, and the `_meta` a tool names its MCP view with),
@@ -434,7 +441,8 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   Cloudflare hop reported the client, and no address is stored. Each rate limit window is counted in Redis through
   `@carlnotes/db/redisRateLimits`, so every replica shares the count. While Redis is unreachable the counter counts in
   this replica's memory, so a caller stays bounded per replica.
-- `avatars.ts` — the user and team avatar uploads and the published avatar, and `avatarsRoute.ts` their routes, with
+- `avatars.ts` — the user and team avatar uploads, the published avatar, `toTeamIdentity` for a topic's team as a
+  reader may see it, and `avatarsRoute.ts` their routes, with
   `POST /api/avatars/decode-failures`, which reports a chosen avatar file that could not be decoded, by its content
   type and byte size, the first five a user sends in a day. An upload is checked and stored through
   `toStoredAvatar` in `@carlnotes/pipeline/avatarImages`: past 4,096 pixels a side it is rejected before it is

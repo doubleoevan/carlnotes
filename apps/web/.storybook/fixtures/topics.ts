@@ -24,6 +24,14 @@ export const SAMPLE_TOPIC_IMAGE: TopicImageUrls = {
 	thumbnail: SAMPLE_TOPIC_IMAGE_FILES,
 }
 
+// the story user as a table row names its owner
+const STORY_USER_IDENTITY = {
+	userId: STORY_USER.userId,
+	username: STORY_USER.username,
+	avatarSource: "generated",
+	avatarVersion: null,
+}
+
 /** The owned topics the stories render: public, invite, and private. */
 export const OWNER_TOPIC_FIXTURES: OwnerTopic[] = [
 	{
@@ -37,6 +45,8 @@ export const OWNER_TOPIC_FIXTURES: OwnerTopic[] = [
 		monthCostCents: 420,
 		monthEmailCount: 4,
 		ownerUserId: STORY_USER.userId,
+		owner: STORY_USER_IDENTITY,
+		team: null,
 		isEmailEnabled: true,
 		scans: [
 			toActivityScan({ id: "scan-1", dayOffset: 0, foundCount: 349, keptCount: 13, costCents: 118 }),
@@ -59,6 +69,8 @@ export const OWNER_TOPIC_FIXTURES: OwnerTopic[] = [
 		monthCostCents: 64,
 		monthEmailCount: 0,
 		ownerUserId: STORY_USER.userId,
+		owner: STORY_USER_IDENTITY,
+		team: null,
 		isEmailEnabled: false,
 		scans: [toActivityScan({ id: "scan-5", dayOffset: 4, foundCount: 18, keptCount: 2, costCents: 64 })],
 		chatMentions: [],
@@ -76,6 +88,8 @@ export const OWNER_TOPIC_FIXTURES: OwnerTopic[] = [
 		monthCostCents: 0,
 		monthEmailCount: 0,
 		ownerUserId: STORY_USER.userId,
+		owner: STORY_USER_IDENTITY,
+		team: null,
 		isEmailEnabled: true,
 		scans: [],
 		chatMentions: [],
@@ -231,6 +245,8 @@ export function toStoryTopic(topicFields: Pick<Topic, "id" | "name"> & Partial<T
 		subscriberCount: 3,
 		isEmailEnabled: null,
 		latestPodcastEpisode: null,
+		owner: STORY_USER_IDENTITY,
+		team: null,
 		...topicFields,
 	}
 }

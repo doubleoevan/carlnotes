@@ -3,8 +3,24 @@ import { z } from "zod"
 import { toSessionAvatarVersion } from "./avatars"
 import { billingIntervals, billingProviders, plans, teamRoles, visibilities } from "./enums"
 import { podcastEpisodeSummary } from "./podcast"
+import { teamIdentity } from "./teamIdentity"
 import { displayEnum } from "./tolerantReads"
 import { imageRegenerationQuota } from "./topicImages"
+
+// the two audiences an admin shows someone else's profile to. user reads it as the signed-in admin, which is the
+// person's whole profile, and visitor reads it as a visitor
+export const profileAudiences = ["user", "visitor"] as const
+
+export type ProfileAudience = (typeof profileAudiences)[number]
+
+// each audience as the admin's select names it
+export const PROFILE_AUDIENCE_LABELS: Record<ProfileAudience, string> = {
+	user: "User view",
+	visitor: "Visitor view",
+}
+
+// a profile read's query, which reads as the signed-in user unless it names the visitor audience
+export const profileQuery = z.object({ audience: z.enum(profileAudiences).default("user") })
 
 // the user identity for a profile page link, with the avatar's source and the version that its url names
 export const profileIdentity = z.object({
@@ -57,6 +73,9 @@ export const topic = z.object({
 	isEmailEnabled: z.boolean().nullable(),
 	// the topic's latest published podcast episode that the user may listen to, null without one
 	latestPodcastEpisode: podcastEpisodeSummary.nullable(),
+	// the owner, and the team that owns the topic if it is one the user may see named
+	owner: profileIdentity,
+	team: teamIdentity.nullable(),
 })
 
 export type Topic = z.infer<typeof topic>

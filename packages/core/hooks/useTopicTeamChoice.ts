@@ -1,3 +1,4 @@
+import { showClientMessage } from "@carlnotes/client/apiClient"
 import {
 	fetchLeaderTeams,
 	fetchTeamNameTaken,
@@ -11,11 +12,11 @@ import { useEffect, useRef, useState } from "react"
 import { createTeam, TEAM_REJECTION_REASONS } from "../lib/saveTeam"
 import type { PendingInvite } from "../lib/teamFields"
 import { sendPendingTeamInvites } from "../lib/teamInvites"
-import { NEW_TEAM_CHOICE } from "../lib/topicTeamChoices"
+import { NEW_TEAM_CHOICE, type OfferedTeam, toDefaultTeamAddedText } from "../lib/topicTeamChoices"
 
 export type TopicTeamField = {
 	// the teams offered and the ones selected
-	offeredTeams: { teamId: string; name: string }[]
+	offeredTeams: OfferedTeam[]
 	selectedTeamIds: string[]
 	setSelectedTeamIds: (ids: string[]) => void
 	// whether the New team option is on, and the new team's name
@@ -110,8 +111,20 @@ export function useTopicTeamChoice(
 		if (isNewTeamSelected && newTeamName.trim() !== "") {
 			desiredTeamIds.add(await createSelectedTeam(topicId))
 		}
-		// the memberships, then the new team's invitations
+		// whether the save adds the topic to the default team, which a message names once the memberships save
+		const defaultTeam = teams.find((team) => team.isDefaultTeam)
+		const isAddingDefaultTeam =
+			defaultTeam !== undefined &&
+			desiredTeamIds.has(defaultTeam.teamId) &&
+			!savedTeamIds.current.has(defaultTeam.teamId)
+
+		// the memberships, then the message
 		await saveTopicTeams({ topicId, desiredTeamIds, savedTeamIds: savedTeamIds.current })
+		if (isAddingDefaultTeam) {
+			showClientMessage(toDefaultTeamAddedText(defaultTeam.name))
+		}
+
+		// then the new team's invitations
 		if (isNewTeamSelected && createdTeam.current) {
 			await sendNewTeamInvites(createdTeam.current.teamId)
 		}

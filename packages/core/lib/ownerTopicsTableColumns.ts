@@ -3,11 +3,13 @@ import { frequencies, isDailyFrequency } from "@carlnotes/contracts/enums"
 import { toCountLabel } from "@carlnotes/contracts/text"
 import type { ReactNode } from "react"
 import type { TableColumn } from "../components/DataTable"
-import { toCentsLabel, toMonthYearLabel } from "./labels"
+import { toCentsLabel, toMonthYearLabel, toTopicOwnerName } from "./labels"
+import { TOPIC_OWNER_TOOLTIP } from "./topicsTableColumns"
 
 // the owner table sorts identically on Profile and in the web admin console
 export const ownerTopicSortValues = {
 	name: (topic: OwnerTopic) => topic.name,
+	owner: toTopicOwnerName,
 	scans: (topic: OwnerTopic) => topic.monthScanCount,
 	subscribers: (topic: OwnerTopic) => topic.subscriberCount,
 	created: (topic: OwnerTopic) => topic.createdAt,
@@ -20,12 +22,14 @@ export const ownerTopicSortValues = {
 }
 
 /**
- * Supplies owner table columns and totals to both apps while each platform renders its controls.
+ * Supplies owner table columns and totals to both apps while each platform renders its controls. The Owner column
+ * shows only if a renderer is given.
  */
 export function toOwnerTopicsTableColumns({
 	topics,
 	renderText,
 	renderName,
+	renderOwner,
 	renderSubscribers,
 	renderVisibility,
 	renderEmail,
@@ -35,6 +39,8 @@ export function toOwnerTopicsTableColumns({
 	// the cell renderers each app supplies with its own elements
 	renderText: (text: string) => ReactNode
 	renderName: (topic: OwnerTopic) => ReactNode
+	// the Owner column's link, or undefined for a table without the column
+	renderOwner?: (topic: OwnerTopic) => ReactNode
 	renderSubscribers: (topic: OwnerTopic) => ReactNode
 	renderVisibility: (topic: OwnerTopic) => ReactNode
 	renderEmail: (topic: OwnerTopic) => ReactNode
@@ -47,6 +53,9 @@ export function toOwnerTopicsTableColumns({
 	const totalCost = topics.reduce((total, topic) => total + topic.monthCostCents, 0)
 	return [
 		{ key: "name", label: "Topic", width: 192, render: renderName, footer: renderText("Total") },
+		...(renderOwner
+			? [{ key: "owner", label: "Owner", width: 176, tooltip: TOPIC_OWNER_TOOLTIP, render: renderOwner }]
+			: []),
 		{
 			key: "scans",
 			label: "Brews",

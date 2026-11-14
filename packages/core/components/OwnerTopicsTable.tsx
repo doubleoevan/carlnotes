@@ -1,4 +1,6 @@
 import type { OwnerTopic } from "@carlnotes/contracts/activity"
+import type { ProfileIdentity } from "@carlnotes/contracts/profiles"
+import type { TeamIdentity } from "@carlnotes/contracts/teamIdentity"
 import { type ComponentType, type ReactNode, useState } from "react"
 import { toOwnerTopicsTableColumns } from "../lib/ownerTopicsTableColumns"
 import type { TableColumn } from "./DataTable"
@@ -9,6 +11,9 @@ type DetailToggleProps = { topic: OwnerTopic; isOpen: boolean; onToggle: () => v
 export type OwnerTopicsTableElements = {
 	Text: ComponentType<{ children: ReactNode }>
 	Name: ComponentType<{ topic: OwnerTopic }>
+	// the Owner column's links on a profile: the topic's team, or else its owner
+	TeamLink: ComponentType<{ team: TeamIdentity }>
+	UserProfileLink: ComponentType<{ user: ProfileIdentity }>
 	Visibility: ComponentType<{ visibility: OwnerTopic["visibility"] }>
 	EmailSwitch: ComponentType<{ topic: OwnerTopic; isDisabled: boolean; onChange: (isEnabled: boolean) => void }>
 	// the follower count that opens the topic's followers, and the month's cost that opens its scans
@@ -28,7 +33,7 @@ export type OwnerTopicsTableElements = {
 
 /**
  * Renders the topics an owner keeps with their month's scans, followers, schedule, emails, and cost, and the detail a
- * row opens, through platform table elements.
+ * row opens, through platform table elements. On a profile each row also names its team or owner.
  */
 export function OwnerTopicsTable({
 	topics,
@@ -37,11 +42,23 @@ export function OwnerTopicsTable({
 	isPending = false,
 	className,
 	onEmailChange,
-	elements: { Text, Name, Visibility, EmailSwitch, SubscribersToggle, CostToggle, Detail, Table, EmptyCard },
+	elements: {
+		Text,
+		Name,
+		TeamLink,
+		UserProfileLink,
+		Visibility,
+		EmailSwitch,
+		SubscribersToggle,
+		CostToggle,
+		Detail,
+		Table,
+		EmptyCard,
+	},
 }: {
 	topics: OwnerTopic[]
 	// on a profile, the person whose rows show the email switch and the month's cost. the rows of topics they don't
-	// own show neither
+	// own show neither, and every row names its team or owner
 	profileUserId?: string
 	// the admin console lists each topic's followers
 	canListSubscribers?: boolean
@@ -72,6 +89,10 @@ export function OwnerTopicsTable({
 		topics,
 		renderText: (text) => <Text>{text}</Text>,
 		renderName: (topic) => <Name topic={topic} />,
+		renderOwner:
+			profileUserId === undefined
+				? undefined
+				: (topic) => (topic.team ? <TeamLink team={topic.team} /> : <UserProfileLink user={topic.owner} />),
 		renderSubscribers: (topic) =>
 			canListSubscribers ? (
 				<SubscribersToggle

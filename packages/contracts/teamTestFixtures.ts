@@ -16,6 +16,8 @@ export function toTestTableTopic(overrides: Partial<Topic> = {}): Topic {
 		subscriberCount: 5,
 		isEmailEnabled: null,
 		latestPodcastEpisode: null,
+		owner: toTestProfileIdentity("carl"),
+		team: null,
 		...overrides,
 	}
 }

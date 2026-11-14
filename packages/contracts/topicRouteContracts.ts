@@ -159,6 +159,12 @@ export const topicRouteContracts: Record<string, ApiRouteContract> = {
 		path: "/api/updates/opener",
 		response: updatesOpenerResponse,
 	},
+	"updatesClient.fetchProfileUpdatesOpener": {
+		method: "GET",
+		path: "/api/profiles/:userId/opener",
+		params: userIdParam,
+		response: updatesOpenerResponse,
+	},
 	"topicClient.sendManualScan": {
 		method: "POST",
 		path: "/api/topics/:id/scan",

@@ -6,6 +6,7 @@ import {
 	type NewsResponse,
 	type NewsWindow,
 } from "@carlnotes/contracts/news"
+import type { ProfileAudience } from "@carlnotes/contracts/profiles"
 import { useState } from "react"
 import { type NewsPageLoader, useNews } from "./useNews"
 
@@ -16,6 +17,8 @@ type UseNewsListOptions = {
 	// the first page of the first window's news, if it is already read, and that window, the week unless named
 	firstPage?: NewsResponse
 	firstWindow?: NewsWindow
+	// the audience the profile shows to, the user audience unless an admin chose the visitor audience
+	audience?: ProfileAudience
 	// the read of a page in place of the api's
 	loadNewsPage?: NewsPageLoader
 	captureVisitEvent: (event: VisitAnalyticsEvent, properties: AnalyticsEventProperties) => void
@@ -41,22 +44,43 @@ type NewsList = {
 }
 
 /**
- * Holds a news list: its window, which starts at the week unless another is named, its page, which starts at the first, and whether its rows
- * show, which they do at first. Choosing a window returns to the first page and opens a closed list. Each choice of a
- * window or a page reports its event with the list's place and no text.
+ * Holds a news list: its window, which starts at the week unless another is named, its page, which starts at the
+ * first, and whether its rows show, which they do at first. Choosing a window returns to the first page and opens a
+ * closed list, and so does a change of the profile's audience. Each choice of a window or a page reports its event with
+ * the list's place and no text.
  */
 export function useNewsList({
 	profileUserId,
 	userId,
 	firstPage,
 	firstWindow = DEFAULT_NEWS_WINDOW,
+	audience = "user",
 	loadNewsPage,
 	captureVisitEvent,
 }: UseNewsListOptions): NewsList {
 	const [window, setWindow] = useState<NewsWindow>(firstWindow)
 	const [pageNumber, setPageNumber] = useState(1)
 	const [isExpanded, setIsExpanded] = useState(true)
-	const newsPageRead = { profileUserId, userId, window, page: pageNumber, firstPage, firstWindow, loadNewsPage }
+
+	// a new audience of the profile starts at the first page of an open list
+	const [listAudience, setListAudience] = useState(audience)
+	if (audience !== listAudience) {
+		setListAudience(audience)
+		setPageNumber(1)
+		setIsExpanded(true)
+	}
+
+	// the current page, read for the profile's audience
+	const newsPageRead = {
+		profileUserId,
+		userId,
+		window,
+		page: pageNumber,
+		audience,
+		firstPage,
+		firstWindow,
+		loadNewsPage,
+	}
 	const newsQuery = useNews(newsPageRead)
 	const newsPage = newsQuery.data
 

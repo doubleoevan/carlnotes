@@ -1,11 +1,16 @@
 // the user profile api client
 import { type ProfileResponse, profileResponse } from "@carlnotes/contracts/profilePage"
-import { type ProfileTeamStatus, profileTeamStatusesResponse } from "@carlnotes/contracts/profiles"
+import {
+	type ProfileAudience,
+	type ProfileTeamStatus,
+	profileTeamStatusesResponse,
+} from "@carlnotes/contracts/profiles"
 import { apiClient, fetchApi, readApiErrorMessage, readApiResponse } from "./apiClient"
 
-// a user's public profile by id, or null if there is no such user. any other rejected read throws
-export async function fetchProfile(userId: string): Promise<ProfileResponse | null> {
-	const response = await apiClient().api.profiles[":userId"].$get({ param: { userId } })
+// a user's public profile by id, read for the user audience unless the visitor audience is named, or null if there is
+// no such user. any other rejected read throws
+export async function fetchProfile(userId: string, audience?: ProfileAudience): Promise<ProfileResponse | null> {
+	const response = await apiClient().api.profiles[":userId"].$get({ param: { userId }, query: { audience } })
 	if (response.ok) {
 		return readApiResponse(profileResponse, response)
 	}

@@ -1,4 +1,4 @@
-import { TEST_OWNER_TOPICS } from "@carlnotes/contracts/activityTestFixtures"
+import { TEST_OWN_PROFILE_TOPICS, TEST_OWNER_TOPICS } from "@carlnotes/contracts/activityTestFixtures"
 import type { Meta, StoryObj } from "@storybook/react-native"
 import { OwnerTopicsTable } from "./OwnerTopicsTable"
 
@@ -13,3 +13,7 @@ export default meta
 type Story = StoryObj<typeof meta>
 export const Default: Story = {}
 export const Empty: Story = { args: { topics: [] } }
+
+// the user's own profile: each row names its team or owner, and a team topic another member owns shows no owner's
+// controls
+export const OnProfile: Story = { args: { topics: TEST_OWN_PROFILE_TOPICS, profileUserId: "user-carl" } }

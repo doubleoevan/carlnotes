@@ -11,22 +11,22 @@ import type {
 import type { TopicPostCard } from "@carlnotes/contracts/topicPosts"
 import { db } from "@carlnotes/db"
 import { podcastEpisodes, topicPodcastEpisodeVideos } from "@carlnotes/db/schema/podcast"
-import { teamMembers, teams } from "@carlnotes/db/schema/teams"
-import { teamTopics } from "@carlnotes/db/schema/teamTopics"
 import { topicPosts } from "@carlnotes/db/schema/topicPosts"
 import { topics } from "@carlnotes/db/schema/topics"
 import { and, asc, desc, eq, inArray, isNotNull, or, type SQL, sql } from "drizzle-orm"
 import type { AnyPgColumn } from "drizzle-orm/pg-core"
 import { isReadyFilmOfPodcastEpisode } from "./home/homeCardIds"
 import { loadPodcastEpisodeCards, toPodcastEpisodeCardList, toTopicCards } from "./home/topicCards"
+import { type ProfileReader, toOwnTopicFilter } from "./profileReader"
+import { toMemberTeamIdsQuery, toTeamTopicFilter } from "./team/memberTeamTopics"
 import { loadProfileOrderTopicPostRows, toTopicPostCards } from "./topicPost/topicPosts"
 
 // how many of a person's published podcast episodes the read takes before keeping the pinned ones and one per topic
 // ponytail: limits a long-running podcast. rank one per topic in sql past it
 const PODCAST_EPISODE_CANDIDATE_LIMIT = 500
 
-// whose profile it is, and whether its reader sees the person's topics that are not public
-type LoadProfileTopicRowsOptions = { profileUserId: string; includesNonPublicTopics: boolean }
+// whose profile it is, and who reads it
+type LoadProfileTopicRowsOptions = { profileUserId: string; profileReader: ProfileReader }
 
 // the topics that the profile's cards show, in the profile's order, whose profile it is, and who reads them
 type LoadProfileCardsOptions = {
@@ -199,36 +199,38 @@ function toOwnPinPosition(topicRow: typeof topics.$inferSelect, profileUserId: s
 /**
  * Loads the topics of a person's card sections in their profile's order: the topics they own, and the topics held by
  * the teams they lead. A reader who sees only public topics gets the public ones alone, and a team's only if the team
- * is public. The person's own pins lead in their order, then the home's trending order, most viewed, then most
- * followed, then newest.
+ * is public and shows the person's membership. A private topic another member owns stays out until its Personal
+ * sources text is converted. The person's own pins lead in their order, then the home's trending order, most viewed,
+ * then most followed, then newest.
  */
 export function loadProfileTopicRows({
 	profileUserId,
-	includesNonPublicTopics,
+	profileReader,
 }: LoadProfileTopicRowsOptions): Promise<(typeof topics.$inferSelect)[]> {
-	const ledTeamIds = toProfileTeamIdsQuery({
-		profileUserId,
-		isLeaderOnly: true,
-		isPublicOnly: !includesNonPublicTopics,
-	})
+	const isPublicOnly = profileReader === "visitor"
+	const ledTeamIds = toMemberTeamIdsQuery({ profileUserId, isLeaderOnly: true, isPublicOnly })
 	return loadTopicRowsInProfileOrder({
 		profileUserId,
-		topicFilter: and(
-			or(eq(topics.ownerId, profileUserId), toHeldTopicFilter(ledTeamIds)),
-			includesNonPublicTopics ? undefined : eq(topics.visibility, "public"),
+		topicFilter: or(
+			toOwnTopicFilter(profileUserId, profileReader),
+			toTeamTopicFilter({ teamIds: ledTeamIds, isPublicOnly }),
 		),
 	})
 }
 
 /**
  * Loads the topics of the All Topics table on the person's own profile: every topic they own, and every topic held
- * by a team they are an active member of, at every visibility, each once.
+ * by a team they are an active member of, at every visibility, each once. A private topic another member owns stays
+ * out until its Personal sources text is converted.
  */
 export function loadProfileTableTopicRows(profileUserId: string): Promise<(typeof topics.$inferSelect)[]> {
-	const memberTeamIds = toProfileTeamIdsQuery({ profileUserId, isLeaderOnly: false, isPublicOnly: false })
+	const memberTeamIds = toMemberTeamIdsQuery({ profileUserId, isLeaderOnly: false, isPublicOnly: false })
 	return loadTopicRowsInProfileOrder({
 		profileUserId,
-		topicFilter: or(eq(topics.ownerId, profileUserId), toHeldTopicFilter(memberTeamIds)),
+		topicFilter: or(
+			eq(topics.ownerId, profileUserId),
+			toTeamTopicFilter({ teamIds: memberTeamIds, isPublicOnly: false }),
+		),
 	})
 }
 
@@ -247,42 +249,6 @@ function loadTopicRowsInProfileOrder({
 		.from(topics)
 		.where(topicFilter)
 		.orderBy(...toProfileTopicOrder(ownPinPosition))
-}
-
-// the ids of the teams the person is an active member of, the led ones alone or the public ones alone if asked
-// biome-ignore lint/nursery/useExplicitReturnType: drizzle infers the select builder's type, which has no name to write here
-function toProfileTeamIdsQuery({
-	profileUserId,
-	isLeaderOnly,
-	isPublicOnly,
-}: {
-	profileUserId: string
-	isLeaderOnly: boolean
-	isPublicOnly: boolean
-}) {
-	// the person's active memberships, narrowed to the led or public teams if asked
-	return db
-		.select({ teamId: teamMembers.teamId })
-		.from(teamMembers)
-		.innerJoin(teams, eq(teams.id, teamMembers.teamId))
-		.where(
-			and(
-				eq(teamMembers.userId, profileUserId),
-				eq(teamMembers.isActive, true),
-				isLeaderOnly ? eq(teamMembers.role, "leader") : undefined,
-				isPublicOnly ? eq(teams.isPublic, true) : undefined,
-			),
-		)
-}
-
-// the topics that the teams hold: the ones they own, and the ones shared into them
-function toHeldTopicFilter(teamIds: ReturnType<typeof toProfileTeamIdsQuery>): SQL | undefined {
-	// a topic a team owns, or one shared into it
-	const sharedTopicIds = db
-		.select({ topicId: teamTopics.topicId })
-		.from(teamTopics)
-		.where(inArray(teamTopics.teamId, teamIds))
-	return or(inArray(topics.teamId, teamIds), inArray(topics.id, sharedTopicIds))
 }
 
 /**

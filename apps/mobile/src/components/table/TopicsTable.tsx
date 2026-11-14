@@ -13,9 +13,11 @@ import { NoteIcon } from "@/components/branding/NoteIcon"
 import { showConfirmAlert } from "@/components/common/ConfirmDialog"
 import { PreferenceSwitch } from "@/components/common/PreferenceSwitch"
 import { Sheet } from "@/components/common/Sheet"
+import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
+import { TeamLink } from "@/components/team/TeamLink"
 import { TopicInfoContent, TopicVisibility } from "@/components/topic/TopicInfo"
 import { DataTable } from "./DataTable"
 import { TopicNameLink } from "./TopicNameLink"
@@ -26,10 +28,12 @@ import { TopicNameLink } from "./TopicNameLink"
 export function TopicsTable({
 	topics,
 	includesNonPublicTopics,
+	isOwnerShown,
 	onRemoveTopic,
 }: {
 	topics: Topic[]
 	includesNonPublicTopics: boolean
+	isOwnerShown?: boolean
 	onRemoveTopic?: (topic: Topic) => void
 }) {
 	// taking a topic off the team asks first
@@ -43,6 +47,7 @@ export function TopicsTable({
 		<SharedTopicsTable
 			topics={topics}
 			includesNonPublicTopics={includesNonPublicTopics}
+			isOwnerShown={isOwnerShown}
 			onRemoveTopic={onRemoveTopic && handleRemoveTopic}
 			elements={TOPICS_TABLE_ELEMENTS}
 		/>
@@ -96,6 +101,8 @@ const TOPICS_TABLE_ELEMENTS: TopicsTableElements = {
 	Text: ({ children }) => <Text className="text-sm text-muted-foreground">{children}</Text>,
 	ErrorText: ({ children }) => <Text className="text-sm text-destructive">{children}</Text>,
 	NameLink: TopicNameLink,
+	TeamLink,
+	UserProfileLink,
 	Visibility: TopicVisibility,
 	TopicInfo: TopicPopover,
 	Switch: PreferenceSwitch,

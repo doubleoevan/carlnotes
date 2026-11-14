@@ -19,6 +19,7 @@ import {
 } from "@carlnotes/contracts/topicImages"
 import { z } from "zod"
 import { parseJsonCursor, toJsonCursor } from "../cursors"
+import { loadProfileReader } from "../profileReader"
 import { loadNewsEventRows, type NewsEventRow } from "./newsEventRows"
 import { loadNewsPodcastEpisodes } from "./newsPodcastEpisodes"
 import { loadNewsTopicIds, type NewsGroup, newsGroups } from "./newsTopics"
@@ -55,7 +56,8 @@ type ReadNewsOptions = {
 
 /**
  * Reads one numbered page of a person's news, or returns null if the cursor is not one a page of this window returned.
- * The window ends at its first read, so a later page never repeats or skips a row that arrived in between.
+ * The window ends at its first read, so a later page never repeats or skips a row that arrived in between. An admin
+ * reads the news as the person reads it.
  */
 export async function readNews({
 	profileUserId,
@@ -71,11 +73,13 @@ export async function readNews({
 		return null
 	}
 
-	// the window's two ends, and the groups' Topics as the reader may open them
+	// the window's two ends, and the groups' Topics as the reader may open them. an admin reads as the person
+	const profileReader = await loadProfileReader(profileUserId, userId)
+	const readerUserId = profileReader === "visitor" ? userId : profileUserId
 	const until = new Date(windowCursor?.until ?? Date.now())
 	const since = new Date(until.getTime() - NEWS_WINDOW_MILLISECONDS[window])
-	const topicIds = await loadNewsTopicIds({ profileUserId, isOwnNews: userId === profileUserId })
-	const groupRead = { topicIds, profileUserId, readerUserId: userId, since, until }
+	const topicIds = await loadNewsTopicIds({ profileUserId, profileReader })
+	const groupRead = { topicIds, profileUserId, readerUserId, since, until }
 
 	// one group's rows from an offset
 	const loadGroupRows = (group: NewsGroup, offset: number, limit: number): Promise<NewsEventRow[]> =>

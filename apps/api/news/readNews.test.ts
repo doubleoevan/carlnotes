@@ -1,7 +1,8 @@
 // the news read's pure parts: each Topic in its first group, the first page and its counts, a later page across the
-// groups, the cursor, and a row as the news shows it
-import { expect, test } from "bun:test"
+// groups, the cursor, a row as the news shows it, and an admin's read of someone's news
+import { expect, spyOn, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
+import * as authorization from "../authorization"
 import { parseJsonCursor, toJsonCursor } from "../cursors"
 import type { NewsEventRow } from "./newsEventRows"
 import { toNewsPodcastEpisodeIds } from "./newsPodcastEpisodes"
@@ -207,4 +208,32 @@ test("the reactions on one Comment are a row of their own beside the Comment's",
 		path: "/topics/topic-1/home-espresso?comment=comment-1",
 	})
 	expect(toNewsEvent(toNewsEventRow({ ...reactedComment, kind: "comment", body: "hi" })).id).toBe("comment:comment-1")
+})
+
+test("an admin reads someone's news as the person does, followed Topics included, but no unconverted private Topic, and anyone else does not", async () => {
+	const isAllowedSpy = spyOn(authorization, "isAllowed").mockResolvedValueOnce(true).mockResolvedValueOnce(false)
+	const newsRead = { profileUserId: "user-1", window: "week" as const, page: 1 }
+
+	// the admin's read reads the Topics the person follows
+	const isFollowedTopicRead = ({ text }: { text: string }): boolean =>
+		text.startsWith('select "topics"."id" from "subscriptions"')
+	const adminQueries = stubConnectionPool(() => [])
+	await readNews({ ...newsRead, userId: "admin-1" })
+	expect(adminQueries.some(isFollowedTopicRead)).toBe(true)
+
+	// but not the person's own private Topic whose Personal sources text is not converted
+	expect(
+		adminQueries.some(({ text }) =>
+			text.includes('("topics"."owner_id" = $1 and ("topics"."visibility" <> $2 or "topics"."id" not in'),
+		),
+	).toBe(true)
+	restoreConnectionPool()
+
+	// another user's read does not
+	const userQueries = stubConnectionPool(() => [])
+	await readNews({ ...newsRead, userId: "user-2" })
+	expect(userQueries.some(isFollowedTopicRead)).toBe(false)
+	restoreConnectionPool()
+	expect(isAllowedSpy).toHaveBeenCalledWith("admin-1", "admin:console")
+	isAllowedSpy.mockRestore()
 })

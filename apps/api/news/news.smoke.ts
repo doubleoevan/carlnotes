@@ -1,282 +1,38 @@
 // a live smoke test for the news read against the dev database: the windows, the three groups and their order, ties,
 // the reactions on one Comment as one row, a Finding rated thumbs down, an invite Topic's activation, the user blocks
-// in both directions, the person's own Topic Posts, someone else's profile, and the pages
+// in both directions, the person's own Topic Posts, someone else's profile, an admin's read and audiences, and the pages.
+// the profile's Team Topics share the news's membership rule, so a profile check runs on the same rows
 // run it with: bun run smoke:news. needs Doppler secrets
 
 import { NEWS_PAGE_SIZE, type NewsEvent, type NewsWindow } from "@carlnotes/contracts/news"
 
-// the tables the run seeds
-const { connectionPool, db } = await import("@carlnotes/db")
-const { podcastEpisodes } = await import("@carlnotes/db/schema/podcast")
-const { findings, resources, scans } = await import("@carlnotes/db/schema/scans")
-const { comments, reactions } = await import("@carlnotes/db/schema/social")
-const { topicPosts } = await import("@carlnotes/db/schema/topicPosts")
+// the run's connection pool
+const { connectionPool } = await import("@carlnotes/db")
 
-// the people, their Teams, and their Topics
-const { teamMembers, teams } = await import("@carlnotes/db/schema/teams")
-const { teamTopics } = await import("@carlnotes/db/schema/teamTopics")
-const { subscriptions, topics } = await import("@carlnotes/db/schema/topics")
-const { userBlocks } = await import("@carlnotes/db/schema/userBlocks")
-const { users } = await import("@carlnotes/db/schema/users")
-const { inArray, like } = await import("drizzle-orm")
+// the seeded rows and their ids
+const {
+	cleanUp,
+	seedOwnEvents,
+	seedPeopleAndTopics,
+	seedPersonTopicPosts,
+	seedTeamAndFollowedEvents,
+	toMinutesAgo,
+	toRunId,
+	topicIds,
+	userIds,
+} = await import("./newsSmokeFixtures")
 
-// the read under test
+// the reads under test
 const { readNews } = await import("./readNews")
-
-// the ids of this run's rows, which a parallel run never shares
-const runId = `news-smoke-${Date.now()}-${Math.random().toString(36).slice(2)}`
-const toRunId = (name: string): string => `${runId}-${name}`
-
-// the person whose news it is, the people around them, and a signed-in stranger
-const userIds = {
-	person: toRunId("person"),
-	teammate: toRunId("teammate"),
-	followedOwner: toRunId("followed-owner"),
-	firstReactor: toRunId("reactor-1"),
-	secondReactor: toRunId("reactor-2"),
-	blocked: toRunId("blocked"),
-	blocker: toRunId("blocker"),
-	stranger: toRunId("stranger"),
-}
-
-// the person's own Topics, their Teams' Topics, and the Topics they follow
-const topicIds = {
-	ownPublic: toRunId("own-public"),
-	ownPrivate: toRunId("own-private"),
-	team: toRunId("team"),
-	hiddenTeam: toRunId("hidden-team"),
-	followed: toRunId("followed"),
-	invite: toRunId("invite"),
-	// two Topics of someone else that the person neither holds nor follows
-	otherPublic: toRunId("other-public"),
-	otherPrivate: toRunId("other-private"),
-}
-const teamIds = { shown: toRunId("team-shown"), hidden: toRunId("team-hidden") }
-
-// how many extra Findings fill the own Topic, so the week holds more than two pages
-const EXTRA_FINDING_COUNT = 30
-
-// a time some minutes before the run
-const startedAt = Date.now()
-const toMinutesAgo = (minutes: number): Date => new Date(startedAt - minutes * 60_000)
+const { loadProfileTopicRows } = await import("../profileCards")
+const { profilesRoute } = await import("../profiles")
+const { Hono } = await import("hono")
 
 // each check's result, counted for the exit code
 let failureCount = 0
 function check(label: string, isTestPassing: boolean, detail?: unknown): void {
 	console.log(`${isTestPassing ? "ok  " : "FAIL"} ${label}`, isTestPassing || detail === undefined ? "" : detail)
 	failureCount += isTestPassing ? 0 : 1
-}
-
-// the users, the Topics, the two Teams, the subscriptions, and the user blocks
-async function seedPeopleAndTopics(): Promise<void> {
-	await db.insert(users).values(
-		Object.values(userIds).map((userId) => ({
-			id: userId,
-			name: userId,
-			email: `${userId}@carlnotes.test`,
-			username: userId,
-			usernameNormalized: userId.replaceAll("-", "").toLowerCase(),
-		})),
-	)
-
-	// one public Team that shows the person's membership, and one that hides it
-	await db.insert(teams).values([
-		{ id: teamIds.shown, name: "shown team", isPublic: true },
-		{ id: teamIds.hidden, name: "hidden team", isPublic: true },
-	])
-	await db.insert(teamMembers).values([
-		{ teamId: teamIds.shown, userId: userIds.person },
-		{ teamId: teamIds.shown, userId: userIds.teammate, role: "leader" },
-		{ teamId: teamIds.hidden, userId: userIds.person, isMemberVisible: false },
-		{ teamId: teamIds.hidden, userId: userIds.teammate, role: "leader" },
-	])
-
-	// the Topics. the person's public Topic is also shared with their shown Team
-	await db.insert(topics).values([
-		{ id: topicIds.ownPublic, ownerId: userIds.person, name: "own public", visibility: "public" },
-		{ id: topicIds.ownPrivate, ownerId: userIds.person, name: "own private", visibility: "private" },
-		{ id: topicIds.team, ownerId: userIds.teammate, teamId: teamIds.shown, name: "team", visibility: "public" },
-		{
-			id: topicIds.hiddenTeam,
-			ownerId: userIds.teammate,
-			teamId: teamIds.hidden,
-			name: "hidden",
-			visibility: "public",
-		},
-		{ id: topicIds.followed, ownerId: userIds.followedOwner, name: "followed", visibility: "public" },
-		{ id: topicIds.invite, ownerId: userIds.followedOwner, name: "invite", visibility: "invite" },
-		{ id: topicIds.otherPublic, ownerId: userIds.followedOwner, name: "other public", visibility: "public" },
-		{ id: topicIds.otherPrivate, ownerId: userIds.followedOwner, name: "other private", visibility: "private" },
-	])
-	await db.insert(teamTopics).values({ teamId: teamIds.shown, topicId: topicIds.ownPublic })
-
-	// the person follows two Topics, the invite one since two hours ago, and is in a user block each way
-	await db.insert(subscriptions).values([
-		{ topicId: topicIds.followed, subscriberUserId: userIds.person },
-		{ topicId: topicIds.invite, subscriberUserId: userIds.person, createdAt: toMinutesAgo(120) },
-	])
-	await db.insert(userBlocks).values([
-		{ blockerUserId: userIds.person, blockedUserId: userIds.blocked },
-		{ blockerUserId: userIds.blocker, blockedUserId: userIds.person },
-	])
-}
-
-// a Finding on a Topic, kept some minutes ago by a Scan that started then or earlier
-async function seedFinding(
-	name: string,
-	topicId: string,
-	minutesAgo: number,
-	options: { scanMinutesAgo?: number; rating?: "down" } = {},
-): Promise<string> {
-	// the resource and the Scan the Finding hangs on
-	const findingId = toRunId(name)
-	await db.insert(resources).values({ id: findingId, url: `https://carlnotes.test/${findingId}`, kind: "read" })
-	const [scan] = await db
-		.insert(scans)
-		.values({
-			topicId,
-			ownerId: userIds.followedOwner,
-			status: "succeeded",
-			startedAt: toMinutesAgo(options.scanMinutesAgo ?? minutesAgo),
-		})
-		.returning()
-	await db.insert(findings).values({
-		id: findingId,
-		topicId,
-		resourceId: findingId,
-		scanId: scan?.id ?? "",
-		foundScanId: scan?.id ?? "",
-		relevanceScore: 0.9,
-		rating: options.rating,
-		createdAt: toMinutesAgo(minutesAgo),
-	})
-	return findingId
-}
-
-// a Comment by one user on a Topic or on one of its Findings, some minutes ago
-async function seedComment(
-	name: string,
-	authorUserId: string,
-	topicId: string,
-	minutesAgo: number,
-	options: { findingId?: string; parentCommentId?: string; body?: string } = {},
-): Promise<string> {
-	const commentId = toRunId(name)
-	await db.insert(comments).values({
-		id: commentId,
-		authorUserId,
-		// a Comment hangs on its Finding, or on the Topic itself
-		findingId: options.findingId,
-		topicId: options.findingId ? undefined : topicId,
-		targetTopicId: topicId,
-		parentCommentId: options.parentCommentId,
-		body: options.body ?? `${name} body`,
-		createdAt: toMinutesAgo(minutesAgo),
-	})
-	return commentId
-}
-
-// a reaction by one user on a Comment or a Finding of a Topic, some minutes ago
-async function seedReaction(
-	userId: string,
-	topicId: string,
-	minutesAgo: number,
-	target: { commentId: string } | { findingId: string },
-): Promise<void> {
-	await db
-		.insert(reactions)
-		.values({ userId, targetTopicId: topicId, reactionType: "like", createdAt: toMinutesAgo(minutesAgo), ...target })
-}
-
-// what happened on the person's own Topics and Comments
-async function seedOwnEvents(): Promise<void> {
-	// a Podcast Episode three days ago, and one at the same time as a Finding
-	await db.insert(podcastEpisodes).values([
-		{
-			id: toRunId("old-episode"),
-			topicId: topicIds.ownPublic,
-			ownerId: userIds.person,
-			status: "published",
-			season: 2026,
-			episodeNumber: 1,
-			publishedAt: toMinutesAgo(3 * 24 * 60),
-		},
-		{
-			id: toRunId("tied-episode"),
-			topicId: topicIds.ownPublic,
-			ownerId: userIds.person,
-			status: "published",
-			season: 2026,
-			episodeNumber: 2,
-			publishedAt: toMinutesAgo(40),
-		},
-	])
-	await seedFinding("tied-finding", topicIds.ownPublic, 40)
-
-	// a Comment on the public Topic, a Finding on the private one, and the Findings that fill the pages
-	await seedComment("own-comment", userIds.firstReactor, topicIds.ownPublic, 120, {
-		body: "https://example.com first line\nsecond line",
-	})
-	await seedFinding("private-finding", topicIds.ownPrivate, 50)
-	for (let i = 0; i < EXTRA_FINDING_COUNT; i++) {
-		await seedFinding(`extra-finding-${i}`, topicIds.ownPublic, 200 + i)
-	}
-
-	// the person's Comment on a Topic they follow, five days old, with a reply and three reactions inside the hour
-	const personCommentId = await seedComment("person-comment", userIds.person, topicIds.followed, 5 * 24 * 60)
-	await seedComment("reply", userIds.teammate, topicIds.followed, 20, { parentCommentId: personCommentId })
-	await seedReaction(userIds.firstReactor, topicIds.followed, 30, { commentId: personCommentId })
-	await seedReaction(userIds.secondReactor, topicIds.followed, 10, { commentId: personCommentId })
-	await seedReaction(userIds.blocked, topicIds.followed, 5, { commentId: personCommentId })
-}
-
-// the person's published Topic Posts: one with its own image on a public Topic they neither hold nor follow, one on
-// a Topic they follow, and one on a private Topic they may no longer open
-async function seedPersonTopicPosts(): Promise<void> {
-	const personPost = { authorUserId: userIds.person, title: "a post" }
-	await db.insert(topicPosts).values([
-		{
-			...personPost,
-			id: toRunId("other-post"),
-			topicId: topicIds.otherPublic,
-			imageHash: "posthash",
-			publishedAt: toMinutesAgo(35),
-		},
-		{ ...personPost, id: toRunId("followed-post"), topicId: topicIds.followed, publishedAt: toMinutesAgo(34) },
-		{ ...personPost, id: toRunId("closed-post"), topicId: topicIds.otherPrivate, publishedAt: toMinutesAgo(33) },
-	])
-}
-
-// what happened on the Topics of the person's Teams and on the Topics they follow
-async function seedTeamAndFollowedEvents(): Promise<void> {
-	await seedComment("team-comment", userIds.teammate, topicIds.team, 15)
-	await seedFinding("hidden-team-finding", topicIds.hiddenTeam, 25)
-
-	// a Finding with two reactions, and Comments by the two people in a user block with the person
-	const followedFindingId = await seedFinding("followed-finding", topicIds.followed, 3)
-	await seedReaction(userIds.firstReactor, topicIds.followed, 2, { findingId: followedFindingId })
-	await seedReaction(userIds.secondReactor, topicIds.followed, 1, { findingId: followedFindingId })
-	await seedComment("blocked-comment", userIds.blocked, topicIds.followed, 8)
-	await seedComment("blocker-comment", userIds.blocker, topicIds.followed, 9)
-
-	// a Finding rated thumbs down, with a Comment and a reaction on it
-	const ratedDownFindingId = await seedFinding("rated-down-finding", topicIds.followed, 12, { rating: "down" })
-	await seedComment("rated-down-comment", userIds.firstReactor, topicIds.followed, 11, {
-		findingId: ratedDownFindingId,
-	})
-	await seedReaction(userIds.secondReactor, topicIds.followed, 11, { findingId: ratedDownFindingId })
-
-	// the invite Topic's Findings from a Scan before the person's activation and from one after it
-	await seedFinding("early-invite-finding", topicIds.invite, 60, { scanMinutesAgo: 300 })
-	await seedFinding("late-invite-finding", topicIds.invite, 55, { scanMinutesAgo: 60 })
-}
-
-// delete the run's Topics, Teams, resources, and users, which takes every other row with them
-async function cleanUp(): Promise<void> {
-	await db.delete(topics).where(inArray(topics.id, Object.values(topicIds)))
-	await db.delete(teams).where(inArray(teams.id, Object.values(teamIds)))
-	await db.delete(resources).where(like(resources.id, `${runId}-%`))
-	await db.delete(users).where(like(users.id, `${runId}-%`))
 }
 
 // every row of a reader's window of the person's news, read page by page, with each page's size and the total
@@ -485,6 +241,56 @@ async function checkProfileNews(): Promise<void> {
 	// the play buttons: the tied Podcast Episode's row returns its own episode
 	const personWeek = await readEveryPodcastEpisodeId()
 	check("a Podcast Episode's row returns the episode it plays", personWeek.has(toRunId("tied-episode")))
+
+	// an admin reads the person's whole news, as the person reads it
+	const toWeekIds = async (userId: string): Promise<string> =>
+		(await readEveryPage(userId, "week")).newsEvents.map((newsEvent) => newsEvent.id).join()
+	check(
+		"an admin reads the person's whole news",
+		(await toWeekIds(userIds.admin)) === (await toWeekIds(userIds.person)),
+	)
+}
+
+async function checkProfileTeamTopics(): Promise<void> {
+	// the profile's Topics as a visitor and as the person read them
+	const toProfileTopicIdSet = async (profileReader: "person" | "visitor"): Promise<Set<string>> =>
+		new Set((await loadProfileTopicRows({ profileUserId: userIds.person, profileReader })).map((topic) => topic.id))
+	const visitorProfileTopicIds = await toProfileTopicIdSet("visitor")
+	const personProfileTopicIds = await toProfileTopicIdSet("person")
+	check("a visitor's profile holds the shown Team's Topic", visitorProfileTopicIds.has(topicIds.team))
+	check("a visitor's profile leaves out the hidden membership's Team", !visitorProfileTopicIds.has(topicIds.hiddenTeam))
+	check("the person's profile holds the hidden membership's Team", personProfileTopicIds.has(topicIds.hiddenTeam))
+}
+
+async function checkAdminProfileAudiences(): Promise<void> {
+	// the profile route with the admin signed in, as the api's session middleware signs a user in
+	const adminApp = new Hono()
+		.use(async (context, next) => {
+			context.set("user" as never, { id: userIds.admin } as never)
+			await next()
+		})
+		.route("/", profilesRoute)
+
+	// the profile's flag and its table's Topic ids from a audience
+	const toProfileTopicIds = async (
+		query: string,
+	): Promise<{ includesNonPublicTopics: boolean; topicIds: string[] }> => {
+		const profile = await (await adminApp.request(`/profiles/${userIds.person}${query}`)).json()
+		return { ...profile, topicIds: profile.topics.map((topic: { id: string }) => topic.id) }
+	}
+
+	// the user audience shows the admin the person's private Topic, and the visitor audience reads as a visitor
+	const userAudience = await toProfileTopicIds("")
+	const visitorAudience = await toProfileTopicIds("?audience=visitor")
+	check(
+		"an admin's user audience reads the person's private Topic",
+		userAudience.topicIds.includes(topicIds.ownPrivate),
+	)
+	check(
+		"an admin's visitor audience leaves the private Topic out",
+		!visitorAudience.topicIds.includes(topicIds.ownPrivate),
+	)
+	check("an admin's visitor audience reads no non-public Topic", !visitorAudience.includesNonPublicTopics)
 }
 
 // seed, run every check, and clean up whatever happened
@@ -494,8 +300,12 @@ try {
 	await seedOwnEvents()
 	await seedPersonTopicPosts()
 	await seedTeamAndFollowedEvents()
+
+	// the news, the profile, and an admin's two audiences of a profile
 	await checkPersonNews()
 	await checkProfileNews()
+	await checkProfileTeamTopics()
+	await checkAdminProfileAudiences()
 } finally {
 	// undo the run's rows whether a check threw or not
 	await cleanUp()

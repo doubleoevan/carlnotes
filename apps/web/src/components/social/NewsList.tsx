@@ -15,6 +15,7 @@ import { Pagination } from "@/components/common/Pagination"
 import { FindingChapterPill, PodcastEpisodeNumberPill } from "@/components/podcast/PodcastEpisodePill"
 import { PodcastEpisodeVideoButton } from "@/components/podcast/PodcastEpisodeVideoButton"
 import { Button } from "@/components/primitives/button"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/primitives/select"
 import { SearchResultRow } from "@/components/search/SearchResultRow"
 import { SearchRowTopicDetail } from "@/components/search/SearchRowParts"
 import { TopicImageLink } from "@/components/topic/TopicImageLink"
@@ -23,6 +24,7 @@ import { TopicPostInfoButton } from "@/components/topicPost/TopicPostInfo"
 import {
 	DASHED_ROW_CLASS,
 	EXPANDER_CARET_CLASS,
+	HIGHLIGHTED_SELECT_CLASS,
 	NEWS_HEADING_ROW_CLASS,
 	RANK_SLOT_CLASS,
 	RESOURCE_LIST_CARD_CLASS,
@@ -87,6 +89,22 @@ export const NEWS_LIST_ELEMENTS: NewsListElements = {
 		<Button variant={isSelected ? "secondary" : "ghost"} size="sm" aria-pressed={isSelected} onClick={onSelect}>
 			{children}
 		</Button>
+	),
+	AudienceSelect: ({ label, value, options, onChange }) => (
+		<div className="mb-4">
+			<Select value={value} onValueChange={(selectedValue) => onChange(selectedValue as typeof value)}>
+				<SelectTrigger size="sm" aria-label={label} className={HIGHLIGHTED_SELECT_CLASS}>
+					<SelectValue />
+				</SelectTrigger>
+				<SelectContent>
+					{options.map((option) => (
+						<SelectItem key={option.value} value={option.value}>
+							{option.label}
+						</SelectItem>
+					))}
+				</SelectContent>
+			</Select>
+		</div>
 	),
 	// the rows run past the card's padding, so their hover reaches the same inset as the search results'
 	List: ({ children }) => <div className="-mx-3">{children}</div>,

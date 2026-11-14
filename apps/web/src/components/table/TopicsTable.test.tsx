@@ -17,6 +17,8 @@ function toTopic(id: string, isEmailEnabled: boolean | null): Topic {
 		subscriberCount: 2,
 		isEmailEnabled,
 		latestPodcastEpisode: null,
+		owner: { userId: "user-1", username: "carl", avatarSource: null, avatarVersion: null },
+		team: null,
 	}
 }
 

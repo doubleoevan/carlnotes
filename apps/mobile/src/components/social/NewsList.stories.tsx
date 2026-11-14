@@ -8,11 +8,12 @@ import { NewsList } from "./NewsList"
 // a query client that already holds the week's first page of a list, so no story reaches the api
 function toStoryQueryClient(profileUserId: string | null, userId: string, newsPage: NewsResponse): QueryClient {
 	const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } })
-	queryClient.setQueryData(["news", profileUserId, userId, "week", 1], newsPage)
+	queryClient.setQueryData(["news", profileUserId, userId, "week", 1, "user"], newsPage)
 	return queryClient
 }
 
-// the web card's full week, its row with a film, its empty line, and a profile's rows as another reader
+// the web card's full week, its row with a film, its empty line, a profile's rows as another reader, and an admin's
+// of someone's news
 const meta: Meta<typeof NewsList> = {
 	title: "Social/NewsList",
 	component: NewsList,
@@ -52,3 +53,9 @@ export const QuietWeek: Story = { parameters: { newsPage: EMPTY_NEWS_STORY } }
 
 // a profile's news as another reader: no opener, and a row names the Comment's author
 export const Profile: Story = { args: { profileUserId: "user-evan", userId: "user-roastfan", opener: null } }
+
+// an admin reads someone else's profile as the person does, with the person's stored opener and the highlighted
+// select that changes the whole page's audience
+export const AdminView: Story = {
+	args: { profileUserId: "user-evan", userId: "user-laura", audience: "user", onAudienceChange: () => {} },
+}

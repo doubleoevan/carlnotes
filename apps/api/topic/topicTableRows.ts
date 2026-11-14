@@ -5,6 +5,7 @@ import { findings, scans } from "@carlnotes/db/schema/scans"
 import { subscriptions, type topics } from "@carlnotes/db/schema/topics"
 import { and, count, eq, inArray, sql } from "drizzle-orm"
 import { loadLatestPodcastEpisodeSummaries } from "../podcast/podcastEpisodeShapes"
+import { loadTopicOwners } from "./topicOwners"
 
 /**
  * The topic table rows that the profile page and the team page both render.
@@ -28,23 +29,35 @@ export async function toTopicTableRows(
 	// kept counts the topic's findings saved, and seen sums the topic's findings that succeeded scans reviewed.
 	// each topic also reads its latest podcast episode that the user may listen to
 	const topicIds = topicRows.map((topicRow) => topicRow.id)
-	const [keptAndSeenTopicFindings, emailByTopic, latestPodcastEpisodeByTopic] = await Promise.all([
+	const [keptAndSeenTopicFindings, emailByTopic, latestPodcastEpisodeByTopic, topicOwners] = await Promise.all([
 		loadFindingsKeptAndResourcesSeen(topicIds),
 		loadTopicsEmailPreferences(userId, topicIds),
 		loadLatestPodcastEpisodeSummaries(topicRows, userId),
+		loadTopicOwners(topicIds, userId),
 	])
-	return topicRows.map((topicRow) => ({
-		id: topicRow.id,
-		name: topicRow.name,
-		visibility: topicRow.visibility,
-		createdAt: topicRow.createdAt.toISOString(),
-		updatedAt: topicRow.updatedAt.toISOString(),
-		subscriberCount: topicRow.subscriberCount,
-		keptCount: keptAndSeenTopicFindings.get(topicRow.id)?.kept ?? 0,
-		seenCount: keptAndSeenTopicFindings.get(topicRow.id)?.seen ?? 0,
-		isEmailEnabled: emailByTopic.get(topicRow.id) ?? null,
-		latestPodcastEpisode: latestPodcastEpisodeByTopic.get(topicRow.id) ?? null,
-	}))
+
+	// each row with its owner, and its owning team if the user may see it named
+	return topicRows.flatMap((topicRow) => {
+		const topicOwner = topicOwners.get(topicRow.id)
+		if (!topicOwner) {
+			return []
+		}
+		return [
+			{
+				id: topicRow.id,
+				name: topicRow.name,
+				visibility: topicRow.visibility,
+				createdAt: topicRow.createdAt.toISOString(),
+				updatedAt: topicRow.updatedAt.toISOString(),
+				subscriberCount: topicRow.subscriberCount,
+				keptCount: keptAndSeenTopicFindings.get(topicRow.id)?.kept ?? 0,
+				seenCount: keptAndSeenTopicFindings.get(topicRow.id)?.seen ?? 0,
+				isEmailEnabled: emailByTopic.get(topicRow.id) ?? null,
+				latestPodcastEpisode: latestPodcastEpisodeByTopic.get(topicRow.id) ?? null,
+				...topicOwner,
+			},
+		]
+	})
 }
 
 // the user's own email switch on each of their followed topics

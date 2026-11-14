@@ -1,5 +1,6 @@
 import { fetchNews, fetchProfileNews } from "@carlnotes/client/newsClient"
 import { DEFAULT_NEWS_WINDOW, type NewsResponse, type NewsWindow } from "@carlnotes/contracts/news"
+import type { ProfileAudience } from "@carlnotes/contracts/profiles"
 import { type UseQueryResult, useQuery, useQueryClient } from "@tanstack/react-query"
 
 // the query key a news page is cached under, and how long a page stays fresh
@@ -21,6 +22,8 @@ type UseNewsOptions = {
 	userId: string | null
 	window: NewsWindow
 	page: number
+	// the audience a profile shows to, the user audience unless an admin chose the visitor audience
+	audience?: ProfileAudience
 	// the first window's first page, that window, the week unless named, and the read in place of the api's
 	firstPage?: NewsResponse
 	firstWindow?: NewsWindow
@@ -37,12 +40,20 @@ export function useNews({
 	userId,
 	window,
 	page,
+	audience = "user",
 	firstPage,
 	firstWindow = DEFAULT_NEWS_WINDOW,
 	loadNewsPage,
 }: UseNewsOptions): UseQueryResult<NewsResponse> {
 	const queryClient = useQueryClient()
-	const toQueryKey = (pageNumber: number): unknown[] => [NEWS_QUERY_KEY, profileUserId, userId, window, pageNumber]
+	const toQueryKey = (pageNumber: number): unknown[] => [
+		NEWS_QUERY_KEY,
+		profileUserId,
+		userId,
+		window,
+		pageNumber,
+		audience,
+	]
 	return useQuery({
 		queryKey: toQueryKey(page),
 		queryFn: () => {
@@ -54,14 +65,14 @@ export function useNews({
 			if (loadNewsPage) {
 				return loadNewsPage(query)
 			}
-			return profileUserId ? fetchProfileNews(profileUserId, query) : fetchNews(query)
+			return profileUserId ? fetchProfileNews(profileUserId, { ...query, audience }) : fetchNews(query)
 		},
 		enabled: profileUserId !== null || userId !== null,
-		// the page already read is the first window's first one
-		initialData: window === firstWindow && page === 1 ? firstPage : undefined,
-		// keep the last page's rows while the next loads, but never another window's
+		// the page already read is the first window's first one, for the user audience
+		initialData: window === firstWindow && page === 1 && audience === "user" ? firstPage : undefined,
+		// keep the last page's rows while the next loads, but never another window's or another audience's
 		placeholderData: (previousNewsPage, previousQuery) =>
-			previousQuery?.queryKey[3] === window ? previousNewsPage : undefined,
+			previousQuery?.queryKey[3] === window && previousQuery.queryKey[5] === audience ? previousNewsPage : undefined,
 		staleTime: NEWS_STALE_MS,
 	})
 }

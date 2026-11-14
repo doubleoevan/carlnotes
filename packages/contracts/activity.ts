@@ -47,6 +47,9 @@ export const ownerTopic = z.object({
 	monthEmailCount: z.number(),
 	// who owns the topic, and so whose subscription the Emails switch writes
 	ownerUserId: z.string(),
+	// the owner, and the team that owns the topic if it is one the user may see named
+	owner: profileIdentity,
+	team: teamIdentity.nullable(),
 	// the owner's own subscription decides whether this topic emails them
 	isEmailEnabled: z.boolean(),
 	scans: z.array(activityScan),

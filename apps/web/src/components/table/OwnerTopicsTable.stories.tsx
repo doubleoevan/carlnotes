@@ -2,6 +2,7 @@
 // month, subscribers, schedule, emails, and cost
 import { fetchAdminTopicSubscribers } from "@carlnotes/client/billingClient"
 import { fetchScanNote } from "@carlnotes/client/topicClient"
+import { TEST_OWN_PROFILE_TOPICS } from "@carlnotes/contracts/activityTestFixtures"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { fn, mocked } from "storybook/test"
 import { TOPIC_SUBSCRIBER_FIXTURES } from "../../../.storybook/fixtures/adminUsers"
@@ -34,6 +35,10 @@ type Story = StoryObj<typeof meta>
 
 // three owned topics with their totals line, one with a podcast episode's play button beside its name
 export const Default: Story = {}
+
+// the user's own profile: each row names its team or owner, and a team topic another member owns shows no owner's
+// controls
+export const OnProfile: Story = { args: { topics: TEST_OWN_PROFILE_TOPICS, profileUserId: "user-carl" } }
 
 // in the admin console, the first topic's subscribers, opened by a click on its subscriber count
 export const SubscribersOpen: Story = {

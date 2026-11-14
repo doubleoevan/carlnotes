@@ -23,6 +23,8 @@ const activityFixture: ActivityResponse = {
 			monthCostCents: 120,
 			monthEmailCount: 2,
 			ownerUserId: "user-1",
+			owner: { userId: "user-1", username: "evan", avatarSource: "generated", avatarVersion: null },
+			team: null,
 			isEmailEnabled: true,
 			scans: [
 				{

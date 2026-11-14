@@ -67,7 +67,9 @@ test("a profile's list reports its window change with the window, the place, and
 
 	// the chosen window starts at its first page with no cursor of the week's, and reads the profile's news
 	expect(harness.read()).toMatchObject({ window: "day", pageNumber: 1 })
-	expect(requestUrls.at(-1)).toBe("https://test.example/api/profiles/user-roastfan/news?window=day&page=1")
+	expect(requestUrls.at(-1)).toBe(
+		"https://test.example/api/profiles/user-roastfan/news?window=day&page=1&audience=user",
+	)
 	expect(events).toEqual([
 		["social_news_page_open", { place: "profile", profileUserId: "user-roastfan", page: 2 }],
 		["social_news_window_change", { place: "profile", profileUserId: "user-roastfan", window: "day" }],
