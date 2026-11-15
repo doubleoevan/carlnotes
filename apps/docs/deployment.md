@@ -253,11 +253,14 @@ filled in by hand.
 4. **Close the origin to everything but the edge.** **Owner:** in Northflank, add an IP policy on the `app` service's
    public port that allows Cloudflare's published address ranges alone. Without it a request to the service's own
    hostname skips the edge cache and Cloudflare's protection, and each one is a server render.
-5. **Read each service's termination grace.** **Owner:** in Northflank, each service's advanced deployment settings.
+5. **Send the visitors' places.** **Owner:** in Cloudflare, **Rules → Transform Rules → Managed Transforms**, turn on
+   **Add visitor location headers**. Without it Cloudflare sends only `cf-ipcountry`, so the Specials maps and the
+   paragraph's places stop at the country. A view counted before the switch keeps its country alone.
+6. **Read each service's termination grace.** **Owner:** in Northflank, each service's advanced deployment settings.
    The worker gives a running activity two minutes to finish on a stop (`SHUTDOWN_GRACE_MS` in
    `apps/worker/temporal.ts`), so `temporal-worker` needs a grace period longer than two minutes. Record each value
    in the Services table below.
-6. **Read each plan and quota.** **Owner**, each in its own dashboard. The wanted value is room for the wave: a
+7. **Read each plan and quota.** **Owner**, each in its own dashboard. The wanted value is room for the wave: a
    quota that runs out fails quietly.
    - Sentry: the plan's monthly errors and spans. Past the quota Sentry drops errors and the alerts stop with them.
    - PostHog and Langfuse: the plan's monthly events and traces.
@@ -272,8 +275,8 @@ filled in by hand.
      at 332 MB on 2026-11-13.
    - Neon: the compute's maximum size. The pools were sized from `max_connections` 901 on 2026-11-13.
    - Temporal: the free disk on the `temporal-db` addon, 20 GB on 2026-11-13.
-7. **Freeze deploys if you want none during the wave.** See Rollback below. A docs commit deploys too.
-8. **Check the store links.** The docs' Get the app page (`apps/docs/src/content/docs/get-the-app.md`) links to the
+8. **Freeze deploys if you want none during the wave.** See Rollback below. A docs commit deploys too.
+9. **Check the store links.** The docs' Get the app page (`apps/docs/src/content/docs/get-the-app.md`) links to the
    live App Store and Google Play listings. Its App Store line was still a placeholder on 2026-11-13.
 
 Three things stay unguarded after this work:
