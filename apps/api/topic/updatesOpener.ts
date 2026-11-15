@@ -2,16 +2,12 @@
 
 import { toUtcDay, withTimeLimit } from "@carlnotes/contracts/time"
 import type { UpdatesFinding } from "@carlnotes/contracts/updates"
-import { db } from "@carlnotes/db"
-import { toConvertedPersonalSourcesFilter } from "@carlnotes/db/personalSourcesAuthority"
-import { cacheJson, readRedisJson } from "@carlnotes/db/redis"
-import { topics } from "@carlnotes/db/schema/topics"
+import { cacheJson } from "@carlnotes/db/redis"
 import { loadOrProvisionUserLiteLLMKey } from "@carlnotes/models/litellm"
 import { isBudgetRejection } from "@carlnotes/models/models"
 import { reserveUserSpend } from "@carlnotes/models/spendReservations"
 import { MAX_UPDATES_OPENER_DOLLARS, writeUpdatesOpener } from "@carlnotes/pipeline/updatesOpener"
 import { reportError } from "@carlnotes/server/monitoring"
-import { and, eq, not } from "drizzle-orm"
 
 // how long a stored opener lasts. the key names its day, so this only clears the old key
 const OPENER_CACHE_TTL_MS = 24 * 60 * 60 * 1000
@@ -53,20 +49,6 @@ export function loadUpdatesOpener({
 		timeLimitMs: OPENER_WAIT_MS,
 		toError: () => new Error("the updates opener outlasted its wait"),
 	}).catch(() => null)
-}
-
-/**
- * Returns the user's stored opener for today across their Topics, or null. Nothing is written, so
- * no model call runs and no budget is reserved. A user who owns a private Topic whose Personal sources text is not
- * converted gets null, because the opener may be written from that Topic's Findings.
- */
-export async function readStoredUpdatesOpener(userId: string): Promise<string | null> {
-	const [unconvertedTopic] = await db
-		.select({ id: topics.id })
-		.from(topics)
-		.where(and(eq(topics.ownerId, userId), eq(topics.visibility, "private"), not(toConvertedPersonalSourcesFilter())))
-		.limit(1)
-	return unconvertedTopic ? null : readRedisJson<string>(toUpdatesOpenerKey(userId, null))
 }
 
 // the key of a user's opener for today, across their Topics or for one Topic

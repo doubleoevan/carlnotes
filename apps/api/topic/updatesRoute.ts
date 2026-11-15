@@ -4,12 +4,11 @@ import { Hono } from "hono"
 import { isAllowed } from "../authorization"
 import { type AppEnv, currentUser } from "../currentUser"
 import { toolCallerRateLimiter } from "../rateLimit"
-import { readUpdatesOpener } from "./updates"
-import { readStoredUpdatesOpener } from "./updatesOpener"
+import { readProfileUpdatesOpener, readUpdatesOpener } from "./updates"
 
 /**
- * The updates routes: the day's opener on its own, which marks no Finding read, and a person's stored opener for an
- * admin, which writes nothing. The list itself is built for the `read_updates` tool.
+ * The updates routes: the day's opener on its own, and a person's opener for an admin. Neither marks a Finding read.
+ * The list itself is built for the `read_updates` tool.
  */
 export const updatesRoute = new Hono<AppEnv>()
 	.get("/updates/opener", toolCallerRateLimiter, async (context) => {
@@ -30,6 +29,6 @@ export const updatesRoute = new Hono<AppEnv>()
 			return context.json({ error: "Only an admin reads another person's opener." }, 403)
 		}
 
-		// the cache alone, so no model call runs on the person's budget
-		return context.json({ opener: await readStoredUpdatesOpener(context.req.param("userId")) })
+		// the opener the person's home shows, written for the person if the day has none
+		return context.json({ opener: await readProfileUpdatesOpener(context.req.param("userId")) })
 	})

@@ -31,7 +31,7 @@ export function ProfileSections({
 	onReload: () => void
 }) {
 	const { data: session } = authClient().useSession()
-	// carl's line for the day shows on the person's own profile, and to an admin on anyone else's without writing one
+	// carl's line for the day shows on the person's own profile, and to an admin on anyone else's in the user audience
 	const opener = useProfileUpdatesOpener({
 		profileUserId: profile.userId,
 		userId: session?.user.id ?? null,

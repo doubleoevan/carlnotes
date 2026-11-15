@@ -54,7 +54,7 @@ export const QuietWeek: Story = { parameters: { newsPage: EMPTY_NEWS_STORY } }
 // a profile's news as another reader: no opener, and a row names the Comment's author
 export const Profile: Story = { args: { profileUserId: "user-evan", userId: "user-roastfan", opener: null } }
 
-// an admin reads someone else's profile as the person does, with the person's stored opener and the highlighted
+// an admin reads someone else's profile as the person does, with the person's opener and the highlighted
 // select that changes the whole page's audience
 export const AdminView: Story = {
 	args: { profileUserId: "user-evan", userId: "user-laura", audience: "user", onAudienceChange: () => {} },

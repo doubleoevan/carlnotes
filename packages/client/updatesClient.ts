@@ -15,8 +15,8 @@ export async function fetchUpdatesOpener(): Promise<string | null> {
 }
 
 /**
- * Fetches the person's stored opener for today, or null without one. Only an admin may read it, and the read
- * writes no opener.
+ * Fetches the opener the person's home shows today, written for the person if the day has none, or null without one.
+ * Only an admin may read it.
  */
 export async function fetchProfileUpdatesOpener(userId: string): Promise<string | null> {
 	const response = await apiClient().api.profiles[":userId"].opener.$get({ param: { userId } })

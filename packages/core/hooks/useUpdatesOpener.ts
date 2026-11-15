@@ -33,7 +33,7 @@ type UseProfileUpdatesOpenerOptions = {
 
 /**
  * Reads the opener a profile's news shows. The person reads their own day's opener. An admin in the user audience
- * reads the person's stored opener for today without writing one, and anyone else none.
+ * reads the opener the person's home shows today, and anyone else none.
  */
 export function useProfileUpdatesOpener({
 	profileUserId,
@@ -46,8 +46,8 @@ export function useProfileUpdatesOpener({
 	const isAdminView = includesNonPublicTopics && !isOwnProfile && audience === "user"
 	const ownOpener = useUpdatesOpener(isOwnProfile ? userId : null)
 
-	// an admin's read of the person's stored opener
-	const { data: storedOpener } = useQuery({
+	// an admin's read of the person's opener
+	const { data: profileOpener } = useQuery({
 		queryKey: [UPDATES_OPENER_QUERY_KEY, "profile", profileUserId],
 		queryFn: () => fetchProfileUpdatesOpener(profileUserId),
 		enabled: isAdminView,
@@ -55,5 +55,5 @@ export function useProfileUpdatesOpener({
 		staleTime: Number.POSITIVE_INFINITY,
 		gcTime: UPDATES_OPENER_CACHE_MS,
 	})
-	return isAdminView ? (storedOpener ?? null) : ownOpener
+	return isAdminView ? (profileOpener ?? null) : ownOpener
 }

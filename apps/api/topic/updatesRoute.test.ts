@@ -1,9 +1,8 @@
-// the updates routes: a session, the day's opener or null without one, and a person's stored opener for an admin
+// the updates routes: a session, the day's opener or null without one, and a person's opener for an admin
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import * as authorization from "../authorization"
 import { toSignedInApp } from "../testSession"
 import * as updates from "./updates"
-import * as updatesOpener from "./updatesOpener"
 import { updatesRoute } from "./updatesRoute"
 
 // put the spies back after each test
@@ -30,8 +29,8 @@ test("the opener's read returns the day's opener, or null without one", async ()
 	expect(openerSpy).toHaveBeenCalledWith("opener-user-1")
 })
 
-test("another person's opener is an admin's read of the cache alone", async () => {
-	const storedOpenerSpy = spyOn(updatesOpener, "readStoredUpdatesOpener").mockResolvedValue("Carl's stored line.")
+test("another person's opener is an admin's read of the person's home opener", async () => {
+	const profileOpenerSpy = spyOn(updates, "readProfileUpdatesOpener").mockResolvedValue("Carl's line.")
 	const openerSpy = spyOn(updates, "readUpdatesOpener")
 	const isAllowedSpy = spyOn(authorization, "isAllowed").mockResolvedValueOnce(false).mockResolvedValueOnce(true)
 
@@ -40,9 +39,9 @@ test("another person's opener is an admin's read of the cache alone", async () =
 	const app = toSignedInApp(updatesRoute, "opener-user-1")
 	expect((await app.request("/profiles/person-1/opener")).status).toBe(403)
 
-	// an admin reads the person's stored opener, and no opener is written
-	expect(await (await app.request("/profiles/person-1/opener")).json()).toEqual({ opener: "Carl's stored line." })
+	// an admin reads the person's opener, and the admin's own is not read
+	expect(await (await app.request("/profiles/person-1/opener")).json()).toEqual({ opener: "Carl's line." })
 	expect(isAllowedSpy).toHaveBeenCalledWith("opener-user-1", "admin:console")
-	expect(storedOpenerSpy).toHaveBeenCalledWith("person-1")
+	expect(profileOpenerSpy).toHaveBeenCalledWith("person-1")
 	expect(openerSpy).not.toHaveBeenCalled()
 })

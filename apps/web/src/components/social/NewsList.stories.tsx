@@ -100,7 +100,7 @@ export const Profile: Story = {
 	},
 }
 
-// an admin reads someone else's profile as the person does, with the person's stored opener, and the highlighted
+// an admin reads someone else's profile as the person does, with the person's opener, and the highlighted
 // select changes the whole page's audience
 export const AdminView: Story = {
 	args: { profileUserId: "user-evan", userId: "user-laura", audience: "user", onAudienceChange: fn() },

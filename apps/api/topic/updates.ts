@@ -15,7 +15,7 @@ import { toConvertedPersonalSourcesFilter } from "@carlnotes/db/personalSourcesA
 import { bookmarks, consumptions, findings, resources, scans } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
 import { trackEvent } from "@carlnotes/server/analytics"
-import { and, desc, eq, inArray, isNull, max, ne, or, sql } from "drizzle-orm"
+import { and, desc, eq, inArray, isNull, max, ne, not, or, sql } from "drizzle-orm"
 import type { AnalyticsProperties } from "../currentUser"
 import { attachTopicFindingFaviconPaths } from "../favicons"
 import { MCP_PAGE_MAX_CHARS, packPage } from "../mcp/results"
@@ -144,6 +144,23 @@ export async function buildUpdates({
  */
 export function readUpdatesOpener(userId: string): Promise<string | null> {
 	return loadUpdatesOpener({ userId, topicId: null, loadUpdatesFindings: () => loadDefaultUpdatesFindings(userId) })
+}
+
+/**
+ * Returns the opener a person's home shows today, for an admin on the person's profile. If the day has none yet, it is
+ * written on the person's budget and stored for the person's home, and no Finding is marked read. A person who owns a
+ * private Topic whose Personal sources text is not converted gets null, because the opener may be written from that
+ * Topic's Findings.
+ */
+export async function readProfileUpdatesOpener(profileUserId: string): Promise<string | null> {
+	const [unconvertedTopic] = await db
+		.select({ id: topics.id })
+		.from(topics)
+		.where(
+			and(eq(topics.ownerId, profileUserId), eq(topics.visibility, "private"), not(toConvertedPersonalSourcesFilter())),
+		)
+		.limit(1)
+	return unconvertedTopic ? null : readUpdatesOpener(profileUserId)
 }
 
 // the unread Findings that the default list across the user's Topics would hold, ranked and inside its reading budget

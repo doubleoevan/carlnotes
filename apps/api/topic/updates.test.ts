@@ -11,7 +11,14 @@ import { TEST_ANALYTICS_PROPERTIES } from "../analyticsTestFixtures"
 import { MCP_PAGE_MAX_CHARS } from "../mcp/results"
 import { toFencedUpdates } from "../mcp/updatesTool"
 import * as accessibleFindings from "./accessibleFindings"
-import { type BuiltUpdates, buildUpdates, rankFindingRows, readUpdatesOpener, trimToReadingBudget } from "./updates"
+import {
+	type BuiltUpdates,
+	buildUpdates,
+	rankFindingRows,
+	readProfileUpdatesOpener,
+	readUpdatesOpener,
+	trimToReadingBudget,
+} from "./updates"
 import * as updatesOpener from "./updatesOpener"
 
 // the times around the user's last read time
@@ -472,4 +479,22 @@ test("the opener's read returns the day's stored opener with no Findings read", 
 	await readUpdatesOpener(USER_ID)
 	expect(sentQueries.some(({ text }) => text.includes("count(*) over ()"))).toBe(true)
 	expect(sentQueries.some(({ text }) => text.startsWith('select max("consumptions"'))).toBe(true)
+})
+
+test("an admin's profile opener is the person's home opener, and null if the person has an unconverted private Topic", async () => {
+	const openerSpy = spyOn(updatesOpener, "loadUpdatesOpener").mockResolvedValue("Carl's line.")
+
+	// no private Topic to convert reads the person's opener, written if the day has none
+	stubConnectionPool(() => [])
+	expect(await readProfileUpdatesOpener("person-1")).toBe("Carl's line.")
+	expect(openerSpy.mock.calls[0]?.[0]).toMatchObject({ userId: "person-1", topicId: null })
+
+	// an unconverted private Topic keeps the opener and writes none
+	openerSpy.mockClear()
+	const sentQueries = stubConnectionPool(() => [{ id: "topic-private" }])
+	expect(await readProfileUpdatesOpener("person-1")).toBeNull()
+	expect(openerSpy).not.toHaveBeenCalled()
+	expect(sentQueries[0]?.text).toContain(
+		'not "topics"."id" not in (select "topic_id" from "topic_personal_source_contexts"',
+	)
 })
