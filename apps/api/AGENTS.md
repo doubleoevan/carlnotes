@@ -112,10 +112,10 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   holds that membership query and topic filter, which `news/newsTopics.ts` shares. `profileReader.ts` decides who reads
   a profile, the person, an admin, or a visitor, and filters the person's own topics for each: an admin reads all but
   a private topic whose Personal sources text is not converted. `topic/topicOwners.ts` reads each
-  table row's owner and team for the Owner column. On a profile only the person's own pins count. Each pinned row leads, then one podcast episode and one Topic Post of each other topic. A profile
-  lists every Topic Post of its person after the pins, newest first, in `profileTopicPosts`, and an author's pinned
+  table row's owner and team for the Owner column. On a profile only the person's own featured items count. Each featured row leads, then one podcast episode and one Topic Post of each other topic. A profile
+  lists every Topic Post of its person after the featured items, newest first, in `profileTopicPosts`, and an author's featured
   Topic Posts have no limit. A profile also gets its films, the podcast episodes with a ready film, by the same rule
-  over the films' own pins, right before its podcast episodes.
+  over the films' own featured items, right before its podcast episodes.
   `profileOrder.ts` is the four `profile-order` routes: a topic's, a podcast episode's, and
   `PATCH /api/podcast-episodes/:id/video/profile-order` for a ready film's, each for the topic's owner, and
   `PATCH /api/topic-posts/:id/profile-order` for a published Topic Post's author on a public topic.
@@ -124,7 +124,7 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   `team/teamPage.ts` reads a team's page, and `team/teamPageAccess.ts` reads who the page opens for, apart from the
   page so the viewer counts load it without the cards. The page's cards are those of the topics the reader may open:
   `loadTeamCards` for the topics, their podcast episodes, and every published Topic Post of them from one read of the
-  posts, the pinned ones first and then the rest newest first, and the page's own read for their films, by the
+  posts, the featured ones first and then the rest newest first, and the page's own read for their films, by the
   profile's film read, right before the podcast episodes.
   `apiPageStyle.ts` holds `API_PAGE_BASE_STYLE`, the body and link rules in the emails' palette that the api's own pages
   start with: the pages `content.ts` renders and the unsubscribe page in `unsubscribe.ts`. `billingRoute.ts` holds the
@@ -315,13 +315,13 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   `toolTestFixtures.ts` holds the registered tools and the callers the tool tests share.
 - `home/` — the home page's payload: `homeRoute.ts` (`GET /api/home`, the home topics, films, podcast episodes, and
   Topic Posts and the first page of a user's topics as cards, and `GET /api/home/your-topics`, each later page of six),
-  `homeCardIds.ts` (the pinned topics, films, podcast episodes, and Topic Posts first, then the trending topics, the
+  `homeCardIds.ts` (the featured topics, films, podcast episodes, and Topic Posts first, then the trending topics, the
   most listened films and podcast episodes, and the newest Topic Posts, one film, one podcast episode, and one Topic
   Post per topic, and the films, podcast episodes, and Topic Posts of public shown topics published in the last seven
-  days, newest first and pinned or not, in one cached read every replica shares for a minute. The route reads the cards
+  days, newest first and featured or not, in one cached read every replica shares for a minute. The route reads the cards
   of both Topic Post lists at once), and `topicCards.ts` (the card shapes). An admin block takes its user's topics,
   their podcast episodes and films, and the Topic Posts on those topics or by that user out of every list.
-  `isHomePinnedOnly` in the spend control settings leaves every list its pinned rows alone. Both are read with the
+  `isHomeFeaturedOnly` in the spend control settings leaves every list its featured rows alone. Both are read with the
   cached ids, so the home follows them within a minute. A Topic Post's publish on a public topic and
   a published post's delete call `clearHomeCaches` and purge the author's profile. `topic/serveImageFile.ts` streams one
   image file with the visibility gate and the cache headers, and `topic/topicImagesRoute.ts` serves a topic image's
@@ -339,7 +339,7 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   `serveCurrentOrUncheckedImageFile` in `topic/serveImageFile.ts`, with the headers of a file that never reaches the
   edge, and a Regenerate drops the unchecked image.
   `podcast/podcastEpisodeImagesRoute.ts` serves a podcast episode's own image files, gated by its topic's visibility,
-  and its editor's Regenerate and upload. `podcast/topicPodcastEpisodeVideoImagesRoute.ts`
+  and its editor's Regenerate and upload. `podcast/topicVideoImagesRoute.ts`
   does the same for a film's own image: the poster at
   `/api/topic-podcast-episode-video-images/:podcastEpisodeId/:hash/poster.jpg`, a chapter's generated image at
   `/api/topic-podcast-episode-video-images/:podcastEpisodeId/chapters/:position/image.jpg`, behind the same gate and not
@@ -348,16 +348,16 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   with a ready film, the regeneration within the same `imageRegenerationLimit` and the upload cropped to 16:9.
   `podcast/podcastEpisodeEditor.ts` loads a podcast episode for a signed-in user with `topic:edit` on its topic, for the
   image routes and `PATCH /api/episodes/:id`, the title and description save. `podcast/podcastEpisodeHomeOrder.ts` is
-  `PATCH /api/podcast-episodes/:id/home-order` with the topic rules, the pinned podcast episodes a podcast episode
+  `PATCH /api/podcast-episodes/:id/home-order` with the topic rules, the featured podcast episodes a podcast episode
   page's rank dialog lists, and the purge of the home on every change. `topicPost/topicPostHomeOrder.ts` is `PATCH
   /api/topic-posts/:id/home-order` for a published Topic Post of a public shown topic, and `GET /api/home/topic-posts`,
-  the pinned Topic Posts and the newest ones a pin may name, which the home page's rank dialog lists, both admin only.
-  `podcast/topicPodcastEpisodeVideoHomeOrder.ts` is `PATCH /api/podcast-episodes/:id/video/home-order`, the same as the
+  the featured Topic Posts and the newest ones an admin may feature, which the home page's rank dialog lists, both admin only.
+  `podcast/topicVideoHomeOrder.ts` is `PATCH /api/podcast-episodes/:id/video/home-order`, the same as the
   podcast episode's for a ready film, with the `episode_video_home_order_change` event. Every home-order route writes
   through `@carlnotes/db/homeOrder`, and `topic/homeOrder.ts` owns `toHomeOrderAdmin`, the admin gate every home-order
   route runs, `clearHomeCaches`, the home card ids cache delete and home purge they share, and `releaseHomeOrder`, which
   takes a topic's podcast episodes, their films, and its Topic Posts off the home with it. A topic's write for the
-  position it already holds changes nothing, so the Rank dialog's Save of an unchanged order keeps the pins of each
+  position it already holds changes nothing, so the Rank dialog's Save of an unchanged order keeps the featured items of each
   topic's podcast episodes and films. `report/removeReportedSubject.ts` draws a reported topic image again through an
   `admin` render instead of deleting it.
 - `podcast/` — a Topic's podcast episodes: `podcastEpisodes.ts` (the routes for a season's episodes, an episode page,
@@ -368,7 +368,7 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   what the user may listen to), `helpers.ts` (the page reads over them: the topic page's podcast, a season's episodes,
   and a podcast episode page), `podcastEpisodeShapes.ts` (an episode as the player shows it, with its chapters, and as a
   table row shows it, with its chapter count, and each topic's latest of either: the home feed reads full episodes, and
-  every table row and its play button read summaries. `loadTopicPodcastEpisodeVideos` reads the ready and the
+  every table row and its play button read summaries. `loadTopicVideos` reads the ready and the
   rendering film rows of a list of podcast episodes in one query, so a podcast episode has its `video` for a ready
   film and `isVideoRendering` while its film renders, and a failed film has neither),
   `podcastSeo.ts` (the public episodes that the sitemap and
@@ -377,7 +377,7 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   the audio and film routes share), `podcastFeedTokens.ts` (a listener's feed token, and building, caching, and
   responding with a podcast feed or film feed, or a 304 for a current copy), `podcastFeeds.ts` (a listener's feed urls
   and their reset, an episode's audio and film files at paths after a feed token, and the covers),
-  `topicPodcastEpisodeVideos.ts` (a ready film's files), `topicPodcastEpisodeVideoRoutes.ts` (the film and captions
+  `topicVideos.ts` (a ready film's files), `topicVideoRoutes.ts` (the film and captions
   urls, and the rebuild that starts for a film drawn from an image that it no longer shows),
   `relatedPodcastEpisodes.ts` (the rows of an episode page's Other episodes and Similar podcasts tables: the topic's
   other published episodes that the user may listen to, and the most related published episodes of other topics. The
@@ -481,7 +481,7 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   free-plan spend, the worst case monthly spend from `loadWorstCaseMonthlySpend`, each cutoff and whether it is passed,
   the first scan dispatch limit with the waiting scan count from `toWaitingScanFilter`, the signup alert, a film's
   generated image limit, and the four switches: the unverified accounts switch, the pauses on new podcast episodes
-  and on new films, and the home that shows pinned items only. Its save writes the one `spend_control_settings` row
+  and on new films, and the home that shows featured items only. Its save writes the one `spend_control_settings` row
   and deletes both cached reads, and a field the payload leaves out keeps its stored value), and
   `report/adminReports.ts` (the open content reports, each with its subject's avatar or images as they stand, and
   resolving one). `emergencySwitches.test.ts` reads every switch with nothing set and checks that each pause is named

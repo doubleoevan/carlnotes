@@ -12,8 +12,8 @@ export const DEFAULT_SPEND_CONTROL_SETTINGS: SpendControlSettings = {
 	generatedChapterImageLimit: 40,
 	isUnverifiedFirstScanLimitOn: false,
 	isPodcastEpisodeRecordingPaused: false,
-	isTopicPodcastEpisodeVideoRenderingPaused: false,
-	isHomePinnedOnly: false,
+	isTopicVideoRenderingPaused: false,
+	isHomeFeaturedOnly: false,
 }
 
 // the overrides a stored settings row sets: the chat cutoff in cents, and the unverified accounts switch
@@ -21,7 +21,7 @@ type SpendControlOverridesRowOptions = { chatCutoffCents?: number | null; isUnve
 
 /**
  * Returns the stored overrides row in the column order the settings read selects: the five numeric overrides, the
- * unverified accounts switch, the generated chapter image limit, the two pauses, and the pinned-only home. The row has
+ * unverified accounts switch, the generated chapter image limit, the two pauses, and the featured-only home. The row has
  * no override and every switch off, but for the chat cutoff and the unverified accounts switch a test gives.
  */
 export function toSpendControlOverridesRow({

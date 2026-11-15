@@ -58,7 +58,7 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   `mobileMinimumVersions.ts` (the minimum app version of each platform), `spendControlSettings.ts` (the one row of
   admin overrides on the daily spend cutoffs, the first scan dispatch limit, the hourly signup alert, and a film's
   generated image limit, with the switches: the unverified accounts switch, the pauses on new podcast episodes and on
-  new films, and the home that shows pinned items only), `uncheckedImages.ts` (the unchecked images: one row for each
+  new films, and the home that shows featured items only), `uncheckedImages.ts` (the unchecked images: one row for each
   upload whose image moderation could not run, by subject kind and subject id, with the avatar key or the image hash,
   the uploader, whether the image is already published, and when it was uploaded and reported), `reports.ts` (content
   reports),
@@ -106,11 +106,11 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   `apps/worker/retryPendingObjectDeletions.ts` retries the pending keys after the sweep. Resource content deletes
   through `deleteStoredObject` with no pending row. Its key is fixed per Resource, and the next fetch rewrites it. A
   Resource Image sits beside it at `toResourceImageKey`, `resources/<id>/images/<position>.jpg`.
-  `topicPodcastEpisodeVideoKeys.ts` holds a film's object keys. A film's part,
+  `topicVideoKeys.ts` holds a film's object keys. A film's part,
   chapters, and captions keys include the film's render version from version 2 (`render_version` on
-  `topic_podcast_episode_videos`, with `failed_render_version` for a re-render that failed for good), so a re-render
-  never writes over the film that plays. `toTopicPodcastEpisodeVideoImageLargeOriginalKey` is the larger original of a
-  film's own image, and `toTopicPodcastEpisodeVideoChapterImageKeys` lists the
+  `topic_videos`, with `failed_render_version` for a re-render that failed for good), so a re-render
+  never writes over the film that plays. `toTopicVideoImageLargeOriginalKey` is the larger original of a
+  film's own image, and `toTopicVideoChapterImageKeys` lists the
   `GENERATED_CHAPTER_IMAGE_LIMIT_PER_CHAPTER` generated image keys a chapter may have in a style version, the first
   at the key that the api serves. A new `GENERATED_CHAPTER_IMAGE_STYLE_VERSION` gives the images new keys, so a
   re-render draws them again.
@@ -154,11 +154,11 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   `setHomeOrder` puts a row at a position inside the caller's transaction, `releaseHomeOrder` clears one and closes its
   gap, and `releaseTopicHomeOrders` clears every podcast episode's or every Topic Post's of a topic.
   `podcastEpisodeHomeOrder.ts` wraps it for one podcast episode, for the films of some podcast episodes, and for every
-  podcast episode and film of a topic that leaves the public set. `profileOrder.ts` holds the same for a profile's pins:
+  podcast episode and film of a topic that leaves the public set. `profileOrder.ts` holds the same for a profile's featured items:
   a topic's, a podcast episode's, and a film's among their topic's owner's, each limited to twelve, and a Topic Post's
-  among its author's, with no limit, with `releaseTopicProfileOrders`, which returns the users whose pins a topic's
-  change released, `releaseTopicPodcastEpisodeVideoProfileOrders` for the films of removed podcast episodes, and
-  `releaseTopicPostProfileOrder` for a deleted post. `pinnedOrder.ts` is the write and the release both share.
+  among its author's, with no limit, with `releaseTopicProfileOrders`, which returns the users whose featured items a topic's
+  change released, `releaseTopicVideoProfileOrders` for the films of removed podcast episodes, and
+  `releaseTopicPostProfileOrder` for a deleted post. `featuredOrder.ts` is the write and the release both share.
   `topic_posts.home_order` and `topic_posts.profile_order` hold a Topic Post's two orders.
 - `quotas.ts` — the derived per-user limits, and `loadUserAccess`, the one read of a user's role, plan, budget
   override, and admin block, which the api and the worker share.
@@ -188,9 +188,9 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   manual scans, and `isUnverifiedAccountLimited` returns whether chat and voice reject it. Each setting defaults from
   Doppler (`PODCAST_EPISODES_DAILY_SPEND_CUTOFF_USD`, `SCHEDULED_SCANS_DAILY_SPEND_CUTOFF_USD`,
   `CHAT_DAILY_SPEND_CUTOFF_USD`, `FIRST_SCAN_DISPATCH_LIMIT`, `HOURLY_SIGNUP_ALERT_COUNT`, and
-  `TOPIC_PODCAST_EPISODE_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT` for a film's generated image limit).
+  `TOPIC_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT` for a film's generated image limit).
   `loadSpendControlSettings` returns the settings with the switches, which an activity or a route reads: the pause on
-  new podcast episodes, the pause on new films, and the home that shows pinned items only. A failed read is reported
+  new podcast episodes, the pause on new films, and the home that shows featured items only. A failed read is reported
   and reads every switch as off, and a cached value from before a switch existed reads that switch as off.
   `countHourlySignups` counts the accounts the past hour created, for the worker's signup alert and the admin
   console's signups meter.

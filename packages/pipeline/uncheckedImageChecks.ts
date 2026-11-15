@@ -6,7 +6,7 @@ import { DAY_MS } from "@carlnotes/contracts/time"
 import type { DbTransaction } from "@carlnotes/db"
 import { deleteUncheckedAvatar, publishUncheckedAvatar, toAvatarContentType } from "@carlnotes/db/avatars"
 import { attachmentExists, getAttachmentBytes } from "@carlnotes/db/store"
-import { toTopicPodcastEpisodeVideoImageKey } from "@carlnotes/db/topicPodcastEpisodeVideoKeys"
+import { toTopicVideoImageKey } from "@carlnotes/db/topicVideoKeys"
 import {
 	countFailedUncheckedImageCheck,
 	deleteUncheckedImageById,
@@ -18,7 +18,7 @@ import {
 import { classifyImage } from "@carlnotes/models/moderation"
 import { toDataUrl } from "@carlnotes/server/dataUrl"
 import { reportError } from "@carlnotes/server/monitoring"
-import { startImageTopicPodcastEpisodeVideoRebuilds } from "./publishedUncheckedImages"
+import { startImageTopicVideoRebuilds } from "./publishedUncheckedImages"
 import { removeImageUpload } from "./topicImages/removedImageUploads"
 import {
 	toPodcastEpisodeImageOriginalKey,
@@ -174,7 +174,7 @@ async function actOnUncheckedImage(
 
 	// a published image that passed its check is drawn into the films that kept their image until then
 	if (uncheckedImageCheckResult === "clean" && uncheckedImage.isPublished) {
-		await startImageTopicPodcastEpisodeVideoRebuilds([uncheckedImageSubject])
+		await startImageTopicVideoRebuilds([uncheckedImageSubject])
 	}
 	return ACTED_UNCHECKED_IMAGE_OUTCOMES[uncheckedImageCheckResult]
 }
@@ -223,13 +223,13 @@ async function actOnLockedUncheckedImage(
 	// and a film's image to its film. an unchecked image with no content hash has nothing to publish
 	const { imageHash, width, height } = uncheckedImage
 	if (uncheckedImageCheckResult === "clean" && subjectState && imageHash) {
-		const { topicPodcastEpisodeVideoId } = subjectState
+		const { topicVideoId } = subjectState
 		const uploadedImageSize = { width: width ?? undefined, height: height ?? undefined }
 		await publishUploadedImage({
 			...uncheckedImageSubject,
 			imageHash,
 			...uploadedImageSize,
-			topicPodcastEpisodeVideoId,
+			topicVideoId,
 		})
 	}
 
@@ -262,7 +262,7 @@ function toCheckedObjectKey({ subjectKind, subjectId, avatarKey, imageHash }: Un
 		case "topicPostImage":
 			return toTopicPostImageOriginalKey(subjectId, imageHash)
 		case "topicPodcastEpisodeVideoImage":
-			return toTopicPodcastEpisodeVideoImageKey(subjectId, imageHash)
+			return toTopicVideoImageKey(subjectId, imageHash)
 	}
 }
 

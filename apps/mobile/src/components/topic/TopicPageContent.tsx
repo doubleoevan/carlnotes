@@ -12,7 +12,7 @@ import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { Footer } from "@/components/layout/Footer"
 import { SectionTargetContext } from "@/components/layout/SectionAnchor"
 import { PodcastEpisodePlayer } from "@/components/podcast/PodcastEpisodePlayer"
-import { TopicPodcastEpisodeVideoSection } from "@/components/podcast/TopicPodcastEpisodeVideoSection"
+import { TopicVideoSection } from "@/components/podcast/TopicVideoSection"
 import { Badge } from "@/components/primitives/badge"
 import { Text } from "@/components/primitives/text"
 import { ReactionRow } from "@/components/social/ReactionRow"
@@ -55,7 +55,8 @@ export function TopicPageContent({
 	const [commentCount, setCommentCount] = useState<number | null>(null)
 	const [noteCount, setNoteCount] = useState<number | null>(null)
 
-	// the scroll view that a Coffee Break films row scrolls to Topic Cinema, and that opens at a linked comment
+	// the scroll view that a Coffee Break films row scrolls to the topic video section, and that opens at a linked
+	// comment
 	const scrollViewRef = useRef<ComponentRef<typeof ScrollView>>(null)
 	const { sectionTargetRef, scrollHandlers } = useSectionTargetScroll(scrollViewRef)
 	return (
@@ -117,7 +118,7 @@ export function TopicPageContent({
 			</View>
 			{/* full-width cards match the web's narrow reading column */}
 			<View className="mx-4">
-				<TopicPodcastEpisodeVideoSection
+				<TopicVideoSection
 					topic={topic}
 					onVideoRenderingPoll={() => onScanned({ isPoll: true })}
 					scrollViewRef={scrollViewRef}

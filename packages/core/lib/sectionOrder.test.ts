@@ -37,7 +37,7 @@ const HOME_SECTION_PAIRS = [
 ] as const
 
 // the film section, the films list, and the podcast episodes list, as both apps write them
-const FILM_SECTION = "<TopicPodcastEpisodeVideoSection"
+const FILM_SECTION = "<TopicVideoSection"
 const FILM_LIST = '<PodcastEpisodesCard topic={topic} format="video"'
 const PODCAST_EPISODE_LIST = "<PodcastEpisodesCard topic={topic}"
 
@@ -77,12 +77,12 @@ const TOPIC_PAGE_ELEMENT_ORDERS: Record<string, string[]> = {
 const PODCAST_EPISODE_PAGE_ELEMENT_ORDERS: Record<string, string[]> = {
 	"apps/web/src/pages/PodcastEpisodePage.tsx": [
 		"title={PODCAST_NAME}",
-		"<TopicPodcastEpisodeVideoPageSection",
+		"<PodcastEpisodeTopicVideoSection",
 		"<SocialSection",
 	],
 	"apps/mobile/src/components/podcast/PodcastEpisodeScreen.tsx": [
 		"title={PODCAST_NAME}",
-		"title={TOPIC_PODCAST_EPISODE_VIDEO_SECTION_TITLE}",
+		"title={TOPIC_VIDEO_SECTION_TITLE}",
 		"<SocialSection",
 	],
 }
@@ -92,10 +92,10 @@ const PODCAST_EPISODE_PAGE_ELEMENT_ORDERS: Record<string, string[]> = {
 const THEME_SONG_CREDITS = "<PodcastThemeSongNote"
 const THEME_SONG_CREDITS_TITLE_NOTE = "titleNote={<PodcastThemeSongNote />}"
 const THEME_SONG_CREDITS_COUNTS: Record<string, number> = {
-	"apps/web/src/components/podcast/TopicPodcastEpisodeVideoSection.tsx": 1,
+	"apps/web/src/components/podcast/TopicVideoSection.tsx": 1,
 	"apps/web/src/components/podcast/PodcastEpisodePlayer.tsx": 1,
 	"apps/web/src/pages/PodcastEpisodePage.tsx": 2,
-	"apps/mobile/src/components/podcast/TopicPodcastEpisodeVideoSection.tsx": 1,
+	"apps/mobile/src/components/podcast/TopicVideoSection.tsx": 1,
 	"apps/mobile/src/components/podcast/PodcastEpisodePlayer.tsx": 1,
 	"apps/mobile/src/components/podcast/PodcastEpisodeScreen.tsx": 2,
 }

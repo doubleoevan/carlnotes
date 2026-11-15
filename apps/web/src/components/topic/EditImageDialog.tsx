@@ -28,7 +28,7 @@ export function EditImageDialog({ editableImage, onImageChanged, onClose }: Edit
 				<DialogTitle>{EDIT_IMAGE_DIALOG_TITLES[editableImage.kind]}</DialogTitle>
 				{/* the image block, under the Image label in a film's dialog, whose title names the film */}
 				<div>
-					{editableImage.kind === "topicPodcastEpisodeVideo" && <FieldLabel>{TOPIC_IMAGE_LABEL}</FieldLabel>}
+					{editableImage.kind === "topicVideo" && <FieldLabel>{TOPIC_IMAGE_LABEL}</FieldLabel>}
 					<TopicImageEditor
 						key={toTopicImageEditorKey(editableImage)}
 						editableImage={editableImage}

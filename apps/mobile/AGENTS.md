@@ -343,7 +343,7 @@ reading time, and comment count under its byline's row, the profile's and the te
 Topic's viewers and followers in the Topic Post sheet. `components/common/DotSeparatedTexts.tsx` adapts core's row
 details texts, which the news, search, and finding rows draw on their details lines. `components/common/RankDialog.tsx` adapts core's
 `RankDialog` in a `Sheet`, where step buttons replace the web's drag, for the topics, films, podcast episodes, and
-Topic Posts pinned on a person's own profile, opened from the profile and from the screen of one of their topics,
+Topic Posts featured on a person's own profile, opened from the profile and from the screen of one of their topics,
 podcast episodes, or Topic Posts.
 `components/topic/TopicByline.tsx` is a topic's byline, the team or the owner of the topic with its avatar, the web's
 `TopicByline`. `components/topic/TopicCard.tsx` and `components/podcast/PodcastEpisodeCard.tsx` adapt the shared cards
@@ -352,16 +352,16 @@ web's `cardElements`. `components/podcast/PodcastEpisodeVideoButton.tsx` adapts 
 with the Video sheet its press opens: a film card's round play button, `PodcastEpisodePlayButton` centered over the
 card's image, and the Video pill beside the play pill on a `components/social/NewsList.tsx` row whose Podcast Episode
 has a film. Its thumbnail size is the play button over the film's poster in `components/topic/TopicInfo.tsx`, whose
-sheet shows the latest film's section, core's `TopicPodcastEpisodeVideoInfoSection`, right above the podcast's, and
-whose Video sheet opens over the Topic roast sheet. `components/podcast/TopicPodcastEpisodeVideoPlayer.tsx` adapts
+sheet shows the latest film's section, core's `TopicVideoInfoSection`, right above the podcast's, and
+whose Video sheet opens over the Topic roast sheet. `components/podcast/TopicVideoPlayer.tsx` adapts
 core's film player to an `expo-video` view with its captions track, fullscreen, and picture-in-picture, over
-`src/topicPodcastEpisodeVideoAdapter.ts`, which adapts one Expo player to core's playback and keeps the authorized
-film url in memory only. `components/podcast/TopicPodcastEpisodeVideoDialog.tsx` is the Video sheet, and
-`components/podcast/TopicPodcastEpisodeVideoSection.tsx` the topic screen's collapsible film section, which the
+`src/topicVideoAdapter.ts`, which adapts one Expo player to core's playback and keeps the authorized
+film url in memory only. `components/podcast/TopicVideoDialog.tsx` is the Video sheet, and
+`components/podcast/TopicVideoSection.tsx` the topic screen's collapsible film section, which the
 screen scrolls to each time a row asks. While a film renders, that section on a topic with no ready film and the
 podcast episode screen's film section show `components/podcast/UnpublishedPodcastEpisodeCard.tsx` with
 `isVideoRendering` in the film player's place, the recording card's frame with the line "Carl and Vienna are
-filming...", and core's `useTopicPodcastEpisodeVideoRenderingPoll` reads the screen again until the film is ready.
+filming...", and core's `useTopicVideoRenderingPoll` reads the screen again until the film is ready.
 `components/topic/TopicNotePopover.tsx` adapts core's
 `TopicNotePopover`, a Topic's note in a sheet under the note icon of a search row and a news row, and
 `components/social/CommentMentionBadge.tsx` core's mention badge, a count whose press opens
@@ -378,7 +378,7 @@ closes the sheet. It compares the image's path, mapped through `toPlatformPath`,
 screen's own image is a plain image.
 `components/topic/EditImageDialog.tsx` is the Edit topic image and Edit podcast image sheet that the header image
 opens, and the Edit film sheet that the Edit film option opens from the action menu of the podcast episode screen and
-of the topic screen (`toEditTopicPodcastEpisodeVideoOption` in `components/search/pageActionOptions.ts`, which also
+of the topic screen (`toEditTopicVideoOption` in `components/search/pageActionOptions.ts`, which also
 holds the Add topic to team and Share topic options and their labels, as both those screens' menus offer them), and
 `components/podcast/EditPodcastEpisodeDialog.tsx` the Edit podcast sheet of the podcast episode screen's menu, the
 web's dialogs of those names. `components/podcast/PodcastEpisodeHeader.tsx` holds that screen's header and

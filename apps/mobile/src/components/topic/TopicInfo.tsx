@@ -7,9 +7,9 @@ import { toCountLabel } from "@carlnotes/contracts/text"
 import type { TopicDetails, TopicResponse } from "@carlnotes/contracts/topics"
 import { MAX_TOPIC_SOURCES } from "@carlnotes/contracts/topics"
 import {
-	TopicPodcastEpisodeVideoInfoSection,
-	type TopicPodcastEpisodeVideoInfoSectionElements,
-} from "@carlnotes/core/components/TopicPodcastEpisodeVideoInfoSection"
+	TopicVideoInfoSection,
+	type TopicVideoInfoSectionElements,
+} from "@carlnotes/core/components/TopicVideoInfoSection"
 import { toNotesMarkdown } from "@carlnotes/core/lib/topicScanRecap"
 import { usePurchaseOffers } from "@carlnotes/core/stores/purchaseOffersStore"
 import { useRecyclingState } from "@shopify/flash-list"
@@ -45,7 +45,7 @@ type TopicInfoProps = { topic: TopicDetails } & Pick<SheetProps, "onClose" | "tr
 const VISIBILITY_ICONS = { private: Lock, public: Globe, invite: Mail }
 
 // the film section's elements: the info section, the podcast episode row, and the Video button
-const TOPIC_PODCAST_EPISODE_VIDEO_INFO_SECTION_ELEMENTS: TopicPodcastEpisodeVideoInfoSectionElements = {
+const TOPIC_VIDEO_INFO_SECTION_ELEMENTS: TopicVideoInfoSectionElements = {
 	Section: InfoSection,
 	Row: PodcastEpisodeRow,
 	VideoButton: PodcastEpisodeVideoButton,
@@ -196,18 +196,18 @@ export function TopicVisibility({ visibility }: Pick<TopicDetails, "visibility">
 function TopicPrompt({ topic, isCard }: { topic: TopicDetails; isCard: boolean }) {
 	// the urls the prompt may link, and whether the film's section leads the podcast's
 	const allowedUrls = new Set(topic.findings.map((finding) => finding.url))
-	const hasTopicPodcastEpisodeVideo = Boolean(topic.latestPodcastEpisode?.video)
+	const hasTopicVideo = Boolean(topic.latestPodcastEpisode?.video)
 	return (
 		<>
 			{!isCard ? (
-				<TopicPodcastEpisodeVideoInfoSection
+				<TopicVideoInfoSection
 					podcastEpisode={topic.latestPodcastEpisode}
 					isFirst={!topic.owner}
-					elements={TOPIC_PODCAST_EPISODE_VIDEO_INFO_SECTION_ELEMENTS}
+					elements={TOPIC_VIDEO_INFO_SECTION_ELEMENTS}
 				/>
 			) : null}
 			{!isCard && topic.latestPodcastEpisode?.pagePath ? (
-				<InfoSection label={PODCAST_NAME} isFirst={!topic.owner && !hasTopicPodcastEpisodeVideo}>
+				<InfoSection label={PODCAST_NAME} isFirst={!topic.owner && !hasTopicVideo}>
 					<PodcastEpisodeRow
 						podcastEpisode={topic.latestPodcastEpisode}
 						podcastEpisodePath={topic.latestPodcastEpisode.pagePath}

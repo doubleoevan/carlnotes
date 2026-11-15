@@ -234,7 +234,7 @@ const reportedStages = [
 	"email",
 	"push",
 	"podcast-episode",
-	"topic-podcast-episode-video",
+	"topic-video",
 	"topic-image",
 	"unchecked-image",
 	"chat",
@@ -248,6 +248,7 @@ const reportedStages = [
 	"startup",
 	"worker",
 	"dashboard",
+	"job",
 ] as const
 
 // one of the stages above

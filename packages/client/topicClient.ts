@@ -235,7 +235,7 @@ export async function sendTopicHomeOrder(topicId: string, position: number): Pro
 }
 
 /**
- * Sets where a public topic sits among the topics its owner pinned to their profile, with zero clearing it. Throws an
+ * Sets where a public topic sits among the topics its owner featured on their profile, with zero clearing it. Throws an
  * error on a rejected write.
  */
 export async function sendTopicProfileOrder(topicId: string, position: number): Promise<void> {

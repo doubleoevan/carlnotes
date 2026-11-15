@@ -31,9 +31,9 @@ import {
 	topicImageOrigins,
 	topicImageRenderKinds,
 	topicImageRenderStatuses,
-	topicPodcastEpisodeVideoStatuses,
 	topicPostDiscussionKinds,
 	topicPostDiscussionStatuses,
+	topicVideoStatuses,
 	uncheckedImageSubjectKinds,
 	visibilities,
 } from "@carlnotes/contracts/enums"
@@ -50,7 +50,7 @@ export const dayOfWeek = pgEnum("day_of_week", daysOfWeek)
 export const scanStatus = pgEnum("scan_status", scanStatuses)
 export const podcastEpisodeStatus = pgEnum("episode_status", podcastEpisodeStatuses)
 // a podcast episode film's status
-export const topicPodcastEpisodeVideoStatus = pgEnum("episode_video_status", topicPodcastEpisodeVideoStatuses)
+export const topicVideoStatus = pgEnum("episode_video_status", topicVideoStatuses)
 // who speaks a podcast episode's turn, and who answered a question asked from the podcast player
 export const podcastEpisodeSpeaker = pgEnum("episode_speaker", podcastEpisodeSpeakers)
 export const sourceVisibility = pgEnum("source_visibility", sourceVisibilities)

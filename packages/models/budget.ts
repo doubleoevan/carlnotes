@@ -96,7 +96,7 @@ export const TOPIC_IMAGE_2K_COST_DOLLARS: Record<string, number> = {
 // what one minute of podcast episode film costs to render in dollars. one film minute took 79 cpu seconds on a laptop
 // core, so about 160 on a Northflank vCPU, which is 0.044 vCPU hours at $0.01667 each, or $0.00074. the worker's
 // memory for the same time adds about $0.0002, so the rate is rounded up to a tenth of a cent
-export const TOPIC_PODCAST_EPISODE_VIDEO_DOLLARS_PER_MINUTE = 0.001
+export const TOPIC_VIDEO_DOLLARS_PER_MINUTE = 0.001
 
 // one transcription call to price. its audio and text input tokens and its transcript output tokens
 export type TranscriptionCostOptions = { inputTokens: number; outputTokens: number }

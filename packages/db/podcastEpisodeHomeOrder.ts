@@ -4,7 +4,7 @@
 import { and, eq, inArray, isNotNull } from "drizzle-orm"
 import { releaseHomeOrder, releaseTopicHomeOrders } from "./homeOrder"
 import { type DbHandle, db } from "./index"
-import { podcastEpisodes, topicPodcastEpisodeVideos } from "./schema/podcast"
+import { podcastEpisodes, topicVideos } from "./schema/podcast"
 
 /**
  * Clears a podcast episode's home order and moves everything below it up one. Returns whether it had one.
@@ -20,24 +20,19 @@ export async function releasePodcastEpisodeHomeOrder(
  * Clears the home order of the films of the given podcast episodes, one at a time so the orders stay contiguous.
  * Returns whether any had one.
  */
-export async function releaseTopicPodcastEpisodeVideoHomeOrders(
+export async function releaseTopicVideoHomeOrders(
 	podcastEpisodeIds: string[],
 	handle: DbHandle = db,
 ): Promise<boolean> {
-	// the pinned films of those podcast episodes
+	// the featured films of those podcast episodes
 	const homeOrderRows = await handle
-		.select({ id: topicPodcastEpisodeVideos.id })
-		.from(topicPodcastEpisodeVideos)
-		.where(
-			and(
-				inArray(topicPodcastEpisodeVideos.podcastEpisodeId, podcastEpisodeIds),
-				isNotNull(topicPodcastEpisodeVideos.homeOrder),
-			),
-		)
+		.select({ id: topicVideos.id })
+		.from(topicVideos)
+		.where(and(inArray(topicVideos.podcastEpisodeId, podcastEpisodeIds), isNotNull(topicVideos.homeOrder)))
 
 	// release each in turn
 	for (const homeOrderRow of homeOrderRows) {
-		await releaseHomeOrder({ table: topicPodcastEpisodeVideos, id: homeOrderRow.id, handle })
+		await releaseHomeOrder({ table: topicVideos, id: homeOrderRow.id, handle })
 	}
 	return homeOrderRows.length > 0
 }
@@ -47,7 +42,7 @@ export async function releaseTopicPodcastEpisodeVideoHomeOrders(
  * contiguous. Returns whether any had one.
  */
 export async function releaseTopicPodcastEpisodeHomeOrders(topicId: string, handle: DbHandle = db): Promise<boolean> {
-	// release the topic's pinned podcast episodes
+	// release the topic's featured podcast episodes
 	const isPodcastEpisodeOrderReleased = await releaseTopicHomeOrders({ table: podcastEpisodes, topicId, handle })
 
 	// then the films of every podcast episode of the topic
@@ -55,9 +50,9 @@ export async function releaseTopicPodcastEpisodeHomeOrders(topicId: string, hand
 		.select({ id: podcastEpisodes.id })
 		.from(podcastEpisodes)
 		.where(eq(podcastEpisodes.topicId, topicId))
-	const isTopicPodcastEpisodeVideoOrderReleased = await releaseTopicPodcastEpisodeVideoHomeOrders(
+	const isTopicVideoOrderReleased = await releaseTopicVideoHomeOrders(
 		podcastEpisodeRows.map((podcastEpisodeRow) => podcastEpisodeRow.id),
 		handle,
 	)
-	return isPodcastEpisodeOrderReleased || isTopicPodcastEpisodeVideoOrderReleased
+	return isPodcastEpisodeOrderReleased || isTopicVideoOrderReleased
 }

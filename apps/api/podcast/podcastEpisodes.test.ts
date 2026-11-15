@@ -13,7 +13,7 @@ import {
 	PUBLISHED_PODCAST_EPISODE,
 	UNCHECKED_PODCAST_EPISODE,
 	UNCHECKED_PODCAST_EPISODE_IMAGE_ROW,
-	UNCHECKED_TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_ROW,
+	UNCHECKED_TOPIC_VIDEO_IMAGE_ROW,
 } from "../uncheckedImageOverlayTestFixtures"
 import * as helpers from "./helpers"
 import type { PodcastEpisodeRow, TopicRow } from "./podcastEpisodeRows"
@@ -40,9 +40,7 @@ function stubUncheckedPodcastEpisodeImages(): SentQuery[] {
 	return stubConnectionPool(({ text, values }) => {
 		// the unchecked images, which the read of the user who uploaded them finds
 		if (text.includes('from "unchecked_images"')) {
-			return values.includes("member-1")
-				? [UNCHECKED_PODCAST_EPISODE_IMAGE_ROW, UNCHECKED_TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_ROW]
-				: []
+			return values.includes("member-1") ? [UNCHECKED_PODCAST_EPISODE_IMAGE_ROW, UNCHECKED_TOPIC_VIDEO_IMAGE_ROW] : []
 		}
 
 		// the owning team's members among the users the edit check names, and each user's access row
@@ -86,7 +84,7 @@ test("an unchecked podcast episode image and film poster show on the page to the
 		podcastEpisode: UNCHECKED_PODCAST_EPISODE,
 		isPodcastEpisodeImageUnchecked: true,
 		podcastEpisodeImageOrigin: "uploaded",
-		isTopicPodcastEpisodeVideoImageUnchecked: true,
+		isTopicVideoImageUnchecked: true,
 		topicPodcastEpisodeVideoImageOrigin: "uploaded",
 	})
 	expect(uploaderResponse.headers.get("cdn-cache-control")).toBeNull()
@@ -97,7 +95,7 @@ test("an unchecked podcast episode image and film poster show on the page to the
 		const page = (await (await requestAs(userId, pagePath)).json()) as PodcastEpisodePageResponse
 		expect(page.podcastEpisode).toEqual(PUBLISHED_PODCAST_EPISODE)
 		expect(page.isPodcastEpisodeImageUnchecked).toBeUndefined()
-		expect(page.isTopicPodcastEpisodeVideoImageUnchecked).toBeUndefined()
+		expect(page.isTopicVideoImageUnchecked).toBeUndefined()
 	}
 
 	// each editor's page sent one read for both kinds, and nobody else's page sent any

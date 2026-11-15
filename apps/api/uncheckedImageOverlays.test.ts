@@ -19,7 +19,7 @@ import {
 	PUBLISHED_PODCAST_EPISODE,
 	UNCHECKED_PODCAST_EPISODE,
 	UNCHECKED_PODCAST_EPISODE_IMAGE_ROW,
-	UNCHECKED_TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_ROW,
+	UNCHECKED_TOPIC_VIDEO_IMAGE_ROW,
 } from "./uncheckedImageOverlayTestFixtures"
 
 // put the pool and every spy back after each test
@@ -139,7 +139,7 @@ function stubUncheckedPodcastEpisodeImageRows(uncheckedImageRows: string[][]): S
 test("a podcast episode's page shows both unchecked uploads to the editor who uploaded them, from one read", async () => {
 	const sentQueries = stubUncheckedPodcastEpisodeImageRows([
 		UNCHECKED_PODCAST_EPISODE_IMAGE_ROW,
-		UNCHECKED_TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_ROW,
+		UNCHECKED_TOPIC_VIDEO_IMAGE_ROW,
 	])
 
 	// the uploader reads each unchecked upload in its image's place, as an upload with no image prompt, with its flag
@@ -149,7 +149,7 @@ test("a podcast episode's page shows both unchecked uploads to the editor who up
 		isPodcastEpisodeImageUnchecked: true,
 		podcastEpisodeImageOrigin: "uploaded",
 		podcastEpisodeImagePrompt: null,
-		isTopicPodcastEpisodeVideoImageUnchecked: true,
+		isTopicVideoImageUnchecked: true,
 		topicPodcastEpisodeVideoImageOrigin: "uploaded",
 		topicPodcastEpisodeVideoImagePrompt: null,
 	})
@@ -167,12 +167,12 @@ test("a podcast episode's page shows both unchecked uploads to the editor who up
 
 test("a podcast episode's image with no unchecked upload stays, and a second editor reads both as published", async () => {
 	// an unchecked film image alone leaves the podcast episode's own image and its fields as they were
-	stubUncheckedPodcastEpisodeImageRows([UNCHECKED_TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_ROW])
+	stubUncheckedPodcastEpisodeImageRows([UNCHECKED_TOPIC_VIDEO_IMAGE_ROW])
 	const uploaderPage = await overlayUncheckedPodcastEpisodePageImages(EDITOR_PODCAST_EPISODE_PAGE, "uploader-1")
 	expect(uploaderPage.podcastEpisode.image).toEqual(PUBLISHED_PODCAST_EPISODE.image)
 	expect(uploaderPage.isPodcastEpisodeImageUnchecked).toBeUndefined()
 	expect(uploaderPage.podcastEpisodeImagePrompt).toBe("a moka pot")
-	expect(uploaderPage.isTopicPodcastEpisodeVideoImageUnchecked).toBe(true)
+	expect(uploaderPage.isTopicVideoImageUnchecked).toBe(true)
 	expect(uploaderPage.podcastEpisode.video).toEqual(UNCHECKED_PODCAST_EPISODE.video)
 
 	// a second editor reads the page as published, with no flag
@@ -183,7 +183,7 @@ test("a podcast episode's image with no unchecked upload stays, and a second edi
 
 test("an unchecked film image shows on a ready film alone, and a reader and a visitor read no unchecked image", async () => {
 	// a podcast episode whose film is not ready has no poster to show the unchecked image as
-	const sentQueries = stubUncheckedPodcastEpisodeImageRows([UNCHECKED_TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_ROW])
+	const sentQueries = stubUncheckedPodcastEpisodeImageRows([UNCHECKED_TOPIC_VIDEO_IMAGE_ROW])
 	const filmlessPage = {
 		...EDITOR_PODCAST_EPISODE_PAGE,
 		podcastEpisode: { ...PUBLISHED_PODCAST_EPISODE, video: null, videoPosterUrl: null },

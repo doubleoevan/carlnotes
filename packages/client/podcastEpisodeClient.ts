@@ -1,4 +1,6 @@
-// the api client for the podcast episode routes
+// the api client for the podcast episode routes. fetchTopicPodcastEpisodeVideo, uploadTopicPodcastEpisodeVideoImageBody,
+// sendTopicPodcastEpisodeVideoImageRegeneration, and sendTopicPodcastEpisodeVideoProfileOrder keep their names, because
+// the frozen api contract keys their routes by them
 
 import type { PodcastEpisodeListenPayload } from "@carlnotes/contracts/payloads"
 import {
@@ -11,15 +13,15 @@ import {
 	podcastFeedUrlResponse,
 	type SeasonPodcastEpisodes,
 	seasonPodcastEpisodes,
-	type TopicPodcastEpisodeVideoFile,
-	topicPodcastEpisodeVideoFile,
+	type TopicVideoFile,
+	topicVideoFile,
 	type UpdatePodcastEpisodePayload,
 } from "@carlnotes/contracts/podcast"
 import { type PodcastEpisodePageResponse, podcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpisodePage"
 import {
 	regenerateTopicImageResponse,
 	uploadTopicImageResponse,
-	uploadTopicPodcastEpisodeVideoImageResponse,
+	uploadTopicVideoImageResponse,
 } from "@carlnotes/contracts/topicImages"
 import {
 	toDiscussionTopicPostId,
@@ -294,7 +296,7 @@ export async function uploadTopicPodcastEpisodeVideoImageBody(
 	if (!response.ok) {
 		throw new Error((await readApiErrorMessage(response)) ?? `upload failed: ${response.status}`)
 	}
-	return readApiResponse(uploadTopicPodcastEpisodeVideoImageResponse, response)
+	return readApiResponse(uploadTopicVideoImageResponse, response)
 }
 
 /**
@@ -387,7 +389,7 @@ export async function fetchPodcastEpisodeAudio(
 export async function fetchTopicPodcastEpisodeVideo(
 	podcastEpisodeId: string,
 	signal?: AbortSignal,
-): Promise<TopicPodcastEpisodeVideoFile> {
+): Promise<TopicVideoFile> {
 	// resolve the film through the authenticated api without forwarding credentials to storage
 	const response = await fetchApi(`/api/episodes/${encodeURIComponent(podcastEpisodeId)}/video.mp4`, {
 		headers: { Accept: "application/json" },
@@ -396,7 +398,7 @@ export async function fetchTopicPodcastEpisodeVideo(
 		cache: "no-store",
 	})
 	assertPodcastEpisodeResponse(response, { shouldThrowOnError: true })
-	return readApiResponse(topicPodcastEpisodeVideoFile, response)
+	return readApiResponse(topicVideoFile, response)
 }
 
 /**
@@ -413,7 +415,7 @@ function assertPodcastEpisodeResponse(response: ApiResponse, options: PodcastEpi
 }
 
 /**
- * Sets a podcast episode's position among the podcast episodes its topic's owner pinned to their profile. Position
+ * Sets a podcast episode's position among the podcast episodes its topic's owner featured on their profile. Position
  * zero clears it. Throws an error on a rejected write.
  */
 export async function sendPodcastEpisodeProfileOrder(podcastEpisodeId: string, position: number): Promise<void> {
@@ -427,7 +429,7 @@ export async function sendPodcastEpisodeProfileOrder(podcastEpisodeId: string, p
 }
 
 /**
- * Sets a podcast episode's film's position among the films its topic's owner pinned to their profile. Position zero
+ * Sets a podcast episode's film's position among the films its topic's owner featured on their profile. Position zero
  * clears it. Throws an error on a rejected write.
  */
 export async function sendTopicPodcastEpisodeVideoProfileOrder(
@@ -459,7 +461,7 @@ export async function sendPodcastEpisodeHomeOrder(podcastEpisodeId: string, posi
 /**
  * Sets a podcast episode's film's position among the home films, admin only. Position zero clears it.
  */
-export async function sendTopicPodcastEpisodeVideoHomeOrder(podcastEpisodeId: string, position: number): Promise<void> {
+export async function sendTopicVideoHomeOrder(podcastEpisodeId: string, position: number): Promise<void> {
 	const response = await apiClient().api["podcast-episodes"][":id"].video["home-order"].$patch({
 		param: { id: podcastEpisodeId },
 		json: { position },

@@ -67,7 +67,7 @@ export type Capability =
 	// reactions and comments: posting one, and deleting anyone's on the topic's social targets
 	| "social:post"
 	| "social:moderate"
-	// pinning a topic or one of its podcast episodes to its owner's profile
+	// featuring a topic or one of its podcast episodes to its owner's profile
 	| "profile:setProfileOrder"
 	// the admin console
 	| "admin:console"
@@ -147,7 +147,7 @@ async function decideOwnRuleCapability(
 		// Scan workers can use the same authority through their transaction
 		case "scan:request":
 			return canRequestTopicScan(userId, topic)
-		// a profile's pins are its person's alone, so only the topic's owner passes
+		// a profile's featured items are its person's alone, so only the topic's owner passes
 		case "profile:setProfileOrder":
 			return Boolean(userId) && topic?.ownerId === userId
 	}

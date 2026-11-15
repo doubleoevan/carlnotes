@@ -1,6 +1,6 @@
 // mean vector tests: each mean averages the current model's embeddings over the rows behind it, a topic vector and an
 // episode vector each save whether their topic is public and shown, an empty mean deletes the vector, and marking
-// podcast episodes removed deletes their vectors and films and releases the films' profile pins
+// podcast episodes removed deletes their vectors and films and releases the films' featured profile items
 import { afterEach, expect, test } from "bun:test"
 import { type DbTransaction, db } from "@carlnotes/db"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
@@ -143,15 +143,11 @@ test("marking podcast episodes removed deletes their vectors, reactions, and com
 test("marking podcast episodes removed deletes their films and returns the films' keys", async () => {
 	// one removed podcast episode has a film without a sign-off
 	const filmRow = ["intro.mp4", "chapters.mp4", null, "film.mp4", "captions.vtt"]
-	const sentQueries = stubConnectionPool(({ text }) =>
-		text.startsWith('delete from "topic_podcast_episode_videos"') ? [filmRow] : [],
-	)
+	const sentQueries = stubConnectionPool(({ text }) => (text.startsWith('delete from "topic_videos"') ? [filmRow] : []))
 	const { filmKeys } = await markPodcastEpisodesRemoved(db as unknown as DbTransaction, ["episode-1", "episode-2"])
 
 	// the film delete names both podcast episodes, and the keys skip the missing sign-off
-	const filmDeleteQuery = sentQueries.find((sentQuery) =>
-		sentQuery.text.startsWith('delete from "topic_podcast_episode_videos"'),
-	)
+	const filmDeleteQuery = sentQueries.find((sentQuery) => sentQuery.text.startsWith('delete from "topic_videos"'))
 	expect(filmDeleteQuery?.values).toEqual(["episode-1", "episode-2"])
 	expect(filmKeys).toEqual(["intro.mp4", "chapters.mp4", "film.mp4", "captions.vtt"])
 })
@@ -167,7 +163,7 @@ test("marking podcast episodes removed returns the chapter image keys for each c
 		if (text.startsWith('select "episodes"."id", "episodes"."script"')) {
 			return [["episode-1", script]]
 		}
-		return text.startsWith('delete from "topic_podcast_episode_videos"') ? [filmRow] : []
+		return text.startsWith('delete from "topic_videos"') ? [filmRow] : []
 	})
 	const { filmKeys } = await markPodcastEpisodesRemoved(db as unknown as DbTransaction, ["episode-1"])
 
@@ -193,23 +189,21 @@ test("marking podcast episodes removed returns the chapter image keys for each c
 	])
 })
 
-// a removal releases a removed podcast episode's film from its topic owner's profile pins before the film is deleted
-test("marking podcast episodes removed releases their films' profile pins before deleting the films", async () => {
-	// one pinned film of the removed podcast episode, which holds position one. a write returns no row
+// a removal releases a removed podcast episode's film from its topic owner's featured profile items before the film is deleted
+test("marking podcast episodes removed releases their films' featured profile items before deleting the films", async () => {
+	// one featured film of the removed podcast episode, which holds position one. a write returns no row
 	const sentQueries = stubConnectionPool(({ text }) => {
-		if (text.includes('"topic_podcast_episode_videos"."profile_order" is not null')) {
+		if (text.includes('"topic_videos"."profile_order" is not null')) {
 			return text.includes("inner join") ? [["film-1", "owner-1"]] : []
 		}
-		return text.startsWith('select "profile_order" from "topic_podcast_episode_videos"') ? [[1]] : []
+		return text.startsWith('select "profile_order" from "topic_videos"') ? [[1]] : []
 	})
 	await markPodcastEpisodesRemoved(db as unknown as DbTransaction, ["episode-1"])
 
 	// the film's profile order clears, and only then is the film deleted
 	const queryTexts = sentQueries.map((sentQuery) => sentQuery.text)
-	const clearIndex = queryTexts.findIndex((text) =>
-		text.startsWith('update "topic_podcast_episode_videos" set "profile_order" = $1'),
-	)
-	const deleteIndex = queryTexts.findIndex((text) => text.startsWith('delete from "topic_podcast_episode_videos"'))
+	const clearIndex = queryTexts.findIndex((text) => text.startsWith('update "topic_videos" set "profile_order" = $1'))
+	const deleteIndex = queryTexts.findIndex((text) => text.startsWith('delete from "topic_videos"'))
 	expect(clearIndex).toBeGreaterThan(-1)
 	expect(deleteIndex).toBeGreaterThan(clearIndex)
 })

@@ -45,7 +45,7 @@ const profileFixture: ProfileResponse = {
 			chatMentions: [],
 		},
 	],
-	// the one public topic as a pinned card, and no film and no podcast episode
+	// the one public topic as a featured card, and no film and no podcast episode
 	profileTopics: [
 		{
 			id: "topic-1",

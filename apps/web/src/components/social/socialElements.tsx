@@ -164,6 +164,7 @@ export const SOCIAL_ELEMENTS: SocialElements = {
 	),
 	ComposerButton: ({ label, onPress }) => (
 		<Button size="sm" className="shrink-0" onClick={onPress}>
+			<Flame className="size-4" />
 			{label}
 		</Button>
 	),

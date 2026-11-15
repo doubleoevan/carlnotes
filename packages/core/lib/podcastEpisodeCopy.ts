@@ -4,7 +4,7 @@
 
 export const PODCAST_EPISODE_LOAD_FAILED_TEXT = "This podcast episode could not load. Try again."
 export const PODCAST_EPISODE_PLAY_FAILED_TEXT = "This podcast episode could not play. Try again."
-export const TOPIC_PODCAST_EPISODE_VIDEO_SECTION_TITLE = "Coffee Break Cinema"
+export const TOPIC_VIDEO_SECTION_TITLE = "Coffee Break Cinema"
 
 // a line the unpublished card shows while work is in progress: its emoji, hidden from a screen reader, and its text
 export type PodcastEpisodeProgressLine = { emoji: string; text: string }
@@ -14,7 +14,7 @@ export const PODCAST_EPISODE_RECORDING_LINE: PodcastEpisodeProgressLine = {
 	emoji: "🤫",
 	text: "Carl and Vienna are recording...",
 }
-export const TOPIC_PODCAST_EPISODE_VIDEO_RENDERING_LINE: PodcastEpisodeProgressLine = {
+export const TOPIC_VIDEO_RENDERING_LINE: PodcastEpisodeProgressLine = {
 	emoji: "🎬",
 	text: "Carl and Vienna are filming...",
 }

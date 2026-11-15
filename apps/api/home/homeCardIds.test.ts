@@ -1,7 +1,7 @@
 // home card id tests: the home shows one podcast episode, one film, and one Topic Post per topic, in the order read,
 // the reads behind the home films and the week's new Topic Posts, the cached ids' reload once they are cleared, the
-// admin block that takes its user's rows out of every read, and the pinned-only switch that leaves every read its
-// pinned rows alone
+// admin block that takes its user's rows out of every read, and the featured-only switch that leaves every read its
+// featured rows alone
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { HOME_PODCAST_EPISODE_COUNT, NEW_PODCAST_EPISODE_DAYS, NEW_TOPIC_POST_DAYS } from "@carlnotes/contracts/home"
 import { DAY_MS } from "@carlnotes/contracts/time"
@@ -27,17 +27,17 @@ afterEach(() => {
 })
 
 describe("one row per topic", () => {
-	test("each topic shows its first row read, pinned rows first, up to the count", () => {
-		// the pinned post of topic b leads, then the newest post of each other topic
+	test("each topic shows its first row read, featured rows first, up to the count", () => {
+		// the featured post of topic b leads, then the newest post of each other topic
 		const topicPostRows = [
-			{ id: "post-b-pinned", topicId: "topic-b" },
+			{ id: "post-b-featured", topicId: "topic-b" },
 			{ id: "post-a-new", topicId: "topic-a" },
 			{ id: "post-b-new", topicId: "topic-b" },
 			{ id: "post-a-old", topicId: "topic-a" },
 			{ id: "post-c-new", topicId: "topic-c" },
 		]
-		expect(toFirstIdsPerTopic(topicPostRows, 12)).toEqual(["post-b-pinned", "post-a-new", "post-c-new"])
-		expect(toFirstIdsPerTopic(topicPostRows, 2)).toEqual(["post-b-pinned", "post-a-new"])
+		expect(toFirstIdsPerTopic(topicPostRows, 12)).toEqual(["post-b-featured", "post-a-new", "post-c-new"])
+		expect(toFirstIdsPerTopic(topicPostRows, 2)).toEqual(["post-b-featured", "post-a-new"])
 	})
 
 	test("a row with no topic is left out, and no row reads as no card", () => {
@@ -47,14 +47,14 @@ describe("one row per topic", () => {
 
 	test("keeps the first podcast episode read for each topic, in the order read", () => {
 		const podcastEpisodeRows = [
-			{ id: "pinned", topicId: "topic-1" },
+			{ id: "featured", topicId: "topic-1" },
 			{ id: "most-listened", topicId: "topic-2" },
 			{ id: "second-of-topic-1", topicId: "topic-1" },
 			{ id: "no-topic", topicId: null },
 			{ id: "next", topicId: "topic-3" },
 		]
 		const podcastEpisodeIds = toFirstIdsPerTopic(podcastEpisodeRows, HOME_PODCAST_EPISODE_COUNT)
-		expect(podcastEpisodeIds).toEqual(["pinned", "most-listened", "next"])
+		expect(podcastEpisodeIds).toEqual(["featured", "most-listened", "next"])
 	})
 
 	test("stops at the home's twelve", () => {
@@ -73,7 +73,7 @@ describe("the home films", () => {
 	async function loadFilmQueries(): Promise<{ text: string; values: unknown[] }[]> {
 		const sentQueries = stubConnectionPool(() => [])
 		await loadHomeCardIds()
-		return sentQueries.filter(({ text }) => text.includes('"topic_podcast_episode_videos"'))
+		return sentQueries.filter(({ text }) => text.includes('"topic_videos"'))
 	}
 
 	test("read only ready films of published podcast episodes of public shown topics", async () => {
@@ -81,7 +81,7 @@ describe("the home films", () => {
 		expect(filmQueries).toHaveLength(2)
 		for (const { text, values } of filmQueries) {
 			expect(text).toContain(
-				'inner join "topic_podcast_episode_videos" on ("topic_podcast_episode_videos"."episode_id" = "episodes"."id" and "topic_podcast_episode_videos"."status" = $1)',
+				'inner join "topic_videos" on ("topic_videos"."episode_id" = "episodes"."id" and "topic_videos"."status" = $1)',
 			)
 			expect(values[0]).toBe("ready")
 			expect(text).toContain('"topics"."visibility" = ')
@@ -89,10 +89,10 @@ describe("the home films", () => {
 		}
 	})
 
-	test("Featured films reads the pinned films first, then the most listened", async () => {
+	test("Featured films reads the featured films first, then the most listened", async () => {
 		const [homeFilmQuery] = await loadFilmQueries()
 		expect(homeFilmQuery?.text).toContain(
-			'order by "topic_podcast_episode_videos"."home_order" is null, "topic_podcast_episode_videos"."home_order" asc, "episodes"."listener_count" desc, "episodes"."published_at" desc',
+			'order by "topic_videos"."home_order" is null, "topic_videos"."home_order" asc, "episodes"."listener_count" desc, "episodes"."published_at" desc',
 		)
 	})
 
@@ -113,12 +113,12 @@ describe("the week's new Topic Posts", () => {
 	const isNewestTopicPostRead = ({ text }: { text: string }): boolean =>
 		text.includes('from "topic_posts"') && text.includes('"topic_posts"."published_at" >= ')
 
-	test("read the past seven days of public shown topics' posts, newest first, pinned or not", async () => {
+	test("read the past seven days of public shown topics' posts, newest first, featured or not", async () => {
 		const sentQueries = stubConnectionPool(() => [])
 		await loadHomeCardIds()
 		const newestTopicPostQuery = sentQueries.find(isNewestTopicPostRead)
 
-		// public shown topics alone, newest first, with no word on the home's pins
+		// public shown topics alone, newest first, with no word on the home's featured items
 		expect(newestTopicPostQuery?.text).toContain('inner join "topics" on "topics"."id" = "topic_posts"."topic_id"')
 		expect(newestTopicPostQuery?.text).toContain('"topics"."visibility" = ')
 		expect(newestTopicPostQuery?.values).toContain("public")
@@ -231,87 +231,87 @@ describe("an admin block", () => {
 	})
 })
 
-describe("the pinned-only switch", () => {
+describe("the featured-only switch", () => {
 	// the filter each read adds while the switch is on, in the order the home shows the reads' sections
-	const PINNED_ONLY_FILTER_TEXTS = [
+	const FEATURED_ONLY_FILTER_TEXTS = [
 		'"topics"."feature_order" is not null',
-		'"topic_podcast_episode_videos"."home_order" is not null',
-		'"topic_podcast_episode_videos"."home_order" is not null',
+		'"topic_videos"."home_order" is not null',
+		'"topic_videos"."home_order" is not null',
 		'"episodes"."feature_order" is not null',
 		'"episodes"."feature_order" is not null',
 		'"topic_posts"."home_order" is not null',
 		'"topic_posts"."home_order" is not null',
 	]
 
-	// whether a read takes its pinned rows alone
-	const isPinnedOnlyRead = ({ text }: SentQuery): boolean =>
-		PINNED_ONLY_FILTER_TEXTS.some((pinnedOnlyFilterText) => text.includes(pinnedOnlyFilterText))
+	// whether a read takes its featured rows alone
+	const isFeaturedOnlyRead = ({ text }: SentQuery): boolean =>
+		FEATURED_ONLY_FILTER_TEXTS.some((featuredOnlyFilterText) => text.includes(featuredOnlyFilterText))
 
 	// read the settings as the defaults with the switch on or off
-	function stubPinnedOnlySwitch(isHomePinnedOnly: boolean): ReturnType<typeof spyOn> {
+	function stubFeaturedOnlySwitch(isHomeFeaturedOnly: boolean): ReturnType<typeof spyOn> {
 		return spyOn(dailySpendCutoffs, "loadSpendControlSettings").mockResolvedValue({
 			...DEFAULT_SPEND_CONTROL_SETTINGS,
-			isHomePinnedOnly,
+			isHomeFeaturedOnly,
 		})
 	}
 
-	test("is off with no settings row, and no read is limited to its pinned rows", async () => {
+	test("is off with no settings row, and no read is limited to its featured rows", async () => {
 		const homeIdReads = await loadHomeIdReads()
 		expect(homeIdReads).toHaveLength(7)
-		expect(homeIdReads.filter(isPinnedOnlyRead)).toHaveLength(0)
+		expect(homeIdReads.filter(isFeaturedOnlyRead)).toHaveLength(0)
 	})
 
-	test("on, every read takes the rows an admin pinned alone, in the same order", async () => {
-		stubPinnedOnlySwitch(true)
+	test("on, every read takes the rows an admin featured alone, in the same order", async () => {
+		stubFeaturedOnlySwitch(true)
 		const homeIdReads = await loadHomeIdReads()
 
 		// each of the seven reads holds its own home order filter
 		expect(homeIdReads).toHaveLength(7)
-		for (const [i, pinnedOnlyFilterText] of PINNED_ONLY_FILTER_TEXTS.entries()) {
-			expect(homeIdReads[i]?.text).toContain(pinnedOnlyFilterText)
+		for (const [i, featuredOnlyFilterText] of FEATURED_ONLY_FILTER_TEXTS.entries()) {
+			expect(homeIdReads[i]?.text).toContain(featuredOnlyFilterText)
 		}
 
-		// the pinned rows stay in their order, and the week's rows stay newest first
+		// the featured rows stay in their order, and the week's rows stay newest first
 		expect(homeIdReads[0]?.text).toContain('order by "topics"."feature_order" is null, "topics"."feature_order" asc')
 		expect(homeIdReads[2]?.text).toContain('order by "episodes"."published_at" desc')
 
-		// a pinned row of a blocked owner's topic is still left out
+		// a featured row of a blocked owner's topic is still left out
 		expect(homeIdReads.filter(({ text }) => text.includes(OWNER_ADMIN_BLOCK_FILTER_TEXT))).toHaveLength(7)
 	})
 
-	test("on, an unpinned row leaves every list, and a week with no pinned row reads as no ids", async () => {
-		// a database where nothing is pinned. only a read of every row returns one
-		stubPinnedOnlySwitch(true)
-		const toUnpinnedRows = (sentQuery: SentQuery): unknown[] =>
-			isHomeIdRead(sentQuery) && !isPinnedOnlyRead(sentQuery) ? [["unpinned-1", "topic-1"]] : []
-		stubConnectionPool(toUnpinnedRows)
-		const pinnedOnlyIds = await loadHomeCardIds()
+	test("on, an unfeatured row leaves every list, and a week with no featured row reads as no ids", async () => {
+		// a database where nothing is featured. only a read of every row returns one
+		stubFeaturedOnlySwitch(true)
+		const toUnfeaturedRows = (sentQuery: SentQuery): unknown[] =>
+			isHomeIdRead(sentQuery) && !isFeaturedOnlyRead(sentQuery) ? [["unfeatured-1", "topic-1"]] : []
+		stubConnectionPool(toUnfeaturedRows)
+		const featuredOnlyIds = await loadHomeCardIds()
 
-		// no list holds the unpinned row, so each week's section is absent
-		expect(Object.values(pinnedOnlyIds)).toEqual([[], [], [], [], [], [], []])
+		// no list holds the unfeatured row, so each week's section is absent
+		expect(Object.values(featuredOnlyIds)).toEqual([[], [], [], [], [], [], []])
 
 		// the switch off fills every list again on the next cache refresh
-		stubPinnedOnlySwitch(false)
+		stubFeaturedOnlySwitch(false)
 		await clearSharedTopicFeedCaches()
-		stubConnectionPool(toUnpinnedRows)
-		expect(Object.values(await loadHomeCardIds())).toEqual(Array.from({ length: 7 }, () => ["unpinned-1"]))
+		stubConnectionPool(toUnfeaturedRows)
+		expect(Object.values(await loadHomeCardIds())).toEqual(Array.from({ length: 7 }, () => ["unfeatured-1"]))
 	})
 
 	test("is read with the ids, so the home follows it on its next cache refresh", async () => {
 		// the switch on, read once for two loads of the cached ids
-		const loadSpendControlSettingsSpy = stubPinnedOnlySwitch(true)
+		const loadSpendControlSettingsSpy = stubFeaturedOnlySwitch(true)
 		const sentQueries = stubConnectionPool(() => [])
 		await loadHomeCardIds()
 		await loadHomeCardIds()
 		expect(loadSpendControlSettingsSpy).toHaveBeenCalledTimes(1)
-		expect(sentQueries.filter(isPinnedOnlyRead)).toHaveLength(7)
+		expect(sentQueries.filter(isFeaturedOnlyRead)).toHaveLength(7)
 
 		// the cached ids outlive the switch until they are read again
-		stubPinnedOnlySwitch(false)
+		stubFeaturedOnlySwitch(false)
 		await loadHomeCardIds()
 		expect(sentQueries).toHaveLength(7)
 		await clearSharedTopicFeedCaches()
 		await loadHomeCardIds()
-		expect(sentQueries.filter((sentQuery) => !isPinnedOnlyRead(sentQuery))).toHaveLength(7)
+		expect(sentQueries.filter((sentQuery) => !isFeaturedOnlyRead(sentQuery))).toHaveLength(7)
 	})
 })

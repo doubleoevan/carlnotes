@@ -17,7 +17,7 @@ import { topicCounts } from "./viewerCounts"
 export const TOPIC_POST_DISCUSSION_WAIT_MS = 15 * MINUTE_MS
 
 // the title of the section that lists Topic Posts, on a Topic's page and on a profile's
-export const OPEN_MIC_TITLE = "Open Mic"
+export const OPEN_MIC_TITLE = "Open Mic 🎤"
 
 // the longest title a Topic Post takes, and the fewest words a published one holds
 export const TOPIC_POST_TITLE_MAX_CHARS = 120
@@ -119,10 +119,10 @@ export type TopicPostCard = z.infer<typeof topicPostCard>
 // a Topic Post as a row of the admin's home rank dialog: its title and its Topic's name
 const homeTopicPost = z.object({ id: z.string(), title: z.string(), topicName: z.string() })
 
-// the Topic Posts an admin orders on the home: the pinned ones in their order, and the newest published ones of
-// public topics, which a pin may name
+// the Topic Posts an admin orders on the home: the featured ones in their order, and the newest published ones of
+// public topics, which an admin may feature
 export const homeTopicPostsResponse = z.object({
-	pinnedTopicPosts: z.array(homeTopicPost),
+	featuredTopicPosts: z.array(homeTopicPost),
 	candidateTopicPosts: z.array(homeTopicPost),
 })
 

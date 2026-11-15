@@ -3,7 +3,7 @@ import { toTestTopicResponse } from "@carlnotes/contracts/topicFeedTestFixtures"
 import { PODCAST_STORY_FILM_EPISODE, PodcastEpisodeStory } from "@carlnotes/core/lib/podcastEpisodeStories"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { PodcastEpisodesCard } from "./PodcastEpisodesCard"
-import { TopicPodcastEpisodeVideoSection } from "./TopicPodcastEpisodeVideoSection"
+import { TopicVideoSection } from "./TopicVideoSection"
 
 // a season of seven films, newest first, so the list shows two pages
 const films = Array.from({ length: 7 }, (_, index) => ({
@@ -13,7 +13,7 @@ const films = Array.from({ length: 7 }, (_, index) => ({
 	title: `${PODCAST_STORY_FILM_EPISODE.title} ${7 - index}`,
 }))
 
-// a topic with Topic Cinema on the latest film, and its owner's removal permission
+// a topic with the topic video section on the latest film, and its owner's removal permission
 const topic = toTestTopicResponse({
 	latestPodcastEpisode: films[0],
 	podcast: toTopicPodcastFixture({
@@ -41,10 +41,10 @@ export default meta
 type Story = StoryObj
 
 export const Films: Story = { render: () => <PodcastEpisodesCard topic={topic} format="video" /> }
-export const FilmsWithTopicCinema: Story = {
+export const FilmsWithTopicVideoSection: Story = {
 	render: () => (
 		<>
-			<TopicPodcastEpisodeVideoSection topic={topic} onVideoRenderingPoll={() => {}} />
+			<TopicVideoSection topic={topic} onVideoRenderingPoll={() => {}} />
 			<PodcastEpisodesCard topic={topic} format="video" />
 		</>
 	),

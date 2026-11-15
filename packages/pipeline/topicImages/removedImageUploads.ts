@@ -11,10 +11,10 @@ import { topicImageModel, topicImageRegenerateModel } from "@carlnotes/models/to
 import { reportError } from "@carlnotes/server/monitoring"
 import { and, eq, ne } from "drizzle-orm"
 import { removePodcastEpisodeImageUpload } from "../podcast/podcastEpisodeImageRenders"
-import { startTopicPodcastEpisodeVideoRebuild } from "../temporalClient"
-import { removeTopicPodcastEpisodeVideoImageUpload } from "../topicPodcastEpisodeVideo/topicPodcastEpisodeVideoImage"
-import { saveImageTopicPodcastEpisodeVideosRendering } from "../topicPodcastEpisodeVideo/topicPodcastEpisodeVideoRows"
+import { startTopicVideoRebuild } from "../temporalClient"
 import { removeTopicPostImageUpload } from "../topicPosts/topicPostImageRenders"
+import { removeTopicVideoImageUpload } from "../topicVideo/topicVideoImage"
+import { saveImageTopicVideosRendering } from "../topicVideo/topicVideoRows"
 import type { UncheckedImageHashSubject } from "../uncheckedImages"
 import { removeTopicImageUpload, startTopicImageRender } from "./topicImageRenders"
 
@@ -80,18 +80,18 @@ export async function regenerateRemovedPodcastEpisodeImage(podcastEpisodeId: str
  * intro and sign-off. A film whose image is not an upload, and a podcast episode that is gone, removed, or left with
  * no topic, are skipped.
  */
-export async function regenerateRemovedTopicPodcastEpisodeVideoImage(podcastEpisodeId: string): Promise<void> {
+export async function regenerateRemovedTopicVideoImage(podcastEpisodeId: string): Promise<void> {
 	const topicId = await loadPodcastEpisodeTopicId(podcastEpisodeId)
 	if (!topicId) {
 		return
 	}
 
 	// a film's own image is drawn on the better model. the render row names the film, bills no user, and is the admin's
-	const topicPodcastEpisodeVideoId = await removeTopicPodcastEpisodeVideoImageUpload(podcastEpisodeId)
-	if (topicPodcastEpisodeVideoId) {
+	const topicVideoId = await removeTopicVideoImageUpload(podcastEpisodeId)
+	if (topicVideoId) {
 		await startTopicImageRender({
 			topicId,
-			topicPodcastEpisodeVideoId,
+			topicVideoId,
 			userId: null,
 			kind: "admin",
 			model: topicImageRegenerateModel(),
@@ -118,7 +118,7 @@ export async function removeImageUpload(
 	imageHash: string,
 ): Promise<void> {
 	// no film drawn from the image plays from here on
-	const podcastEpisodeIds = await saveImageTopicPodcastEpisodeVideosRendering(db, {
+	const podcastEpisodeIds = await saveImageTopicVideosRendering(db, {
 		...uncheckedImageSubject,
 		imageHash,
 	})
@@ -126,8 +126,8 @@ export async function removeImageUpload(
 
 	// rebuild each of those films. a failed start is reported, and the film stays marked rendering
 	for (const podcastEpisodeId of podcastEpisodeIds) {
-		await startTopicPodcastEpisodeVideoRebuild(podcastEpisodeId).catch((error: unknown) => {
-			reportError(error, "topic-podcast-episode-video", { podcastEpisodeId, step: "rebuild" })
+		await startTopicVideoRebuild(podcastEpisodeId).catch((error: unknown) => {
+			reportError(error, "topic-video", { podcastEpisodeId, step: "rebuild" })
 		})
 	}
 }
@@ -147,6 +147,6 @@ async function removeSubjectImageUpload({ subjectKind, subjectId }: UncheckedIma
 			await removeTopicPostImageUpload(subjectId)
 			return
 		case "topicPodcastEpisodeVideoImage":
-			await removeTopicPodcastEpisodeVideoImageUpload(subjectId)
+			await removeTopicVideoImageUpload(subjectId)
 	}
 }

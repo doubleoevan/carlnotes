@@ -96,7 +96,7 @@ const TOPIC_SKELETON_ELEMENTS: TopicSkeletonElements = {
 	Section: ({ children }) => <CollapsibleSectionSkeleton>{children}</CollapsibleSectionSkeleton>,
 	Cards: View,
 	Column: View,
-	Film: TopicPodcastEpisodeVideoCardSkeleton,
+	Film: TopicVideoCardSkeleton,
 	Podcast: () => <PodcastEpisodePlayerCardSkeleton hasFeedButton />,
 	// the findings' card has its own inset, so it leaves the column's, as the loaded list does
 	Findings: ({ hasChapterPills }) => (
@@ -128,7 +128,7 @@ export function EmptySectionCardSkeleton() {
 /**
  * Reserves a film's card: the frame, the seek bar, and the controls, which wrap onto two rows.
  */
-export function TopicPodcastEpisodeVideoCardSkeleton() {
+export function TopicVideoCardSkeleton() {
 	return (
 		<View className="gap-3 rounded-lg border border-separator bg-card p-5 shadow-raised">
 			<View className={cn(SKELETON_SHAPE_CLASS, "aspect-video w-full rounded-lg")} />

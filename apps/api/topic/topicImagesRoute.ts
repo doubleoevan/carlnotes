@@ -8,11 +8,11 @@ import {
 	type TopicImageUrls,
 	toPodcastEpisodeImageUrls,
 	toTopicImageUrlsOrNull,
-	toTopicPodcastEpisodeVideoPosterUrl,
 	toTopicPostImageUrls,
+	toTopicVideoPosterUrl,
 } from "@carlnotes/contracts/topicImages"
 import { db } from "@carlnotes/db"
-import { podcastEpisodes, topicPodcastEpisodeVideos } from "@carlnotes/db/schema/podcast"
+import { podcastEpisodes, topicVideos } from "@carlnotes/db/schema/podcast"
 import { topicPosts } from "@carlnotes/db/schema/topicPosts"
 import { topics } from "@carlnotes/db/schema/topics"
 import { loadTopicImage } from "@carlnotes/db/topicImages"
@@ -135,27 +135,25 @@ export const topicImagesRoute = new Hono<AppEnv>()
 
 // the poster url of the image a succeeded film render left, or null for any other render
 async function loadRenderedPosterUrl(render: TopicImageRenderRow): Promise<string | null> {
-	if (!render.topicPodcastEpisodeVideoId) {
+	if (!render.topicVideoId) {
 		return null
 	}
 
 	// the film's current image, at its podcast episode
-	const [topicPodcastEpisodeVideo] = await db
+	const [topicVideo] = await db
 		.select({
-			podcastEpisodeId: topicPodcastEpisodeVideos.podcastEpisodeId,
-			imageHash: topicPodcastEpisodeVideos.imageHash,
+			podcastEpisodeId: topicVideos.podcastEpisodeId,
+			imageHash: topicVideos.imageHash,
 		})
-		.from(topicPodcastEpisodeVideos)
-		.where(eq(topicPodcastEpisodeVideos.id, render.topicPodcastEpisodeVideoId))
-	return topicPodcastEpisodeVideo?.imageHash
-		? toTopicPodcastEpisodeVideoPosterUrl(topicPodcastEpisodeVideo.podcastEpisodeId, topicPodcastEpisodeVideo.imageHash)
-		: null
+		.from(topicVideos)
+		.where(eq(topicVideos.id, render.topicVideoId))
+	return topicVideo?.imageHash ? toTopicVideoPosterUrl(topicVideo.podcastEpisodeId, topicVideo.imageHash) : null
 }
 
 // the urls of the image a succeeded render left, on its podcast episode, its Topic Post, or its topic. a film's render
 // leaves a poster and no urls
 async function loadRenderedImage(render: TopicImageRenderRow): Promise<TopicImageUrls | null> {
-	if (render.topicPodcastEpisodeVideoId) {
+	if (render.topicVideoId) {
 		return null
 	}
 

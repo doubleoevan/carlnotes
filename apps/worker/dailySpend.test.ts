@@ -33,7 +33,7 @@ test("loadDailySpend sums the day's scan, chat, podcast episode, and film costs 
 	// each table answers its own sum, and the users table its count, as the array rows a select reads. the film sum
 	// comes first. its query names the episodes table too
 	const rowsByTable: Record<string, string[][]> = {
-		topic_podcast_episode_videos: [["0.5"]],
+		topic_videos: [["0.5"]],
 		scans: [["1.5"]],
 		chat_turns: [["0.25"]],
 		episodes: [["2"]],

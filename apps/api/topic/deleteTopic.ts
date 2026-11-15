@@ -51,7 +51,7 @@ export async function deleteTopic(
 	const objectKeys = await db.transaction(async (transaction) => {
 		const topicObjectKeys = await loadTopicObjectKeys(topicId, transaction)
 		await recordPendingObjectDeletions({ handle: transaction, objectKeys: topicObjectKeys })
-		// the topic and its podcast episodes leave the home's pins and their owner's profile pins
+		// the topic and its podcast episodes leave the home's featured items and their owner's featured profile items
 		isHomeOrderReleased = await releaseHomeOrder(topicId, transaction)
 		releasedProfileUserIds = await releaseTopicProfileOrders(topicId, transaction)
 		await transaction.delete(topics).where(eq(topics.id, topicId))

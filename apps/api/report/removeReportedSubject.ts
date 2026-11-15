@@ -10,8 +10,8 @@ import { noteComments, notes } from "@carlnotes/db/schema/notes"
 import {
 	regenerateRemovedPodcastEpisodeImage,
 	regenerateRemovedTopicImage,
-	regenerateRemovedTopicPodcastEpisodeVideoImage,
 	regenerateRemovedTopicPostImage,
+	regenerateRemovedTopicVideoImage,
 } from "@carlnotes/pipeline/topicImages/removedImageUploads"
 import { dropUncheckedImage } from "@carlnotes/pipeline/uncheckedImages"
 import { purgeEdgeCacheTagAfterDeletion } from "@carlnotes/server/edgePurge"
@@ -114,6 +114,6 @@ export async function removeReportedSubjectImages({ subjectKind, subjectId }: Re
 		await dropUncheckedImage({ subjectKind: "podcastEpisodeImage", subjectId }, null)
 		await dropUncheckedImage({ subjectKind: "topicPodcastEpisodeVideoImage", subjectId }, null)
 		await regenerateRemovedPodcastEpisodeImage(subjectId)
-		await regenerateRemovedTopicPodcastEpisodeVideoImage(subjectId)
+		await regenerateRemovedTopicVideoImage(subjectId)
 	}
 }

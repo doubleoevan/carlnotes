@@ -62,7 +62,7 @@ test("a topic image's cache tag names the topic", () => {
 	expect(toTopicImageCacheTag("topic-1")).toBe("topic-image:topic-1")
 })
 
-// a profile page and its payloads carry the profile's own tag, which a change to its pins purges
+// a profile page and its payloads carry the profile's own tag, which a change to its featured items purges
 test("a profile page and its payload are tagged with the profile's user, and the home with its own tag", () => {
 	const toCacheTag = (path: string): string | null => {
 		const response = new Response("page")

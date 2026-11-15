@@ -62,8 +62,8 @@ export const PODCAST_STORY_FILM_EPISODE: PodcastEpisode = {
 	})),
 	hasVideo: true,
 	video: {
-		videoUrl: "/stories/topic-podcast-episode-video.mp4",
-		captionsUrl: "/stories/topic-podcast-episode-video.vtt",
+		videoUrl: "/stories/topic-video.mp4",
+		captionsUrl: "/stories/topic-video.vtt",
 	},
 }
 

@@ -48,7 +48,7 @@ export const podcastEpisodeSummary = z.object({
 
 export type PodcastEpisodeSummary = z.infer<typeof podcastEpisodeSummary>
 
-// a podcast episode pinned among the home podcast episodes: its title, its topic's name, its page, and its position
+// a podcast episode featured among the home podcast episodes: its title, its topic's name, its page, and its position
 export const homePodcastEpisode = z.object({
 	id: z.string(),
 	title: z.string(),
@@ -91,13 +91,13 @@ export function isPublishedPodcastEpisode<T extends { season: number | null; epi
 
 // a podcast episode's film: its stable video url, its captions url, and the url of its own image for the poster,
 // which is null until the film has one and optional, so a released app reads a film without it
-const topicPodcastEpisodeVideo = z.object({
+const topicVideo = z.object({
 	videoUrl: z.string(),
 	captionsUrl: z.string(),
 	posterUrl: z.string().nullable().optional(),
 })
 
-export type TopicPodcastEpisodeVideo = z.infer<typeof topicPodcastEpisodeVideo>
+export type TopicVideo = z.infer<typeof topicVideo>
 
 // the formats a podcast episode plays in
 export const podcastEpisodeFormats = ["audio", "video"] as const
@@ -117,7 +117,7 @@ export const podcastEpisode = podcastEpisodeSummary.extend({
 	coverUrl: z.string().nullable(),
 	smallCoverUrl: z.string().nullable(),
 	// the film, null if the podcast episode has no ready film. an older api leaves it out
-	video: topicPodcastEpisodeVideo.nullable().optional(),
+	video: topicVideo.nullable().optional(),
 	// whether the podcast episode's film is rendering. an older api leaves it out
 	isVideoRendering: z.boolean().optional(),
 	chapters: z.array(podcastEpisodeChapter),
@@ -179,7 +179,8 @@ export const topicPodcast = z.object({
 	latestSeasonPodcastEpisodes: seasonPodcastEpisodes,
 	// the public podcast feed, for a public topic with a published episode, and null for every other topic
 	publicFeedUrl: z.string().nullable(),
-	// Topic Cinema: the latest film the user may watch, null with no film. an older api leaves it out
+	// the topic video section: the latest film the user may watch, null with no film. an older api leaves it out, and
+	// the field's name must not change, because the frozen api contract reads it
 	topicPodcastEpisodeVideoSection: z.object({ podcastEpisode: podcastEpisode }).nullable().optional(),
 	// the public film feed, for a public topic with a film, and null for every other topic. an older api leaves it out
 	publicVideoFeedUrl: z.string().nullable().optional(),
@@ -217,8 +218,8 @@ export const podcastEpisodeAudio = z.object({
 export type PodcastEpisodeAudio = z.infer<typeof podcastEpisodeAudio>
 
 // a film's short-lived url, which a platform player loads without the session, and when the url expires
-export const topicPodcastEpisodeVideoFile = z.object({
+export const topicVideoFile = z.object({
 	videoUrl: z.url().refine((url) => url.startsWith("https://")),
 	expiresAt: z.iso.datetime(),
 })
-export type TopicPodcastEpisodeVideoFile = z.infer<typeof topicPodcastEpisodeVideoFile>
+export type TopicVideoFile = z.infer<typeof topicVideoFile>

@@ -20,7 +20,7 @@ const TOPIC: EditableImage = {
 }
 
 // a film's own image, which the block edits by the film's podcast episode
-const TOPIC_PODCAST_EPISODE_VIDEO: EditableImage = { ...TOPIC, kind: "topicPodcastEpisodeVideo", id: "episode-1" }
+const TOPIC_VIDEO: EditableImage = { ...TOPIC, kind: "topicVideo", id: "episode-1" }
 
 const meta = {
 	title: "Topic/TopicImageEditor",
@@ -95,8 +95,8 @@ export const NoImage: Story = {
 
 // a film's own image in the standard layout: the image at 16:9, which a press uploads over, then the image prompt
 // beside Regenerate
-export const TopicPodcastEpisodeVideo: Story = {
-	args: { editableImage: TOPIC_PODCAST_EPISODE_VIDEO },
+export const TopicVideo: Story = {
+	args: { editableImage: TOPIC_VIDEO },
 	beforeEach: () => {
 		mocked(sendTopicPodcastEpisodeVideoImageRegeneration).mockResolvedValue("render-1")
 		mocked(fetchTopicImageRender).mockResolvedValue({ status: "pending", image: null })
@@ -127,8 +127,8 @@ export const TopicPodcastEpisodeVideo: Story = {
 }
 
 // a film at the month's limit keeps the image as the upload control, without the image prompt and Regenerate
-export const TopicPodcastEpisodeVideoLimitReached: Story = {
-	args: { editableImage: { ...TOPIC_PODCAST_EPISODE_VIDEO, imageRegenerationQuota: { used: 15, limit: 15 } } },
+export const TopicVideoLimitReached: Story = {
+	args: { editableImage: { ...TOPIC_VIDEO, imageRegenerationQuota: { used: 15, limit: 15 } } },
 	play: async ({ canvas }) => {
 		await expect(canvas.queryByLabelText("Image prompt")).toBeNull()
 		await expect(canvas.queryByRole("button", { name: "Regenerate" })).toBeNull()
@@ -137,10 +137,10 @@ export const TopicPodcastEpisodeVideoLimitReached: Story = {
 }
 
 // a film's own image shown to the editor alone: the same line under the image at the film's frame
-export const TopicPodcastEpisodeVideoUncheckedUpload: Story = {
+export const TopicVideoUncheckedUpload: Story = {
 	args: {
 		editableImage: {
-			...TOPIC_PODCAST_EPISODE_VIDEO,
+			...TOPIC_VIDEO,
 			imageOrigin: "uploaded",
 			imagePrompt: null,
 			isImageUnchecked: true,

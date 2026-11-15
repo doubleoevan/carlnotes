@@ -4,9 +4,9 @@ import { toCountLabel } from "@carlnotes/contracts/text"
 import type { TopicDetails, TopicResponse } from "@carlnotes/contracts/topics"
 import { MAX_TOPIC_SOURCES } from "@carlnotes/contracts/topics"
 import {
-	TopicPodcastEpisodeVideoInfoSection,
-	type TopicPodcastEpisodeVideoInfoSectionElements,
-} from "@carlnotes/core/components/TopicPodcastEpisodeVideoInfoSection"
+	TopicVideoInfoSection,
+	type TopicVideoInfoSectionElements,
+} from "@carlnotes/core/components/TopicVideoInfoSection"
 import { toTopicSourceRows } from "@carlnotes/core/lib/topicSources"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { AudioLines, Diamond, Download, ExternalLink, Globe, Link, Lock, Mail, Plug, Puzzle, Rss } from "lucide-react"
@@ -74,7 +74,7 @@ const SCROLLING_PROMPT_CHARS = 900
 const DASHED_SEPARATOR_CLASS = "border-separator-strong border-t border-dashed"
 
 // the film section's elements: the info section, the row at the podcast row's padding, and the Video button
-const TOPIC_PODCAST_EPISODE_VIDEO_INFO_SECTION_ELEMENTS: TopicPodcastEpisodeVideoInfoSectionElements = {
+const TOPIC_VIDEO_INFO_SECTION_ELEMENTS: TopicVideoInfoSectionElements = {
 	Section: InfoSection,
 	Row: (props) => (
 		<ul>
@@ -153,9 +153,9 @@ export function TopicInfo(props: TopicInfoProps) {
 
 				{/* the latest podcast episode's film above its row, in the popover only */}
 				{!props.isCard && (
-					<TopicPodcastEpisodeVideoInfoSection
+					<TopicVideoInfoSection
 						podcastEpisode={topic.latestPodcastEpisode}
-						elements={TOPIC_PODCAST_EPISODE_VIDEO_INFO_SECTION_ELEMENTS}
+						elements={TOPIC_VIDEO_INFO_SECTION_ELEMENTS}
 					/>
 				)}
 

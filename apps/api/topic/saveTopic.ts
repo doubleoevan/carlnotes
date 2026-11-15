@@ -337,8 +337,8 @@ export async function updateTopic(
 		// save a prompt version when the prompt changed
 		await savePromptVersion(transaction, { topicId, prompt, userId, origin: "editor", previousPrompt: topic.prompt })
 
-		// only a public topic can be pinned, so changing the visibility from public drops it from the home topics and
-		// from its owner's profile pins
+		// only a public topic can be featured, so changing the visibility from public drops it from the home topics and
+		// from its owner's featured profile items
 		if (visibility !== "public") {
 			isHomeOrderReleased = await releaseHomeOrder(topicId, transaction)
 			releasedProfileUserIds = await releaseTopicProfileOrders(topicId, transaction)

@@ -7,8 +7,8 @@ import {
 	type CardSection,
 	PODCAST_EPISODE_CARD_SECTION,
 	TOPIC_CARD_SECTION,
-	TOPIC_PODCAST_EPISODE_VIDEO_CARD_SECTION,
 	TOPIC_POST_CARD_SECTION,
+	TOPIC_VIDEO_CARD_SECTION,
 } from "./cardSections"
 
 // the card sections in the order both homes show them, under the home payload's field names. the films come right
@@ -16,14 +16,14 @@ import {
 export const HOME_SECTIONS = {
 	homeTopics: { value: "home-topics", title: "Featured topics", ...TOPIC_CARD_SECTION },
 	homeTopicPodcastEpisodeVideos: {
-		value: "home-topic-podcast-episode-videos",
+		value: "home-topic-videos",
 		title: "Featured films",
-		...TOPIC_PODCAST_EPISODE_VIDEO_CARD_SECTION,
+		...TOPIC_VIDEO_CARD_SECTION,
 	},
 	newestTopicPodcastEpisodeVideos: {
-		value: "newest-topic-podcast-episode-videos",
+		value: "newest-topic-videos",
 		title: "New films this week",
-		...TOPIC_PODCAST_EPISODE_VIDEO_CARD_SECTION,
+		...TOPIC_VIDEO_CARD_SECTION,
 	},
 	homePodcastEpisodes: {
 		value: "home-podcast-episodes",

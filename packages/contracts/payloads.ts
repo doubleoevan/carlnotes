@@ -341,7 +341,7 @@ const GENERATED_CHAPTER_IMAGE_LIMIT_MAX = 1000
 
 // the admin spend control settings body. each daily spend cutoff in dollars of at least a cent, the first scan dispatch
 // limit of zero or more, the hourly signup alert count of one or more, and the generated chapter image limit of zero or
-// more, each null to use its default, with the unverified accounts switch, the two pauses, and the pinned-only home.
+// more, each null to use its default, with the unverified accounts switch, the two pauses, and the featured-only home.
 // a setting left out keeps its stored value
 export const spendControlSettingsPayload = z
 	.object({
@@ -353,8 +353,8 @@ export const spendControlSettingsPayload = z
 		isUnverifiedFirstScanLimitOn: z.boolean(),
 		generatedChapterImageLimit: z.number().int().min(0).max(GENERATED_CHAPTER_IMAGE_LIMIT_MAX).nullable(),
 		isPodcastEpisodeRecordingPaused: z.boolean(),
-		isTopicPodcastEpisodeVideoRenderingPaused: z.boolean(),
-		isHomePinnedOnly: z.boolean(),
+		isTopicVideoRenderingPaused: z.boolean(),
+		isHomeFeaturedOnly: z.boolean(),
 	})
 	.partial()
 

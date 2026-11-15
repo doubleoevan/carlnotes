@@ -50,11 +50,11 @@ type ToTopicDetailsOptions = {
 export function toTopicDetails({ topic, findingCount, commentCount, noteCount }: ToTopicDetailsOptions): string[] {
 	// the latest season's podcast episodes, and the ones with a film if the topic has a film the user may watch
 	const podcastEpisodes = topic.podcast?.seasons.length ? topic.podcast.latestSeasonPodcastEpisodes.podcastEpisodes : []
-	const topicPodcastEpisodeVideoCount = topic.podcast?.topicPodcastEpisodeVideoSection
+	const topicVideoCount = topic.podcast?.topicPodcastEpisodeVideoSection
 		? podcastEpisodes.filter((podcastEpisode) => podcastEpisode.video).length
 		: 0
 	return toCountDetails([
-		{ count: topicPodcastEpisodeVideoCount, noun: "film" },
+		{ count: topicVideoCount, noun: "film" },
 		{ count: podcastEpisodes.length, noun: "podcast episode" },
 		{ count: findingCount, noun: "finding" },
 		{ count: commentCount ?? topic.commentThread?.commentCount, noun: "hot take" },

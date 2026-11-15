@@ -57,7 +57,7 @@ export function toUncheckedAvatarRow(): unknown[] {
 }
 
 // an unchecked film image of the film of episode-1
-export function toUncheckedTopicPodcastEpisodeVideoImageRow(): unknown[] {
+export function toUncheckedTopicVideoImageRow(): unknown[] {
 	return toUncheckedImageRow({
 		id: "unchecked-film",
 		subjectKind: "topicPodcastEpisodeVideoImage",
@@ -97,7 +97,7 @@ function toUncheckedImageQueryRows(
 
 // the rows a film query returns: the image a publish replaces with its private topic, or the film's current image
 // hash, its topic and that topic's visibility, and its id
-function toTopicPodcastEpisodeVideoQueryRows({ text }: SentQuery): unknown[][] {
+function toTopicVideoQueryRows({ text }: SentQuery): unknown[][] {
 	return text.includes("for no key update")
 		? [["film-hash-before", "topic-1", "private"]]
 		: [["film-hash-before", "topic-1", "public", "film-1"]]
@@ -118,8 +118,8 @@ export function stubUncheckedImageCheck(
 		}
 
 		// the film of an unchecked film image
-		if (text.includes('from "topic_podcast_episode_videos"')) {
-			return toTopicPodcastEpisodeVideoQueryRows(sentQuery)
+		if (text.includes('from "topic_videos"')) {
+			return toTopicVideoQueryRows(sentQuery)
 		}
 
 		// a topic by its id, or no row for a topic that is gone

@@ -231,7 +231,7 @@ test("the topic page reads its podcast episodes' films once", async () => {
 
 	// one page load, and one film read among its queries, for both podcast episodes
 	const { response } = await requestAsUser("/api/topics/topic-1", "user-1")
-	const filmReads = sentQueries.filter((sentQuery) => sentQuery.text.includes('from "topic_podcast_episode_videos"'))
+	const filmReads = sentQueries.filter((sentQuery) => sentQuery.text.includes('from "topic_videos"'))
 	expect(response.status).toBe(200)
 	expect(filmReads).toHaveLength(1)
 	expect(filmReads[0]?.values).toEqual(["episode-2", "episode-1", "ready", "rendering"])

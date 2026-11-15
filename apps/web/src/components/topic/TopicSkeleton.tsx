@@ -132,7 +132,7 @@ const TOPIC_SKELETON_ELEMENTS: TopicSkeletonElements = {
 	Section: TopicSectionSkeleton,
 	Cards: ({ children }) => <div className="grid gap-x-8 lg:grid-cols-[32rem_minmax(0,1fr)]">{children}</div>,
 	Column: ({ children }) => <div className="min-w-0">{children}</div>,
-	Film: TopicPodcastEpisodeVideoCardSkeleton,
+	Film: TopicVideoCardSkeleton,
 	Podcast: () => <PodcastEpisodePlayerCardSkeleton hasFeedButton />,
 	Findings: FindingListSkeleton,
 	Comments: EmptySectionCardSkeleton,
@@ -200,7 +200,7 @@ export function EmptySectionCardSkeleton() {
 /**
  * The loading state of a film's card: the frame, the seek bar, and the controls, which wrap onto two rows on a phone.
  */
-export function TopicPodcastEpisodeVideoCardSkeleton() {
+export function TopicVideoCardSkeleton() {
 	return (
 		<div className={FILM_CARD_CLASS}>
 			<div className="bg-muted aspect-video w-full animate-pulse rounded-lg" />

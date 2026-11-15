@@ -33,7 +33,7 @@
 				"scripts/backfill-vectors.ts",
 				"scripts/backfill-topic-images.ts",
 				"scripts/backfill-podcast-episode-images.ts",
-				"scripts/backfill-topic-podcast-episode-videos.ts",
+				"scripts/backfill-topic-videos.ts",
 				// the eval:* scripts and smoke:eval
 				"evals/attachment-summaries/attachmentSummariesEval.ts",
 				"evals/personal-sources-context/personalSourcesContextEval.ts",
@@ -69,6 +69,8 @@
 				// the temporal and reset:monthly-budgets scripts
 				"temporal.ts",
 				"resetMonthlyBudgets.ts",
+				// the schedule, reset:monthly-budgets, db:migrate, docs:embed, and edge:purge scripts run their jobs through it
+				"runMonitoredJob.ts",
 				// temporal.ts passes each workflow file to Temporal as `new URL(...)`, not as an import
 				"workflows/processAttachment.ts",
 				"workflows/runTopicScan.ts",

@@ -3,7 +3,7 @@
 // Regenerate
 import { expect, test } from "bun:test"
 import type { AdminReport } from "@carlnotes/contracts/reports"
-import { toPodcastEpisodeImageUrls, toTopicPodcastEpisodeVideoPosterUrl } from "@carlnotes/contracts/topicImages"
+import { toPodcastEpisodeImageUrls, toTopicVideoPosterUrl } from "@carlnotes/contracts/topicImages"
 import { renderWithRouter } from "@/components/chat/renderWithRouter"
 import { AdminReportsTable } from "./AdminReportsTable"
 
@@ -16,7 +16,7 @@ const PROFILE_REPORT: AdminReport = {
 	subjectPath: "/profiles/user-2",
 	subjectImage: null,
 	subjectAvatarVersion: null,
-	topicPodcastEpisodeVideoPosterUrl: null,
+	topicVideoPosterUrl: null,
 	reason: "rude",
 	createdAt: "2026-10-29T10:00:00.000Z",
 	author: { id: "user-2", username: "vienna" },
@@ -79,7 +79,7 @@ test("a team with an uploaded avatar shows it and offers Reset avatar", async ()
 test("a podcast episode shows its image and its film's poster and offers Regenerate", async () => {
 	// the podcast episode's image and its film's poster
 	const subjectImage = toPodcastEpisodeImageUrls("podcast-episode-1", "image-hash")
-	const topicPodcastEpisodeVideoPosterUrl = toTopicPodcastEpisodeVideoPosterUrl("podcast-episode-1", "video-image-hash")
+	const topicVideoPosterUrl = toTopicVideoPosterUrl("podcast-episode-1", "video-image-hash")
 	const { rowHtml, buttonLabels } = await renderReportRow({
 		...PROFILE_REPORT,
 		subjectKind: "podcastEpisode",
@@ -87,13 +87,13 @@ test("a podcast episode shows its image and its film's poster and offers Regener
 		subjectText: "Agents that read the docs",
 		subjectPath: "/topics/topic-1/llm-tooling/episodes/2026/12",
 		subjectImage,
-		topicPodcastEpisodeVideoPosterUrl,
+		topicVideoPosterUrl,
 		canRemove: true,
 	})
 
 	// both images at the list size, and Regenerate in Remove's place
 	expect(rowHtml).toContain(`src="${subjectImage.list.url}"`)
-	expect(rowHtml).toContain(`src="${topicPodcastEpisodeVideoPosterUrl}"`)
+	expect(rowHtml).toContain(`src="${topicVideoPosterUrl}"`)
 	expect(buttonLabels).toEqual(["Regenerate", "Block", "Clear"])
 })
 

@@ -266,14 +266,14 @@ export function DailySpendCutoffsCard({ dailySpendCutoffs, onSaved }: DailySpend
 				<SpendControlSwitch
 					id="pause-films"
 					label="Pause new films"
-					isChecked={spendControlDraft.isTopicPodcastEpisodeVideoRenderingPaused}
-					onCheckedChange={(isPaused) => handleSwitchChange({ isTopicPodcastEpisodeVideoRenderingPaused: isPaused })}
+					isChecked={spendControlDraft.isTopicVideoRenderingPaused}
+					onCheckedChange={(isPaused) => handleSwitchChange({ isTopicVideoRenderingPaused: isPaused })}
 				/>
 				<SpendControlSwitch
-					id="home-pinned-only"
-					label="Show only pinned items on the home"
-					isChecked={spendControlDraft.isHomePinnedOnly}
-					onCheckedChange={(isPinnedOnly) => handleSwitchChange({ isHomePinnedOnly: isPinnedOnly })}
+					id="home-featured-only"
+					label="Show only featured items on the home"
+					isChecked={spendControlDraft.isHomeFeaturedOnly}
+					onCheckedChange={(isFeaturedOnly) => handleSwitchChange({ isHomeFeaturedOnly: isFeaturedOnly })}
 				/>
 			</div>
 		</div>

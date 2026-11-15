@@ -4,7 +4,7 @@ import type { ImageRegenerationQuota } from "@carlnotes/contracts/topicImages"
 import { MAX_TOPIC_IMAGE_UPLOAD_BYTES, TOPIC_IMAGE_UPLOAD_TYPES } from "@carlnotes/contracts/topicImages"
 
 // whether the block edits a topic's image, a podcast episode's image, a Topic Post's image, or a film's own image
-export type EditableImageKind = "topic" | "podcastEpisode" | "topicPost" | "topicPodcastEpisodeVideo"
+export type EditableImageKind = "topic" | "podcastEpisode" | "topicPost" | "topicVideo"
 
 // the title of the dialog that holds the image block alone, by kind. a click or tap on a header image opens it, and
 // the action menu's Edit film option opens a film's
@@ -12,7 +12,7 @@ export const EDIT_IMAGE_DIALOG_TITLES: Record<EditableImageKind, string> = {
 	topic: "Edit topic image",
 	podcastEpisode: "Edit podcast image",
 	topicPost: "Edit post image",
-	topicPodcastEpisodeVideo: "Edit film",
+	topicVideo: "Edit film",
 }
 
 // the block's labels

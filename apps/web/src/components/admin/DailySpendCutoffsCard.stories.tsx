@@ -1,6 +1,6 @@
 // the admin console's spend control section: below every cutoff with every default, past two with overrides and a busy
 // hour of signups, the cutoffs saved and reset from their buttons, a setting saved on blur without the typed cutoffs,
-// unverified signups limited, every switch on, each pause and the pinned-only home saved as it is flipped, a saved
+// unverified signups limited, every switch on, each pause and the featured-only home saved as it is flipped, a saved
 // pause left out of the next save and sent once it is turned back off, the generated image limit saved on blur, a
 // save that failed, and a rejected value
 import { sendSpendControlSettings } from "@carlnotes/client/billingClient"
@@ -29,8 +29,8 @@ const BELOW_CUTOFFS: AdminDailySpendCutoffs = {
 	generatedChapterImageLimit: { value: 40, defaultValue: 40, isOverridden: false },
 	isUnverifiedFirstScanLimitOn: false,
 	isPodcastEpisodeRecordingPaused: false,
-	isTopicPodcastEpisodeVideoRenderingPaused: false,
-	isHomePinnedOnly: false,
+	isTopicVideoRenderingPaused: false,
+	isHomeFeaturedOnly: false,
 	updatedAt: null,
 	updatedByUsername: null,
 }
@@ -55,20 +55,20 @@ const PAST_CUTOFFS: AdminDailySpendCutoffs = {
 	generatedChapterImageLimit: { value: 40, defaultValue: 40, isOverridden: false },
 	isUnverifiedFirstScanLimitOn: true,
 	isPodcastEpisodeRecordingPaused: false,
-	isTopicPodcastEpisodeVideoRenderingPaused: false,
-	isHomePinnedOnly: false,
+	isTopicVideoRenderingPaused: false,
+	isHomeFeaturedOnly: false,
 	updatedAt: FIXTURE_DATE.toISOString(),
 	updatedByUsername: STORY_PEOPLE[0].username,
 }
 
-// both pauses and the pinned-only home on, unverified signups limited, and a generated image limit of 10
+// both pauses and the featured-only home on, unverified signups limited, and a generated image limit of 10
 const EVERY_SWITCH_ON: AdminDailySpendCutoffs = {
 	...BELOW_CUTOFFS,
 	generatedChapterImageLimit: { value: 10, defaultValue: 40, isOverridden: true },
 	isUnverifiedFirstScanLimitOn: true,
 	isPodcastEpisodeRecordingPaused: true,
-	isTopicPodcastEpisodeVideoRenderingPaused: true,
-	isHomePinnedOnly: true,
+	isTopicVideoRenderingPaused: true,
+	isHomeFeaturedOnly: true,
 	updatedAt: FIXTURE_DATE.toISOString(),
 	updatedByUsername: STORY_PEOPLE[0].username,
 }
@@ -166,13 +166,13 @@ export const UnverifiedSignupsLimited: Story = {
 	},
 }
 
-// every switch on: both pauses, the pinned-only home, unverified signups limited, and an overridden image limit
+// every switch on: both pauses, the featured-only home, unverified signups limited, and an overridden image limit
 export const EverySwitchOn: Story = {
 	args: { dailySpendCutoffs: EVERY_SWITCH_ON },
 	play: async ({ canvas }) => {
 		await expect(canvas.getByRole("switch", { name: "Pause new podcast episodes" })).toBeChecked()
 		await expect(canvas.getByRole("switch", { name: "Pause new films" })).toBeChecked()
-		await expect(canvas.getByRole("switch", { name: "Show only pinned items on the home" })).toBeChecked()
+		await expect(canvas.getByRole("switch", { name: "Show only featured items on the home" })).toBeChecked()
 		await expect(
 			canvas.getByRole("switch", { name: "Allow unverified email sign-ups to scan and chat" }),
 		).not.toBeChecked()
@@ -220,22 +220,22 @@ export const SavedPauseTurnedOff: Story = {
 }
 
 // flipping the pause on new films saves it as on
-export const TopicPodcastEpisodeVideosPaused: Story = {
+export const TopicVideosPaused: Story = {
 	play: async ({ canvas, userEvent }) => {
 		await userEvent.click(canvas.getByRole("switch", { name: "Pause new films" }))
 		await waitFor(() =>
 			expect(mocked(sendSpendControlSettings)).toHaveBeenCalledWith({
-				isTopicPodcastEpisodeVideoRenderingPaused: true,
+				isTopicVideoRenderingPaused: true,
 			}),
 		)
 	},
 }
 
-// flipping the pinned-only home saves it as on
-export const HomePinnedOnly: Story = {
+// flipping the featured-only home saves it as on
+export const HomeFeaturedOnly: Story = {
 	play: async ({ canvas, userEvent }) => {
-		await userEvent.click(canvas.getByRole("switch", { name: "Show only pinned items on the home" }))
-		await waitFor(() => expect(mocked(sendSpendControlSettings)).toHaveBeenCalledWith({ isHomePinnedOnly: true }))
+		await userEvent.click(canvas.getByRole("switch", { name: "Show only featured items on the home" }))
+		await waitFor(() => expect(mocked(sendSpendControlSettings)).toHaveBeenCalledWith({ isHomeFeaturedOnly: true }))
 	},
 }
 

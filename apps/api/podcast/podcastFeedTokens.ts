@@ -19,8 +19,8 @@ import type { Context } from "hono"
 import { isAllowed } from "../authorization"
 import { type PodcastFeedEpisode, toPodcastFeedXml } from "../share/podcastFeed"
 import { loadPublishedPodcastEpisodeRows } from "./podcastEpisodeRows"
-import { loadTopicPodcastEpisodeVideos } from "./podcastEpisodeShapes"
-import { hasReadyTopicPodcastEpisodeVideo } from "./topicPodcastEpisodeVideos"
+import { loadTopicVideos } from "./podcastEpisodeShapes"
+import { hasReadyTopicVideo } from "./topicVideos"
 
 // how long a rendered feed stays in Redis
 const PODCAST_FEED_CACHE_TTL_MS = 15 * 60 * 1000
@@ -62,7 +62,7 @@ export async function loadOrCreatePodcastFeedUrls(
 	// the podcast feed's url, and whether the Topic has a film for a film feed
 	const [podcastFeedToken, hasFilm] = await Promise.all([
 		loadOrCreatePodcastFeedToken(userId, topic),
-		hasReadyTopicPodcastEpisodeVideo(topic.id),
+		hasReadyTopicVideo(topic.id),
 	])
 	if (podcastFeedToken === null) {
 		return null
@@ -256,14 +256,12 @@ export function toPodcastFeedResponse({
 // keep the podcast episodes with a ready film, each with its film's size
 async function toFilmPodcastFeedEpisodes(podcastFeedEpisodes: PodcastFeedEpisode[]): Promise<PodcastFeedEpisode[]> {
 	// the ready films' sizes, then each podcast episode that has one
-	const { readyTopicPodcastEpisodeVideos } = await loadTopicPodcastEpisodeVideos(
+	const { readyTopicVideos } = await loadTopicVideos(
 		podcastFeedEpisodes.map((podcastFeedEpisode) => podcastFeedEpisode.id),
 	)
 	return podcastFeedEpisodes.flatMap((podcastFeedEpisode) => {
-		const readyTopicPodcastEpisodeVideo = readyTopicPodcastEpisodeVideos.get(podcastFeedEpisode.id)
-		return readyTopicPodcastEpisodeVideo
-			? [{ ...podcastFeedEpisode, videoByteSize: readyTopicPodcastEpisodeVideo.byteSize }]
-			: []
+		const readyTopicVideo = readyTopicVideos.get(podcastFeedEpisode.id)
+		return readyTopicVideo ? [{ ...podcastFeedEpisode, videoByteSize: readyTopicVideo.byteSize }] : []
 	})
 }
 

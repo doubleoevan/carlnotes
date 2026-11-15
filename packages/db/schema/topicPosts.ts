@@ -36,9 +36,9 @@ export const topicPosts = pgTable(
 		imageOrigin: topicImageOrigin("image_origin"),
 		imagePrompt: text("image_prompt"),
 		imageUpdatedAt: timestamp("image_updated_at", { withTimezone: true }),
-		// an admin can pin this post to the home page and set its order
+		// an admin can feature this post on the home page and set its order
 		homeOrder: integer("home_order"),
-		// the author can pin this post to the top of their profile page and set its order
+		// the author can feature this post at the top of their profile page and set its order
 		profileOrder: integer("profile_order"),
 		// the unique people who opened the post's page, all time
 		viewerCount: integer("viewer_count").notNull().default(0),
@@ -46,7 +46,7 @@ export const topicPosts = pgTable(
 		...timestamps(),
 	},
 	// covers a topic's posts and an author's posts, both newest first, the posts of every topic published since a
-	// time, the home's pinned posts in their order, and one author's pinned posts in their order
+	// time, the home's featured posts in their order, and one author's featured posts in their order
 	(table) => [
 		index("topic_posts_topic_published_idx").on(table.topicId, table.publishedAt),
 		index("topic_posts_author_published_idx").on(table.authorUserId, table.publishedAt),

@@ -4,10 +4,7 @@ import {
 	PERSONAL_SOURCES_EMAIL_TASK_QUEUE,
 	PERSONAL_SOURCES_TASK_QUEUE,
 } from "@carlnotes/contracts/personalSourcesWork"
-import {
-	TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_TASK_QUEUE,
-	TOPIC_PODCAST_EPISODE_VIDEO_TASK_QUEUE,
-} from "@carlnotes/contracts/topicPodcastEpisodeVideoWork"
+import { TOPIC_VIDEO_BACKFILL_TASK_QUEUE, TOPIC_VIDEO_TASK_QUEUE } from "@carlnotes/contracts/topicVideoWork"
 import { readPoolGauges, sizeConnectionPool } from "@carlnotes/db"
 import { readRedisExtraGauges } from "@carlnotes/db/redisGauges"
 import { shutdownTelemetry, startTelemetry } from "@carlnotes/models/telemetry"
@@ -17,7 +14,7 @@ import {
 	ATTACHMENT_TASK_QUEUE,
 	DASHBOARD_TASK_QUEUE,
 	SOURCE_TASK_QUEUE,
-	startTopicPodcastEpisodeVideoBackfillWorkflow,
+	startTopicVideoBackfillWorkflow,
 	TOPIC_IMAGE_TASK_QUEUE,
 	TOPIC_POST_TASK_QUEUE,
 } from "@carlnotes/pipeline/temporalClient"
@@ -26,21 +23,21 @@ import { toPositiveInteger } from "@carlnotes/server/envSettings"
 import { exitOnFatalError, reportError, shutdownMonitoring, startMonitoring } from "@carlnotes/server/monitoring"
 import { validatePersonalSourcesEmailSettings } from "@carlnotes/server/personalSourcesSettings"
 import {
-	isTopicPodcastEpisodeVideoBackfillEnabled,
-	topicPodcastEpisodeVideoBackfillConcurrency,
-	topicPodcastEpisodeVideoConcurrency,
+	isTopicVideoBackfillEnabled,
+	topicVideoBackfillConcurrency,
+	topicVideoConcurrency,
 } from "@carlnotes/server/podcastEpisodeSettings"
 import { runWithRetries } from "@carlnotes/server/retry"
 import { type ExtraGaugesReading, startRuntimeGauges } from "@carlnotes/server/runtimeGauges"
 import { NativeConnection, Worker } from "@temporalio/worker"
-import * as topicPodcastEpisodeVideoBackfillActivities from "./workflows/backfillTopicPodcastEpisodeVideosActivities"
+import * as topicVideoBackfillActivities from "./workflows/backfillTopicVideosActivities"
 import * as dashboardActivities from "./workflows/buildDashboardSnapshotsActivities"
 import * as attachmentActivities from "./workflows/processAttachmentActivities"
 import * as topicPostActivities from "./workflows/publishTopicPostActivities"
 import * as personalSourcesEmailActivities from "./workflows/receivePersonalSourcesEmailActivities"
 import { PODCAST_EPISODE_TASK_QUEUE } from "./workflows/recordPodcastEpisode"
 import * as podcastEpisodeActivities from "./workflows/recordPodcastEpisodeActivities"
-import * as topicPodcastEpisodeVideoActivities from "./workflows/renderTopicPodcastEpisodeVideoActivities"
+import * as topicVideoActivities from "./workflows/renderTopicVideoActivities"
 import { SCAN_CLOSING_TASK_QUEUE } from "./workflows/runTopicScan"
 import * as scanActivities from "./workflows/runTopicScanActivities"
 import * as sourceActivities from "./workflows/screenSourceActivities"
@@ -85,12 +82,12 @@ const PODCAST_RECORDING_CONCURRENCY = toPositiveInteger(
 const DASHBOARD_CONCURRENCY = 2
 
 // how many films render at once on this replica, and how many the backfill renders
-const TOPIC_PODCAST_EPISODE_VIDEO_CONCURRENCY = topicPodcastEpisodeVideoConcurrency()
-const TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_CONCURRENCY = topicPodcastEpisodeVideoBackfillConcurrency()
+const TOPIC_VIDEO_CONCURRENCY = topicVideoConcurrency()
+const TOPIC_VIDEO_BACKFILL_CONCURRENCY = topicVideoBackfillConcurrency()
 
 // what this replica starts for films. zero films turns films off, and a backfill concurrency of zero turns the
 // backfill off
-const TOPIC_PODCAST_EPISODE_VIDEO_STARTUP = readTopicPodcastEpisodeVideoStartup()
+const TOPIC_VIDEO_STARTUP = readTopicVideoStartup()
 
 // how often and how long to keep retrying the first connection
 const CONNECT_RETRY_DELAY_MS = 3 * 1000
@@ -230,9 +227,7 @@ async function run(): Promise<void> {
 			shutdownGraceTime: SHUTDOWN_GRACE_MS,
 			maxConcurrentActivityTaskExecutions: DASHBOARD_CONCURRENCY,
 		}),
-		...(TOPIC_PODCAST_EPISODE_VIDEO_STARTUP.isTopicPodcastEpisodeVideoQueuePolled
-			? createTopicPodcastEpisodeVideoWorkers(connection)
-			: []),
+		...(TOPIC_VIDEO_STARTUP.isTopicVideoQueuePolled ? createTopicVideoWorkers(connection) : []),
 	])
 
 	// log the pool, the event loop delay, the scan queue, and Redis once a minute, and warn on a backed-up queue or a
@@ -242,8 +237,8 @@ async function run(): Promise<void> {
 	// any worker stopping ends the process. once the workers poll, the film backfill starts or joins without a wait,
 	// unless the backfill is off
 	hasStartedPolling = true
-	if (TOPIC_PODCAST_EPISODE_VIDEO_STARTUP.isTopicPodcastEpisodeVideoBackfillStarted) {
-		startTopicPodcastEpisodeVideoBackfill()
+	if (TOPIC_VIDEO_STARTUP.isTopicVideoBackfillStarted) {
+		startTopicVideoBackfill()
 	}
 	const runningWorkers = workers.map((worker) => worker.run())
 	try {
@@ -267,57 +262,57 @@ async function run(): Promise<void> {
 
 // the film workers: new films and rebuilds on one queue, and the backfill of each Topic's latest podcast episode on
 // another, so neither waits behind the other and neither takes a recording's slot
-function createTopicPodcastEpisodeVideoWorkers(connection: NativeConnection): Promise<Worker>[] {
+function createTopicVideoWorkers(connection: NativeConnection): Promise<Worker>[] {
 	// renders a published podcast episode's film, and rebuilds one for a new image
-	const topicPodcastEpisodeVideoWorker = Worker.create({
+	const topicVideoWorker = Worker.create({
 		connection,
-		workflowsPath: new URL("./workflows/renderTopicPodcastEpisodeVideo.ts", import.meta.url).pathname,
-		activities: topicPodcastEpisodeVideoActivities,
-		taskQueue: TOPIC_PODCAST_EPISODE_VIDEO_TASK_QUEUE,
+		workflowsPath: new URL("./workflows/renderTopicVideo.ts", import.meta.url).pathname,
+		activities: topicVideoActivities,
+		taskQueue: TOPIC_VIDEO_TASK_QUEUE,
 		shutdownGraceTime: SHUTDOWN_GRACE_MS,
-		maxConcurrentActivityTaskExecutions: TOPIC_PODCAST_EPISODE_VIDEO_CONCURRENCY,
+		maxConcurrentActivityTaskExecutions: TOPIC_VIDEO_CONCURRENCY,
 	})
 
 	// leave the backfill's queue unpolled if the backfill is off
-	if (!TOPIC_PODCAST_EPISODE_VIDEO_STARTUP.isTopicPodcastEpisodeVideoBackfillStarted) {
-		return [topicPodcastEpisodeVideoWorker]
+	if (!TOPIC_VIDEO_STARTUP.isTopicVideoBackfillStarted) {
+		return [topicVideoWorker]
 	}
 
 	// gives each Topic's latest podcast episode a film, with the film render's activities
-	const topicPodcastEpisodeVideoBackfillWorker = Worker.create({
+	const topicVideoBackfillWorker = Worker.create({
 		connection,
-		workflowsPath: new URL("./workflows/backfillTopicPodcastEpisodeVideos.ts", import.meta.url).pathname,
-		activities: { ...topicPodcastEpisodeVideoActivities, ...topicPodcastEpisodeVideoBackfillActivities },
-		taskQueue: TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_TASK_QUEUE,
+		workflowsPath: new URL("./workflows/backfillTopicVideos.ts", import.meta.url).pathname,
+		activities: { ...topicVideoActivities, ...topicVideoBackfillActivities },
+		taskQueue: TOPIC_VIDEO_BACKFILL_TASK_QUEUE,
 		shutdownGraceTime: SHUTDOWN_GRACE_MS,
-		maxConcurrentActivityTaskExecutions: TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_CONCURRENCY,
+		maxConcurrentActivityTaskExecutions: TOPIC_VIDEO_BACKFILL_CONCURRENCY,
 	})
-	return [topicPodcastEpisodeVideoWorker, topicPodcastEpisodeVideoBackfillWorker]
+	return [topicVideoWorker, topicVideoBackfillWorker]
 }
 
 // start or join the film backfill without waiting for it. the workflow logs its own summary, and a failed start is
 // reported while the worker keeps polling
-function startTopicPodcastEpisodeVideoBackfill(): void {
-	startTopicPodcastEpisodeVideoBackfillWorkflow(TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_CONCURRENCY).catch(
-		(error: unknown) => reportError(error, "topic-podcast-episode-video", { step: "backfill" }),
+function startTopicVideoBackfill(): void {
+	startTopicVideoBackfillWorkflow(TOPIC_VIDEO_BACKFILL_CONCURRENCY).catch((error: unknown) =>
+		reportError(error, "topic-video", { step: "backfill" }),
 	)
 }
 
 // what a replica starts for films: whether a Worker polls the film queue, and whether the film backfill starts, with a
 // Worker on the backfill's own queue
-type TopicPodcastEpisodeVideoStartup = {
-	isTopicPodcastEpisodeVideoQueuePolled: boolean
-	isTopicPodcastEpisodeVideoBackfillStarted: boolean
+type TopicVideoStartup = {
+	isTopicVideoQueuePolled: boolean
+	isTopicVideoBackfillStarted: boolean
 }
 
 /**
  * Returns what a replica starts for films, read from the film settings. Films that are off start nothing, and a
  * backfill concurrency of zero starts no backfill and leaves the film queue polled.
  */
-export function readTopicPodcastEpisodeVideoStartup(): TopicPodcastEpisodeVideoStartup {
+export function readTopicVideoStartup(): TopicVideoStartup {
 	return {
-		isTopicPodcastEpisodeVideoQueuePolled: topicPodcastEpisodeVideoConcurrency() > 0,
-		isTopicPodcastEpisodeVideoBackfillStarted: isTopicPodcastEpisodeVideoBackfillEnabled(),
+		isTopicVideoQueuePolled: topicVideoConcurrency() > 0,
+		isTopicVideoBackfillStarted: isTopicVideoBackfillEnabled(),
 	}
 }
 

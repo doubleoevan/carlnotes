@@ -6,7 +6,7 @@ import { toTopicPostDiscussionPodcastEpisode } from "@carlnotes/contracts/topicP
 import type {
 	LoadPodcastEpisodeAudioOptions,
 	PodcastEpisodeAudioAdapter,
-	TopicPodcastEpisodeVideoAdapter,
+	TopicVideoAdapter,
 } from "../lib/podcastEpisodeAudio"
 import { SKIP_BACK_SECONDS, SKIP_FORWARD_SECONDS, toNextPlaybackRate } from "../lib/podcastEpisodePlayback"
 import { TOPIC_POST_DISCUSSION_STORY } from "../lib/topicPostStories"
@@ -15,17 +15,17 @@ import { playPodcastEpisodeChapter, togglePodcastEpisodePlayback } from "./podca
 import {
 	clearPodcastEpisodePlayer,
 	cyclePlaybackRate,
-	cycleTopicPodcastEpisodeVideoPlaybackRate,
+	cycleTopicVideoPlaybackRate,
 	pausePodcastEpisode,
 	playPodcastEpisode,
 	playPodcastEpisodeAudio,
-	playTopicPodcastEpisodeVideo,
+	playTopicVideo,
 	registerPodcastEpisodeAudioAdapter,
-	registerTopicPodcastEpisodeVideoAdapter,
+	registerTopicVideoAdapter,
 	reportPodcastEpisodeAudioEvent,
 	seekPlaybackTo,
 	skipPodcastEpisodeChapter,
-	skipTopicPodcastEpisodeVideoBy,
+	skipTopicVideoBy,
 	togglePlayback,
 	toPodcastEpisodePlayerState,
 } from "./podcastEpisodePlayerStore"
@@ -263,7 +263,7 @@ const FILM_PODCAST_EPISODE = toPodcastEpisodeFixture({
 	video: { videoUrl: "https://example.test/episode-1/video.mp4", captionsUrl: "https://example.test/captions.vtt" },
 })
 
-function toVideoFixture(): { adapter: TopicPodcastEpisodeVideoAdapter; toLoad: () => LoadPodcastEpisodeAudioOptions } {
+function toVideoFixture(): { adapter: TopicVideoAdapter; toLoad: () => LoadPodcastEpisodeAudioOptions } {
 	// report the film's playback through the same event boundary as the audio
 	let currentLoad: LoadPodcastEpisodeAudioOptions | undefined
 	const toLoad = (): LoadPodcastEpisodeAudioOptions => {
@@ -273,7 +273,7 @@ function toVideoFixture(): { adapter: TopicPodcastEpisodeVideoAdapter; toLoad: (
 		return currentLoad
 	}
 	// a film player that records its load
-	const adapter: TopicPodcastEpisodeVideoAdapter = {
+	const adapter: TopicVideoAdapter = {
 		load: mock((options: LoadPodcastEpisodeAudioOptions) => {
 			currentLoad = options
 		}),
@@ -284,7 +284,7 @@ function toVideoFixture(): { adapter: TopicPodcastEpisodeVideoAdapter; toLoad: (
 		unload: mock(() => {}),
 		updateMetadata: mock(() => {}),
 	}
-	unregisterVideoAdapter = registerTopicPodcastEpisodeVideoAdapter(adapter)
+	unregisterVideoAdapter = registerTopicVideoAdapter(adapter)
 	return { adapter, toLoad }
 }
 
@@ -296,7 +296,7 @@ test("a film that ends plays no next podcast episode", async () => {
 		toPodcastEpisodeFixture({ id: "next-episode" }),
 	)
 	setIsUserSignedIn(true)
-	await playTopicPodcastEpisodeVideo(FILM_PODCAST_EPISODE)
+	await playTopicVideo(FILM_PODCAST_EPISODE)
 	reportPodcastEpisodeAudioEvent({ type: "ended", loadId: film.toLoad().loadId })
 	await Promise.resolve()
 
@@ -315,7 +315,7 @@ test("playing the film stops the audio and continues from the same second, and p
 	reportPodcastEpisodeAudioEvent({ type: "position", loadId: audioLoadId, positionSeconds: 100 })
 
 	// play the film. it starts at the same second, with the audio stopped
-	await playTopicPodcastEpisodeVideo(FILM_PODCAST_EPISODE)
+	await playTopicVideo(FILM_PODCAST_EPISODE)
 	expect(film.toLoad()).toMatchObject({ positionSeconds: 100 })
 	expect(film.adapter.play).toHaveBeenCalledTimes(1)
 	expect(audio.adapter.pause).toHaveBeenCalled()
@@ -339,7 +339,7 @@ test("another podcast episode's play stops the loaded film and plays as audio", 
 	// watch a film
 	const audio = toAudioFixture()
 	const film = toVideoFixture()
-	await playTopicPodcastEpisodeVideo(FILM_PODCAST_EPISODE)
+	await playTopicVideo(FILM_PODCAST_EPISODE)
 
 	// a play button of another podcast episode with a film plays its audio
 	const otherPodcastEpisode = { ...FILM_PODCAST_EPISODE, id: "episode-other" }
@@ -353,7 +353,7 @@ test("a film player that goes away pauses the film there, and the docked play co
 	// watch the film until 1:10
 	const audio = toAudioFixture()
 	const film = toVideoFixture()
-	await playTopicPodcastEpisodeVideo(FILM_PODCAST_EPISODE)
+	await playTopicVideo(FILM_PODCAST_EPISODE)
 	reportPodcastEpisodeAudioEvent({ type: "position", loadId: film.toLoad().loadId, positionSeconds: 70 })
 
 	// remove the film player. the film stops where it stood
@@ -373,11 +373,11 @@ test("a film play saves one playback start with its format, and the other format
 	const { listen } = toAudioFixture()
 	toVideoFixture()
 	setIsUserSignedIn(true)
-	await playTopicPodcastEpisodeVideo(FILM_PODCAST_EPISODE)
+	await playTopicVideo(FILM_PODCAST_EPISODE)
 
 	// play the audio and the film again
 	await playPodcastEpisodeAudio(FILM_PODCAST_EPISODE)
-	await playTopicPodcastEpisodeVideo(FILM_PODCAST_EPISODE)
+	await playTopicVideo(FILM_PODCAST_EPISODE)
 
 	// one start, saved with the film's format
 	const playbackStarts = listen.mock.calls.filter(([{ podcastEpisodeListen }]) => podcastEpisodeListen.isPlaybackStart)
@@ -388,10 +388,10 @@ test("a podcast episode without a film never plays as one", async () => {
 	// no film on the podcast episode, and no film without a film player
 	toAudioFixture()
 	toVideoFixture()
-	expect(await playTopicPodcastEpisodeVideo(toPodcastEpisodeFixture())).toBe(false)
+	expect(await playTopicVideo(toPodcastEpisodeFixture())).toBe(false)
 	unregisterVideoAdapter()
 	await playPodcastEpisode(FILM_PODCAST_EPISODE)
-	expect(await playTopicPodcastEpisodeVideo(FILM_PODCAST_EPISODE)).toBe(false)
+	expect(await playTopicVideo(FILM_PODCAST_EPISODE)).toBe(false)
 	expect(toPodcastEpisodePlayerState()).toMatchObject({ format: "audio", isPlaying: true })
 })
 
@@ -399,7 +399,7 @@ test("a chapter pill seeks the loaded film instead of loading the audio", async 
 	// watch the film
 	const audio = toAudioFixture()
 	const film = toVideoFixture()
-	await playTopicPodcastEpisodeVideo(FILM_PODCAST_EPISODE)
+	await playTopicVideo(FILM_PODCAST_EPISODE)
 
 	// a pill press seeks the film to the chapter's start, and the audio stays unloaded
 	await playPodcastEpisode(FILM_PODCAST_EPISODE, 120)
@@ -416,7 +416,7 @@ test("the film's play continues the loaded audio at the same speed", async () =>
 	cyclePlaybackRate()
 	const { playbackRate } = toPodcastEpisodePlayerState()
 	reportPodcastEpisodeAudioEvent({ type: "position", loadId: audio.toLoad().loadId, positionSeconds: 100 })
-	await playTopicPodcastEpisodeVideo(FILM_PODCAST_EPISODE)
+	await playTopicVideo(FILM_PODCAST_EPISODE)
 
 	// the film holds the audio's second and speed
 	expect(film.toLoad()).toMatchObject({ positionSeconds: 100, playbackRate })
@@ -430,11 +430,11 @@ test("a format switch reports only the podcast episode and the format", async ()
 	const onFormatSwitched = mock((_podcastEpisode: PodcastEpisode, _format: string) => {})
 	audio.adapter.onFormatSwitched = onFormatSwitched
 	await playPodcastEpisode(FILM_PODCAST_EPISODE)
-	await playTopicPodcastEpisodeVideo(FILM_PODCAST_EPISODE)
+	await playTopicVideo(FILM_PODCAST_EPISODE)
 	await playPodcastEpisodeAudio(FILM_PODCAST_EPISODE)
 
 	// another podcast episode's play is no switch of the loaded one
-	await playTopicPodcastEpisodeVideo(FILM_PODCAST_EPISODE)
+	await playTopicVideo(FILM_PODCAST_EPISODE)
 	await playPodcastEpisode({ ...FILM_PODCAST_EPISODE, id: "episode-other" })
 
 	// one report per switch, naming the podcast episode and its new format
@@ -453,14 +453,14 @@ test("a skip forward before the film is loaded starts the film a skip past its s
 	const savedPodcastEpisode = { ...FILM_PODCAST_EPISODE, progressSeconds: 60 }
 
 	// the press starts the film 30 seconds past the saved progress
-	skipTopicPodcastEpisodeVideoBy(savedPodcastEpisode, SKIP_FORWARD_SECONDS)
+	skipTopicVideoBy(savedPodcastEpisode, SKIP_FORWARD_SECONDS)
 	await new Promise((resolve) => setTimeout(resolve, 0))
 	expect(film.toLoad()).toMatchObject({ positionSeconds: 60 + SKIP_FORWARD_SECONDS })
 	expect(film.adapter.play).toHaveBeenCalledTimes(1)
 	expect(toPodcastEpisodePlayerState()).toMatchObject({ format: "video", isPlaying: true })
 
 	// a press on the loaded film seeks it, and loads nothing again
-	skipTopicPodcastEpisodeVideoBy(savedPodcastEpisode, SKIP_FORWARD_SECONDS)
+	skipTopicVideoBy(savedPodcastEpisode, SKIP_FORWARD_SECONDS)
 	expect(film.adapter.seek).toHaveBeenCalledWith(60 + 2 * SKIP_FORWARD_SECONDS)
 	expect(film.adapter.load).toHaveBeenCalledTimes(1)
 })
@@ -469,7 +469,7 @@ test("a skip back before the film is loaded starts the film at zero, or a skip b
 	// a film with no progress starts at zero
 	const audio = toAudioFixture()
 	const film = toVideoFixture()
-	skipTopicPodcastEpisodeVideoBy(FILM_PODCAST_EPISODE, -SKIP_BACK_SECONDS)
+	skipTopicVideoBy(FILM_PODCAST_EPISODE, -SKIP_BACK_SECONDS)
 	await new Promise((resolve) => setTimeout(resolve, 0))
 	expect(film.toLoad()).toMatchObject({ positionSeconds: 0 })
 	expect(toPodcastEpisodePlayerState()).toMatchObject({ format: "video", isPlaying: true })
@@ -477,7 +477,7 @@ test("a skip back before the film is loaded starts the film at zero, or a skip b
 	// listen to the audio until 1:40. the press takes the film over 15 seconds behind it, with the audio stopped
 	await playPodcastEpisodeAudio(FILM_PODCAST_EPISODE)
 	reportPodcastEpisodeAudioEvent({ type: "position", loadId: audio.toLoad().loadId, positionSeconds: 100 })
-	skipTopicPodcastEpisodeVideoBy(FILM_PODCAST_EPISODE, -SKIP_BACK_SECONDS)
+	skipTopicVideoBy(FILM_PODCAST_EPISODE, -SKIP_BACK_SECONDS)
 	await new Promise((resolve) => setTimeout(resolve, 0))
 	expect(film.toLoad()).toMatchObject({ positionSeconds: 100 - SKIP_BACK_SECONDS })
 	expect(audio.adapter.unload).toHaveBeenCalled()
@@ -491,13 +491,13 @@ test("a speed press before the film is loaded starts the film at the next speed"
 	const nextPlaybackRate = toNextPlaybackRate(toPodcastEpisodePlayerState().playbackRate)
 
 	// the press steps the speed and starts the film at it
-	cycleTopicPodcastEpisodeVideoPlaybackRate(FILM_PODCAST_EPISODE)
+	cycleTopicVideoPlaybackRate(FILM_PODCAST_EPISODE)
 	await new Promise((resolve) => setTimeout(resolve, 0))
 	expect(film.toLoad()).toMatchObject({ positionSeconds: 0, playbackRate: nextPlaybackRate })
 	expect(toPodcastEpisodePlayerState()).toMatchObject({ format: "video", isPlaying: true })
 
 	// a press on the loaded film steps the speed alone
-	cycleTopicPodcastEpisodeVideoPlaybackRate(FILM_PODCAST_EPISODE)
+	cycleTopicVideoPlaybackRate(FILM_PODCAST_EPISODE)
 	expect(film.adapter.setPlaybackRate).toHaveBeenCalledWith(toNextPlaybackRate(nextPlaybackRate))
 	expect(film.adapter.load).toHaveBeenCalledTimes(1)
 })

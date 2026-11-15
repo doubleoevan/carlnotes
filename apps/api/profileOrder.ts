@@ -1,15 +1,15 @@
-// a topic's, a podcast episode's, and a film's position among the rows their topic's owner pinned to their profile,
-// and a Topic Post's among the ones its author pinned to theirs: the writes and their routes
+// a topic's, a podcast episode's, and a film's position among the rows their topic's owner featured on their profile,
+// and a Topic Post's among the ones its author featured on theirs: the writes and their routes
 
-import { pinnedOrderPayload } from "@carlnotes/contracts/topicPayloads"
+import { featuredOrderPayload } from "@carlnotes/contracts/topicPayloads"
 import { db } from "@carlnotes/db"
 import {
 	setPodcastEpisodeProfileOrder,
-	setTopicPodcastEpisodeVideoProfileOrder,
 	setTopicPostProfileOrder,
 	setTopicProfileOrder,
+	setTopicVideoProfileOrder,
 } from "@carlnotes/db/profileOrder"
-import { podcastEpisodes, topicPodcastEpisodeVideos } from "@carlnotes/db/schema/podcast"
+import { podcastEpisodes, topicVideos } from "@carlnotes/db/schema/podcast"
 import { topicPosts } from "@carlnotes/db/schema/topicPosts"
 import { topics } from "@carlnotes/db/schema/topics"
 import { gatedTopicColumns } from "@carlnotes/db/topicPermissions"
@@ -23,14 +23,14 @@ import { purgeProfileAtEdge } from "./edgeCache"
 
 // whether the profile order was applied, and if not, which rule rejected it: no such row for this user, a topic that
 // is not public, a podcast episode or a Topic Post that is not published, or a film that is not ready, or a profile
-// whose pinned topics, films, or podcast episodes are at their limit
+// whose featured topics, films, or podcast episodes are at their limit
 type ProfileOrderResult = "ranked" | "missing" | "notPublic" | "full"
 
 // what a profile order request names: the user, the row, and the position, where zero clears it
 type SetProfileOrderOptions = { userId: string; id: string; position: number }
 
 /**
- * Sets a public topic's position among the topics its owner pinned to their profile. Only the topic's owner sets it,
+ * Sets a public topic's position among the topics its owner featured on their profile. Only the topic's owner sets it,
  * and anyone else is told the topic is missing.
  */
 async function setTopicProfileOrderForOwner({
@@ -55,7 +55,7 @@ async function setTopicProfileOrderForOwner({
 }
 
 /**
- * Sets a published podcast episode's position among the podcast episodes its topic's owner pinned to their profile,
+ * Sets a published podcast episode's position among the podcast episodes its topic's owner featured on their profile,
  * with the topic's rules.
  */
 async function setPodcastEpisodeProfileOrderForOwner({
@@ -85,10 +85,10 @@ async function setPodcastEpisodeProfileOrderForOwner({
 }
 
 /**
- * Sets a ready film's position among the films its topic's owner pinned to their profile, with the topic's rules.
+ * Sets a ready film's position among the films its topic's owner featured on their profile, with the topic's rules.
  * The id is the film's podcast episode.
  */
-async function setTopicPodcastEpisodeVideoProfileOrderForOwner({
+async function setTopicVideoProfileOrderForOwner({
 	userId,
 	id,
 	position,
@@ -96,15 +96,15 @@ async function setTopicPodcastEpisodeVideoProfileOrderForOwner({
 	// the film with its podcast episode's status and its topic, for the topic's owner alone
 	const [filmRow] = await db
 		.select({
-			id: topicPodcastEpisodeVideos.id,
-			status: topicPodcastEpisodeVideos.status,
+			id: topicVideos.id,
+			status: topicVideos.status,
 			podcastEpisodeStatus: podcastEpisodes.status,
 			topic: gatedTopicColumns,
 		})
-		.from(topicPodcastEpisodeVideos)
-		.innerJoin(podcastEpisodes, eq(podcastEpisodes.id, topicPodcastEpisodeVideos.podcastEpisodeId))
+		.from(topicVideos)
+		.innerJoin(podcastEpisodes, eq(podcastEpisodes.id, topicVideos.podcastEpisodeId))
 		.innerJoin(topics, eq(topics.id, podcastEpisodes.topicId))
-		.where(eq(topicPodcastEpisodeVideos.podcastEpisodeId, id))
+		.where(eq(topicVideos.podcastEpisodeId, id))
 	if (!filmRow || !(await isAllowed(userId, "profile:setProfileOrder", filmRow.topic))) {
 		return "missing"
 	}
@@ -115,13 +115,13 @@ async function setTopicPodcastEpisodeVideoProfileOrderForOwner({
 		return "notPublic"
 	}
 	const isRanked = await db.transaction((transaction) =>
-		setTopicPodcastEpisodeVideoProfileOrder({ id: filmRow.id, ownerId: topic.ownerId, position, transaction }),
+		setTopicVideoProfileOrder({ id: filmRow.id, ownerId: topic.ownerId, position, transaction }),
 	)
 	return isRanked ? "ranked" : "full"
 }
 
 /**
- * Sets a published Topic Post's position among the Topic Posts its author pinned to their profile, with the topic's
+ * Sets a published Topic Post's position among the Topic Posts its author featured on their profile, with the topic's
  * rules and no limit. Only the post's author sets it, and anyone else is told the post is missing.
  */
 async function setTopicPostProfileOrderForAuthor({
@@ -148,14 +148,14 @@ async function setTopicPostProfileOrderForAuthor({
 		return "notPublic"
 	}
 
-	// an author's pinned Topic Posts have no limit, so the write always applies
+	// an author's featured Topic Posts have no limit, so the write always applies
 	await db.transaction((transaction) => setTopicPostProfileOrder({ id, ownerId: userId, position, transaction }))
 	return "ranked"
 }
 
-// which kind of row a profile order request pins, and the write that pins it
+// which kind of row a profile order request features, and the write that features it
 type ProfileOrderWrite = {
-	kind: "topic" | "podcastEpisode" | "topicPodcastEpisodeVideo" | "topicPost"
+	kind: "topic" | "podcastEpisode" | "topicVideo" | "topicPost"
 	setProfileOrder: (options: SetProfileOrderOptions) => Promise<ProfileOrderResult>
 }
 
@@ -181,12 +181,12 @@ async function respondToProfileOrder(
 	// each other rejection is a conflict that names its rule
 	if (profileOrderResult === "notPublic") {
 		return context.json(
-			{ error: "only a public topic and its published podcast episodes, ready films, and Topic Posts can be pinned" },
+			{ error: "only a public topic and its published podcast episodes, ready films, and Topic Posts can be featured" },
 			409,
 		)
 	}
 	if (profileOrderResult === "full") {
-		return context.json({ error: "the profile's pins are at their limit" }, 409)
+		return context.json({ error: "the profile's featured items are at their limit" }, 409)
 	}
 
 	// the owner's profile page shows the change at once, and the event names ids alone
@@ -202,25 +202,25 @@ async function respondToProfileOrder(
 
 // the profile order routes, for a topic's owner and a Topic Post's author only
 export const profileOrderRoute = new Hono<AppEnv>()
-	.patch("/topics/:id/profile-order", zValidator("json", pinnedOrderPayload), (context) =>
+	.patch("/topics/:id/profile-order", zValidator("json", featuredOrderPayload), (context) =>
 		respondToProfileOrder(context, context.req.valid("json").position, {
 			kind: "topic",
 			setProfileOrder: setTopicProfileOrderForOwner,
 		}),
 	)
-	.patch("/podcast-episodes/:id/profile-order", zValidator("json", pinnedOrderPayload), (context) =>
+	.patch("/podcast-episodes/:id/profile-order", zValidator("json", featuredOrderPayload), (context) =>
 		respondToProfileOrder(context, context.req.valid("json").position, {
 			kind: "podcastEpisode",
 			setProfileOrder: setPodcastEpisodeProfileOrderForOwner,
 		}),
 	)
-	.patch("/podcast-episodes/:id/video/profile-order", zValidator("json", pinnedOrderPayload), (context) =>
+	.patch("/podcast-episodes/:id/video/profile-order", zValidator("json", featuredOrderPayload), (context) =>
 		respondToProfileOrder(context, context.req.valid("json").position, {
-			kind: "topicPodcastEpisodeVideo",
-			setProfileOrder: setTopicPodcastEpisodeVideoProfileOrderForOwner,
+			kind: "topicVideo",
+			setProfileOrder: setTopicVideoProfileOrderForOwner,
 		}),
 	)
-	.patch("/topic-posts/:id/profile-order", zValidator("json", pinnedOrderPayload), (context) =>
+	.patch("/topic-posts/:id/profile-order", zValidator("json", featuredOrderPayload), (context) =>
 		respondToProfileOrder(context, context.req.valid("json").position, {
 			kind: "topicPost",
 			setProfileOrder: setTopicPostProfileOrderForAuthor,

@@ -218,7 +218,7 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
   images and shows them to their uploaders alone in the transaction that makes it invite or public. It locks each
   subject's row before it reads the subject's current image, and marks each ready film drawn from an unpublished image
   rendering in that transaction. `redrawUnpublishedImageFiles` then forgets the Topic's covers and starts each affected
-  film's rebuild through `startImageTopicPodcastEpisodeVideoRebuilds`, which the sweep also calls once a published
+  film's rebuild through `startImageTopicVideoRebuilds`, which the sweep also calls once a published
   upload passes its check.
 - `uncheckedImageChecks.ts` — `checkUncheckedImages`, which the sweep runs for two minutes at most, 20 unchecked images
   a page, the fewest failed checks first: a clean image is published through the function that publishes its kind, a
@@ -230,7 +230,7 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
 - `avatarImages.ts` — `toStoredAvatar` reads an uploaded avatar's pixel size from its header, rejects one past 4,096
   pixels a side, and stores it resized within 512 pixels, a jpeg as a jpeg and anything else as a png.
   `toCardAvatarPng` resizes any avatar to the size a share card draws before the card inlines it.
-- `topicPodcastEpisodeVideo/` — a published podcast episode's film, the steps of the worker's film workflows.
+- `topicVideo/` — a published podcast episode's film, the steps of the worker's film workflows.
   `videoTimeline.ts` turns the chapter times into frame-exact segments, `videoCaptions.ts` writes the WebVTT captions
   from the script, timed with the pauses in the audio, `videoHotTakes.ts` finds where the hosts turn to the Comments,
   and `videoFrames.ts` draws the stills and lower thirds. `videoShots.ts` plans a segment's montage: shots of 5 to 8
@@ -243,7 +243,7 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
   each chapter's first image, and the sign-off, which cuts through them and pulls back from the film's image, each
   under a lower third that stays. `videoAudio.ts` downloads the audio and returns its length, the timeline, and the
   captions that the render and the rebuild share.
-  `topicPodcastEpisodeVideoInputs.ts` reads the podcast episode, the image its film shows (the film's own, or else the
+  `topicVideoInputs.ts` reads the podcast episode, the image its film shows (the film's own, or else the
   podcast episode's, its topic's, or the podcast card) with its larger original, and each chapter's Resource.
   `videoChapterImages.ts` settles each chapter's images before the chapters are encoded: its Resource's images from
   `resourceImages/`, then the generated images that bring it to one distinct image for every 30 seconds, at most 12 a
@@ -254,26 +254,26 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
   moderation, stores it beside the film's parts, where a second attempt reuses it, and bills it to the film's row unless
   the platform pays. A failed draw leaves the chapter on the images it has. `chapterImageTestFixtures.ts` holds the
   stubbed draws and chapter reads that the tests of `videoChapterImages.ts` and `generatedChapterImages.ts` share.
-  `topicPodcastEpisodeVideoImage.ts` holds the
+  `topicVideoImage.ts` holds the
   film's own image: its 16:9 format, the first draw at 2K, the scene input for an editor's regeneration, and the replace
-  in two steps. `storeTopicPodcastEpisodeVideoImage` stores the jpeg and its larger original beside the film's
-  parts, and `publishTopicPodcastEpisodeVideoImage` swaps the hash and starts the rebuild, so an unchecked upload
-  stores its files and rebuilds nothing. `removeTopicPodcastEpisodeVideoImageUpload` removes an uploaded image.
-  `renderTopicPodcastEpisodeVideo.ts` draws the film's image if it has none, falling back to the podcast episode's on a
+  in two steps. `storeTopicVideoImage` stores the jpeg and its larger original beside the film's
+  parts, and `publishTopicVideoImage` swaps the hash and starts the rebuild, so an unchecked upload
+  stores its files and rebuilds nothing. `removeTopicVideoImageUpload` removes an uploaded image.
+  `renderTopicVideo.ts` draws the film's image if it has none, falling back to the podcast episode's on a
   failed draw, then renders, uploads, and bills a film, writing a failed row for missing inputs. A recorded podcast
   episode's film renders in full whatever its owner's spend. Its owner was under the podcast episodes cutoff when the
   podcast episode was planned. A ready film below the current render version renders again under versioned keys while it
-  keeps playing, and one guarded update swaps it in. `rebuildTopicPodcastEpisodeVideo.ts` renders only the intro and the
+  keeps playing, and one guarded update swaps it in. `rebuildTopicVideo.ts` renders only the intro and the
   sign-off again for a new image, over the chapters' stored images, and joins them with the stored chapters part. It
   also rebuilds a film marked rendering that still has its files, whatever its owner spent, and marks it ready. A film
-  draws no unchecked upload: `loadTopicPodcastEpisodeVideoEpisode` shows the next checked image in the film's order, and
+  draws no unchecked upload: `loadTopicVideoPodcastEpisode` shows the next checked image in the film's order, and
   the rebuild skips a film that plays while an unchecked upload would be its image. Its
   swap takes the Topic's image visibility lock, shared, and throws an error if the film's image changed meanwhile.
-  `topicPodcastEpisodeVideoRows.ts` is the film row both of them write: the render version, the skipped, rendering,
+  `topicVideoRows.ts` is the film row both of them write: the render version, the skipped, rendering,
   ready, re-rendered, and failed writes, the render state read, the upload that records its pending deletion first, and
-  what a film's rendered minutes cost. `saveImageTopicPodcastEpisodeVideosRendering` marks each ready film drawn from
+  what a film's rendered minutes cost. `saveImageTopicVideosRendering` marks each ready film drawn from
   an image rendering, so a film that shows an unpublished or rejected image plays as audio until its rebuild.
-  `topicPodcastEpisodeVideo.test.ts` renders a fixture podcast episode with ffmpeg.
+  `topicVideo.test.ts` renders a fixture podcast episode with ffmpeg.
 - `uprightImageSize.ts` — an image's pixel size as it shows, read from its metadata, which the film's stills, the
   topic image originals, and the Resource Images share.
 - `resourceImages/` — a Resource's images for the films that narrate it. `fetchResourceImages.ts` returns each

@@ -1,5 +1,5 @@
-// home Topic Post route tests: only an admin reads the lists and pins, only a published post of a public shown topic
-// is pinned, and each rejection changes nothing
+// home Topic Post route tests: only an admin reads the lists and featured items, only a published post of a public shown topic
+// is featured, and each rejection changes nothing
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import {
 	ADMIN_USER_ACCESS_ROW,
@@ -20,14 +20,14 @@ afterEach(() => {
 // what the stubbed reads return: the post's published time, or no post, and whether its topic is public and shown
 type StubTopicPostOptions = { publishedAt?: string | null; isMissing?: boolean; isTopicShown?: boolean }
 
-// the rank dialog's two reads: the pinned rows, and the rows a pin may name, which the limit marks
+// the rank dialog's two reads: the featured rows, and the rows an admin may feature, which the limit marks
 function toRankDialogRows(queryText: string): unknown[][] {
 	return queryText.includes("limit")
 		? [["post-2", "Pulling shots", "Home espresso"]]
 		: [["post-1", "Dialing in", "Home espresso"]]
 }
 
-// a read or a write of the home order while no row is pinned: no order, a count of zero, and no row for a write
+// a read or a write of the home order while no row is featured: no order, a count of zero, and no row for a write
 function toHomeOrderRows(queryText: string): unknown[][] {
 	if (!queryText.startsWith("select")) {
 		return []
@@ -35,7 +35,7 @@ function toHomeOrderRows(queryText: string): unknown[][] {
 	return [[queryText.includes("count(*)") ? 0 : null]]
 }
 
-// stand in for the reads around a pin: each user's access row, the post, its topic, and the pinned rows
+// stand in for the reads around a featured position: each user's access row, the post, its topic, and the featured rows
 function stubTopicPost({
 	publishedAt = "2026-11-09 12:00:00+00",
 	isMissing = false,
@@ -80,7 +80,7 @@ function sendTopicPostHomeOrder(userId: string | null, position: number): Respon
 	})
 }
 
-test("an admin pins a published Topic Post of a public shown topic, and the home reads its cards again", async () => {
+test("an admin features a published Topic Post of a public shown topic, and the home reads its cards again", async () => {
 	const { sentQueries, clearHomeSpy } = stubTopicPost()
 	expect((await sendTopicPostHomeOrder("admin-1", 1)).status).toBe(200)
 	const orderWrite = sentQueries.find(({ text }) => text.startsWith('update "topic_posts" set "home_order" = $1'))
@@ -115,16 +115,16 @@ test("a missing post is not found, and a draft and a hidden topic's post are eac
 	expect(hidden.sentQueries.some(({ text }) => text.startsWith("update"))).toBe(false)
 })
 
-test("an admin reads the pinned Topic Posts in their order and the newest ones a pin may name", async () => {
+test("an admin reads the featured Topic Posts in their order and the newest ones an admin may feature", async () => {
 	const { sentQueries } = stubTopicPost()
 	const response = await toSignedInApp(topicPostHomeOrderRoute, "admin-1").request("/home/topic-posts")
 	expect(response.status).toBe(200)
 	expect(await response.json()).toEqual({
-		pinnedTopicPosts: [{ id: "post-1", title: "Dialing in", topicName: "Home espresso" }],
+		featuredTopicPosts: [{ id: "post-1", title: "Dialing in", topicName: "Home espresso" }],
 		candidateTopicPosts: [{ id: "post-2", title: "Pulling shots", topicName: "Home espresso" }],
 	})
 
-	// the pinned read follows the home order, and the offered read takes published posts newest first
+	// the featured read follows the home order, and the offered read takes published posts newest first
 	const listReads = sentQueries.filter(({ text }) => text.includes('inner join "topics"')).map(({ text }) => text)
 	expect(listReads.some((text) => text.includes('order by "topic_posts"."home_order" asc'))).toBe(true)
 	expect(

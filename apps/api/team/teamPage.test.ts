@@ -19,7 +19,7 @@ afterEach(() => {
 })
 
 // the ready films of published podcast episodes as the films read selects them: the podcast episode, its topic, and
-// the film's profile order. the public topic's film is pinned
+// the film's profile order. the public topic's film is featured
 const FILM_ROWS = [
 	["episode-public", "topic-public", 1],
 	["episode-private", "topic-private", null],
@@ -49,7 +49,7 @@ function stubTeamPage(role: "member" | null, filmRows: unknown[][] = FILM_ROWS, 
 
 	return stubConnectionPool(({ text, values }) => {
 		// the films of the topics the read names
-		if (text.includes('inner join "topic_podcast_episode_videos"')) {
+		if (text.includes('inner join "topic_videos"')) {
 			return filmRows.filter(([, topicId]) => values.includes(topicId))
 		}
 
@@ -79,7 +79,7 @@ function toTopicPostReadValues(sentQueries: SentQuery[]): unknown[] | undefined 
 	return sentQueries.find(({ text }) => text.includes('from "topic_posts"'))?.values
 }
 
-test("a member sees the films and reads the Topic Posts of every topic of the team, the pinned film first", async () => {
+test("a member sees the films and reads the Topic Posts of every topic of the team, the featured film first", async () => {
 	const sentQueries = stubTeamPage("member")
 	expect(await loadFilmPodcastEpisodeIds("user-1")).toEqual(["episode-public", "episode-private"])
 	expect(toTopicPostReadValues(sentQueries)).toEqual(["topic-public", "topic-private"])
@@ -112,7 +112,7 @@ test("a team with no ready film lists no film", async () => {
 	expect(await loadFilmPodcastEpisodeIds("user-1")).toEqual([])
 })
 
-test("the Topic Posts read takes the topics' published posts, the pinned ones first, then the newest, with no limit", async () => {
+test("the Topic Posts read takes the topics' published posts, the featured ones first, then the newest, with no limit", async () => {
 	const sentQueries = stubTeamPage("member")
 	await loadTeamPage("user-1", "team-1")
 
@@ -128,8 +128,8 @@ test("the Topic Posts read takes the topics' published posts, the pinned ones fi
 	expect(topicPostReads[0]?.text).not.toContain("limit")
 })
 
-test("a team page lists every published Topic Post of its topics, more than twelve, the pinned ones first", async () => {
-	// fourteen pinned posts and six more on one topic, in the order the read returns them
+test("a team page lists every published Topic Post of its topics, more than twelve, the featured ones first", async () => {
+	// fourteen featured posts and six more on one topic, in the order the read returns them
 	stubTeamPage("member")
 	const topicPostRows = Array.from({ length: 20 }, (_, i) => ({
 		topicPost: { id: `post-${i}`, topicId: "topic-public", profileOrder: i < 14 ? i + 1 : null },

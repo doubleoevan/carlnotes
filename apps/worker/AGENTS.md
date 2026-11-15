@@ -40,9 +40,12 @@ limit, the daily topics that scan weekly past the daily scans cutoff, with each 
 hour, the owners whose key budget is spent, and the free owners past the scheduled scans cutoff, read in one query only
 while that cutoff is passed, with `scheduledTopicTestFixtures.ts` for the scheduled topic that its tests and the sweep's
 share), `resetMonthlyBudgets.ts` (the monthly budget reset, a daily job run as `bun run reset:monthly-budgets`, which
-replaces each user's LiteLLM key through `@carlnotes/models/litellm`), and `docsSync.ts` (`bun run docs:embed`, which
+replaces each user's LiteLLM key through `@carlnotes/models/litellm`), `docsSync.ts` (`bun run docs:embed`, which
 splits the pages under `apps/docs/src/content/docs` into sections and embeds them into `docs_chunks`, the sections chat
-quotes for a question about the app; a section whose hash is unchanged is not embedded again).
+quotes for a question about the app; a section whose hash is unchanged is not embedded again), and
+`runMonitoredJob.ts` (the wrapper every Northflank job's root script runs its command through, inside `doppler run`:
+the sweep and the reset check in to their Sentry cron monitors from `CRON_MONITOR_CONFIGS` at start and with their
+result, and a failed release job, `migrate`, `docs-sync`, or `edge-purge`, is reported in the `job` stage).
 
 - The sweep and the reset each run under a job lease from `@carlnotes/db/jobLease`, so two overlapping runs cannot
   do the work twice. Each takes the lease's abort signal and checks it between batches: the sweep before each stage and
@@ -102,7 +105,7 @@ quotes for a question about the app; a section whose hash is unchanged is not em
   its page can be read), `sendScanEmail.ts`, `sendPushNotifications.ts`, and `recordPodcastEpisode.ts`, with
   `deliveryRetryPolicy.ts` holding the send retry policy that the email and push workflows share. Temporal bundles a
   workflow file with webpack, so a workflow file imports only `@carlnotes/contracts/scanFailure`,
-  `@carlnotes/contracts/topicPodcastEpisodeVideoWork`,
+  `@carlnotes/contracts/topicVideoWork`,
   `@carlnotes/pipeline/stageTimeouts`, `@carlnotes/pipeline/pushWorkflows`, types, and its sibling files, and the
   activities file beside it imports the rest. `temporal.ts` resolves each workflow
   by `new URL("./workflows/<name>.ts", import.meta.url)`, and `scripts/check-workflow-bundles.ts` bundles every workflow
@@ -146,16 +149,16 @@ quotes for a question about the app; a section whose hash is unchanged is not em
   the email can name the Podcast Episode. No audio passes between activities except through object storage. The steps
   are in `@carlnotes/pipeline/podcast/`. The plan records no new podcast episode while the spend control settings
   pause new podcast episodes, and a recording under way finishes.
-- A published podcast episode's film renders in `workflows/renderTopicPodcastEpisodeVideo.ts` on the `episode-videos`
-  queue, whose Worker's concurrency is `TOPIC_PODCAST_EPISODE_VIDEO_CONCURRENCY`, default 1. The recording workflow
-  starts the render as an abandoned child after the image step, behind the `topic-podcast-episode-video` patch, and the
+- A published podcast episode's film renders in `workflows/renderTopicVideo.ts` on the `episode-videos`
+  queue, whose Worker's concurrency is `TOPIC_VIDEO_CONCURRENCY`, default 1. The recording workflow
+  starts the render as an abandoned child after the image step, behind the `topic-video` patch, and the
   film route starts the rebuild for a new image on the same queue. The render is one activity, in
-  `workflows/renderTopicPodcastEpisodeVideoActivities.ts` beside the rebuild's, with a four-hour timeout, 3 attempts,
-  and a heartbeat every 30 seconds, and the steps are in `@carlnotes/pipeline/topicPodcastEpisodeVideo/`. The activity
+  `workflows/renderTopicVideoActivities.ts` beside the rebuild's, with a four-hour timeout, 3 attempts,
+  and a heartbeat every 30 seconds, and the steps are in `@carlnotes/pipeline/topicVideo/`. The activity
   draws the film's own 16:9 image before the intro and the sign-off, and a failed draw leaves the podcast episode's
   image. Before the chapters it fetches the Resource Images of each chapter's Resource, with no scrape, and draws the
   generated images that give each chapter one distinct image for every 30 seconds, up to
-  `TOPIC_PODCAST_EPISODE_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT` a film, default 40, and a failed draw leaves the chapter
+  `TOPIC_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT` a film, default 40, and a failed draw leaves the chapter
   on the images it has. Each chapter is a montage, encoded as one ffmpeg run for each shot. A render of a ready film
   below the current render version renders it again while it keeps playing, then swaps its files in one update, and a
   failure leaves the film that plays. An editor's regeneration of the film's own image runs as a `renderTopicImage`
@@ -164,20 +167,20 @@ quotes for a question about the app; a section whose hash is unchanged is not em
   queues a rebuild on the `episode-videos` queue, which waits until a Worker polls it again.
   `isTopicPodcastEpisodeVideoEnabled` in `workflows/recordPodcastEpisodeActivities.ts` is false at a concurrency of 0
   and while the spend control settings pause new films. The backfill and the rebuild never ask it.
-- `workflows/backfillTopicPodcastEpisodeVideos.ts` gives each Topic's latest published podcast episode a film, and of
+- `workflows/backfillTopicVideos.ts` gives each Topic's latest published podcast episode a film, and of
   the podcast episodes with no film only that one, then re-renders every ready film below the current render version,
   all on the platform's bill. It runs under the fixed id `episode-video-backfill` on the `episode-video-backfill`
-  queue at `TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_CONCURRENCY`, default 1, where 0 creates no backfill Worker and
-  starts no backfill, which `readTopicPodcastEpisodeVideoStartup` in `temporal.ts` decides at the worker's boot,
+  queue at `TOPIC_VIDEO_BACKFILL_CONCURRENCY`, default 1, where 0 creates no backfill Worker and
+  starts no backfill, which `readTopicVideoStartup` in `temporal.ts` decides at the worker's boot,
   public Topics first, 100 a page with
-  `continueAsNew`, each page listed by `workflows/backfillTopicPodcastEpisodeVideosActivities.ts`: the Topics with no
+  `continueAsNew`, each page listed by `workflows/backfillTopicVideosActivities.ts`: the Topics with no
   film first, then the films to render again, without a film whose re-render failed at this version. It logs the
   counts so far and the films left after each batch. `temporal.ts` starts or joins it once the Workers poll, without
-  waiting, and `bun run films:backfill`, the root script `scripts/backfill-topic-podcast-episode-videos.ts`, starts or
+  waiting, and `bun run films:backfill`, the root script `scripts/backfill-topic-videos.ts`, starts or
   joins it and prints the summary. A podcast episode missing its inputs or failing every attempt gets a failed film
   row, so no later listing finds it again, and a re-render that fails for good leaves the film that plays and records
   the failed render version. The queue names live in
-  `@carlnotes/contracts/topicPodcastEpisodeVideoWork`, which the workflow files may import.
+  `@carlnotes/contracts/topicVideoWork`, which the workflow files may import.
 - `temporal.ts` starts Sentry (`@carlnotes/server/monitoring`) before Langfuse's tracer (`@carlnotes/models/telemetry`)
   and logs the connection pool, the event loop delay, the scan queue, and Redis once a minute, and the sweep reports a
   queue nothing polls and a backlog older than 15 minutes, both through `describeScanQueue` in
@@ -195,7 +198,7 @@ quotes for a question about the app; a section whose hash is unchanged is not em
 - Workflow tests run a workflow in `@temporalio/testing`'s time-skipping test server, in-process, on a queue no other
   worker polls, through `workflows/workflowTestFixtures.ts`. The first run downloads the test server binary, about
   65 MB, into the temp folder, and later runs reuse it. `recordPodcastEpisode.test.ts`,
-  `renderTopicPodcastEpisodeVideo.test.ts`, and `backfillTopicPodcastEpisodeVideos.test.ts` use it.
+  `renderTopicVideo.test.ts`, and `backfillTopicVideos.test.ts` use it.
 
 `workflows/personalSourcesContextLoop.ts` shares the durable revision decisions with deterministic virtual-time tests;
 Temporal supplies replayable waits and activity calls.

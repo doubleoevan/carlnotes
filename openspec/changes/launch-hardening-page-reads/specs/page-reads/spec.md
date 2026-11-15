@@ -149,9 +149,9 @@ inside the activity that makes the write, so no workflow changes for it.
 
 ### Requirement: A profile's and a team's own writes clear their own copy
 
-A username change, an avatar change, and a profile pin change SHALL clear that profile's visitor copy. A team's edit,
-its avatar change, and a membership change SHALL clear that team page's copy, and a membership change SHALL clear the
-member's profile copy too, because a profile lists the person's teams.
+A username change, an avatar change, and a change to a profile's featured items SHALL clear that profile's visitor copy.
+A team's edit, its avatar change, and a membership change SHALL clear that team page's copy, and a membership change
+SHALL clear the member's profile copy too, because a profile lists the person's teams.
 
 #### Scenario: A new username shows to the next visitor
 

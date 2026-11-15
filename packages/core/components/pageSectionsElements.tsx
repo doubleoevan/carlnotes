@@ -5,7 +5,7 @@ import type {
 	TopicCard as TopicCardFields,
 } from "@carlnotes/contracts/home"
 import type { TopicPostCard as TopicPostCardFields } from "@carlnotes/contracts/topicPosts"
-import type { TopicPodcastEpisodeVideoDialogSurface } from "@carlnotes/contracts/visitAnalytics"
+import type { TopicVideoDialogSurface } from "@carlnotes/contracts/visitAnalytics"
 import type { ComponentType, ReactNode } from "react"
 import type { CardSection } from "../lib/cardSections"
 
@@ -21,7 +21,7 @@ export type PageSectionsElements = {
 	// a podcast episode card, or a film card that opens its film in the page's dialog
 	PodcastEpisodeCard: ComponentType<{
 		podcastEpisodeCard: PodcastEpisodeCardFields
-		videoSurface?: TopicPodcastEpisodeVideoDialogSurface
+		videoSurface?: TopicVideoDialogSurface
 	}>
 	TopicPostCard: ComponentType<{ topicPost: TopicPostCardFields }>
 	// a collapsible section with its title and its count at the far right, open at first

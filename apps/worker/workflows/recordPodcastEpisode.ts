@@ -4,10 +4,10 @@
 // a relative import. temporal bundles workflow code with webpack, which has no @shared alias
 import { toWorkflowFailureReason } from "@carlnotes/contracts/scanFailure"
 import {
-	TOPIC_PODCAST_EPISODE_VIDEO_TASK_QUEUE,
-	TOPIC_PODCAST_EPISODE_VIDEO_WORKFLOW,
-	toTopicPodcastEpisodeVideoWorkflowId,
-} from "@carlnotes/contracts/topicPodcastEpisodeVideoWork"
+	TOPIC_VIDEO_TASK_QUEUE,
+	TOPIC_VIDEO_WORKFLOW,
+	toTopicVideoWorkflowId,
+} from "@carlnotes/contracts/topicVideoWork"
 import type { SpeechTier } from "@carlnotes/models/budget"
 import type { ScanTrigger } from "@carlnotes/pipeline/scanWorkflowClient"
 import {
@@ -54,8 +54,9 @@ const FLEX_CHAPTER_TOTAL_TIMEOUT_MS = 6 * 60 * 60 * 1000
 const ENCODE_TIMEOUT_MS = 10 * 60 * 1000
 const ENCODE_ATTEMPTS = 3
 
-// the patch that starts the film after the image, which recordings already running before it skip on replay
-const TOPIC_PODCAST_EPISODE_VIDEO_PATCH = "topic-podcast-episode-video"
+// the patch that starts the film after the image, which recordings already running before it skip on replay. the patch id
+// must not change, because workflow histories record it
+const TOPIC_VIDEO_PATCH = "topic-podcast-episode-video"
 
 // the writes and the films setting's read are idempotent, so they may retry
 const {
@@ -191,20 +192,20 @@ export async function recordPodcastEpisodeWorkflow({
 	await drawPodcastEpisodeImageActivity(podcastEpisodeId).catch(() => undefined)
 
 	// the film renders on its own queue as an abandoned child, so the recording never waits for it or fails with it
-	if (patched(TOPIC_PODCAST_EPISODE_VIDEO_PATCH)) {
-		await startTopicPodcastEpisodeVideo(podcastEpisodeId)
+	if (patched(TOPIC_VIDEO_PATCH)) {
+		await startTopicVideo(podcastEpisodeId)
 	}
 }
 
 // start the podcast episode's film if films are on. a film already started, or a failed start, leaves no film
-async function startTopicPodcastEpisodeVideo(podcastEpisodeId: string): Promise<void> {
+async function startTopicVideo(podcastEpisodeId: string): Promise<void> {
 	try {
 		if (!(await isTopicPodcastEpisodeVideoEnabled())) {
 			return
 		}
-		await startChild(TOPIC_PODCAST_EPISODE_VIDEO_WORKFLOW, {
-			workflowId: toTopicPodcastEpisodeVideoWorkflowId(podcastEpisodeId),
-			taskQueue: TOPIC_PODCAST_EPISODE_VIDEO_TASK_QUEUE,
+		await startChild(TOPIC_VIDEO_WORKFLOW, {
+			workflowId: toTopicVideoWorkflowId(podcastEpisodeId),
+			taskQueue: TOPIC_VIDEO_TASK_QUEUE,
 			args: [{ podcastEpisodeId }],
 			parentClosePolicy: ParentClosePolicy.ABANDON,
 		})

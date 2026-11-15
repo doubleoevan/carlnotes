@@ -27,7 +27,7 @@ import {
 } from "./podcastEpisodeFiles"
 import { loadAccessiblePodcastEpisode, toPodcastEpisodeAnalyticsProperties } from "./podcastEpisodeRows"
 import { deletePodcastFeedToken, loadOrCreatePodcastFeedUrls, loadPodcastFeedTokenListener } from "./podcastFeedTokens"
-import { loadReadyTopicPodcastEpisodeVideoFiles, TOPIC_PODCAST_EPISODE_VIDEO_FILE } from "./topicPodcastEpisodeVideos"
+import { loadReadyTopicVideoFiles, TOPIC_VIDEO_FILE } from "./topicVideos"
 
 // the format of each podcast episode file that a feed encloses, by its file name
 const PODCAST_EPISODE_FORMAT_BY_FILE_NAME: Record<string, PodcastEpisodeFormat | undefined> = {
@@ -161,9 +161,8 @@ export const podcastFeedsRoute = new Hono<AppEnv>()
 
 		// respond 404 to any file name but the audio's and the film's, and to a film that is not ready
 		const format = PODCAST_EPISODE_FORMAT_BY_FILE_NAME[fileName]
-		const readyTopicPodcastEpisodeVideoFiles =
-			format === "video" ? await loadReadyTopicPodcastEpisodeVideoFiles(podcastEpisodeRow.id) : null
-		if (!format || (format === "video" && !readyTopicPodcastEpisodeVideoFiles)) {
+		const readyTopicVideoFiles = format === "video" ? await loadReadyTopicVideoFiles(podcastEpisodeRow.id) : null
+		if (!format || (format === "video" && !readyTopicVideoFiles)) {
 			return context.json({ error: "not found" }, 404)
 		}
 
@@ -198,11 +197,11 @@ export const podcastFeedsRoute = new Hono<AppEnv>()
 		}
 
 		// respond with the film or the audio
-		if (readyTopicPodcastEpisodeVideoFiles) {
+		if (readyTopicVideoFiles) {
 			return toPodcastEpisodeFileResponse(context, {
-				...TOPIC_PODCAST_EPISODE_VIDEO_FILE,
-				objectKey: readyTopicPodcastEpisodeVideoFiles.filmKey,
-				byteSize: readyTopicPodcastEpisodeVideoFiles.byteSize,
+				...TOPIC_VIDEO_FILE,
+				objectKey: readyTopicVideoFiles.filmKey,
+				byteSize: readyTopicVideoFiles.byteSize,
 			})
 		}
 		return toPodcastEpisodeAudioResponse(context, podcastEpisodeRow)

@@ -1,8 +1,8 @@
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
-import { useTopicPodcastEpisodeVideoEditableImage } from "@carlnotes/core/hooks/useTopicPodcastEpisodeVideoEditableImage"
+import { useTopicVideoEditableImage } from "@carlnotes/core/hooks/useTopicVideoEditableImage"
 import { toTopicPageEditedPodcastEpisode } from "@carlnotes/core/lib/podcastEpisodeEditor"
-import { type PinnedOrderMove, toHomeRankDialogLabels } from "@carlnotes/core/lib/rankDialog"
+import { type FeaturedOrderMove, toHomeRankDialogLabels } from "@carlnotes/core/lib/rankDialog"
 import { REQUEST_FAILED_TEXT } from "@carlnotes/core/lib/sessionCopy"
 import { toast } from "sonner"
 import { ProfileRankDialog, RankDialog } from "@/components/common/RankDialog"
@@ -46,7 +46,7 @@ export function TopicDialogs({
 	onTopicTeamsChanged: () => void
 	// called once each new image is in place
 	onTopicImageChanged: () => void
-	onRankTopic: (moves: PinnedOrderMove[]) => Promise<void>
+	onRankTopic: (moves: FeaturedOrderMove[]) => Promise<void>
 	onTopicDeleted: () => Promise<void>
 }) {
 	// the podcast episode of the topic's latest film, for a user who may edit it
@@ -80,7 +80,7 @@ export function TopicDialogs({
 			)}
 			{/* the image dialog of the topic's latest film, which the action menu's Edit film opens */}
 			{openDialog === "edit-film" && editedPodcastEpisode && (
-				<TopicPodcastEpisodeVideoImageDialog
+				<TopicVideoImageDialog
 					podcastEpisode={editedPodcastEpisode}
 					onImageChanged={onTopicImageChanged}
 					onClose={() => onOpenDialog(null)}
@@ -105,11 +105,11 @@ export function TopicDialogs({
 				<RankDialog
 					labels={toHomeRankDialogLabels("topics")}
 					pageItem={{ id: topic.id, label: topic.name }}
-					pinnedItems={(topic.homeTopics ?? []).map((homeTopic) => ({
+					featuredItems={(topic.homeTopics ?? []).map((homeTopic) => ({
 						id: homeTopic.id,
 						label: homeTopic.name,
 					}))}
-					isPageItemPinned={topic.homeOrder !== null}
+					isPageItemFeatured={topic.homeOrder !== null}
 					onSave={onRankTopic}
 					onClose={() => onOpenDialog(null)}
 				/>
@@ -129,7 +129,7 @@ export function TopicDialogs({
 }
 
 // the podcast episode whose film's image the dialog edits, the call after each new image is in place, and the close
-type TopicPodcastEpisodeVideoImageDialogProps = {
+type TopicVideoImageDialogProps = {
 	podcastEpisode: PodcastEpisode
 	onImageChanged: () => void
 	onClose: () => void
@@ -137,12 +137,8 @@ type TopicPodcastEpisodeVideoImageDialogProps = {
 
 // the Edit film dialog on the topic page, which opens once the podcast episode's page loads with the editor's view of
 // the film's image. a page that does not load reports it and closes
-function TopicPodcastEpisodeVideoImageDialog({
-	podcastEpisode,
-	onImageChanged,
-	onClose,
-}: TopicPodcastEpisodeVideoImageDialogProps) {
-	const editableImage = useTopicPodcastEpisodeVideoEditableImage({
+function TopicVideoImageDialog({ podcastEpisode, onImageChanged, onClose }: TopicVideoImageDialogProps) {
+	const editableImage = useTopicVideoEditableImage({
 		podcastEpisode,
 		onLoadFailed: () => {
 			toast.error(REQUEST_FAILED_TEXT)

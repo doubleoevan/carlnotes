@@ -46,10 +46,10 @@ function rewritePathsAndUrls(properties: Record<string, unknown>): void {
 	}
 }
 
-// where a press opens the Video dialog. the play button labelled "Play film" on a film card of the home's pinned
-// films, of its newest films, of a profile's pinned films, and of a team's films. the Video button on a podcast
+// where a press opens the Video dialog. the play button labelled "Play film" on a film card of the home's featured
+// films, of its newest films, of a profile's featured films, and of a team's films. the Video button on a podcast
 // episode's row of the news on the home and on a profile
-export type TopicPodcastEpisodeVideoDialogSurface =
+export type TopicVideoDialogSurface =
 	| "home-videos"
 	| "newest-videos"
 	| "profile-videos"
@@ -66,7 +66,7 @@ export type FilmVisitEvents = {
 	visit_episode_format_switched: { podcastEpisodeId: string; format: PodcastEpisodeFormat }
 	visit_episode_video_section_toggled: { topicId: string; isOpen: boolean }
 	visit_episode_videos_page_viewed: { topicId: string; season: number; page: number }
-	visit_episode_video_dialog_opened: { podcastEpisodeId: string; surface: TopicPodcastEpisodeVideoDialogSurface }
+	visit_episode_video_dialog_opened: { podcastEpisodeId: string; surface: TopicVideoDialogSurface }
 }
 
 /**

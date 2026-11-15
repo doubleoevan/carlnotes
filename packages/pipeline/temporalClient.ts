@@ -8,14 +8,14 @@ import {
 	PERSONAL_SOURCES_TASK_QUEUE,
 } from "@carlnotes/contracts/personalSourcesWork"
 import {
-	TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_TASK_QUEUE,
-	TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_WORKFLOW,
-	TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_WORKFLOW_ID,
-	TOPIC_PODCAST_EPISODE_VIDEO_REBUILD_WORKFLOW,
-	TOPIC_PODCAST_EPISODE_VIDEO_TASK_QUEUE,
-	type TopicPodcastEpisodeVideoBackfillSummary,
-	toTopicPodcastEpisodeVideoRebuildWorkflowId,
-} from "@carlnotes/contracts/topicPodcastEpisodeVideoWork"
+	TOPIC_VIDEO_BACKFILL_TASK_QUEUE,
+	TOPIC_VIDEO_BACKFILL_WORKFLOW,
+	TOPIC_VIDEO_BACKFILL_WORKFLOW_ID,
+	TOPIC_VIDEO_REBUILD_WORKFLOW,
+	TOPIC_VIDEO_TASK_QUEUE,
+	type TopicVideoBackfillSummary,
+	toTopicVideoRebuildWorkflowId,
+} from "@carlnotes/contracts/topicVideoWork"
 import { Client, Connection, WorkflowExecutionAlreadyStartedError } from "@temporalio/client"
 import { CHAT_MENTION_PUSH_WORKFLOW, PUSH_TASK_QUEUE } from "./pushWorkflows"
 
@@ -260,37 +260,35 @@ export async function startTopicImageBackfillWorkflow({
  * Starts the rebuild of a podcast episode's film for its current image, named by the podcast episode so a second
  * start while one runs is ignored.
  */
-export async function startTopicPodcastEpisodeVideoRebuild(podcastEpisodeId: string): Promise<void> {
+export async function startTopicVideoRebuild(podcastEpisodeId: string): Promise<void> {
 	await startWorkflowOnce({
-		workflow: TOPIC_PODCAST_EPISODE_VIDEO_REBUILD_WORKFLOW,
-		taskQueue: TOPIC_PODCAST_EPISODE_VIDEO_TASK_QUEUE,
-		workflowId: toTopicPodcastEpisodeVideoRebuildWorkflowId(podcastEpisodeId),
+		workflow: TOPIC_VIDEO_REBUILD_WORKFLOW,
+		taskQueue: TOPIC_VIDEO_TASK_QUEUE,
+		workflowId: toTopicVideoRebuildWorkflowId(podcastEpisodeId),
 		args: [{ podcastEpisodeId }],
 	})
 }
 
 // the started or joined film backfill, and a call that waits for its summary. it is a call, so a worker that only
 // starts the backfill opens no long-poll
-export type TopicPodcastEpisodeVideoBackfillStart = {
-	whenFinished: () => Promise<TopicPodcastEpisodeVideoBackfillSummary>
+export type TopicVideoBackfillStart = {
+	whenFinished: () => Promise<TopicVideoBackfillSummary>
 }
 
 /**
  * Starts the film backfill at a concurrency, or joins the one running.
  */
-export async function startTopicPodcastEpisodeVideoBackfillWorkflow(
-	concurrency: number,
-): Promise<TopicPodcastEpisodeVideoBackfillStart> {
+export async function startTopicVideoBackfillWorkflow(concurrency: number): Promise<TopicVideoBackfillStart> {
 	// start the backfill under its fixed id
 	const client = await getClient()
-	const toBackfillStart = (): TopicPodcastEpisodeVideoBackfillStart => ({
-		whenFinished: () => client.workflow.getHandle(TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_WORKFLOW_ID).result(),
+	const toBackfillStart = (): TopicVideoBackfillStart => ({
+		whenFinished: () => client.workflow.getHandle(TOPIC_VIDEO_BACKFILL_WORKFLOW_ID).result(),
 	})
 	try {
 		await withClientDeadline(client, () =>
-			client.workflow.start(TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_WORKFLOW, {
-				taskQueue: TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_TASK_QUEUE,
-				workflowId: TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_WORKFLOW_ID,
+			client.workflow.start(TOPIC_VIDEO_BACKFILL_WORKFLOW, {
+				taskQueue: TOPIC_VIDEO_BACKFILL_TASK_QUEUE,
+				workflowId: TOPIC_VIDEO_BACKFILL_WORKFLOW_ID,
 				args: [{ concurrency }],
 			}),
 		)

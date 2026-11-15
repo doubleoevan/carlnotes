@@ -130,7 +130,7 @@ async function settleResourceImages({
 		return fetchedImages ?? (await waitForFetchedResourceImages(narratedResource.id, signal))
 	} catch (error) {
 		signal?.throwIfAborted()
-		reportError(error, "topic-podcast-episode-video", { resourceId: narratedResource.id, step: "resource-images" })
+		reportError(error, "topic-video", { resourceId: narratedResource.id, step: "resource-images" })
 		return []
 	}
 }

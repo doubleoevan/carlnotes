@@ -1,25 +1,18 @@
 // the options a podcast episode page gives the search bar's actions menu
 import type { PodcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpisodePage"
-import {
-	EDIT_PODCAST_EPISODE_LABEL,
-	isTopicPodcastEpisodeVideoEditShown,
-} from "@carlnotes/core/lib/podcastEpisodeEditor"
+import { EDIT_PODCAST_EPISODE_LABEL, isTopicVideoEditShown } from "@carlnotes/core/lib/podcastEpisodeEditor"
 import {
 	isPodcastEpisodeHomeOrderShown,
 	isPodcastEpisodeProfileOrderShown,
-	isTopicPodcastEpisodeVideoHomeOrderShown,
-	isTopicPodcastEpisodeVideoProfileOrderShown,
+	isTopicVideoHomeOrderShown,
+	isTopicVideoProfileOrderShown,
 } from "@carlnotes/core/lib/podcastEpisodeHomeOrder"
 import { toPodcastEpisodeReportSubject } from "@carlnotes/core/lib/podcastEpisodeSocial"
 import { HOME_RANK_OPTION_LABELS, PROFILE_RANK_OPTION_LABELS } from "@carlnotes/core/lib/rankDialog"
 import { Home, ListOrdered, Pencil, Trash2 } from "lucide-react"
 import type { PodcastEpisodeDialog } from "@/components/podcast/PodcastEpisodeDialogs"
 import { isAddTopicToTeamShown } from "@/components/team/AddTopicToTeamButton"
-import {
-	toAddTopicToTeamOption,
-	toEditTopicPodcastEpisodeVideoOption,
-	toShareTopicOption,
-} from "@/components/topic/TopicActions"
+import { toAddTopicToTeamOption, toEditTopicVideoOption, toShareTopicOption } from "@/components/topic/TopicActions"
 import { type PageActionOption, useRegisterPageActions } from "@/stores/pageActionsStore"
 
 // the loaded page, whether the user is signed in, and the call that opens one of the menu's dialogs
@@ -31,7 +24,7 @@ type UseRegisterPodcastEpisodePageActionsOptions = {
 
 /**
  * Registers the actions menu of a podcast episode's topic, with Edit film above Edit podcast, the home and profile
- * pins, and Remove episode last.
+ * featured items, and Remove episode last.
  */
 export function useRegisterPodcastEpisodePageActions({
 	podcastEpisodePage,
@@ -48,8 +41,8 @@ export function useRegisterPodcastEpisodePageActions({
 							? [toAddTopicToTeamOption(() => onOpenDialog("add-topic-to-team"))]
 							: []),
 						toShareTopicOption(() => onOpenDialog("share")),
-						...(podcastEpisodePage && isTopicPodcastEpisodeVideoEditShown(podcastEpisodePage)
-							? [toEditTopicPodcastEpisodeVideoOption(() => onOpenDialog("edit-film"))]
+						...(podcastEpisodePage && isTopicVideoEditShown(podcastEpisodePage)
+							? [toEditTopicVideoOption(() => onOpenDialog("edit-film"))]
 							: []),
 						...(podcastEpisodePage?.canEditPodcastEpisode
 							? [{ label: EDIT_PODCAST_EPISODE_LABEL, Icon: Pencil, onSelect: () => onOpenDialog("edit") }]
@@ -80,10 +73,10 @@ function toPodcastEpisodeRankOptions(
 		...(isPodcastEpisodeHomeOrderShown(podcastEpisodePage)
 			? [{ label: HOME_RANK_OPTION_LABELS.podcasts, Icon: Home, onSelect: () => onOpenDialog("rank") }]
 			: []),
-		...(isTopicPodcastEpisodeVideoHomeOrderShown(podcastEpisodePage)
+		...(isTopicVideoHomeOrderShown(podcastEpisodePage)
 			? [{ label: HOME_RANK_OPTION_LABELS.films, Icon: Home, onSelect: () => onOpenDialog("rank-films") }]
 			: []),
-		...(isTopicPodcastEpisodeVideoProfileOrderShown(podcastEpisodePage)
+		...(isTopicVideoProfileOrderShown(podcastEpisodePage)
 			? [toProfileRankOption("films", () => onOpenDialog("rank-profile-films"))]
 			: []),
 		...(isPodcastEpisodeProfileOrderShown(podcastEpisodePage)
@@ -92,7 +85,7 @@ function toPodcastEpisodeRankOptions(
 	]
 }
 
-// the option that opens the owner's profile pins for the films or the podcast episodes
+// the option that opens the owner's featured profile items for the films or the podcast episodes
 function toProfileRankOption(rankedNoun: "films" | "podcasts", onSelect: () => void): PageActionOption {
 	return { label: PROFILE_RANK_OPTION_LABELS[rankedNoun], Icon: ListOrdered, onSelect }
 }

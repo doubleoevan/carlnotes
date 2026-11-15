@@ -14,11 +14,11 @@ export type SpendControlDraft = {
 	dispatchLimitText: string
 	signupAlertText: string
 	generatedChapterImageLimitText: string
-	// the unverified accounts switch, the two pauses, and the pinned-only home
+	// the unverified accounts switch, the two pauses, and the featured-only home
 	isUnverifiedFirstScanLimitOn: boolean
 	isPodcastEpisodeRecordingPaused: boolean
-	isTopicPodcastEpisodeVideoRenderingPaused: boolean
-	isHomePinnedOnly: boolean
+	isTopicVideoRenderingPaused: boolean
+	isHomeFeaturedOnly: boolean
 }
 
 // every cutoff's text emptied, so each reads its default
@@ -46,8 +46,8 @@ export function toSpendControlDraft(dailySpendCutoffs: AdminDailySpendCutoffs): 
 		generatedChapterImageLimitText: toOverrideText(dailySpendCutoffs.generatedChapterImageLimit),
 		isUnverifiedFirstScanLimitOn: dailySpendCutoffs.isUnverifiedFirstScanLimitOn,
 		isPodcastEpisodeRecordingPaused: dailySpendCutoffs.isPodcastEpisodeRecordingPaused,
-		isTopicPodcastEpisodeVideoRenderingPaused: dailySpendCutoffs.isTopicPodcastEpisodeVideoRenderingPaused,
-		isHomePinnedOnly: dailySpendCutoffs.isHomePinnedOnly,
+		isTopicVideoRenderingPaused: dailySpendCutoffs.isTopicVideoRenderingPaused,
+		isHomeFeaturedOnly: dailySpendCutoffs.isHomeFeaturedOnly,
 	}
 }
 
@@ -106,8 +106,8 @@ function toSpendControlDraftSettings(draft: SpendControlDraft): SpendControlDraf
 		generatedChapterImageLimit: toFieldNumber(draft.generatedChapterImageLimitText),
 		isUnverifiedFirstScanLimitOn: draft.isUnverifiedFirstScanLimitOn,
 		isPodcastEpisodeRecordingPaused: draft.isPodcastEpisodeRecordingPaused,
-		isTopicPodcastEpisodeVideoRenderingPaused: draft.isTopicPodcastEpisodeVideoRenderingPaused,
-		isHomePinnedOnly: draft.isHomePinnedOnly,
+		isTopicVideoRenderingPaused: draft.isTopicVideoRenderingPaused,
+		isHomeFeaturedOnly: draft.isHomeFeaturedOnly,
 	}
 }
 

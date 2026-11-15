@@ -428,7 +428,7 @@ Claims that no longer match the code:
 - **The topic page's film section does not poll while a newer film renders.** 8cb46ed added a filming line under the
   ready film's player and no poll, so that line stays until the page is read again. The section polls only while the
   film it shows is rendering, on a topic with no ready film
-  (`packages/core/components/TopicPodcastEpisodeVideoSection.tsx:100-106,124`).
+  (`packages/core/components/TopicVideoSection.tsx:100-106,124`).
 - **"Polls forever" is bounded by the sweep.** The client has no limit, but the sweep fails a dispatched scan after 2
   days 21 minutes. A waiting scan is never failed and polls like a running one: the page's scan has no field that
   says it is waiting (`packages/contracts/topics.ts:144-161`).
@@ -482,7 +482,7 @@ Facts the design rests on:
 
 - **A status read already exists as a pattern:** `GET /api/topic-image-renders/:id` returns a status and the fields
   the editor swaps in (`apps/api/topic/topicImagesRoute.ts:84-101`).
-- **Every status write of a film is in one pipeline module** (`topicPodcastEpisodeVideoRows.ts:45-229`) **and every one
+- **Every status write of a film is in one pipeline module** (`topicVideoRows.ts:45-229`) **and every one
   of a discussion in another** (`topicPostDiscussions.ts:63-313`), so a Redis delete there changes no workflow, and
   the live render, the backfill, and the close-out all get it. The render already deletes the film feeds' cache at
   the ready write.

@@ -14,21 +14,20 @@ function toPodcastEpisode(id: string, hasVideo: boolean): unknown {
 
 // a topic with the given count of each thing its page lists. the first film count of its podcast episodes have a film
 function toTopic({
-	topicPodcastEpisodeVideoCount = 0,
+	topicVideoCount = 0,
 	podcastEpisodeCount = 0,
 	commentCount = 0,
 	topicPostCount = 0,
 	relatedTopicCount = 0,
 }): DetailsTopic {
 	const podcastEpisodes = Array.from({ length: podcastEpisodeCount }, (_, i) =>
-		toPodcastEpisode(`episode-${i}`, i < topicPodcastEpisodeVideoCount),
+		toPodcastEpisode(`episode-${i}`, i < topicVideoCount),
 	)
 	return {
 		podcast: {
 			seasons: podcastEpisodeCount > 0 ? [2026] : [],
 			latestSeasonPodcastEpisodes: { podcastEpisodes },
-			topicPodcastEpisodeVideoSection:
-				topicPodcastEpisodeVideoCount > 0 ? { podcastEpisode: podcastEpisodes[0] } : null,
+			topicPodcastEpisodeVideoSection: topicVideoCount > 0 ? { podcastEpisode: podcastEpisodes[0] } : null,
 		},
 		commentThread: { commentCount },
 		topicPosts: { topicPosts: Array.from({ length: topicPostCount }), canPublish: false },
@@ -57,7 +56,7 @@ test("every detail but the line's last ends with a middle dot", () => {
 
 test("a topic's details count its films, podcast episodes, findings, comments, posts, notes, and related topics", () => {
 	const topic = toTopic({
-		topicPodcastEpisodeVideoCount: 1,
+		topicVideoCount: 1,
 		podcastEpisodeCount: 17,
 		commentCount: 4,
 		topicPostCount: 2,
@@ -87,7 +86,7 @@ test("a topic with nothing to count has no details, and one with no film the use
 	expect(toTopicDetails({ topic: toTopic({}), findingCount: 0, commentCount: null, noteCount: 0 })).toEqual([])
 
 	// podcast episodes with a film and no film section, and a topic with no podcast and no first page of comments
-	const filmlessTopic = toTopic({ topicPodcastEpisodeVideoCount: 2, podcastEpisodeCount: 2 })
+	const filmlessTopic = toTopic({ topicVideoCount: 2, podcastEpisodeCount: 2 })
 	filmlessTopic.podcast = { ...filmlessTopic.podcast, topicPodcastEpisodeVideoSection: null } as DetailsTopic["podcast"]
 	const withoutLoadedCounts = { findingCount: 0, commentCount: null, noteCount: null }
 	expect(toTopicDetails({ topic: filmlessTopic, ...withoutLoadedCounts })).toEqual(["2 podcast episodes"])

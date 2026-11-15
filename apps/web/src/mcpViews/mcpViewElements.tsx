@@ -2,9 +2,9 @@
 // Topic Post's info popup, the comment thread, the film player, and the link to the site
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import type { DataTableElements } from "@carlnotes/core/components/DataTable"
-import type { TopicPodcastEpisodeVideoPlayerElements } from "@carlnotes/core/components/TopicPodcastEpisodeVideoPlayer"
 import type { TopicPostInfoElements } from "@carlnotes/core/components/TopicPostInfo"
 import type { TopicsTableElements } from "@carlnotes/core/components/TopicsTable"
+import type { TopicVideoPlayerElements } from "@carlnotes/core/components/TopicVideoPlayer"
 import type { RowSort } from "@carlnotes/core/hooks/useRowSort"
 import type { SocialElements } from "@carlnotes/core/lib/socialElements"
 import { toKeptOverSeenLabel } from "@carlnotes/core/lib/topicsTableColumns"
@@ -13,7 +13,7 @@ import { cn } from "@carlnotes/nightshift/classNames"
 import type { ReactNode } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { PodcastEpisodePlayButton } from "@/components/podcast/PodcastEpisodePlayButton"
-import { TOPIC_PODCAST_EPISODE_VIDEO_PLAYER_ELEMENTS } from "@/components/podcast/TopicPodcastEpisodeVideoPlayer"
+import { TOPIC_VIDEO_PLAYER_ELEMENTS } from "@/components/podcast/TopicVideoPlayer"
 import { Switch } from "@/components/primitives/switch"
 import { SOCIAL_ELEMENTS } from "@/components/social/socialElements"
 import { DATA_TABLE_ELEMENTS } from "@/components/table/DataTable"
@@ -130,11 +130,9 @@ const ignoreSurfaceControls = (): void => {}
  * The film player elements of an MCP view, which plays the film in the host's frame and never asks the browser for
  * picture-in-picture or fullscreen.
  */
-export const MCP_VIEW_FILM_PLAYER_ELEMENTS: TopicPodcastEpisodeVideoPlayerElements = {
-	...TOPIC_PODCAST_EPISODE_VIDEO_PLAYER_ELEMENTS,
-	Surface: (props) => (
-		<TOPIC_PODCAST_EPISODE_VIDEO_PLAYER_ELEMENTS.Surface {...props} onSurfaceControls={ignoreSurfaceControls} />
-	),
+export const MCP_VIEW_FILM_PLAYER_ELEMENTS: TopicVideoPlayerElements = {
+	...TOPIC_VIDEO_PLAYER_ELEMENTS,
+	Surface: (props) => <TOPIC_VIDEO_PLAYER_ELEMENTS.Surface {...props} onSurfaceControls={ignoreSurfaceControls} />,
 }
 
 /**

@@ -11,7 +11,7 @@ import {
 import type { PodcastEpisodeOutline } from "@carlnotes/pipeline/podcast/podcastEpisodeOutline"
 import { type PodcastEpisodeSegment, RejectedScriptError } from "@carlnotes/pipeline/podcast/podcastEpisodeScript"
 import * as writePodcastEpisodeScript from "@carlnotes/pipeline/podcast/writePodcastEpisodeScript"
-import { topicPodcastEpisodeVideoConcurrency } from "@carlnotes/server/podcastEpisodeSettings"
+import { topicVideoConcurrency } from "@carlnotes/server/podcastEpisodeSettings"
 import { ApplicationFailure, activityInfo } from "@temporalio/activity"
 
 // the plan, the encode, the publish, and the failure are exported as they are. each throws only on an unexpected error
@@ -115,13 +115,14 @@ export async function drawPodcastEpisodeImageActivity(podcastEpisodeId: string):
 }
 
 /**
- * Returns whether a new podcast episode starts its film: films are on, which a TOPIC_PODCAST_EPISODE_VIDEO_CONCURRENCY
- * of zero turns off, and new films are not paused in the spend control settings.
+ * Returns whether a new podcast episode starts its film: films are on, which a TOPIC_VIDEO_CONCURRENCY of zero turns
+ * off, and new films are not paused in the spend control settings. Its name must not change, because a recording under
+ * way calls the activity by name.
  */
 export async function isTopicPodcastEpisodeVideoEnabled(): Promise<boolean> {
 	// skip the settings read if films are off
-	if (topicPodcastEpisodeVideoConcurrency() === 0) {
+	if (topicVideoConcurrency() === 0) {
 		return false
 	}
-	return !(await loadSpendControlSettings()).isTopicPodcastEpisodeVideoRenderingPaused
+	return !(await loadSpendControlSettings()).isTopicVideoRenderingPaused
 }

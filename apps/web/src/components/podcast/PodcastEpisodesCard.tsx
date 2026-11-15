@@ -10,10 +10,10 @@ import {
 	toShownPodcastSeason,
 } from "@carlnotes/core/components/PodcastEpisodesCard"
 import {
-	playInTopicPodcastEpisodeVideoSection,
-	type TopicPodcastEpisodeVideoSection,
-	useTopicPodcastEpisodeVideoSection,
-} from "@carlnotes/core/stores/topicPodcastEpisodeVideoSectionStore"
+	playInTopicVideoSection,
+	type TopicVideoSection,
+	useTopicVideoSection,
+} from "@carlnotes/core/stores/topicVideoSectionStore"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useMatch } from "@tanstack/react-router"
 import { useCallback, useEffect, useState } from "react"
@@ -97,11 +97,11 @@ export function PodcastEpisodesCard(props: PodcastEpisodesCardProps) {
 	if (props.format !== "video") {
 		return <PodcastEpisodeList topic={props.topic} onPodcastEpisodeRemoved={props.onPodcastEpisodeRemoved} />
 	}
-	const topicPodcastEpisodeVideoSection = props.topic.podcast?.topicPodcastEpisodeVideoSection
-	if (!topicPodcastEpisodeVideoSection) {
+	const topicVideoSection = props.topic.podcast?.topicPodcastEpisodeVideoSection
+	if (!topicVideoSection) {
 		return null
 	}
-	return <FilmList topic={props.topic} topicPodcastEpisodeVideoSection={topicPodcastEpisodeVideoSection} />
+	return <FilmList topic={props.topic} topicVideoSection={topicVideoSection} />
 }
 
 // Coffee Break podcast episodes, with removal for a permitted user
@@ -142,15 +142,10 @@ function PodcastEpisodeList({
 	)
 }
 
-// Coffee Break films, whose row plays its film in Topic Cinema and marks the film that Topic Cinema shows
-function FilmList({
-	topic,
-	topicPodcastEpisodeVideoSection,
-}: {
-	topic: TopicResponse
-	topicPodcastEpisodeVideoSection: TopicPodcastEpisodeVideoSection
-}) {
-	// the film season shown, its films, and the film in Topic Cinema
+// Coffee Break films, whose row plays its film in the topic video section and marks the film that the topic video
+// section shows
+function FilmList({ topic, topicVideoSection }: { topic: TopicResponse; topicVideoSection: TopicVideoSection }) {
+	// the film season shown, its films, and the film in the topic video section
 	const searchParams = useSearchParams()
 	const shownSeason = toShownPodcastSeason(topic.podcast?.seasons ?? [], searchParams.get(FILM_SEASON_KEY))
 	const { seasonPodcastEpisodes, isSeasonLoading, loadSeasonPodcastEpisodes } = useSeasonPodcastEpisodes({
@@ -158,7 +153,7 @@ function FilmList({
 		shownSeason,
 		hasVideo: true,
 	})
-	const { podcastEpisode: shownFilm } = useTopicPodcastEpisodeVideoSection(topic.id, topicPodcastEpisodeVideoSection)
+	const { podcastEpisode: shownFilm } = useTopicVideoSection(topic.id, topicVideoSection)
 	return (
 		<SharedPodcastEpisodesCard
 			topic={topic}
@@ -175,8 +170,8 @@ function FilmList({
 				captureFilmVisitEvent("visit_episode_videos_page_viewed", { topicId: topic.id, season, page })
 			}
 			filmList={{
-				latestFilmPodcastEpisodeId: topicPodcastEpisodeVideoSection.podcastEpisode.id,
-				onPlayFilm: (podcastEpisode) => playInTopicPodcastEpisodeVideoSection(topic.id, podcastEpisode),
+				latestFilmPodcastEpisodeId: topicVideoSection.podcastEpisode.id,
+				onPlayFilm: (podcastEpisode) => playInTopicVideoSection(topic.id, podcastEpisode),
 			}}
 			elements={filmElements}
 		/>

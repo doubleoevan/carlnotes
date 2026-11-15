@@ -128,7 +128,7 @@ test("a summary of each topic's latest podcast episode counts its chapters in on
 test("summaries keep their order, an episode with no chapter row counts none, and each says if it has a film", async () => {
 	// two podcast episodes, and a chapter count and a ready film for the second alone
 	const sentQueries = stubConnectionPool(({ text }) => {
-		if (text.includes('from "topic_podcast_episode_videos"')) {
+		if (text.includes('from "topic_videos"')) {
 			return [["episode-2", "ready", 5678, "film-hash"]]
 		}
 		return text.includes('from "episode_chapters"') ? [["episode-2", 4]] : []

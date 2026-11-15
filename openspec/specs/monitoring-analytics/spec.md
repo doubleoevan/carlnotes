@@ -783,7 +783,7 @@ and `visit_episode_video_dialog_opened` with the surface. Each SHALL hold only i
 
 #### Scenario: A collapse is counted
 
-- **WHEN** a user collapses Topic Cinema
+- **WHEN** a user collapses the topic video section
 - **THEN** one `visit_episode_video_section_toggled` event is sent with the Topic's id and `isOpen` false
 
 #### Scenario: Nothing without a key
@@ -810,18 +810,6 @@ page's Featured Films.
 - **WHEN** a user presses the play button over the film's poster in the Topic roast
 - **THEN** one `visit_episode_video_dialog_opened` event is sent with `surface` `topic-info`
 
-### Requirement: Featured film events hold ids only
-
-An admin's home film pin change SHALL send `episode_video_home_order_change` with the Podcast Episode's id and the new
-position. An owner's Café film pin change SHALL send `social_profile_order_change` with the film kind. A press on a
-film card's play button SHALL send `visit_episode_video_dialog_opened` with the Podcast Episode's id and its section.
-None SHALL carry text.
-
-#### Scenario: A Café pin is reported by kind
-
-- **WHEN** an owner pins a film on their Café at position two
-- **THEN** one `social_profile_order_change` event is sent with the film kind, the id, and position two
-
 ### Requirement: A film card's open names its section
 
 A film card's `visit_episode_video_dialog_opened` SHALL hold the `surface` of the section that holds the card:
@@ -840,3 +828,15 @@ from the Topic roast's play button.
 
 - **WHEN** a member presses a film card's play button in a team page's Featured Films
 - **THEN** one `visit_episode_video_dialog_opened` event is sent with `surface` `team-videos`
+
+### Requirement: Featured film events send ids only
+
+An admin's change to the home's featured films SHALL send `episode_video_home_order_change` with the Podcast Episode's
+id and the new position. An owner's change to their Café's featured films SHALL send `social_profile_order_change` with
+the film kind. A press on a film card's play button SHALL send `visit_episode_video_dialog_opened` with the Podcast
+Episode's id and its section. None SHALL carry text.
+
+#### Scenario: A Café's featured film is reported by kind
+
+- **WHEN** an owner features a film on their Café at position two
+- **THEN** one `social_profile_order_change` event is sent with the film kind, the id, and position two

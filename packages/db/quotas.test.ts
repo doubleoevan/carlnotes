@@ -271,7 +271,7 @@ test("the spend for a plan is filtered to that plan's users who are not admins",
 test("the films' cost counts as podcast episode spend", async () => {
 	// the podcast episode sum and the film sum each return a cost, and every other sum returns none
 	const sentQueries = stubConnectionPool(({ text }) => {
-		if (text.includes('from "topic_podcast_episode_videos"')) {
+		if (text.includes('from "topic_videos"')) {
 			return [["0.25"]]
 		}
 		return [[text.includes('from "episodes"') ? "1.5" : "0"]]
@@ -286,7 +286,7 @@ test("the films' cost counts as podcast episode spend", async () => {
 	}
 
 	// the film sum filters by the podcast episode's owner
-	const filmSumQuery = sentQueries.find((sentQuery) => sentQuery.text.includes('from "topic_podcast_episode_videos"'))
+	const filmSumQuery = sentQueries.find((sentQuery) => sentQuery.text.includes('from "topic_videos"'))
 	expect(filmSumQuery?.text).toContain('"episodes"."owner_id"')
 	expect(filmSumQuery?.values).toContain("user-1")
 })

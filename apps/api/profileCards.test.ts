@@ -1,4 +1,4 @@
-// profile cards tests: the person's own pinned rows lead, a visitor reads public topics alone and no hidden membership,
+// profile cards tests: the person's own featured rows lead, a visitor reads public topics alone and no hidden membership,
 // the person's tiles and table take their teams' topics but another member's unconverted private one, each other topic
 // shows one film and one podcast episode, and a profile and a team list every published Topic Post from one read of the
 // posts
@@ -11,9 +11,9 @@ import {
 	loadProfileCards,
 	loadProfilePodcastEpisodeIds,
 	loadProfileTableTopicRows,
-	loadProfileTopicPodcastEpisodeVideoIds,
 	loadProfileTopicPostCards,
 	loadProfileTopicRows,
+	loadProfileTopicVideoIds,
 	loadTeamCards,
 	toProfileSectionRowIds,
 } from "./profileCards"
@@ -77,18 +77,18 @@ test("the person's own table takes every topic of every team they are an active 
 	expect(sentQueries[0]?.text).toContain('"topic_personal_source_contexts"')
 })
 
-// the profile order: the pinned ones by their position and the newest first at one position, then the unpinned ones most
+// the profile order: the featured ones by their position and the newest first at one position, then the unfeatured ones most
 // viewed, most followed, and newest
 const PROFILE_ORDER_SQL =
 	'order by "topics"."profile_order" is null, "topics"."profile_order" asc, case when "topics"."profile_order" is null then "topics"."viewer_count" end desc, case when "topics"."profile_order" is null then "topics"."subscriber_count" end desc, "topics"."created_at" desc'
 
-test("topics read the person's own pins first in their order, then most viewed, most followed, and newest", async () => {
+test("topics read the person's own featured items first in their order, then most viewed, most followed, and newest", async () => {
 	const sentQueries = stubConnectionPool(() => [])
 	await loadProfileTopicRows({ profileUserId: "user-1", profileReader: "visitor" })
 
-	// a pin counts only on a topic the person owns, so a team topic's pin by its owner does not lead
-	const ownPinPosition = 'case when "topics"."owner_id" = $14 then "topics"."profile_order" end'
-	expect(sentQueries[0]?.text).toContain(`order by ${ownPinPosition} is null`)
+	// a featured position counts only on a topic the person owns, so a team topic its owner features does not lead
+	const ownFeaturePosition = 'case when "topics"."owner_id" = $14 then "topics"."profile_order" end'
+	expect(sentQueries[0]?.text).toContain(`order by ${ownFeaturePosition} is null`)
 	expect(sentQueries[0]?.values.slice(13, 17)).toEqual(["user-1", "user-1", "user-1", "user-1"])
 })
 
@@ -104,23 +104,23 @@ test("a team's cards read its topics in the same order, and a team with none rea
 	expect(topicRead?.text).toContain(PROFILE_ORDER_SQL)
 })
 
-test("with no pin, each topic shows its first podcast episode read", () => {
+test("with nothing featured, each topic shows its first podcast episode read", () => {
 	const profileSectionRowIds = toProfileSectionRowIds([
 		{ id: "episode-a2", topicId: "topic-a", profileOrder: null },
 		{ id: "episode-b1", topicId: "topic-b", profileOrder: null },
 		{ id: "episode-a1", topicId: "topic-a", profileOrder: null },
 	])
-	expect(profileSectionRowIds).toEqual({ rowIds: ["episode-a2", "episode-b1"], pinnedCount: 0 })
+	expect(profileSectionRowIds).toEqual({ rowIds: ["episode-a2", "episode-b1"], featuredCount: 0 })
 })
 
-test("every pinned podcast episode shows, two of one topic included, and that topic adds no other", () => {
+test("every featured podcast episode shows, two of one topic included, and that topic adds no other", () => {
 	const profileSectionRowIds = toProfileSectionRowIds([
 		{ id: "episode-a1", topicId: "topic-a", profileOrder: 1 },
 		{ id: "episode-a2", topicId: "topic-a", profileOrder: 2 },
 		{ id: "episode-a3", topicId: "topic-a", profileOrder: null },
 		{ id: "episode-b1", topicId: "topic-b", profileOrder: null },
 	])
-	expect(profileSectionRowIds).toEqual({ rowIds: ["episode-a1", "episode-a2", "episode-b1"], pinnedCount: 2 })
+	expect(profileSectionRowIds).toEqual({ rowIds: ["episode-a1", "episode-a2", "episode-b1"], featuredCount: 2 })
 })
 
 test("a person with no topic reads no podcast episode", async () => {
@@ -129,27 +129,27 @@ test("a person with no topic reads no podcast episode", async () => {
 	expect(sentQueries).toHaveLength(0)
 })
 
-test("the films read takes the topics' published podcast episodes with a ready film, the pinned films first", async () => {
+test("the films read takes the topics' published podcast episodes with a ready film, the featured films first", async () => {
 	// a person with no topic reads no film
 	const sentQueries = stubConnectionPool(() => [])
-	expect(await loadProfileTopicPodcastEpisodeVideoIds([])).toEqual({
+	expect(await loadProfileTopicVideoIds([])).toEqual({
 		podcastEpisodeIds: [],
 		pinnedTopicPodcastEpisodeVideoCount: 0,
 	})
 	expect(sentQueries).toHaveLength(0)
 
 	// the read joins the ready films of the topics' published podcast episodes
-	await loadProfileTopicPodcastEpisodeVideoIds(["topic-a", "topic-b"])
+	await loadProfileTopicVideoIds(["topic-a", "topic-b"])
 	const [filmRead] = sentQueries
 	expect(filmRead?.text).toContain(
-		'inner join "topic_podcast_episode_videos" on ("topic_podcast_episode_videos"."episode_id" = "episodes"."id" and "topic_podcast_episode_videos"."status" = $1)',
+		'inner join "topic_videos" on ("topic_videos"."episode_id" = "episodes"."id" and "topic_videos"."status" = $1)',
 	)
 	expect(filmRead?.text).toContain('"episodes"."topic_id" in ($2, $3)')
 	expect(filmRead?.values.slice(0, 4)).toEqual(["ready", "topic-a", "topic-b", "published"])
 
-	// the pinned films lead in their own order, then the most listened, newest first among ties
+	// the featured films lead in their own order, then the most listened, newest first among ties
 	expect(filmRead?.text).toContain(
-		'order by "topic_podcast_episode_videos"."profile_order" is null, "topic_podcast_episode_videos"."profile_order" asc, case when "topic_podcast_episode_videos"."profile_order" is null then "episodes"."listener_count" end desc, "episodes"."published_at" desc',
+		'order by "topic_videos"."profile_order" is null, "topic_videos"."profile_order" asc, case when "topic_videos"."profile_order" is null then "episodes"."listener_count" end desc, "episodes"."published_at" desc',
 	)
 })
 
@@ -159,7 +159,7 @@ function toTopicRowValues(id: string, visibility: "public" | "private"): unknown
 	return Object.keys(getTableColumns(topics)).map((columnKey) => topicValues[columnKey] ?? null)
 }
 
-// a person with a pinned film on a public topic and a film on a private topic. a read that filters on visibility
+// a person with a featured film on a public topic and a film on a private topic. a read that filters on visibility
 // gets the public topic alone, and the films read gets the films of the topics it names
 function stubProfileFilms(): void {
 	stubConnectionPool(({ text, values }) => {
@@ -173,7 +173,7 @@ function stubProfileFilms(): void {
 		}
 
 		// the films of the topics the read names, and no podcast episode beside them
-		if (!text.includes('inner join "topic_podcast_episode_videos"')) {
+		if (!text.includes('inner join "topic_videos"')) {
 			return []
 		}
 		const filmRows = [
@@ -211,7 +211,7 @@ test("a visitor sees a person's films on public topics alone, and the person see
 	])
 	expect(visitorCards.pinnedTopicPodcastEpisodeVideoCount).toBe(1)
 
-	// the person's holds both, the pinned film first, each with whether its topic is public
+	// the person's holds both, the featured film first, each with whether its topic is public
 	expect(
 		ownCards.profileTopicPodcastEpisodeVideos.map((filmCard) => [filmCard.podcastEpisode.id, filmCard.isTopicPublic]),
 	).toEqual([
@@ -222,11 +222,11 @@ test("a visitor sees a person's films on public topics alone, and the person see
 })
 
 test("a podcast episode in both sections is read once, and each section keeps its own order", async () => {
-	// the film read returns a pinned film and another topic's, and the podcast episode read the same two the other way
+	// the film read returns a featured film and another topic's, and the podcast episode read the same two the other way
 	stubProfileFilms()
 	restoreConnectionPool()
 	stubConnectionPool(({ text }) => {
-		const isFilmRead = text.includes('inner join "topic_podcast_episode_videos"')
+		const isFilmRead = text.includes('inner join "topic_videos"')
 		const filmRows = [
 			["episode-public", "topic-public", 1],
 			["episode-private", "topic-private", null],
@@ -250,7 +250,7 @@ test("a podcast episode in both sections is read once, and each section keeps it
 	expect(toPodcastEpisodeIds(profileCards.profilePodcastEpisodes)).toEqual(["episode-private", "episode-public"])
 })
 
-// the profile order of Topic Posts: the pinned ones by their position, then the newest first
+// the profile order of Topic Posts: the featured ones by their position, then the newest first
 const TOPIC_POST_ORDER_SQL =
 	'order by "topic_posts"."profile_order" is null, "topic_posts"."profile_order" asc, "topic_posts"."published_at" desc'
 
@@ -280,7 +280,7 @@ test("a team's Topic Post cards read the published posts of its topics once, in 
 	expect(topicPostReads[0]?.text).not.toContain("limit")
 })
 
-test("a profile's Topic Posts are every one: the pinned ones, then the rest newest first, with no limit", async () => {
+test("a profile's Topic Posts are every one: the featured ones, then the rest newest first, with no limit", async () => {
 	// a row with its topic, its visibility, its profile order, and the day of November it was published. the test reads
 	// only the fields below
 	const toTopicPostRow = (id: string, topicId: string, profileOrder: number | null, day: number): TopicPostRow =>
@@ -289,9 +289,9 @@ test("a profile's Topic Posts are every one: the pinned ones, then the rest newe
 			topic: { id: topicId, visibility: topicId === "topic-a" ? "public" : "private" },
 		}) as TopicPostRow
 
-	// the rows in the profile order: the pinned post, then the rest newest first
+	// the rows in the profile order: the featured post, then the rest newest first
 	spyOn(topicPosts, "loadProfileOrderTopicPostRows").mockResolvedValue([
-		toTopicPostRow("post-a-pinned", "topic-a", 1, 1),
+		toTopicPostRow("post-a-featured", "topic-a", 1, 1),
 		toTopicPostRow("post-a-new", "topic-a", null, 9),
 		toTopicPostRow("post-b-new", "topic-b", null, 8),
 		toTopicPostRow("post-b-old", "topic-b", null, 2),
@@ -303,11 +303,11 @@ test("a profile's Topic Posts are every one: the pinned ones, then the rest newe
 	)
 	const profileTopicPostCards = await loadProfileTopicPostCards("user-1", true)
 
-	// every post in the order read, each with whether its topic is public, and the pinned one counted
+	// every post in the order read, each with whether its topic is public, and the featured one counted
 	expect(
 		profileTopicPostCards.profileTopicPosts.map((topicPostCard) => [topicPostCard.id, topicPostCard.isTopicPublic]),
 	).toEqual([
-		["post-a-pinned", true],
+		["post-a-featured", true],
 		["post-a-new", true],
 		["post-b-new", false],
 		["post-b-old", false],
@@ -316,8 +316,8 @@ test("a profile's Topic Posts are every one: the pinned ones, then the rest newe
 	expect(profileTopicPostCards).not.toHaveProperty("topicPosts")
 })
 
-test("a profile lists more than twelve pinned Topic Posts and every other one, in one read of the posts", async () => {
-	// fourteen pinned posts and six more, all on one topic
+test("a profile lists more than twelve featured Topic Posts and every other one, in one read of the posts", async () => {
+	// fourteen featured posts and six more, all on one topic
 	const topicPostRows = Array.from({ length: 20 }, (_, i) => ({
 		topicPost: { id: `post-${i}`, topicId: "topic-a", profileOrder: i < 14 ? i + 1 : null, publishedAt: new Date() },
 		topic: { id: "topic-a", visibility: "public" },
@@ -327,7 +327,7 @@ test("a profile lists more than twelve pinned Topic Posts and every other one, i
 		rows.map(({ topicPost }) => ({ id: topicPost.id }) as never),
 	)
 
-	// a visitor's list holds all twenty, the fourteen pinned ones first
+	// a visitor's list holds all twenty, the fourteen featured ones first
 	const profileTopicPostCards = await loadProfileTopicPostCards("user-1", false)
 	expect(profileTopicPostCards.profileTopicPosts).toHaveLength(20)
 	expect(profileTopicPostCards.pinnedTopicPostCount).toBe(14)
@@ -335,12 +335,12 @@ test("a profile lists more than twelve pinned Topic Posts and every other one, i
 })
 
 test("a team's Topic Post cards are every post read, in the order read, from one read of the posts and their reactions", async () => {
-	// a pinned post and a newer one on topic a, and two on topic b. the test reads only the fields below
+	// a featured post and a newer one on topic a, and two on topic b. the test reads only the fields below
 	const toTopicPostRow = (id: string, topicId: string, profileOrder: number | null): TopicPostRow =>
 		({ topicPost: { id, topicId, profileOrder, publishedAt: new Date() }, topic: { id: topicId } }) as TopicPostRow
 	stubConnectionPool(() => [])
 	const loadRowsSpy = spyOn(topicPosts, "loadProfileOrderTopicPostRows").mockResolvedValue([
-		toTopicPostRow("post-a-pinned", "topic-a", 1),
+		toTopicPostRow("post-a-featured", "topic-a", 1),
 		toTopicPostRow("post-a-new", "topic-a", null),
 		toTopicPostRow("post-b-new", "topic-b", null),
 		toTopicPostRow("post-b-old", "topic-b", null),
@@ -352,7 +352,7 @@ test("a team's Topic Post cards are every post read, in the order read, from one
 	// all four posts in the order read
 	const { topicPostCards } = await loadTeamCards(["topic-a", "topic-b"], "user-1")
 	expect(topicPostCards.map((topicPostCard) => topicPostCard.id)).toEqual([
-		"post-a-pinned",
+		"post-a-featured",
 		"post-a-new",
 		"post-b-new",
 		"post-b-old",

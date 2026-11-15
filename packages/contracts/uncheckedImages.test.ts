@@ -2,7 +2,7 @@
 // whose own query names unchecked=1 reads as an unchecked image's
 import { expect, test } from "bun:test"
 import { toAvatarImagePath, toTeamAvatarImagePath } from "./avatars"
-import { toTopicImageUrls, toTopicPodcastEpisodeVideoPosterUrl, toUncheckedTopicImageUrls } from "./topicImages"
+import { toTopicImageUrls, toTopicVideoPosterUrl, toUncheckedTopicImageUrls } from "./topicImages"
 import { isUncheckedImagePath, toUncheckedImagePath } from "./uncheckedImages"
 
 test("the mark joins an avatar path's query and starts an image file path's", () => {
@@ -10,7 +10,7 @@ test("the mark joins an avatar path's query and starts an image file path's", ()
 	expect(toUncheckedImagePath(toTeamAvatarImagePath("team-1", "5e6f"))).toBe(
 		"/api/team-avatars/team-1?v=5e6f&unchecked=1",
 	)
-	expect(toUncheckedImagePath(toTopicPodcastEpisodeVideoPosterUrl("episode-1", "hash-1"))).toBe(
+	expect(toUncheckedImagePath(toTopicVideoPosterUrl("episode-1", "hash-1"))).toBe(
 		"/api/topic-podcast-episode-video-images/episode-1/hash-1/poster.jpg?unchecked=1",
 	)
 })

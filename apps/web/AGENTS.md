@@ -281,23 +281,23 @@ the browser bundle and renders pages through the server build, behind its own ro
   podcast player that `Layout` mounts.
   `stores/podcastEpisodePlayerStore.ts` binds that element and browser lifecycle/voice hooks to the core player, so
   playback continues from one page to the next, and core `stores/podcastEpisodePlayActions.ts` plays or pauses a
-  podcast episode or a chapter by id from a page. `stores/topicPodcastEpisodeVideoElement.ts` owns the browser's one
-  film element, the core player's video adapter for the app's lifetime. `TopicPodcastEpisodeVideoPlayer.tsx` moves it
+  podcast episode or a chapter by id from a page. `stores/topicVideoElement.ts` owns the browser's one
+  film element, the core player's video adapter for the app's lifetime. `TopicVideoPlayer.tsx` moves it
   into its frame while its film is loaded and back to a hidden host in a layout effect's cleanup, before the frame
   leaves the document, so a film in picture-in-picture keeps playing from one page to the next and any other pauses
-  for the audio. `TopicPodcastEpisodeVideoDialog.tsx` adapts core's Video dialog to the browser's dialog,
-  `ReturnedTopicPodcastEpisodeVideoDialog.tsx`, which `Layout` mounts, is that dialog for a film that returned from
+  for the audio. `TopicVideoDialog.tsx` adapts core's Video dialog to the browser's dialog,
+  `ReturnedTopicVideoDialog.tsx`, which `Layout` mounts, is that dialog for a film that returned from
   picture-in-picture on a page with no film player, loading the dialog's code once a film returns, and
-  `TopicPodcastEpisodeVideoSection.tsx` is the topic page's
+  `TopicVideoSection.tsx` is the topic page's
   collapsible film section. While a topic with no ready film has a latest podcast episode whose film is rendering, the
   section shows `UnpublishedPodcastEpisodeCard` with `isVideoRendering` in the film player's place, the recording
-  card's frame with the line "Carl and Vienna are filming...", and core's `useTopicPodcastEpisodeVideoRenderingPoll`
+  card's frame with the line "Carl and Vienna are filming...", and core's `useTopicVideoRenderingPoll`
   reads the page again until the film is ready. `pages/PodcastEpisodePage.tsx` shows the same card in its Coffee Break
   Cinema section for a podcast episode whose film is rendering, and its poll replaces the page once the film is no
   longer rendering. A failed poll read of the topic page keeps the page shown.
   The film player's `PodcastEpisodeSeekBar` has `hasChapterTooltips`: hovering a chapter's
-  segment shows `TopicPodcastEpisodeVideoChapterTooltip.tsx`, the chapter's title over the first image of
-  `topicPodcastEpisodeVideoChapterImages.ts` that loads, the Finding's link preview image, then the chapter's generated
+  segment shows `TopicVideoChapterTooltip.tsx`, the chapter's title over the first image of
+  `topicVideoChapterImages.ts` that loads, the Finding's link preview image, then the chapter's generated
   image, then the podcast card. The image's frame shows the loading note until the image loads, and an image that
   failed to load is not requested again until the page reloads. The audio player card's bar has no tooltip.
   `pages/PodcastEpisodePage.tsx` holds the film in its Coffee Break Cinema section and the
@@ -547,7 +547,7 @@ its press opens: a film card's round play button, `PodcastEpisodePlayButton` cen
 Video pill beside the play pill on a `components/social/NewsList.tsx` row whose Podcast Episode has a film. The news
 MCP view's row shows none. Its thumbnail size is the play button over the film's poster in
 `components/topic/TopicInfo.tsx`, whose popover shows the latest film's section, core's
-`TopicPodcastEpisodeVideoInfoSection`, right above the podcast's.
+`TopicVideoInfoSection`, right above the podcast's.
 `components/topic/TopicImageEditor.tsx` adapts the editor's image block, with the browser's file input as its picker.
 `components/topic/TopicImageButton.tsx` is the image as a button with the camera overlay, and the page header's image,
 which is that button for an editor. `components/topic/TopicImageLink.tsx` adapts core's `TopicImageLink`, the image
@@ -558,15 +558,15 @@ as the popup's one link to the page. It reads the open page from the router, and
 plain image. Every image that opens its page goes through it, never its own link.
 `components/topic/EditImageDialog.tsx` is the Edit topic image and Edit podcast
 image dialog that the header image opens, and the Edit film dialog that the Edit film option opens from the actions
-menu of the podcast episode page and of the topic page (`toEditTopicPodcastEpisodeVideoOption` in
+menu of the podcast episode page and of the topic page (`toEditTopicVideoOption` in
 `components/topic/TopicActions.tsx`), and `components/podcast/EditPodcastEpisodeDialog.tsx` the Edit podcast dialog
 of the podcast episode page's actions menu.
-`components/common/RankDialog.tsx` is the web's rows and frame for core's `RankDialog`, the list that orders pinned
+`components/common/RankDialog.tsx` is the web's rows and frame for core's `RankDialog`, the list that orders featured
 topics, films, podcast episodes, or Topic Posts: the admin's home order list on a topic page and a podcast episode
-page, and a person's own pins on their profile page, films among them, and on the page of one of their topics, podcast
+page, and a person's own featured items on their profile page, films among them, and on the page of one of their topics, podcast
 episodes, or Topic Posts.
 `components/topicPost/HomeTopicPostRankDialog.tsx` is the admin's Home posts list, which the home page's and a Topic
-Post page's actions menus open: it reads the pinned Topic Posts and the ones a pin may name, offers the page's post a
+Post page's actions menus open: it reads the featured Topic Posts and the ones an admin may feature, offers the page's post a
 place, and sends the order. `components/common/CardsSection.tsx` is the web's accordion section, grid, and page
 buttons for core's `CardsSection`, which the home's, the profile's, and the team page's card sections render, and
 `components/common/pageSectionsElements.tsx` is `PAGE_SECTIONS_ELEMENTS`, the sections and cards that the profile's

@@ -17,7 +17,7 @@ const TOPIC: EditableImage = {
 }
 
 // a film's own image, which the block edits by the film's podcast episode
-const TOPIC_PODCAST_EPISODE_VIDEO: EditableImage = { ...TOPIC, kind: "topicPodcastEpisodeVideo", id: "episode-1" }
+const TOPIC_VIDEO: EditableImage = { ...TOPIC, kind: "topicVideo", id: "episode-1" }
 
 // the editor's image block: a generated image with regenerations left, an upload, an upload shown to the editor alone
 // with its line, the month's limit reached, a topic with no image yet, and a film's own image, in the same layout at
@@ -41,14 +41,14 @@ export const LimitReached: Story = {
 export const NoImage: Story = {
 	args: { editableImage: { ...TOPIC, image: null, imageOrigin: null, imagePrompt: null } },
 }
-export const TopicPodcastEpisodeVideo: Story = { args: { editableImage: TOPIC_PODCAST_EPISODE_VIDEO } }
-export const TopicPodcastEpisodeVideoLimitReached: Story = {
-	args: { editableImage: { ...TOPIC_PODCAST_EPISODE_VIDEO, imageRegenerationQuota: { used: 15, limit: 15 } } },
+export const TopicVideo: Story = { args: { editableImage: TOPIC_VIDEO } }
+export const TopicVideoLimitReached: Story = {
+	args: { editableImage: { ...TOPIC_VIDEO, imageRegenerationQuota: { used: 15, limit: 15 } } },
 }
-export const TopicPodcastEpisodeVideoUncheckedUpload: Story = {
+export const TopicVideoUncheckedUpload: Story = {
 	args: {
 		editableImage: {
-			...TOPIC_PODCAST_EPISODE_VIDEO,
+			...TOPIC_VIDEO,
 			imageOrigin: "uploaded",
 			imagePrompt: null,
 			isImageUnchecked: true,

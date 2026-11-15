@@ -174,7 +174,7 @@ both, and the smoke suite runs on the new version before production does.
 
 Six Doppler settings set the defaults of the daily spend controls. Each one is optional, and an unset, empty, or
 invalid value reads as the built-in default. Zero reads as the default too, except for `FIRST_SCAN_DISPATCH_LIMIT`,
-where zero starts no waiting scans, and `TOPIC_PODCAST_EPISODE_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT`, where zero
+where zero starts no waiting scans, and `TOPIC_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT`, where zero
 turns generated images off. The admin console overrides each one without a deploy or a restart, and clearing an
 override returns to the Doppler value.
 
@@ -185,7 +185,7 @@ override returns to the Doppler value.
 | `CHAT_DAILY_SPEND_CUTOFF_USD` | 150 | the day's free-plan spend past which a free user's chat with Carl pauses until midnight UTC |
 | `FIRST_SCAN_DISPATCH_LIMIT` | 5 | how many waiting scans one sweep starts, oldest first. Zero starts none |
 | `HOURLY_SIGNUP_ALERT_COUNT` | 50 | the accounts created in an hour at which the sweep crosses the `hourly-signups` threshold |
-| `TOPIC_PODCAST_EPISODE_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT` | 40 | how many generated images one film draws at most. The console takes 0 to 1,000 |
+| `TOPIC_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT` | 40 | how many generated images one film draws at most. The console takes 0 to 1,000 |
 
 Four switches have no Doppler setting, and each is off until an admin turns it on in the console:
 
@@ -194,7 +194,7 @@ Four switches have no Doppler setting, and each is off until an admin turns it o
   answer that account in chat or voice.
 - **Pause new podcast episodes.** No scan records a new podcast episode.
 - **Pause new films.** A podcast episode that publishes gets no film.
-- **Show only pinned items on the home.** The home's sections list their pinned items alone.
+- **Show only featured items on the home.** The home's sections list their featured items alone.
 
 The overrides and the switches live in the `spend_control_settings` row, and every reader sees a save within its
 next read. The [Launch runbook](#launch-runbook) lists what each one stops and what keeps working.
@@ -219,6 +219,30 @@ Settings → Notifications → Issue Alerts** and **Metric Alerts** set to deliv
 4. **The home page renders.** In Sentry, **Alerts → Create Alert → Uptime Monitor**, for `https://carlnotes.com/`
    every minute, failing on any status other than 200, notifying the owner. It catches a page that fails while
    readiness, which renders only the privacy page, still passes.
+
+## Job monitors
+
+Every Northflank job runs its command through `apps/worker/runMonitoredJob.ts`, inside `doppler run`. The two cron
+jobs each have a Sentry cron monitor, named for the job. A run checks in when it starts and again with its result, and
+the check-in creates or updates the monitor from the schedule in that file.
+
+| Monitor | Schedule (UTC) | Margin | Longest run | Alerts after |
+| --- | --- | --- | --- | --- |
+| `scan-sweep` | every 15 minutes | 5 minutes | 10 minutes | 2 missed or failed runs |
+| `reset-monthly-budgets` | 00:05 daily | 30 minutes | 60 minutes | 1 missed or failed run |
+
+A run that never starts its command, such as one whose Doppler token is revoked, sends no check-in. Its monitor reports
+the run as missed. A change to a job's Northflank cron schedule or time limit changes its monitor in the same commit.
+
+The release jobs, `migrate`, `docs-sync`, and `edge-purge`, have no schedule for a monitor to miss. A release job that
+exits non-zero is reported as an error under the `job` stage. One that fails before its secrets load fails the
+`release-main` workflow. Only a Northflank notification for a failed workflow run reports that. **Owner:** turn it on in
+Northflank's notification settings for the `carlnotes-prd` project, by email.
+
+**Connect each monitor to the alerts.** **Owner:** a monitor exists only after its first check-in. After the first deploy
+with the monitors, open **Monitors** in Sentry. Wait for `scan-sweep` to appear, and for `reset-monthly-budgets` after
+00:05 UTC. Add both to the **prd: monitors (uptime + error spike)** automation, which already emails the owner for the
+uptime checks. The push to the Sentry mobile app follows the notification settings under [Deploy alerts](#deploy-alerts).
 
 ## Launch runbook
 
@@ -376,8 +400,8 @@ work, and a review one of its two attempts. Two restarts inside one review fail 
 | `source-screening`, `attachment-processing`, `personal-sources`, `topic-images`, `topic-posts` | 8 each | `SCREEN_CONCURRENCY` |
 | `episode-recordings` | 16 | `PODCAST_RECORDING_CONCURRENCY` |
 | `dashboard-snapshots` | 2 | fixed |
-| `episode-videos` | 1 | `TOPIC_PODCAST_EPISODE_VIDEO_CONCURRENCY` |
-| `episode-video-backfill` | 1 | `TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_CONCURRENCY` |
+| `episode-videos` | 1 | `TOPIC_VIDEO_CONCURRENCY` |
+| `episode-video-backfill` | 1 | `TOPIC_VIDEO_BACKFILL_CONCURRENCY` |
 
 ### Switches, as a last resort
 
@@ -398,11 +422,11 @@ To stop new podcast episodes, use the pause. The empty speech model is the last 
 | Unverified accounts, the unchecked "Allow unverified email sign-ups to scan and chat" | Limits only | none | for a free account that signed up with a password and has not verified its email: its first and manual Scans wait for the first scan limit whatever the day's spend, and chat and voice do not answer | verified accounts, provider sign-ins, and paid accounts | a Scan under way for as long as it waits, and in chat "Carl will answer once your email is verified. Check your inbox." | check the box again; a Scan that was waiting starts on the next sweep | `packages/db/dailySpendCutoffs.test.ts`, `apps/api/chat/chatTurnAuthorization.test.ts`, `apps/api/chat/voiceAuthorization.test.ts` |
 | Pause new podcast episodes | Limits only | none | every new podcast episode and recording, whoever it bills | the Scan, its Findings, and its email; a recording under way; every published podcast episode, the feeds, and voice | a Scan with no new podcast episode | turn it off; a skipped podcast episode is not recorded later | `packages/pipeline/podcast/planPodcastEpisode.test.ts` |
 | Pause new films | Limits only | none | the film of a podcast episode that publishes while it is on | the podcast episode as audio; a render under way; ready films; a film's rebuild; the backfill | a podcast episode with no film | turn it off; only the backfill renders a skipped film, for each Topic's latest podcast episode | `apps/worker/workflows/recordPodcastEpisodeActivities.test.ts` |
-| Generated image limit, over `TOPIC_PODCAST_EPISODE_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT`, 40 | Limits, with the Doppler default | none for Limits, the worker for Doppler | at 0, every generated chapter image in the films rendered meanwhile | the film renders with its Resource Images, the podcast card, and its own image | a film with fewer generated images, for good | clear the override | `packages/pipeline/topicPodcastEpisodeVideo/videoChapterImages.test.ts` |
-| Show only pinned items on the home | Limits only | none | every unpinned card in the home's seven sections, within a minute for a signed-in user and about three for a visitor | pinned items, Your topics, the news, every item at its own url, and the Topics directory | a home with fewer cards, and no copy | turn it off | `apps/api/home/homeCardIds.test.ts` |
+| Generated image limit, over `TOPIC_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT`, 40 | Limits, with the Doppler default | none for Limits, the worker for Doppler | at 0, every generated chapter image in the films rendered meanwhile | the film renders with its Resource Images, the podcast card, and its own image | a film with fewer generated images, for good | clear the override | `packages/pipeline/topicVideo/videoChapterImages.test.ts` |
+| Show only featured items on the home | Limits only | none | every unfeatured card in the home's seven sections, within a minute for a signed-in user and about three for a visitor | featured items, Your topics, the news, every item at its own url, and the Topics directory | a home with fewer cards, and no copy | turn it off | `apps/api/home/homeCardIds.test.ts` |
 | `SCAN_DISPATCH_LIMIT`, 100 | Doppler | none: the sweep's next run | at 0, every scheduled Scan and every Scan that was opened and never started | waiting Scans within the first scan limit; Scans the api starts; every Topic stays scheduled | a scheduled Scan that comes later | remove the value | `apps/worker/scanQueue.test.ts`, `packages/server/scanSettings.test.ts` |
-| `TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_CONCURRENCY`, 1 | Doppler | the worker | at 0, the film backfill's start and its Worker; a backfill under way waits at its next step | a new podcast episode's film, and rebuilds | nothing | remove the value and restart the worker | `packages/server/podcastEpisodeSettings.test.ts` |
-| `TOPIC_PODCAST_EPISODE_VIDEO_CONCURRENCY`, 1 | Doppler | the worker | at 0, both film Workers, the backfill, and a new podcast episode's film. The api still queues a rebuild, which waits until films are on again | recording, and ready films play | a new podcast episode with no film | remove the value and restart the worker | `packages/server/podcastEpisodeSettings.test.ts`, `apps/worker/workflows/recordPodcastEpisodeActivities.test.ts` |
+| `TOPIC_VIDEO_BACKFILL_CONCURRENCY`, 1 | Doppler | the worker | at 0, the film backfill's start and its Worker; a backfill under way waits at its next step | a new podcast episode's film, and rebuilds | nothing | remove the value and restart the worker | `packages/server/podcastEpisodeSettings.test.ts` |
+| `TOPIC_VIDEO_CONCURRENCY`, 1 | Doppler | the worker | at 0, both film Workers, the backfill, and a new podcast episode's film. The api still queues a rebuild, which waits until films are on again | recording, and ready films play | a new podcast episode with no film | remove the value and restart the worker | `packages/server/podcastEpisodeSettings.test.ts`, `apps/worker/workflows/recordPodcastEpisodeActivities.test.ts` |
 | Mobile minimum version | the admin console's **Mobile app** section | none, within 60 seconds | every api request from an older build, with a 426 | the web, and newer builds | "Carl needs a newer app" with the store link | lower the minimum | `apps/api/appVersionGate.test.ts` |
 | Edge purge | `bun run edge:purge`, and every release | none | nothing. It empties the edge, so every visitor page reaches the origin until the edge fills again | everything | nothing | none needed | `apps/api/edgeCache.purge.test.ts` |
 | `PODCAST_SPEECH_MODEL` set empty | Doppler | `app` and the worker | far more than recording: it hides every published podcast episode from its Topic's page and its own page, the public and listener feeds respond 404, podcast episodes leave the sitemap, voice chat and spoken replies turn off, and a podcast episode being recorded fails at its next chapter. A Topic Post Discussion still starts and pays for its script, then fails at the speech call | Scans, chat in text, and Topic Posts | no podcast section, a missing page, and a feed that is gone | set the model again and restart both | `packages/pipeline/podcast/planPodcastEpisode.test.ts` |

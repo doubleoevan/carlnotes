@@ -25,7 +25,7 @@ import {
 	sharedCommentsResponse,
 } from "./social"
 import { regenerateTopicImagePayload, regenerateTopicImageResponse, uploadTopicImageResponse } from "./topicImages"
-import { pinnedOrderPayload } from "./topicPayloads"
+import { featuredOrderPayload } from "./topicPayloads"
 import { topicPostBodyImageUploadResponse } from "./topicPostBodyImages"
 import {
 	topicPostDiscussionRegeneratePayload,
@@ -119,7 +119,7 @@ export const socialRouteContracts: Record<string, ApiRouteContract> = {
 		method: "PATCH",
 		path: "/api/topic-posts/:id/profile-order",
 		params: idParam,
-		body: { json: pinnedOrderPayload },
+		body: { json: featuredOrderPayload },
 		response: okResponse,
 	},
 	"topicPostClient.sendTopicPostImageRegeneration": {

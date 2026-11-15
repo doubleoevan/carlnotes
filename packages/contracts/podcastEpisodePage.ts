@@ -33,20 +33,22 @@ export const podcastEpisodePageResponse = z.object({
 	podcastEpisodeImagePrompt: z.string().nullable(),
 	imageRegenerationQuota: imageRegenerationQuota.nullable(),
 	// the origin of the film's own image and the image prompt it was drawn from, both null for anyone but an editor
-	// and for a film with no image of its own. both are optional, so a released app reads a page without them
+	// and for a film with no image of its own. both are optional, so a released app reads a page without them.
+	// their names must not change, because the frozen api contract reads them
 	topicPodcastEpisodeVideoImageOrigin: z.enum(topicImageOrigins).nullable().optional(),
 	topicPodcastEpisodeVideoImagePrompt: z.string().nullable().optional(),
 	// whether the podcast episode's image, and whether its film's image, is this editor's own upload, shown to them
 	// alone until its image moderation can run. each is absent for any other image, and from an api older than the
 	// fields
 	isPodcastEpisodeImageUnchecked: z.boolean().optional(),
-	isTopicPodcastEpisodeVideoImageUnchecked: z.boolean().optional(),
+	isTopicVideoImageUnchecked: z.boolean().optional(),
 	// this episode's position among the home podcast episodes and the home podcast episodes themselves, both null for
 	// anyone but an admin
 	homeOrder: z.number().nullable(),
 	homePodcastEpisodes: z.array(homePodcastEpisode).nullable(),
-	// this podcast episode's film's position among the home films and the home films themselves, both null for anyone
-	// but an admin. both are optional, so a released app reads a page without them
+	// this podcast episode's film's position among the home films and the home films themselves, both null for anyone but
+	// an admin. both are optional, so a released app reads a page without them. their names must not change,
+	// because the frozen api contract reads them
 	topicPodcastEpisodeVideoHomeOrder: z.number().nullable().optional(),
 	homeTopicPodcastEpisodeVideos: z.array(homePodcastEpisode).nullable().optional(),
 	transcript: z.array(podcastEpisodeTranscriptBlock),

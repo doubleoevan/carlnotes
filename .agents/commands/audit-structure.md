@@ -1022,6 +1022,26 @@ Check for:
      `packages/core/hooks/useUpdatesOpener.ts`, `packages/models/prompts/updates-opener.md`, `evals/updates-opener/`,
      and `bun run eval:updates-opener` (now `updatesRecap.ts`, `useUpdatesRecap.ts`, `updates-recap.md`,
      `evals/updates-recap/`, and `bun run eval:updates-recap`). `GET /api/updates/opener` stays for the 0.1.0 app
+   - every `topicPodcastEpisodeVideo`, `TopicPodcastEpisodeVideo`, and `TOPIC_PODCAST_EPISODE_VIDEO_` name, among them
+     `packages/pipeline/topicPodcastEpisodeVideo/`, `TopicPodcastEpisodeVideoSection`, the
+     `topic-podcast-episode-video-image-style` prompt, and `scripts/backfill-topic-podcast-episode-videos.ts`
+     (now `topicVideo`, `TopicVideo`, and `TOPIC_VIDEO_`: `packages/pipeline/topicVideo/`, `TopicVideoSection`,
+     `topic-video-image-style`, and `scripts/backfill-topic-videos.ts`), the `topic_podcast_episode_videos` and
+     `topic_podcast_episode_video_sections` tables (now `topic_videos` and `topic_video_sections`, with old-name views
+     until a later migration), the `topic-podcast-episode-video-{player,rendering,featuring}` specs (now
+     `topic-video-*`), and "Topic Cinema" (now the topic video section in code and Coffee Break Cinema in copy). the
+     0.1.0 contract's fields and route keys, the Temporal workflow and activity names, the
+     `topic-podcast-episode-video` patch id, the `/api/topic-podcast-episode-video-images/` path, the stored
+     `topicPodcastEpisodeVideoImage` value, and the `topic_image_renders.topic_podcast_episode_video_id` and
+     `spend_control_settings.is_topic_podcast_episode_video_rendering_paused` columns keep the old name
+   - pin as the verb for featuring an item on the home or a profile, with `packages/db/pinnedOrder.ts`,
+     `apps/web/src/lib/pinnedOrderMoves.ts`, `PinnedOrder`, `PinnedOrderMove`, `pinnedOrderMoves`, `setPinnedOrder`,
+     `releasePinnedOrder`, `isHomePinnedOnly`, `toPinnedOnlyFilter`, `isPageTopicPostPinned`, `isTopicPostPinnable`,
+     and the `home-pinned-only` element id (now feature: `packages/db/featuredOrder.ts`,
+     `apps/web/src/lib/featuredOrderMoves.ts`, `FeaturedOrder`, `FeaturedOrderMove`, `featuredOrderMoves`,
+     `setFeaturedOrder`, `releaseFeaturedOrder`, `isHomeFeaturedOnly`, `toFeaturedOnlyFilter`,
+     `isPageTopicPostFeatured`, `isTopicPostFeaturable`, and `home-featured-only`). the 0.1.0 contract's `pinned…Count`
+     fields and the `spend_control_settings.is_home_pinned_only` column keep the old name
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

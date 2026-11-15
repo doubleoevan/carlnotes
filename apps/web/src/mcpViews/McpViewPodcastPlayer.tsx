@@ -1,6 +1,6 @@
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import { FILM_ANCHOR_ID } from "@carlnotes/contracts/podcastEpisodes"
-import { TopicPodcastEpisodeVideoPlayer } from "@carlnotes/core/components/TopicPodcastEpisodeVideoPlayer"
+import { TopicVideoPlayer } from "@carlnotes/core/components/TopicVideoPlayer"
 import { useEffect, useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { PodcastEpisodeAudio } from "@/components/podcast/PodcastEpisodeAudio"
@@ -44,11 +44,7 @@ export function McpViewPodcastPlayer() {
 			{/* the film in the frame, while the MCP view's data includes its files */}
 			{isPlayerShown && loadedPodcastEpisode?.video && (
 				<div className="mt-3">
-					<TopicPodcastEpisodeVideoPlayer
-						podcastEpisode={loadedPodcastEpisode}
-						isCard
-						elements={MCP_VIEW_FILM_PLAYER_ELEMENTS}
-					/>
+					<TopicVideoPlayer podcastEpisode={loadedPodcastEpisode} isCard elements={MCP_VIEW_FILM_PLAYER_ELEMENTS} />
 				</div>
 			)}
 			{/* the film player on the loaded podcast episode's page, while films play outside the frame */}

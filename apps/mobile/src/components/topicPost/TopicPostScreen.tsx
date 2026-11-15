@@ -11,7 +11,7 @@ import { PROFILE_RANK_OPTION_LABELS, toTopicPostRankedItem } from "@carlnotes/co
 import { EDIT_IMAGE_DIALOG_TITLES } from "@carlnotes/core/lib/topicImageEditor"
 import {
 	isTopicPostEditorShown,
-	isTopicPostPinnable,
+	isTopicPostFeaturable,
 	TOPIC_POST_DELETE,
 	TOPIC_POST_LABELS,
 	type TopicPostBodyImageReport,
@@ -342,7 +342,7 @@ function toTopicPostPageOptions({
 // the author of a published Topic Post of a public topic arranges their own profile's featured Topic Posts from
 // inside the Topic Post, as on the web
 function toProfileRankOptions(topicPost: TopicPostResponse, onSelect: () => void): PageActionOption[] {
-	return topicPost.isAuthor && isTopicPostPinnable(topicPost)
+	return topicPost.isAuthor && isTopicPostFeaturable(topicPost)
 		? [{ label: PROFILE_RANK_OPTION_LABELS.posts, icon: NotebookPen, onSelect }]
 		: []
 }

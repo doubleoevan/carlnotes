@@ -150,6 +150,7 @@ export const SOCIAL_ELEMENTS: SocialElements = {
 	),
 	ComposerButton: ({ label, onPress }) => (
 		<Button accessibilityLabel={label} size="sm" onPress={onPress}>
+			<Icon as={Flame} className="size-4" />
 			<Text>{label}</Text>
 		</Button>
 	),

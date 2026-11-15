@@ -3,19 +3,13 @@
 
 import type { PodcastEpisodeScript } from "@carlnotes/contracts/podcast"
 import { type DbHandle, type DbTransaction, db } from "@carlnotes/db"
-import {
-	releasePodcastEpisodeHomeOrder,
-	releaseTopicPodcastEpisodeVideoHomeOrders,
-} from "@carlnotes/db/podcastEpisodeHomeOrder"
-import {
-	releasePodcastEpisodeProfileOrder,
-	releaseTopicPodcastEpisodeVideoProfileOrders,
-} from "@carlnotes/db/profileOrder"
+import { releasePodcastEpisodeHomeOrder, releaseTopicVideoHomeOrders } from "@carlnotes/db/podcastEpisodeHomeOrder"
+import { releasePodcastEpisodeProfileOrder, releaseTopicVideoProfileOrders } from "@carlnotes/db/profileOrder"
 import {
 	podcastEpisodeChapters,
 	podcastEpisodeListens,
 	podcastEpisodes,
-	topicPodcastEpisodeVideos,
+	topicVideos,
 } from "@carlnotes/db/schema/podcast"
 import { comments, reactions } from "@carlnotes/db/schema/social"
 import {
@@ -24,7 +18,7 @@ import {
 	toPodcastEpisodeAudioKey,
 	toPodcastEpisodeChapterKey,
 } from "@carlnotes/db/store"
-import { toTopicPodcastEpisodeVideoKeys } from "@carlnotes/db/topicPodcastEpisodeVideoKeys"
+import { toTopicVideoKeys } from "@carlnotes/db/topicVideoKeys"
 import { clearUnseenCommentMentions, loadPodcastEpisodeMentionedUserIds } from "@carlnotes/db/unseenCommentMentions"
 import { eq, inArray } from "drizzle-orm"
 import { rebuildTopicDashboardsById } from "../dashboardRebuild"
@@ -61,7 +55,7 @@ export async function removePodcastEpisode(podcastEpisodeId: string): Promise<bo
 	// delete the chapters and the listens, keep the row as removed, and record every key with its film's, in one
 	// transaction
 	const { objectKeys, mentionedUserIds } = await db.transaction(async (transaction) => {
-		// a pinned podcast episode leaves the home and its topic owner's profile pins
+		// a featured podcast episode leaves the home and its topic owner's featured profile items
 		await releasePodcastEpisodeHomeOrder(podcastEpisodeId, transaction)
 		await releasePodcastEpisodeProfileOrder(podcastEpisodeId, transaction)
 		// delete the chapters, so a later Podcast Episode may narrate the Findings again
@@ -99,7 +93,7 @@ export async function markPodcastEpisodesRemoved(
 	podcastEpisodeIds: string[],
 ): Promise<RemovedPodcastEpisodes> {
 	// count each film's chapters while its podcast episode still holds the script
-	const chapterCounts = await loadTopicPodcastEpisodeVideoChapterCounts(transaction, podcastEpisodeIds)
+	const chapterCounts = await loadTopicVideoChapterCounts(transaction, podcastEpisodeIds)
 
 	// delete the listens and the vectors
 	await transaction
@@ -126,42 +120,42 @@ export async function markPodcastEpisodesRemoved(
 		})
 		.where(inArray(podcastEpisodes.id, podcastEpisodeIds))
 
-	// a pinned film leaves the home and its topic owner's profile pins. then delete the films, which the kept row would
+	// a featured film leaves the home and its topic owner's featured profile items. then delete the films, which the kept row would
 	// otherwise keep, and return their keys with the mentioned users
-	await releaseTopicPodcastEpisodeVideoHomeOrders(podcastEpisodeIds, transaction)
-	await releaseTopicPodcastEpisodeVideoProfileOrders(podcastEpisodeIds, transaction)
+	await releaseTopicVideoHomeOrders(podcastEpisodeIds, transaction)
+	await releaseTopicVideoProfileOrders(podcastEpisodeIds, transaction)
 	const filmRows = await transaction
-		.delete(topicPodcastEpisodeVideos)
-		.where(inArray(topicPodcastEpisodeVideos.podcastEpisodeId, podcastEpisodeIds))
-		.returning(TOPIC_PODCAST_EPISODE_VIDEO_KEY_COLUMNS)
+		.delete(topicVideos)
+		.where(inArray(topicVideos.podcastEpisodeId, podcastEpisodeIds))
+		.returning(TOPIC_VIDEO_KEY_COLUMNS)
 	const filmKeys = filmRows.flatMap((filmRow) =>
-		toTopicPodcastEpisodeVideoKeys({ ...filmRow, chapterCount: chapterCounts.get(filmRow.podcastEpisodeId) ?? 0 }),
+		toTopicVideoKeys({ ...filmRow, chapterCount: chapterCounts.get(filmRow.podcastEpisodeId) ?? 0 }),
 	)
 	return { filmKeys, mentionedUserIds }
 }
 
 // the chapter count of each of the podcast episodes that has a film, by podcast episode
-async function loadTopicPodcastEpisodeVideoChapterCounts(
+async function loadTopicVideoChapterCounts(
 	transaction: DbTransaction,
 	podcastEpisodeIds: string[],
 ): Promise<Map<string, number>> {
 	const scriptRows = await transaction
 		.select({ id: podcastEpisodes.id, script: podcastEpisodes.script })
 		.from(podcastEpisodes)
-		.innerJoin(topicPodcastEpisodeVideos, eq(topicPodcastEpisodeVideos.podcastEpisodeId, podcastEpisodes.id))
+		.innerJoin(topicVideos, eq(topicVideos.podcastEpisodeId, podcastEpisodes.id))
 		.where(inArray(podcastEpisodes.id, podcastEpisodeIds))
 	return new Map(scriptRows.map((scriptRow) => [scriptRow.id, toChapterCount(scriptRow.script)]))
 }
 
 // the film row's columns that hold stored keys, and the two that name its own image's key
-const TOPIC_PODCAST_EPISODE_VIDEO_KEY_COLUMNS = {
-	introKey: topicPodcastEpisodeVideos.introKey,
-	chaptersKey: topicPodcastEpisodeVideos.chaptersKey,
-	signOffKey: topicPodcastEpisodeVideos.signOffKey,
-	filmKey: topicPodcastEpisodeVideos.filmKey,
-	captionsKey: topicPodcastEpisodeVideos.captionsKey,
-	podcastEpisodeId: topicPodcastEpisodeVideos.podcastEpisodeId,
-	imageHash: topicPodcastEpisodeVideos.imageHash,
+const TOPIC_VIDEO_KEY_COLUMNS = {
+	introKey: topicVideos.introKey,
+	chaptersKey: topicVideos.chaptersKey,
+	signOffKey: topicVideos.signOffKey,
+	filmKey: topicVideos.filmKey,
+	captionsKey: topicVideos.captionsKey,
+	podcastEpisodeId: topicVideos.podcastEpisodeId,
+	imageHash: topicVideos.imageHash,
 }
 
 /**
@@ -171,15 +165,15 @@ const TOPIC_PODCAST_EPISODE_VIDEO_KEY_COLUMNS = {
 export async function loadTopicPodcastEpisodeObjectKeys(topicId: string, handle: DbHandle = db): Promise<string[]> {
 	// read the Topic's Podcast Episodes with their films' keys
 	const podcastEpisodeRows = await handle
-		.select({ id: podcastEpisodes.id, script: podcastEpisodes.script, ...TOPIC_PODCAST_EPISODE_VIDEO_KEY_COLUMNS })
+		.select({ id: podcastEpisodes.id, script: podcastEpisodes.script, ...TOPIC_VIDEO_KEY_COLUMNS })
 		.from(podcastEpisodes)
-		.leftJoin(topicPodcastEpisodeVideos, eq(topicPodcastEpisodeVideos.podcastEpisodeId, podcastEpisodes.id))
+		.leftJoin(topicVideos, eq(topicVideos.podcastEpisodeId, podcastEpisodes.id))
 		.where(eq(podcastEpisodes.topicId, topicId))
 
 	// list each one's audio keys and film keys
 	return podcastEpisodeRows.flatMap((podcastEpisodeRow) => [
 		...toPodcastEpisodeAudioKeys(podcastEpisodeRow),
-		...toTopicPodcastEpisodeVideoKeys({
+		...toTopicVideoKeys({
 			...podcastEpisodeRow,
 			chapterCount: toChapterCount(podcastEpisodeRow.script),
 		}),

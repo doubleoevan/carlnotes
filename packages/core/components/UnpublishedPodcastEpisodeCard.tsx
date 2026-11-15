@@ -4,7 +4,7 @@ import type { ComponentType, ReactNode } from "react"
 import {
 	PODCAST_EPISODE_RECORDING_LINE,
 	type PodcastEpisodeProgressLine,
-	TOPIC_PODCAST_EPISODE_VIDEO_RENDERING_LINE,
+	TOPIC_VIDEO_RENDERING_LINE,
 } from "../lib/podcastEpisodeCopy"
 
 export type UnpublishedPodcastEpisodeCardProps = {
@@ -34,7 +34,7 @@ export function UnpublishedPodcastEpisodeCard({
 	// the line of the work in progress: the film's render, or the recording, and none for a failed podcast episode
 	const isRecording = !isVideoRendering && (!podcastEpisode || podcastEpisode.status === "recording")
 	const recordingLine = isRecording ? PODCAST_EPISODE_RECORDING_LINE : null
-	const progressLine = isVideoRendering ? TOPIC_PODCAST_EPISODE_VIDEO_RENDERING_LINE : recordingLine
+	const progressLine = isVideoRendering ? TOPIC_VIDEO_RENDERING_LINE : recordingLine
 	return (
 		<Frame>
 			<Cover podcastEpisode={podcastEpisode ?? { title: null, smallCoverUrl: null }} isRecording={isRecording} />

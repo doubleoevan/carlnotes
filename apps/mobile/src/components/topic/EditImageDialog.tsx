@@ -27,9 +27,7 @@ export function EditImageDialog({ editableImage, onImageChanged, onClose }: Edit
 		<Sheet title={EDIT_IMAGE_DIALOG_TITLES[editableImage.kind]} onClose={onClose}>
 			{/* the image block, under the Image label in a film's sheet, whose title names the film */}
 			<View className="gap-2">
-				{editableImage.kind === "topicPodcastEpisodeVideo" && (
-					<Text className="text-sm font-medium">{TOPIC_IMAGE_LABEL}</Text>
-				)}
+				{editableImage.kind === "topicVideo" && <Text className="text-sm font-medium">{TOPIC_IMAGE_LABEL}</Text>}
 				<TopicImageEditor
 					key={toTopicImageEditorKey(editableImage)}
 					editableImage={editableImage}

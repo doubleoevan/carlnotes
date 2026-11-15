@@ -67,7 +67,7 @@ function RankDialogRow({
 				<View className="flex-1 flex-row items-center gap-2">{rowLabel}</View>
 			)}
 
-			{/* the X removes a pinned row after a confirmation, and drops a row that is not saved yet */}
+			{/* the X removes a featured row after a confirmation, and drops a row that is not saved yet */}
 			<Button variant="ghost" size="icon" accessibilityLabel={removeLabel} onPress={onRemove}>
 				<Icon as={X} className="size-4 text-muted-foreground" />
 			</Button>
@@ -80,7 +80,7 @@ const RANK_DIALOG_ELEMENTS: RankDialogElements = {
 	Frame: ({ title, removeConfirm, onClose, children }) => (
 		<Sheet title={title} onClose={onClose}>
 			<View className="gap-4">{children}</View>
-			{/* removing a pinned row asks first, then clears it */}
+			{/* removing a featured row asks first, then clears it */}
 			{removeConfirm}
 		</Sheet>
 	),
@@ -119,7 +119,7 @@ const RANK_DIALOG_ELEMENTS: RankDialogElements = {
 }
 
 /**
- * The list that orders the topics, podcast episodes, or Topic Posts a person pinned to their own profile, in the
+ * The list that orders the topics, podcast episodes, or Topic Posts a person featured on their own profile, in the
  * app. Rows move with the step buttons, and the list opens in a sheet.
  */
 export function RankDialog(props: Omit<ComponentProps<typeof SharedRankDialog>, "elements">) {
@@ -127,7 +127,7 @@ export function RankDialog(props: Omit<ComponentProps<typeof SharedRankDialog>, 
 }
 
 /**
- * The signed-in user's own profile pins in the app, opened from the screen of one of their topics, podcast episodes,
+ * The signed-in user's own featured profile items in the app, opened from the screen of one of their topics, podcast episodes,
  * or Topic Posts.
  */
 export function ProfileRankDialog(

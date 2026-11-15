@@ -6,7 +6,7 @@ import * as topicImageOriginals from "@carlnotes/pipeline/topicImages/renderTopi
 import * as topicImageFiles from "@carlnotes/pipeline/topicImages/topicImageFiles"
 import type { TopicImageRenderRow } from "@carlnotes/pipeline/topicImages/topicImageRenders"
 import * as topicImageRenders from "@carlnotes/pipeline/topicImages/topicImageRenders"
-import * as topicPodcastEpisodeVideoImage from "@carlnotes/pipeline/topicPodcastEpisodeVideo/topicPodcastEpisodeVideoImage"
+import * as topicVideoImage from "@carlnotes/pipeline/topicVideo/topicVideoImage"
 import * as analytics from "@carlnotes/server/analytics"
 import { renderAndStoreTopicImage } from "./renderTopicImageActivities"
 
@@ -45,34 +45,28 @@ function spyImageRender(renderRow: Partial<TopicImageRenderRow>): ReturnType<typ
 
 test("a film's image drawn from an image prompt is still sent in the film house style", async () => {
 	// a regenerate of a film's image, with an image prompt
-	const renderOriginal = spyImageRender({ topicPodcastEpisodeVideoId: "film-1" })
-	const replaceFilmImage = spyOn(
-		topicPodcastEpisodeVideoImage,
-		"replaceTopicPodcastEpisodeVideoImage",
-	).mockResolvedValue("film-image-hash")
+	const renderOriginal = spyImageRender({ topicVideoId: "film-1" })
+	const replaceFilmImage = spyOn(topicVideoImage, "replaceTopicVideoImage").mockResolvedValue("film-image-hash")
 	await renderAndStoreTopicImage({ renderId: "render-1", scene: SCENE, imagePrompt: IMAGE_PROMPT })
 
 	// the scene goes with the film house style, at the film's frame
 	expect(renderOriginal.mock.calls[0]?.[0]).toMatchObject({
 		scene: SCENE,
 		isHouseStyle: true,
-		format: topicPodcastEpisodeVideoImage.TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_FORMAT,
+		format: topicVideoImage.TOPIC_VIDEO_IMAGE_FORMAT,
 	})
 
 	// the film's row keeps the image prompt
 	expect(replaceFilmImage.mock.calls[0]?.[0]).toMatchObject({
-		topicPodcastEpisodeVideoId: "film-1",
+		topicVideoId: "film-1",
 		imagePrompt: IMAGE_PROMPT,
 	})
 })
 
 test("a film's regenerated image is billed at the size it is drawn at, and a topic's at the model's own", async () => {
 	// a regenerate of a film's image on the model that draws at 2K
-	spyImageRender({ topicPodcastEpisodeVideoId: "film-1", model: "gemini-3.1-flash-image" })
-	const replaceFilmImage = spyOn(
-		topicPodcastEpisodeVideoImage,
-		"replaceTopicPodcastEpisodeVideoImage",
-	).mockResolvedValue("film-image-hash")
+	spyImageRender({ topicVideoId: "film-1", model: "gemini-3.1-flash-image" })
+	const replaceFilmImage = spyOn(topicVideoImage, "replaceTopicVideoImage").mockResolvedValue("film-image-hash")
 	await renderAndStoreTopicImage({ renderId: "render-1", scene: SCENE })
 	expect(replaceFilmImage.mock.calls[0]?.[0].costDollars).toBe(0.101)
 

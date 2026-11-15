@@ -87,7 +87,7 @@ function RankDialogRow({
 				<span className="flex min-w-0 flex-1 items-center gap-2 text-sm">{rowLabel}</span>
 			)}
 
-			{/* the X removes a pinned row after a confirmation, and drops a row that is not saved yet */}
+			{/* the X removes a featured row after a confirmation, and drops a row that is not saved yet */}
 			<button
 				type="button"
 				aria-label={removeLabel}
@@ -108,7 +108,7 @@ const RANK_DIALOG_ELEMENTS: RankDialogElements = {
 				<DialogTitle>{title}</DialogTitle>
 				{children}
 			</DialogContent>
-			{/* removing a pinned row asks first, then clears it */}
+			{/* removing a featured row asks first, then clears it */}
 			{removeConfirm}
 		</Dialog>
 	),
@@ -157,8 +157,8 @@ const RANK_DIALOG_ELEMENTS: RankDialogElements = {
 }
 
 /**
- * The list that orders pinned topics, films, podcast episodes, or Topic Posts on the web: the admin's home pins,
- * opened from a topic's, a podcast episode's, or a Topic Post's page or from the home page, and a person's own pins,
+ * The list that orders featured topics, films, podcast episodes, or Topic Posts on the web: the admin's home featured items,
+ * opened from a topic's, a podcast episode's, or a Topic Post's page or from the home page, and a person's own featured items,
  * opened from their profile page.
  */
 export function RankDialog(props: Omit<ComponentProps<typeof SharedRankDialog>, "elements">) {
@@ -166,7 +166,7 @@ export function RankDialog(props: Omit<ComponentProps<typeof SharedRankDialog>, 
 }
 
 /**
- * The signed-in user's own profile pins on the web, opened from the page of one of their topics, podcast episodes, or
+ * The signed-in user's own featured profile items on the web, opened from the page of one of their topics, podcast episodes, or
  * Topic Posts.
  */
 export function ProfileRankDialog(

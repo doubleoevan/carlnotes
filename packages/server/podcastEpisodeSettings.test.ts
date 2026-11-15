@@ -3,23 +3,23 @@
 import { afterEach, beforeEach, expect, test } from "bun:test"
 import {
 	generatedChapterImageLimit,
-	isTopicPodcastEpisodeVideoBackfillEnabled,
-	topicPodcastEpisodeVideoBackfillConcurrency,
-	topicPodcastEpisodeVideoConcurrency,
+	isTopicVideoBackfillEnabled,
+	topicVideoBackfillConcurrency,
+	topicVideoConcurrency,
 } from "./podcastEpisodeSettings"
 import { saveEnvSettings } from "./savedEnvSettings"
 
 // the settings the tests change
-const CONCURRENCY_SETTING = "TOPIC_PODCAST_EPISODE_VIDEO_CONCURRENCY"
-const BACKFILL_CONCURRENCY_SETTING = "TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_CONCURRENCY"
-const LIMIT_SETTING = "TOPIC_PODCAST_EPISODE_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT"
-const TOPIC_PODCAST_EPISODE_VIDEO_SETTINGS = [CONCURRENCY_SETTING, BACKFILL_CONCURRENCY_SETTING, LIMIT_SETTING]
+const CONCURRENCY_SETTING = "TOPIC_VIDEO_CONCURRENCY"
+const BACKFILL_CONCURRENCY_SETTING = "TOPIC_VIDEO_BACKFILL_CONCURRENCY"
+const LIMIT_SETTING = "TOPIC_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT"
+const TOPIC_VIDEO_SETTINGS = [CONCURRENCY_SETTING, BACKFILL_CONCURRENCY_SETTING, LIMIT_SETTING]
 
 // each test starts with no setting set, and the settings are put back after it
-const restoreEnvSettings = saveEnvSettings(TOPIC_PODCAST_EPISODE_VIDEO_SETTINGS)
+const restoreEnvSettings = saveEnvSettings(TOPIC_VIDEO_SETTINGS)
 beforeEach(() => {
-	for (const topicPodcastEpisodeVideoSetting of TOPIC_PODCAST_EPISODE_VIDEO_SETTINGS) {
-		delete Bun.env[topicPodcastEpisodeVideoSetting]
+	for (const topicVideoSetting of TOPIC_VIDEO_SETTINGS) {
+		delete Bun.env[topicVideoSetting]
 	}
 })
 afterEach(restoreEnvSettings)
@@ -64,7 +64,7 @@ test("the limit defaults to 40, reads a whole number, and reads zero as off", ()
 test("the film concurrency defaults to 1, reads 2 as 2, and reads zero as off", () => {
 	expectSettingValues({
 		settingName: CONCURRENCY_SETTING,
-		readSetting: topicPodcastEpisodeVideoConcurrency,
+		readSetting: topicVideoConcurrency,
 		expectedSettingValues: [
 			[undefined, 1],
 			["", 1],
@@ -80,7 +80,7 @@ test("the film concurrency defaults to 1, reads 2 as 2, and reads zero as off", 
 test("the film backfill concurrency defaults to 1, reads a whole number, and reads zero as off", () => {
 	expectSettingValues({
 		settingName: BACKFILL_CONCURRENCY_SETTING,
-		readSetting: topicPodcastEpisodeVideoBackfillConcurrency,
+		readSetting: topicVideoBackfillConcurrency,
 		expectedSettingValues: [
 			[undefined, 1],
 			["", 1],
@@ -94,15 +94,15 @@ test("the film backfill concurrency defaults to 1, reads a whole number, and rea
 
 // the backfill runs with nothing set, and a backfill concurrency of zero turns the backfill off while films stay on
 test("a film backfill concurrency of zero turns the backfill off and leaves films on", () => {
-	expect(isTopicPodcastEpisodeVideoBackfillEnabled()).toBe(true)
+	expect(isTopicVideoBackfillEnabled()).toBe(true)
 	Bun.env[BACKFILL_CONCURRENCY_SETTING] = "0"
-	expect(isTopicPodcastEpisodeVideoBackfillEnabled()).toBe(false)
-	expect(topicPodcastEpisodeVideoConcurrency()).toBe(1)
+	expect(isTopicVideoBackfillEnabled()).toBe(false)
+	expect(topicVideoConcurrency()).toBe(1)
 })
 
 // films that are off run no backfill, whatever the backfill concurrency
 test("a film concurrency of zero turns the backfill off too", () => {
 	Bun.env[CONCURRENCY_SETTING] = "0"
 	Bun.env[BACKFILL_CONCURRENCY_SETTING] = "3"
-	expect(isTopicPodcastEpisodeVideoBackfillEnabled()).toBe(false)
+	expect(isTopicVideoBackfillEnabled()).toBe(false)
 })

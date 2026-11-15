@@ -7,8 +7,8 @@ import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientSt
 import {
 	isPodcastEpisodeRecordingConfigured,
 	podcastEpisodeSpeechModel,
-	topicPodcastEpisodeVideoBackfillConcurrency,
-	topicPodcastEpisodeVideoConcurrency,
+	topicVideoBackfillConcurrency,
+	topicVideoConcurrency,
 } from "@carlnotes/server/podcastEpisodeSettings"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import { scanDispatchLimit } from "@carlnotes/server/scanSettings"
@@ -23,9 +23,9 @@ const SWITCH_SETTINGS = [
 	"FIRST_SCAN_DISPATCH_LIMIT",
 	"SCAN_DISPATCH_LIMIT",
 	"PODCAST_SPEECH_MODEL",
-	"TOPIC_PODCAST_EPISODE_VIDEO_CONCURRENCY",
-	"TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_CONCURRENCY",
-	"TOPIC_PODCAST_EPISODE_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT",
+	"TOPIC_VIDEO_CONCURRENCY",
+	"TOPIC_VIDEO_BACKFILL_CONCURRENCY",
+	"TOPIC_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT",
 ]
 const restoreEnvSettings = saveEnvSettings(SWITCH_SETTINGS)
 
@@ -46,12 +46,12 @@ afterEach(() => {
 })
 
 test("nothing set reads every switch as off", async () => {
-	// the spend control settings: both pauses, the pinned-only home, and the unverified accounts switch off, the cutoffs
+	// the spend control settings: both pauses, the featured-only home, and the unverified accounts switch off, the cutoffs
 	// at 65, 100, and 150 dollars, 5 waiting scans a sweep, and 40 generated images a film
 	expect(await loadSpendControlSettings()).toMatchObject({
 		isPodcastEpisodeRecordingPaused: false,
-		isTopicPodcastEpisodeVideoRenderingPaused: false,
-		isHomePinnedOnly: false,
+		isTopicVideoRenderingPaused: false,
+		isHomeFeaturedOnly: false,
 		isUnverifiedFirstScanLimitOn: false,
 		podcastEpisodesCutoffCents: 6500,
 		scheduledScansCutoffCents: 10_000,
@@ -64,8 +64,8 @@ test("nothing set reads every switch as off", async () => {
 	expect(scanDispatchLimit()).toBe(100)
 	expect(podcastEpisodeSpeechModel()).toBe("gemini-3.8-flash-tts")
 	expect(isPodcastEpisodeRecordingConfigured()).toBe(true)
-	expect(topicPodcastEpisodeVideoConcurrency()).toBe(1)
-	expect(topicPodcastEpisodeVideoBackfillConcurrency()).toBe(1)
+	expect(topicVideoConcurrency()).toBe(1)
+	expect(topicVideoBackfillConcurrency()).toBe(1)
 
 	// no mobile minimum version on either platform
 	expect(await loadCachedMobileMinimumVersions()).toEqual({ ios: null, android: null })
@@ -97,7 +97,7 @@ test("each pause is read by the one activity that starts new work", () => {
 	expect(toSettingReaderPaths("isPodcastEpisodeRecordingPaused")).toEqual([
 		"packages/pipeline/podcast/planPodcastEpisode.ts",
 	])
-	expect(toSettingReaderPaths("isTopicPodcastEpisodeVideoRenderingPaused")).toEqual([
+	expect(toSettingReaderPaths("isTopicVideoRenderingPaused")).toEqual([
 		"apps/worker/workflows/recordPodcastEpisodeActivities.ts",
 	])
 })

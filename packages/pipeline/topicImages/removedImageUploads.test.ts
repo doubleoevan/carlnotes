@@ -5,8 +5,8 @@ import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as podcastEpisodeImageRenders from "../podcast/podcastEpisodeImageRenders"
 import * as temporalClient from "../temporalClient"
-import * as topicPodcastEpisodeVideoImage from "../topicPodcastEpisodeVideo/topicPodcastEpisodeVideoImage"
 import * as topicPostImageRenders from "../topicPosts/topicPostImageRenders"
+import * as topicVideoImage from "../topicVideo/topicVideoImage"
 import { regenerateRemovedTopicImage, removeImageUpload } from "./removedImageUploads"
 import * as topicImageRenders from "./topicImageRenders"
 
@@ -25,10 +25,7 @@ test("a removal with no render removes each kind's upload by its subject's id an
 			"topic-1",
 		),
 		topicPostImage: spyOn(topicPostImageRenders, "removeTopicPostImageUpload").mockResolvedValue(true),
-		topicPodcastEpisodeVideoImage: spyOn(
-			topicPodcastEpisodeVideoImage,
-			"removeTopicPodcastEpisodeVideoImageUpload",
-		).mockResolvedValue("film-1"),
+		topicPodcastEpisodeVideoImage: spyOn(topicVideoImage, "removeTopicVideoImageUpload").mockResolvedValue("film-1"),
 	}
 
 	// each kind's removal runs once, for its own subject
@@ -45,9 +42,9 @@ test("a removal with no render removes each kind's upload by its subject's id an
 test("a removal marks each ready film drawn from the upload rendering before the upload goes, then rebuilds it", async () => {
 	// the Topic has two ready films drawn from the upload
 	const sentQueries = stubConnectionPool(({ text }) =>
-		text.startsWith('update "topic_podcast_episode_videos"') ? [["episode-1"], ["episode-2"]] : [],
+		text.startsWith('update "topic_videos"') ? [["episode-1"], ["episode-2"]] : [],
 	)
-	const rebuildSpy = spyOn(temporalClient, "startTopicPodcastEpisodeVideoRebuild").mockResolvedValue(undefined)
+	const rebuildSpy = spyOn(temporalClient, "startTopicVideoRebuild").mockResolvedValue(undefined)
 
 	// the removal of the upload keeps how many statements were sent before it ran
 	let sentQueryCountAtRemoval = -1

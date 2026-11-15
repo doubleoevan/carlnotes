@@ -164,7 +164,7 @@ export async function updateTopicFields({
 			uncheckedImageSubjects = await unpublishTopicUncheckedImages(transaction, { topicId, visibility })
 		}
 		await transaction.update(topics).set(namedFields).where(eq(topics.id, topicId))
-		// drop the topic from the home topics and from its owner's profile pins if it stops being public
+		// drop the topic from the home topics and from its owner's featured profile items if it stops being public
 		if (topicFields.visibility && topicFields.visibility !== "public") {
 			isHomeOrderReleased = await releaseHomeOrder(topicId, transaction)
 			releasedProfileUserIds = await releaseTopicProfileOrders(topicId, transaction)

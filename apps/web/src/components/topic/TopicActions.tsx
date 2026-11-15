@@ -3,10 +3,7 @@ import type { TopicActionContext, TopicActionLayout } from "@carlnotes/core/lib/
 export { toTopicActionLayout } from "@carlnotes/core/lib/topicActions"
 
 import type { TopicResponse } from "@carlnotes/contracts/topics"
-import {
-	EDIT_TOPIC_PODCAST_EPISODE_VIDEO_LABEL,
-	toTopicPageEditedPodcastEpisode,
-} from "@carlnotes/core/lib/podcastEpisodeEditor"
+import { EDIT_TOPIC_VIDEO_LABEL, toTopicPageEditedPodcastEpisode } from "@carlnotes/core/lib/podcastEpisodeEditor"
 import { HOME_RANK_OPTION_LABELS, PROFILE_RANK_OPTION_LABELS } from "@carlnotes/core/lib/rankDialog"
 import { Clapperboard, Home, ListOrdered, PawPrint, Pencil, Share, Trash2, Users } from "lucide-react"
 import type * as React from "react"
@@ -29,7 +26,7 @@ export function toTopicActionOptions({
 	onToggleFollowTopic,
 	onRankHomeTopic,
 	onRankProfileTopic,
-	onEditTopicPodcastEpisodeVideo,
+	onEditTopicVideo,
 	onEditTopic,
 	onDeleteTopic,
 }: {
@@ -41,7 +38,7 @@ export function toTopicActionOptions({
 	onToggleFollowTopic: () => void
 	onRankHomeTopic: () => void
 	onRankProfileTopic: () => void
-	onEditTopicPodcastEpisodeVideo: () => void
+	onEditTopicVideo: () => void
 	onEditTopic: () => void
 	onDeleteTopic: () => void
 }): PageActionOption[] {
@@ -67,9 +64,7 @@ export function toTopicActionOptions({
 		// sharing sits directly above editing, and Edit film, for a topic whose latest podcast episode has a film, leads
 		// the editing options
 		toShareTopicOption(onShareTopic),
-		...(toTopicPageEditedPodcastEpisode(topic)
-			? [toEditTopicPodcastEpisodeVideoOption(onEditTopicPodcastEpisodeVideo)]
-			: []),
+		...(toTopicPageEditedPodcastEpisode(topic) ? [toEditTopicVideoOption(onEditTopicVideo)] : []),
 		...(topic.canEdit
 			? [
 					{ label: "Edit topic", Icon: Pencil, onSelect: onEditTopic },
@@ -116,8 +111,8 @@ export function toShareTopicOption(onSelect: () => void): PageActionOption {
 /**
  * Returns the actions menu's Edit film option, which opens the film's image dialog.
  */
-export function toEditTopicPodcastEpisodeVideoOption(onSelect: () => void): PageActionOption {
-	return { label: EDIT_TOPIC_PODCAST_EPISODE_VIDEO_LABEL, Icon: Clapperboard, onSelect }
+export function toEditTopicVideoOption(onSelect: () => void): PageActionOption {
+	return { label: EDIT_TOPIC_VIDEO_LABEL, Icon: Clapperboard, onSelect }
 }
 
 /**

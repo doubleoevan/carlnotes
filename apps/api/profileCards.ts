@@ -1,6 +1,6 @@
 // the cards a profile's and a team's card sections draw: the topics, their published podcast episodes, and a profile's
-// films, the pinned ones first in their order and then the rest in the home's order, and every published Topic Post
-// of the person or of the team's topics, the pinned ones first in their order and then the rest newest first
+// films, the featured ones first in their order and then the rest in the home's order, and every published Topic Post
+// of the person or of the team's topics, the featured ones first in their order and then the rest newest first
 
 import type { PodcastEpisodeCard, TopicCard } from "@carlnotes/contracts/home"
 import type {
@@ -10,7 +10,7 @@ import type {
 } from "@carlnotes/contracts/profilePage"
 import type { TopicPostCard } from "@carlnotes/contracts/topicPosts"
 import { db } from "@carlnotes/db"
-import { podcastEpisodes, topicPodcastEpisodeVideos } from "@carlnotes/db/schema/podcast"
+import { podcastEpisodes, topicVideos } from "@carlnotes/db/schema/podcast"
 import { topicPosts } from "@carlnotes/db/schema/topicPosts"
 import { topics } from "@carlnotes/db/schema/topics"
 import { and, asc, desc, eq, inArray, isNotNull, or, type SQL, sql } from "drizzle-orm"
@@ -21,7 +21,7 @@ import { type ProfileReader, toOwnTopicFilter } from "./profileReader"
 import { toMemberTeamIdsQuery, toTeamTopicFilter } from "./team/memberTeamTopics"
 import { loadProfileOrderTopicPostRows, toTopicPostCards } from "./topicPost/topicPosts"
 
-// how many of a person's published podcast episodes the read takes before keeping the pinned ones and one per topic
+// how many of a person's published podcast episodes the read takes before keeping the featured ones and one per topic
 // ponytail: limits a long-running podcast. rank one per topic in sql past it
 const PODCAST_EPISODE_CANDIDATE_LIMIT = 500
 
@@ -35,7 +35,7 @@ type LoadProfileCardsOptions = {
 	userId: string | null
 }
 
-// the cards of a profile's topic, film, and podcast episode sections, each with how many of its first cards are pinned
+// the cards of a profile's topic, film, and podcast episode sections, each with how many of its first cards are featured
 type ProfileCards = {
 	profileTopics: ProfileTopicCard[]
 	pinnedTopicCount: number
@@ -55,11 +55,11 @@ export async function loadProfileCards({
 	userId,
 }: LoadProfileCardsOptions): Promise<ProfileCards> {
 	// the ids of the topics' podcast episodes and of their films that the sections show, read together. only the
-	// person's own pins lead
+	// person's own featured items lead
 	const topicIds = topicRows.map((topicRow) => topicRow.id)
 	const [profilePodcastEpisodeIds, profileFilmIds] = await Promise.all([
 		loadProfilePodcastEpisodeIds(topicIds, profileUserId),
-		loadProfileTopicPodcastEpisodeVideoIds(topicIds, profileUserId),
+		loadProfileTopicVideoIds(topicIds, profileUserId),
 	])
 
 	// the topics' cards, beside one read of the cards of both sections' podcast episodes, each podcast episode once
@@ -89,7 +89,7 @@ export async function loadProfileCards({
 			isPublic: publicTopicIds.has(topicCard.id),
 			isOwned: ownedTopicIds.has(topicCard.id),
 		})),
-		pinnedTopicCount: topicRows.filter((topicRow) => toOwnPinPosition(topicRow, profileUserId) !== null).length,
+		pinnedTopicCount: topicRows.filter((topicRow) => toOwnFeaturePosition(topicRow, profileUserId) !== null).length,
 		// the film cards, right before the podcast episode cards
 		profileTopicPodcastEpisodeVideos: toProfilePodcastEpisodeCards(profileFilmIds.podcastEpisodeIds),
 		pinnedTopicPodcastEpisodeVideoCount: profileFilmIds.pinnedTopicPodcastEpisodeVideoCount,
@@ -125,9 +125,9 @@ type TeamCards = Omit<ProfileOrderCards, "pinnedPodcastEpisodeCount"> & { topicP
 
 /**
  * Loads the cards of a team's topic, podcast episode, and Topic Post sections from the ids of its topics that the
- * reader may open. The topics that their owners pinned lead in their profile order, the newer first where two owners
- * pinned at one position, and the rest follow in the home's trending order. The podcast episodes of those topics
- * follow the same rule. Every published Topic Post of those topics is listed, the ones that their authors pinned
+ * reader may open. The topics that their owners featured lead in their profile order, the newer first where two owners
+ * featured at one position, and the rest follow in the home's trending order. The podcast episodes of those topics
+ * follow the same rule. Every published Topic Post of those topics is listed, the ones that their authors featured
  * first in their profile order, then the rest newest first.
  */
 export async function loadTeamCards(topicIds: string[], userId: string | null): Promise<TeamCards> {
@@ -149,11 +149,11 @@ export async function loadTeamCards(topicIds: string[], userId: string | null): 
 	return { topicCards, podcastEpisodeCards, topicPostCards }
 }
 
-// the Topic Post cards of a profile, with how many of the first are pinned
+// the Topic Post cards of a profile, with how many of the first are featured
 type ProfileTopicPostCards = { profileTopicPosts: ProfileTopicPostCard[]; pinnedTopicPostCount: number }
 
 /**
- * Loads the cards of every published Topic Post of a person: the pinned ones in their order, then the rest newest
+ * Loads the cards of every published Topic Post of a person: the featured ones in their order, then the rest newest
  * first. The person reads every post, and anyone else the posts of public topics alone.
  */
 export async function loadProfileTopicPostCards(
@@ -166,7 +166,7 @@ export async function loadProfileTopicPostCards(
 	)
 	const topicPostCards = await toTopicPostCards(topicPostRows)
 
-	// each card with whether its topic is public, and how many of the rows are pinned
+	// each card with whether its topic is public, and how many of the rows are featured
 	return {
 		profileTopicPosts: topicPostCards.map((topicPostCard, index) => ({
 			...topicPostCard,
@@ -176,23 +176,23 @@ export async function loadProfileTopicPostCards(
 	}
 }
 
-// the profile order of topics by a pin position: the pinned ones by their position, the newest first among those at
+// the profile order of topics by a featured position: the featured ones by their position, the newest first among those at
 // one position, then the home's trending order, most viewed, then most followed, then newest
-function toProfileTopicOrder(pinPosition: SQL | AnyPgColumn): SQL[] {
+function toProfileTopicOrder(featurePosition: SQL | AnyPgColumn): SQL[] {
 	return [
-		sql`${pinPosition} is null`,
-		sql`${pinPosition} asc`,
-		sql`case when ${pinPosition} is null then ${topics.viewerCount} end desc`,
-		sql`case when ${pinPosition} is null then ${topics.subscriberCount} end desc`,
+		sql`${featurePosition} is null`,
+		sql`${featurePosition} asc`,
+		sql`case when ${featurePosition} is null then ${topics.viewerCount} end desc`,
+		sql`case when ${featurePosition} is null then ${topics.subscriberCount} end desc`,
 		desc(topics.createdAt),
 	]
 }
 
-// the profile order of a team's topics, where each owner's pins count
+// the profile order of a team's topics, where each owner's featured items count
 const PROFILE_TOPIC_ORDER = toProfileTopicOrder(topics.profileOrder)
 
-// a topic's pin position on a profile, which counts only on a topic that the person owns
-function toOwnPinPosition(topicRow: typeof topics.$inferSelect, profileUserId: string): number | null {
+// a topic's featured position on a profile, which counts only on a topic that the person owns
+function toOwnFeaturePosition(topicRow: typeof topics.$inferSelect, profileUserId: string): number | null {
 	return topicRow.ownerId === profileUserId ? topicRow.profileOrder : null
 }
 
@@ -200,7 +200,7 @@ function toOwnPinPosition(topicRow: typeof topics.$inferSelect, profileUserId: s
  * Loads the topics of a person's card sections in their profile's order: the topics they own, and the topics held by
  * the teams they lead. A reader who sees only public topics gets the public ones alone, and a team's only if the team
  * is public and shows the person's membership. A private topic another member owns stays out until its Personal
- * sources text is converted. The person's own pins lead in their order, then the home's trending order, most viewed,
+ * sources text is converted. The person's own featured items lead in their order, then the home's trending order, most viewed,
  * then most followed, then newest.
  */
 export function loadProfileTopicRows({
@@ -234,7 +234,7 @@ export function loadProfileTableTopicRows(profileUserId: string): Promise<(typeo
 	})
 }
 
-// the topics that match a filter, each once, with the person's own pins leading and the rest in the trending order
+// the topics that match a filter, each once, with the person's own featured items leading and the rest in the trending order
 function loadTopicRowsInProfileOrder({
 	profileUserId,
 	topicFilter,
@@ -242,72 +242,72 @@ function loadTopicRowsInProfileOrder({
 	profileUserId: string
 	topicFilter: SQL | undefined
 }): Promise<(typeof topics.$inferSelect)[]> {
-	// only the person's own topics keep their pin position
-	const ownPinPosition = sql`case when ${topics.ownerId} = ${profileUserId} then ${topics.profileOrder} end`
+	// only the person's own topics keep their featured position
+	const ownFeaturePosition = sql`case when ${topics.ownerId} = ${profileUserId} then ${topics.profileOrder} end`
 	return db
 		.select()
 		.from(topics)
 		.where(topicFilter)
-		.orderBy(...toProfileTopicOrder(ownPinPosition))
+		.orderBy(...toProfileTopicOrder(ownFeaturePosition))
 }
 
 /**
- * Loads the ids of the published podcast episodes of the topics that a profile or a team shows: the pinned ones in
+ * Loads the ids of the published podcast episodes of the topics that a profile or a team shows: the featured ones in
  * their order, the newest first among those at one position, then the most listened one of each topic with none shown
- * yet, newest first among ties. A profile passes its person, whose pins alone count.
+ * yet, newest first among ties. A profile passes its person, whose featured items alone count.
  */
 export async function loadProfilePodcastEpisodeIds(
 	topicIds: string[],
-	pinOwnerUserId?: string,
+	featureOwnerUserId?: string,
 ): Promise<{ podcastEpisodeIds: string[]; pinnedPodcastEpisodeCount: number }> {
 	if (topicIds.length === 0) {
 		return { podcastEpisodeIds: [], pinnedPodcastEpisodeCount: 0 }
 	}
 
-	// the topics' published podcast episodes, the pinned ones first, then the most listened
-	const pinPosition = toPinPosition(podcastEpisodes.profileOrder, pinOwnerUserId)
+	// the topics' published podcast episodes, the featured ones first, then the most listened
+	const featurePosition = toFeaturePosition(podcastEpisodes.profileOrder, featureOwnerUserId)
 	const podcastEpisodeRows = await db
-		.select({ id: podcastEpisodes.id, topicId: podcastEpisodes.topicId, profileOrder: pinPosition })
+		.select({ id: podcastEpisodes.id, topicId: podcastEpisodes.topicId, profileOrder: featurePosition })
 		.from(podcastEpisodes)
 		.innerJoin(topics, eq(topics.id, podcastEpisodes.topicId))
 		.where(toPublishedPodcastEpisodeFilter(topicIds))
-		.orderBy(...toProfilePodcastEpisodeOrder(pinPosition))
+		.orderBy(...toProfilePodcastEpisodeOrder(featurePosition))
 		.limit(PODCAST_EPISODE_CANDIDATE_LIMIT)
 
-	// keep every pinned one, then the first read of each other topic
-	const { rowIds, pinnedCount } = toProfileSectionRowIds(podcastEpisodeRows)
-	return { podcastEpisodeIds: rowIds, pinnedPodcastEpisodeCount: pinnedCount }
+	// keep every featured one, then the first read of each other topic
+	const { rowIds, featuredCount } = toProfileSectionRowIds(podcastEpisodeRows)
+	return { podcastEpisodeIds: rowIds, pinnedPodcastEpisodeCount: featuredCount }
 }
 
 /**
  * Loads the ids of the published podcast episodes whose ready films a profile shows, from the topics that its reader
- * may open: the pinned films in their order, then the most listened one of each topic with none shown yet, newest
- * first among ties. A profile passes its person, whose pins alone count.
+ * may open: the featured films in their order, then the most listened one of each topic with none shown yet, newest
+ * first among ties. A profile passes its person, whose featured items alone count.
  */
-export async function loadProfileTopicPodcastEpisodeVideoIds(
+export async function loadProfileTopicVideoIds(
 	topicIds: string[],
-	pinOwnerUserId?: string,
+	featureOwnerUserId?: string,
 ): Promise<{ podcastEpisodeIds: string[]; pinnedTopicPodcastEpisodeVideoCount: number }> {
 	if (topicIds.length === 0) {
 		return { podcastEpisodeIds: [], pinnedTopicPodcastEpisodeVideoCount: 0 }
 	}
 
-	// on a profile, a film's pin counts only on a topic that the person owns
-	const pinPosition = toPinPosition(topicPodcastEpisodeVideos.profileOrder, pinOwnerUserId)
+	// on a profile, a film's featured position counts only on a topic that the person owns
+	const featurePosition = toFeaturePosition(topicVideos.profileOrder, featureOwnerUserId)
 
-	// the topics' published podcast episodes that have a ready film, the pinned films first, then the most listened
+	// the topics' published podcast episodes that have a ready film, the featured films first, then the most listened
 	const filmRows = await db
-		.select({ id: podcastEpisodes.id, topicId: podcastEpisodes.topicId, profileOrder: pinPosition })
+		.select({ id: podcastEpisodes.id, topicId: podcastEpisodes.topicId, profileOrder: featurePosition })
 		.from(podcastEpisodes)
-		.innerJoin(topicPodcastEpisodeVideos, isReadyFilmOfPodcastEpisode)
+		.innerJoin(topicVideos, isReadyFilmOfPodcastEpisode)
 		.innerJoin(topics, eq(topics.id, podcastEpisodes.topicId))
 		.where(toPublishedPodcastEpisodeFilter(topicIds))
-		.orderBy(...toProfilePodcastEpisodeOrder(pinPosition))
+		.orderBy(...toProfilePodcastEpisodeOrder(featurePosition))
 		.limit(PODCAST_EPISODE_CANDIDATE_LIMIT)
 
-	// keep every pinned one, then the first read of each other topic
-	const { rowIds, pinnedCount } = toProfileSectionRowIds(filmRows)
-	return { podcastEpisodeIds: rowIds, pinnedTopicPodcastEpisodeVideoCount: pinnedCount }
+	// keep every featured one, then the first read of each other topic
+	const { rowIds, featuredCount } = toProfileSectionRowIds(filmRows)
+	return { podcastEpisodeIds: rowIds, pinnedTopicPodcastEpisodeVideoCount: featuredCount }
 }
 
 // the filter for the published podcast episodes of some topics
@@ -319,15 +319,18 @@ function toPublishedPodcastEpisodeFilter(topicIds: string[]): SQL | undefined {
 	)
 }
 
-// a podcast episode's or a film's pin position, which on a profile counts only on a topic that the person owns
-function toPinPosition(profileOrderColumn: AnyPgColumn, pinOwnerUserId: string | undefined): SQL<number | null> {
-	return pinOwnerUserId
-		? sql<number | null>`case when ${topics.ownerId} = ${pinOwnerUserId} then ${profileOrderColumn} end`
+// a podcast episode's or a film's featured position, which on a profile counts only on a topic that the person owns
+function toFeaturePosition(
+	profileOrderColumn: AnyPgColumn,
+	featureOwnerUserId: string | undefined,
+): SQL<number | null> {
+	return featureOwnerUserId
+		? sql<number | null>`case when ${topics.ownerId} = ${featureOwnerUserId} then ${profileOrderColumn} end`
 		: sql<number | null>`${profileOrderColumn}`
 }
 
-// the profile order of podcast episodes by their own pins or by their films' pins: the pinned ones by their position,
-// then the most listened, newest first among ties
+// the profile order of podcast episodes by their own featured positions or by their films' featured positions: the
+// featured ones by their position, then the most listened, newest first among ties
 function toProfilePodcastEpisodeOrder(profileOrderColumn: SQL): SQL[] {
 	return [
 		sql`${profileOrderColumn} is null`,
@@ -337,32 +340,32 @@ function toProfilePodcastEpisodeOrder(profileOrderColumn: SQL): SQL[] {
 	]
 }
 
-// a published podcast episode or film of a topic, with its profile order if it is pinned
+// a published podcast episode or film of a topic, with its profile order if it is featured
 type ProfileSectionRow = { id: string; topicId: string | null; profileOrder: number | null }
 
 /**
- * Returns the podcast episodes or the films a card section shows from rows in the section's order: every pinned one,
+ * Returns the podcast episodes or the films a card section shows from rows in the section's order: every featured one,
  * then the first one read of each topic that has none shown yet.
  */
 export function toProfileSectionRowIds(profileSectionRows: ProfileSectionRow[]): {
 	rowIds: string[]
-	pinnedCount: number
+	featuredCount: number
 } {
-	// the topics with a row shown, the ids kept, and how many of them are pinned
+	// the topics with a row shown, the ids kept, and how many of them are featured
 	const shownTopicIds = new Set<string>()
 	const rowIds: string[] = []
-	let pinnedCount = 0
+	let featuredCount = 0
 	for (const { id, topicId, profileOrder } of profileSectionRows) {
-		// a pinned row always shows, and any other shows only as its topic's first
-		const isPinned = profileOrder !== null
-		if (!topicId || (!isPinned && shownTopicIds.has(topicId))) {
+		// a featured row always shows, and any other shows only as its topic's first
+		const isFeatured = profileOrder !== null
+		if (!topicId || (!isFeatured && shownTopicIds.has(topicId))) {
 			continue
 		}
 
 		// keep the row and mark its topic as shown
 		shownTopicIds.add(topicId)
 		rowIds.push(id)
-		pinnedCount += isPinned ? 1 : 0
+		featuredCount += isFeatured ? 1 : 0
 	}
-	return { rowIds, pinnedCount }
+	return { rowIds, featuredCount }
 }

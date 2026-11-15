@@ -7,7 +7,7 @@ import type {
 	YourTopicsPage,
 } from "@carlnotes/contracts/home"
 import type { TopicPostCard as TopicPostCardFields } from "@carlnotes/contracts/topicPosts"
-import type { TopicPodcastEpisodeVideoDialogSurface } from "@carlnotes/contracts/visitAnalytics"
+import type { TopicVideoDialogSurface } from "@carlnotes/contracts/visitAnalytics"
 import { useUpdatesRecap } from "@carlnotes/core/hooks/useUpdatesRecap"
 import { useYourTopicsPages } from "@carlnotes/core/hooks/useYourTopicsPages"
 import type { CardSection } from "@carlnotes/core/lib/cardSections"
@@ -76,7 +76,7 @@ export function HomePage() {
 		}
 	}, [isSessionPending, isSignedIn, hasServerHome, reheatKey])
 
-	// read the home again after an admin's change to its pinned posts. a failed read keeps the cards shown
+	// read the home again after an admin's change to its featured posts. a failed read keeps the cards shown
 	const handleReloadHome = useCallback((): void => {
 		fetchHome()
 			.then(setHome)
@@ -90,7 +90,7 @@ export function HomePage() {
 		}
 	}, [isSessionPending, face])
 
-	// the search bar's menu offers an admin the home's pinned posts, and the New Topic button for a user
+	// the search bar's menu offers an admin the home's featured posts, and the New Topic button for a user
 	const [isRankingTopicPosts, setIsRankingTopicPosts] = useState(false)
 	useRegisterPageActions({
 		page: "Home",
@@ -154,7 +154,7 @@ export function HomePage() {
 			) : (
 				<HomeSkeleton />
 			)}
-			{/* an admin's list of the home's pinned posts, with the ones they may still pin */}
+			{/* an admin's list of the home's featured posts, with the ones they may still feature */}
 			{isRankingTopicPosts && (
 				<HomeTopicPostRankDialog onSaved={handleReloadHome} onClose={() => setIsRankingTopicPosts(false)} />
 			)}
@@ -187,7 +187,7 @@ function HomePodcastEpisodesSection({
 }: {
 	section: CardSection<PodcastEpisodeCardFields>
 	podcastEpisodes: PodcastEpisodeCardFields[]
-	videoSurface?: TopicPodcastEpisodeVideoDialogSurface
+	videoSurface?: TopicVideoDialogSurface
 }) {
 	return (
 		<PagedCardsSection

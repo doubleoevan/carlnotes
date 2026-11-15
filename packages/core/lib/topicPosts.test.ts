@@ -5,7 +5,7 @@ import { toTopicPostBodyImagePath } from "@carlnotes/contracts/topicPostBodyImag
 import { TOPIC_POST_DISCUSSION_STORY } from "./topicPostStories"
 import {
 	isTopicPostEditorShown,
-	isTopicPostPinnable,
+	isTopicPostFeaturable,
 	isTopicPostUrlStale,
 	TOPIC_POST_LABELS,
 	toTopicPostBodyImageReports,
@@ -37,11 +37,11 @@ test("a draft always shows its editor, and a published post only while its autho
 	expect(isTopicPostEditorShown({ publishedAt: "2026-11-01T10:00:00Z", isAuthor: false }, true)).toBe(false)
 })
 
-test("a Topic Post takes a pin once it is published on a public topic", () => {
+test("a Topic Post can be featured once it is published on a public topic", () => {
 	const publishedAt = "2026-11-03T16:00:00.000Z"
-	expect(isTopicPostPinnable({ publishedAt, isTopicPublic: true })).toBe(true)
-	expect(isTopicPostPinnable({ publishedAt, isTopicPublic: false })).toBe(false)
-	expect(isTopicPostPinnable({ publishedAt: null, isTopicPublic: true })).toBe(false)
+	expect(isTopicPostFeaturable({ publishedAt, isTopicPublic: true })).toBe(true)
+	expect(isTopicPostFeaturable({ publishedAt, isTopicPublic: false })).toBe(false)
+	expect(isTopicPostFeaturable({ publishedAt: null, isTopicPublic: true })).toBe(false)
 })
 
 test("a published post's line gives its date and its reading time, and marks an edited post", () => {

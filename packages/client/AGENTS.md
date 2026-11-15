@@ -46,7 +46,7 @@ session-only account routes. The one-time key response must remain in the curren
   team's member, and the Google Maps settings.
   `topicPostClient.ts` reads a Topic's Topic Posts and one post, and
   creates, saves, publishes, and deletes one, returning why a write changed nothing. It also sets a post's place among
-  its author's profile pins, and for an admin its place among the home's pins, with the rows the admin's dialog lists.
+  its author's featured profile items, and for an admin its place among the home's featured items, with the rows the admin's dialog lists.
   `viewerCountsClient.ts` sends a topic page's view and reads a topic's or a podcast episode's counts, a public
   topic's through `toReadRequestInit` without credentials so the edge can cache them, as `dashboardClient.ts` does.
   `userBlockClient.ts` blocks and unblocks a user and reads the block list, `pushClient.ts` registers and unregisters

@@ -3,11 +3,7 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { Connection, WorkflowClient, WorkflowExecutionAlreadyStartedError } from "@temporalio/client"
 import { describeScanQueue } from "./scanWorkflowClient"
-import {
-	startChatMentionPushWorkflow,
-	startTopicPodcastEpisodeVideoRebuild,
-	startTopicPostSummaryWorkflow,
-} from "./temporalClient"
+import { startChatMentionPushWorkflow, startTopicPostSummaryWorkflow, startTopicVideoRebuild } from "./temporalClient"
 
 // put the real connect back after each test
 afterEach(() => {
@@ -69,15 +65,15 @@ test("a film rebuild starts once per podcast episode", async () => {
 		.mockRejectedValueOnce(new Error("temporal is down"))
 
 	// the first start names the queue and the podcast episode, the repeat resolves, and the failure throws
-	await startTopicPodcastEpisodeVideoRebuild("e1")
+	await startTopicVideoRebuild("e1")
 	expect(startSpy.mock.calls[0]?.[0]).toBe("rebuildTopicPodcastEpisodeVideoWorkflow")
 	expect(startSpy.mock.calls[0]?.[1]).toMatchObject({
 		taskQueue: "episode-videos",
 		workflowId: "episode-video-rebuild-e1",
 		args: [{ podcastEpisodeId: "e1" }],
 	})
-	await startTopicPodcastEpisodeVideoRebuild("e1")
-	await expect(startTopicPodcastEpisodeVideoRebuild("e1")).rejects.toThrow("temporal is down")
+	await startTopicVideoRebuild("e1")
+	await expect(startTopicVideoRebuild("e1")).rejects.toThrow("temporal is down")
 })
 
 // a summary rewrite starts under the post's id alone, and a start while one is running is ignored

@@ -108,7 +108,7 @@ export const scanStatuses = ["running", "succeeded", "failed"] as const
 // and removed once its topic's owner or an admin removes it
 export const podcastEpisodeStatuses = ["recording", "published", "failed", "removed"] as const
 // a podcast episode film's status. rendering until it is ready or fails
-export const topicPodcastEpisodeVideoStatuses = ["rendering", "ready", "failed"] as const
+export const topicVideoStatuses = ["rendering", "ready", "failed"] as const
 // who speaks a turn of a podcast episode, and who answers a question asked from the podcast player
 export const podcastEpisodeSpeakers = ["host", "cohost"] as const
 export type PodcastEpisodeSpeaker = (typeof podcastEpisodeSpeakers)[number]
@@ -187,6 +187,7 @@ export const uncheckedImageSubjectKinds = [
 	"topicImage",
 	"podcastEpisodeImage",
 	"topicPostImage",
+	// a stored value that must not change, because the previous release reads it
 	"topicPodcastEpisodeVideoImage",
 ] as const
 export type UncheckedImageSubjectKind = (typeof uncheckedImageSubjectKinds)[number]

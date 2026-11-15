@@ -9,7 +9,7 @@ import {
 	EmptySectionCardSkeleton,
 	PodcastEpisodePlayerCardSkeleton,
 	PodcastThemeSongNoteSkeleton,
-	TopicPodcastEpisodeVideoCardSkeleton,
+	TopicVideoCardSkeleton,
 } from "@/components/topic/TopicSkeleton"
 import {
 	HEADER_TOPIC_IMAGE_CLASS,
@@ -86,7 +86,7 @@ export function PodcastEpisodeSkeleton() {
 
 			{/* the film section with the same note, and the film's card */}
 			<CollapsibleSectionSkeleton titleClassName="w-52" className="mt-2" titleNote={<PodcastThemeSongNoteSkeleton />}>
-				<TopicPodcastEpisodeVideoCardSkeleton />
+				<TopicVideoCardSkeleton />
 			</CollapsibleSectionSkeleton>
 
 			{/* the comments card */}

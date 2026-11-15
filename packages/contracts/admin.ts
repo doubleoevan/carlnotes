@@ -103,9 +103,9 @@ export type SpendControlSettings = {
 	isUnverifiedFirstScanLimitOn: boolean
 	// whether a Scan records no new podcast episode, and whether a new podcast episode starts no film
 	isPodcastEpisodeRecordingPaused: boolean
-	isTopicPodcastEpisodeVideoRenderingPaused: boolean
-	// whether the home's card sections hold only the items an admin pinned
-	isHomePinnedOnly: boolean
+	isTopicVideoRenderingPaused: boolean
+	// whether the home's card sections hold only the items an admin featured
+	isHomeFeaturedOnly: boolean
 }
 
 // one numeric spend control on the admin console: the value in effect, its default, and whether an override replaced it
@@ -129,11 +129,11 @@ export type AdminDailySpendCutoffs = {
 	hourlySignupAlertCount: AdminSpendControlSetting
 	hourlySignupCount: number
 	generatedChapterImageLimit: AdminSpendControlSetting
-	// the unverified accounts switch, the two pauses, and the pinned-only home
+	// the unverified accounts switch, the two pauses, and the featured-only home
 	isUnverifiedFirstScanLimitOn: boolean
 	isPodcastEpisodeRecordingPaused: boolean
-	isTopicPodcastEpisodeVideoRenderingPaused: boolean
-	isHomePinnedOnly: boolean
+	isTopicVideoRenderingPaused: boolean
+	isHomeFeaturedOnly: boolean
 	// when the overrides were last saved and by whom. both are null before the first save, and the username is null
 	// once the saver's account closed
 	updatedAt: string | null

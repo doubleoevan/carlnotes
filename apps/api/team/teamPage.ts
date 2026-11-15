@@ -11,7 +11,7 @@ import { eq } from "drizzle-orm"
 import { isLeaderRole } from "../authorization"
 import { loadTeamChatMentions } from "../chat/mentions"
 import { loadPodcastEpisodeCards } from "../home/topicCards"
-import { loadProfileTopicPodcastEpisodeVideoIds, loadTeamCards } from "../profileCards"
+import { loadProfileTopicVideoIds, loadTeamCards } from "../profileCards"
 import { toTopicTableRows } from "../topic/topicTableRows"
 import { loadTeamPageAccess } from "./teamPageAccess"
 
@@ -81,10 +81,10 @@ export async function loadTeamPage(userId: string | null, teamId: string): Promi
 
 	// the topic table's rows, and the cards of the card topics, of their podcast episodes, of every one of their
 	// published Topic Posts, and of their films
-	const [topicTableRows, teamCards, topicPodcastEpisodeVideoCards] = await Promise.all([
+	const [topicTableRows, teamCards, topicVideoCards] = await Promise.all([
 		toTopicTableRows(visibleTopics, userId),
 		loadTeamCards(cardTopicIds, userId),
-		loadTeamTopicPodcastEpisodeVideoCards(cardTopicIds),
+		loadTeamTopicVideoCards(cardTopicIds),
 	])
 
 	// build the page from the members and topics the user may see
@@ -109,15 +109,15 @@ export async function loadTeamPage(userId: string | null, teamId: string): Promi
 		chatMentions: chatMentionsByTeam.get(team.id) ?? [],
 		topics: topicTableRows,
 		...teamCards,
-		topicPodcastEpisodeVideoCards,
+		topicPodcastEpisodeVideoCards: topicVideoCards,
 	}
 	return { status: "visible", team: teamPage }
 }
 
 // the film cards of the topics whose cards the page shows: the ready films of their published podcast episodes, the
-// ones their topics' owners pinned on their profiles first, then the most listened one of each other topic
-async function loadTeamTopicPodcastEpisodeVideoCards(topicIds: string[]): Promise<PodcastEpisodeCard[]> {
-	const { podcastEpisodeIds } = await loadProfileTopicPodcastEpisodeVideoIds(topicIds)
+// ones their topics' owners featured on their profiles first, then the most listened one of each other topic
+async function loadTeamTopicVideoCards(topicIds: string[]): Promise<PodcastEpisodeCard[]> {
+	const { podcastEpisodeIds } = await loadProfileTopicVideoIds(topicIds)
 	return loadPodcastEpisodeCards(podcastEpisodeIds)
 }
 

@@ -86,7 +86,7 @@ function toProfileCacheTag(profileUserId: string): string {
 }
 
 /**
- * Purges a user's profile page and its payloads at the edge, after the topics, podcast episodes, or Topic Posts pinned
+ * Purges a user's profile page and its payloads at the edge, after the topics, podcast episodes, or Topic Posts featured
  * to it change.
  */
 export function purgeProfileAtEdge(profileUserId: string): Promise<unknown> {

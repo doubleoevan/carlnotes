@@ -517,7 +517,7 @@ Claims that no longer match the code:
   fails loses the batch, because `runWithRedis` returns null instead of throwing (`packages/db/redis.ts:76-104`).
 - **Item 5: only `README.md:216` holds the 30-minute claim.** No AGENTS file, docs page, or spec repeats it.
 - **Item 6: the film poll already pauses in a hidden tab and stops after four hours** per page view
-  (`packages/core/hooks/useTopicPodcastEpisodeVideoRenderingPoll.ts:7,10`, `packages/core/lib/limitedPoll.ts:16-32`).
+  (`packages/core/hooks/useTopicVideoRenderingPoll.ts:7,10`, `packages/core/lib/limitedPoll.ts:16-32`).
 - **Item 1, a gap in a true claim:** `publishPodcastEpisode` rejects a row that is no longer recording in a read
   before its transaction (`publishPodcastEpisode.ts:86-89`), but the publishing update has no status predicate
   (`:285-297`), so a close-out between the two is published over.
@@ -556,7 +556,7 @@ Rows in the dev database, 2026-11-13 11:56 UTC (selects only):
 | Table | Rows | Stuck |
 |---|---|---|
 | `episodes` | 416: 340 published, 60 removed, 16 failed | 0 recording |
-| `topic_podcast_episode_videos` | 79: 61 ready, 5 failed | **13 rendering**, last written 9.5 hours to 2 days 9 hours ago, each with `cost = 0` and an image, so all 13 are the backfill's |
+| `topic_videos` | 79: 61 ready, 5 failed | **13 rendering**, last written 9.5 hours to 2 days 9 hours ago, each with `cost = 0` and an image, so all 13 are the backfill's |
 | `topic_post_discussions` | 10, all published | 0 recording |
 | `topic_image_renders` | 316 | **1 pending**, a `regenerate` 2 days 16 hours old |
 
@@ -588,7 +588,7 @@ Facts the design rests on:
   inserted as `recording`, so `created_at` is when the recording began.
 - **The film row** has statuses `rendering`, `ready`, `failed`. No row exists until a film worker picks the activity
   up. Every attempt of a first render runs an upsert that sets `rendering` and moves `updated_at`
-  (`topicPodcastEpisodeVideoRows.ts:72-80`). A re-render never writes `rendering`, so `status = 'rendering'` selects
+  (`topicVideoRows.ts:72-80`). A re-render never writes `rendering`, so `status = 'rendering'` selects
   first renders and retries of failed rows, and the clock is `updated_at`. A first render that finishes sets `ready`
   with no status predicate (`:104-108`), so a late render heals a wrong close-out.
 - **No client function starts the film render workflow.** It is started only by the recording workflow's `startChild`.
@@ -639,7 +639,7 @@ Claims that no longer match the code:
   (`packages/db/updateCounts.ts:30-86`, `packages/db/noteBadges.ts:21-185`). Five is the depth of the round trips.
 - **None of the seven summed tables, nor `users`, has an index led by its time column.** Every index that includes the
   time column leads with another column (`scans.ts:87-88`, `chat.ts:77-79`, `podcast.ts:89`, `personalSources.ts:306`,
-  `topicImages.ts:64-65`, `topicPosts.ts:93`), and `topic_podcast_episode_videos` and `users` have none on it.
+  `topicImages.ts:64-65`, `topicPosts.ts:93`), and `topic_videos` and `users` have none on it.
 - **"Podcast chapters store their audio first" holds between activities only.** The encode starts from the stored
   chapters, but the chapter activity never checks for a stored chapter, so its own retry pays for speech again
   (`packages/pipeline/podcast/podcastEpisodeAudio.ts:84-101`).
@@ -662,8 +662,8 @@ Every task queue and Worker (`apps/worker/temporal.ts`), 88 activity slots a rep
 | `topic-posts` | publish and summarize a Topic Post | 8 | `SCREEN_CONCURRENCY` |
 | `source-screening` | screen a Source | 8 | `SCREEN_CONCURRENCY` |
 | `dashboard-snapshots` | the nightly Dashboard build | 2 | constant |
-| `episode-videos` | the film render and the rebuild | 1 | `TOPIC_PODCAST_EPISODE_VIDEO_CONCURRENCY`, 0 turns films off |
-| `episode-video-backfill` | the film backfill and its renders | 1 | `TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_CONCURRENCY`, 0 reads as 1 |
+| `episode-videos` | the film render and the rebuild | 1 | `TOPIC_VIDEO_CONCURRENCY`, 0 turns films off |
+| `episode-video-backfill` | the film backfill and its renders | 1 | `TOPIC_VIDEO_BACKFILL_CONCURRENCY`, 0 reads as 1 |
 
 Measured on the dev database, seconds from a podcast episode row's creation to its publish:
 
@@ -855,18 +855,18 @@ Claims that no longer match the code:
 
 - **The still is 5120 by 2880, never "up to 2560 by 1440".** 2560 by 1440 is the largest stored Resource image
   (`packages/pipeline/resourceImages/resourceImageFilter.ts:16-17`). Every still ffmpeg reads is a PNG composed at four
-  times the film, `COMPOSED_SCALE = 4` (`packages/pipeline/topicPodcastEpisodeVideo/videoFrames.ts:11-15`), so a zoom
+  times the film, `COMPOSED_SCALE = 4` (`packages/pipeline/topicVideo/videoFrames.ts:11-15`), so a zoom
   steps a quarter of a film pixel. "A smaller still" therefore means a smaller `COMPOSED_SCALE`.
 - **The lower third is already bounded for most shots.** Since the montage a chapter's lower third is fed only to the
   shots that start before the segment's eighth second (`videoParts.ts:308-318`). What is left to bound is the tail of
   the one shot that the eighth second falls in. The intro and sign-off show it throughout (`videoImageParts.ts:144`).
 - **A failed first render is never rendered again, even by a version bump.** Neither backfill listing finds a row at
-  `failed` (`backfillTopicPodcastEpisodeVideosActivities.ts:46-52`, `:125`), and no route starts a render.
+  `failed` (`backfillTopicVideosActivities.ts:46-52`, `:125`), and no route starts a render.
 - **The backfill's remaining count undercounts.** It adds the current page's Topics, at most 100, to the films to
-  re-render (`backfillTopicPodcastEpisodeVideosActivities.ts:72-73`).
-- **Three places skip the platform's cost, not two:** the render (`renderTopicPodcastEpisodeVideo.ts:112` in the
+  re-render (`backfillTopicVideosActivities.ts:72-73`).
+- **Three places skip the platform's cost, not two:** the render (`renderTopicVideo.ts:112` in the
   pipeline), the generated chapter images (`generatedChapterImages.ts:291-297`), and the film's own image
-  (`topicPodcastEpisodeVideoImage.ts:89`).
+  (`topicVideoImage.ts:89`).
 - `README.md:74` says the worker hosts six Workers. It hosts 14.
 
 Numbers:
@@ -881,11 +881,11 @@ Numbers:
 | ffmpeg runs a film | about 100 for 10 minutes, 300 for 30 | `videoParts.ts:236-243` |
 | Shot timeout | 60 seconds plus 12 times its length; join 5 minutes; mux 10 minutes | `videoEncode.ts:52-58`, `:206-208` |
 | Thread flags | none anywhere in the repo | `videoEncode.ts:18-45`, `packages/models/ffmpeg.ts:29` |
-| Render activity | start-to-close 4 hours, heartbeat timeout 10 minutes, heartbeat every 30 seconds, 3 attempts, no schedule-to-start | `apps/worker/workflows/renderTopicPodcastEpisodeVideo.ts:10-14` |
-| Failure mark | 2 minutes, 3 attempts, on its workflow's queue | `renderTopicPodcastEpisodeVideo.ts:17-29` |
+| Render activity | start-to-close 4 hours, heartbeat timeout 10 minutes, heartbeat every 30 seconds, 3 attempts, no schedule-to-start | `apps/worker/workflows/renderTopicVideo.ts:10-14` |
+| Failure mark | 2 minutes, 3 attempts, on its workflow's queue | `renderTopicVideo.ts:17-29` |
 | Upload grace before the sweep may delete a recorded key | 1 hour, shorter than a render | `packages/db/store.ts:17` |
-| Render version | 3 | `topicPodcastEpisodeVideoRows.ts:24` |
-| Backfill page | 100 Topics, then continue as new | `backfillTopicPodcastEpisodeVideos.ts:14` |
+| Render version | 3 | `topicVideoRows.ts:24` |
+| Backfill page | 100 Topics, then continue as new | `backfillTopicVideos.ts:14` |
 | Generated images | 40 a film, 12 a chapter, one per 30 seconds, 4 drawn at once | `podcastEpisodeSettings.ts:47`, `videoChapterImages.ts:27`, `generatedChapterImages.ts:36` |
 | Cost of one generated image | $0.034; the film's own image at 2K $0.101; render $0.001 a film minute | `packages/models/budget.ts:84-98` |
 | Most one platform-billed re-render costs | 40 x $0.034 + 30 x $0.001 = $1.39; a 10-minute film at most $0.69 | derived |
@@ -907,14 +907,14 @@ Facts the design rests on:
 - **A live film starts in one place:** `startChild("renderTopicPodcastEpisodeVideoWorkflow")` under
   `episode-video-<podcastEpisodeId>` on `episode-videos` with `ParentClosePolicy.ABANDON`
   (`apps/worker/workflows/recordPodcastEpisode.ts:200-214`). The row is written when the render activity starts, not
-  when the workflow is queued (`topicPodcastEpisodeVideoRows.ts:72-80`).
+  when the workflow is queued (`topicVideoRows.ts:72-80`).
 - **The backfill renders by activity, with no workflow id of its own**
-  (`backfillTopicPodcastEpisodeVideos.ts:74-76`, `:110-113`), so nothing ties it to `episode-video-<id>`. Two renders
+  (`backfillTopicVideos.ts:74-76`, `:110-113`), so nothing ties it to `episode-video-<id>`. Two renders
   of one podcast episode write `chapters-v3.mp4` and `captions-v3.vtt` under the same keys, the last save wins, and a
-  render that fails deletes what it uploaded (pipeline `renderTopicPodcastEpisodeVideo.ts:135-138`), which can be the
+  render that fails deletes what it uploaded (pipeline `renderTopicVideo.ts:135-138`), which can be the
   files the other render's ready row plays.
 - **A cancelled workflow cannot run its failure mark** unless the mark runs in a non-cancellable scope. The backfill
-  rethrows a cancellation with no mark (`backfillTopicPodcastEpisodeVideos.ts:114-118`).
+  rethrows a cancellation with no mark (`backfillTopicVideos.ts:114-118`).
 - **The film spend sum filters on the film row's `created_at`** (`packages/db/quotas.ts:331`), so a cost added today
   to a film created last week is outside today's total. `loadSpendSince` runs seven sums (`quotas.ts:276-349`):
   scans, chat turns, episodes, personal source distillation spends, topic image renders (user id nullable, null for
@@ -922,7 +922,7 @@ Facts the design rests on:
   user, with a plan to the free users, and with neither it sums everything.
 - **`describeScanQueue` is scan-specific only in the queue's name** (`packages/pipeline/scanWorkflowClient.ts:104-131`):
   it reads the activity side's poller count, `approximateBacklogCount`, and `approximateBacklogAge`.
-- **A render checks its podcast episode once, at the start** (pipeline `renderTopicPodcastEpisodeVideo.ts:196`). Every
+- **A render checks its podcast episode once, at the start** (pipeline `renderTopicVideo.ts:196`). Every
   ffmpeg run and still loop already honors the activity's cancellation signal.
 - **A retry repeats** the audio download, the pause detection, every still's compose, every shot, the joins, and the
   mux. Shots are files in `os.tmpdir()` that the attempt removes.

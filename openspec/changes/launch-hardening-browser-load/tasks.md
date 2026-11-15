@@ -58,7 +58,7 @@ person reads changes.
       poster eager and high priority
 - [ ] 2.6 Derive page, list, and thumbnail sizes for the film image from a 16:9 table beside the topic image's
       (384 by 216, 120 by 68, 48 by 27, each also at twice that), with their keys in
-      `topicPodcastEpisodeVideoKeys.ts`, added to the film's key list so a removed film and a replaced image delete
+      `topicVideoKeys.ts`, added to the film's key list so a removed film and a replaced image delete
       them. The image route serves each size, and falls back to the poster under a short cache for a film not yet
       backfilled. The url function derives each size's path from the poster path, so no contract field changes.
       Verify: key, route, and url tests

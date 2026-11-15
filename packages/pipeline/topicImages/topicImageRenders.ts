@@ -27,7 +27,7 @@ export type StartTopicImageRenderOptions = {
 	topicId: string
 	podcastEpisodeId?: string
 	topicPostId?: string
-	topicPodcastEpisodeVideoId?: string
+	topicVideoId?: string
 	// who is billed, why it runs, the model, and the editor's image prompt
 	userId: string | null
 	kind: Exclude<TopicImageRenderKind, "resize">
@@ -42,7 +42,7 @@ export async function startTopicImageRender({
 	topicId,
 	podcastEpisodeId,
 	topicPostId,
-	topicPodcastEpisodeVideoId,
+	topicVideoId,
 	userId,
 	kind,
 	model,
@@ -51,7 +51,7 @@ export async function startTopicImageRender({
 	// the row first, so the workflow finds it, then the workflow named by the row
 	const [renderRow] = await db
 		.insert(topicImageRenders)
-		.values({ topicId, podcastEpisodeId, topicPostId, topicPodcastEpisodeVideoId, userId, kind, model })
+		.values({ topicId, podcastEpisodeId, topicPostId, topicVideoId, userId, kind, model })
 		.returning()
 	if (!renderRow) {
 		throw new Error(`no render row was written for topic ${topicId}`)

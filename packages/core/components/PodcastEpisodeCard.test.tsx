@@ -3,7 +3,7 @@
 import { expect, test } from "bun:test"
 import type { PodcastEpisodeCard as PodcastEpisodeCardFields } from "@carlnotes/contracts/home"
 import { toPodcastEpisodeSummaryFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
-import { toPodcastEpisodeImageUrls, toTopicPodcastEpisodeVideoImageUrls } from "@carlnotes/contracts/topicImages"
+import { toPodcastEpisodeImageUrls, toTopicVideoImageUrls } from "@carlnotes/contracts/topicImages"
 import { isValidElement, type ReactNode } from "react"
 import { PodcastEpisodeCard, type PodcastEpisodeCardElements } from "./PodcastEpisodeCard"
 
@@ -92,9 +92,7 @@ test("a film card shows the film's own image, and a podcast card the podcast epi
 		variant: "video",
 		elements: ELEMENTS,
 	})
-	expect(findElementProps(filmCard, ELEMENTS.Image)[0]?.image).toEqual(
-		toTopicPodcastEpisodeVideoImageUrls(FILM_POSTER_URL),
-	)
+	expect(findElementProps(filmCard, ELEMENTS.Image)[0]?.image).toEqual(toTopicVideoImageUrls(FILM_POSTER_URL))
 
 	// the podcast card of the same podcast episode keeps the podcast episode's image
 	const podcastCard = PodcastEpisodeCard({ podcastEpisodeCard: FILM_PODCAST_EPISODE_CARD, elements: ELEMENTS })

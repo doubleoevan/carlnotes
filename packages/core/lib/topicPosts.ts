@@ -173,10 +173,10 @@ export function isTopicPostEditorShown(
 }
 
 /**
- * Whether a Topic Post takes a pin: a published one of a public topic. Its author pins it to their own profile from
- * its page, and an admin pins it to the home.
+ * Whether a Topic Post can be featured: a published one of a public topic. Its author features it on their own profile from
+ * its page, and an admin features it on the home.
  */
-export function isTopicPostPinnable(topicPost: Pick<TopicPostResponse, "publishedAt" | "isTopicPublic">): boolean {
+export function isTopicPostFeaturable(topicPost: Pick<TopicPostResponse, "publishedAt" | "isTopicPublic">): boolean {
 	return Boolean(topicPost.publishedAt) && topicPost.isTopicPublic
 }
 

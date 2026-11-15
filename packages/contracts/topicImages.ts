@@ -60,7 +60,7 @@ export type TopicImageRenderResponse = z.infer<typeof topicImageRenderResponse>
 export const uploadTopicImageResponse = z.object({ image: topicImageUrls, isImageUnchecked: z.boolean().optional() })
 
 // what a film image's upload returns: the film's poster url, and whether the upload is unchecked the same way
-export const uploadTopicPodcastEpisodeVideoImageResponse = z.object({
+export const uploadTopicVideoImageResponse = z.object({
 	posterUrl: z.string(),
 	isImageUnchecked: z.boolean().optional(),
 })
@@ -120,28 +120,28 @@ export function toTopicPostImageUrls(topicPostId: string, hash: string): TopicIm
 }
 
 // the file name a film's own image is served under
-export const TOPIC_PODCAST_EPISODE_VIDEO_POSTER_FILE_NAME = "poster.jpg"
+export const TOPIC_VIDEO_POSTER_FILE_NAME = "poster.jpg"
 
 /**
  * Returns the path of a film's poster, its own image at the film's size, from its podcast episode's id and the image's
  * content hash.
  */
-export function toTopicPodcastEpisodeVideoPosterUrl(podcastEpisodeId: string, hash: string): string {
-	return `/api/topic-podcast-episode-video-images/${podcastEpisodeId}/${hash}/${TOPIC_PODCAST_EPISODE_VIDEO_POSTER_FILE_NAME}`
+export function toTopicVideoPosterUrl(podcastEpisodeId: string, hash: string): string {
+	return `/api/topic-podcast-episode-video-images/${podcastEpisodeId}/${hash}/${TOPIC_VIDEO_POSTER_FILE_NAME}`
 }
 
 /**
  * Returns the path of the generated image of one chapter of a film, from its podcast episode's id and the chapter's
  * position. The path is not found for a chapter with no generated image.
  */
-export function toTopicPodcastEpisodeVideoChapterImageUrl(podcastEpisodeId: string, position: number): string {
+export function toTopicVideoChapterImageUrl(podcastEpisodeId: string, position: number): string {
 	return `/api/topic-podcast-episode-video-images/${podcastEpisodeId}/chapters/${position}/image.jpg`
 }
 
 /**
  * Returns a film's poster as an image's urls, its one file at every size, for an image block or a card that shows it.
  */
-export function toTopicPodcastEpisodeVideoImageUrls(posterUrl: string): TopicImageUrls {
+export function toTopicVideoImageUrls(posterUrl: string): TopicImageUrls {
 	return Object.fromEntries(
 		topicImageSizes.map((size) => [size, { url: posterUrl, url2x: posterUrl }]),
 	) as TopicImageUrls

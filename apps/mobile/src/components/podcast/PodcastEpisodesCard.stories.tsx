@@ -10,18 +10,14 @@ import {
 } from "@/components/topic/topicPageStories"
 import { PodcastEpisodePlayer } from "./PodcastEpisodePlayer"
 import { PodcastEpisodesCard } from "./PodcastEpisodesCard"
-import { TopicPodcastEpisodeVideoSection } from "./TopicPodcastEpisodeVideoSection"
+import { TopicVideoSection } from "./TopicVideoSection"
 
-// Topic Cinema above Coffee Break films, which a row's play scrolls to
-function FilmsWithTopicCinemaStory() {
+// the topic video section above Coffee Break films, which a row's play scrolls to
+function FilmsWithTopicVideoSectionStory() {
 	const scrollViewRef = useRef<ComponentRef<typeof ScrollView>>(null)
 	return (
 		<ScrollView ref={scrollViewRef} className="w-full" contentContainerClassName="px-4">
-			<TopicPodcastEpisodeVideoSection
-				topic={STORY_FILM_TOPIC_PAGE}
-				onVideoRenderingPoll={() => {}}
-				scrollViewRef={scrollViewRef}
-			/>
+			<TopicVideoSection topic={STORY_FILM_TOPIC_PAGE} onVideoRenderingPoll={() => {}} scrollViewRef={scrollViewRef} />
 			<PodcastEpisodesCard topic={STORY_FILM_TOPIC_PAGE} format="video" />
 		</ScrollView>
 	)
@@ -67,7 +63,7 @@ export const SeasonsAndPages: Story = {
 	},
 }
 export const Films: Story = { args: { topic: STORY_FILM_TOPIC_PAGE, format: "video" } }
-export const FilmsWithTopicCinema: Story = { render: () => <FilmsWithTopicCinemaStory /> }
+export const FilmsWithTopicVideoSection: Story = { render: () => <FilmsWithTopicVideoSectionStory /> }
 export const Chapters: Story = {
 	render: () => <PodcastEpisodePlayer topic={STORY_TOPIC_PAGE} topicFeedHandlers={STORY_TOPIC_FEED_HANDLERS} />,
 }

@@ -3,7 +3,7 @@ import type { ProfileResponse } from "@carlnotes/contracts/profilePage"
 import { type ComponentType, type ReactNode, useEffect, useRef, useState } from "react"
 import { sendProfileOrderMoves, toProfileRankDialogItems } from "../lib/profileSections"
 import {
-	type PinnedOrderMove,
+	type FeaturedOrderMove,
 	type RankDialogLabels,
 	type RankedItem,
 	type RankedNoun,
@@ -42,29 +42,29 @@ export type RankDialogElements = {
 
 type RankDialogProps = {
 	labels: RankDialogLabels
-	// the pinned rows in their saved order
-	pinnedItems: RankedItem[]
-	// the page's own item, appended if it is not pinned yet, which a row press moves
+	// the featured rows in their saved order
+	featuredItems: RankedItem[]
+	// the page's own item, appended if it is not featured yet, which a row press moves
 	pageItem?: RankedItem
-	isPageItemPinned?: boolean
-	// every item the dialog may add, pinned or not, and the most rows the order holds
+	isPageItemFeatured?: boolean
+	// every item the dialog may add, featured or not, and the most rows the order holds
 	candidateItems?: RankedItem[]
 	limit?: number
-	onSave: (pinnedOrderMoves: PinnedOrderMove[]) => Promise<void>
+	onSave: (featuredOrderMoves: FeaturedOrderMove[]) => Promise<void>
 	onClose: () => void
 	elements: RankDialogElements
 }
 
 /**
- * The list that orders pinned topics, films, podcast episodes, or Topic Posts, for the home's pins and for a
+ * The list that orders featured topics, films, podcast episodes, or Topic Posts, for the home's featured items and for a
  * profile's. Rows move by a drag or a step, the order is sent on Save, and Save is enabled whether or not a row moved.
- * The X on a pinned row asks first, then removes it at once. The X on a row that is not saved yet only drops it.
+ * The X on a featured row asks first, then removes it at once. The X on a row that is not saved yet only drops it.
  */
 export function RankDialog({
 	labels,
-	pinnedItems,
+	featuredItems,
 	pageItem,
-	isPageItemPinned = false,
+	isPageItemFeatured = false,
 	candidateItems = [],
 	limit,
 	onSave,
@@ -73,14 +73,14 @@ export function RankDialog({
 }: RankDialogProps) {
 	const { Frame, List, Row, AddPicker, EmptyText, Footer, RemoveConfirm } = elements
 
-	// the working order, edited locally until Save, with the page's item appended if it is not pinned yet
+	// the working order, edited locally until Save, with the page's item appended if it is not featured yet
 	const [rankedItems, setRankedItems] = useState(
-		pageItem && !isPageItemPinned ? [...pinnedItems, pageItem] : pinnedItems,
+		pageItem && !isPageItemFeatured ? [...featuredItems, pageItem] : featuredItems,
 	)
 	const [draggedItemIndex, setDraggedItemIndex] = useState<number | null>(null)
 	const [isSaving, setIsSaving] = useState(false)
 
-	// the pinned row whose X asks before it is removed
+	// the featured row whose X asks before it is removed
 	const [removingItem, setRemovingItem] = useState<RankedItem | null>(null)
 
 	// move one row to a new index, the one edit that the drag and the step both make
@@ -121,9 +121,9 @@ export function RankDialog({
 		})
 	}
 
-	// the X on a pinned row asks first. the X on a row that is not saved yet only drops it
+	// the X on a featured row asks first. the X on a row that is not saved yet only drops it
 	const handleRemoveItem = (rankedItem: RankedItem): void => {
-		if (pinnedItems.some((pinnedItem) => pinnedItem.id === rankedItem.id)) {
+		if (featuredItems.some((featuredItem) => featuredItem.id === rankedItem.id)) {
 			setRemovingItem(rankedItem)
 			return
 		}
@@ -147,10 +147,10 @@ export function RankDialog({
 
 	// send the order top to bottom, and close the dialog once it saves
 	const handleSave = async (): Promise<void> => {
-		const pinnedOrderMoves = rankedItems.map((rankedItem, index) => ({ id: rankedItem.id, position: index + 1 }))
+		const featuredOrderMoves = rankedItems.map((rankedItem, index) => ({ id: rankedItem.id, position: index + 1 }))
 		setIsSaving(true)
 		try {
-			await onSave(pinnedOrderMoves)
+			await onSave(featuredOrderMoves)
 			onClose()
 		} catch {
 			// keep the dialog open after a failed save
@@ -211,7 +211,7 @@ export function RankDialog({
 	)
 }
 
-// whose profile's pins the dialog orders, what it ranks, the page's own item, and what a save, a failure, and a close
+// whose profile's featured items the dialog orders, what it ranks, the page's own item, and what a save, a failure, and a close
 // do
 type ProfileRankDialogProps = {
 	userId: string
@@ -225,8 +225,8 @@ type ProfileRankDialogProps = {
 }
 
 /**
- * The rank dialog of a person's own profile pins, opened from the page of one of their topics, podcast episodes, or
- * Topic Posts. It reads the profile's pins first, then offers the page's item a place among them.
+ * The rank dialog of a person's own featured profile items, opened from the page of one of their topics, podcast episodes, or
+ * Topic Posts. It reads the profile's featured items first, then offers the page's item a place among them.
  */
 export function ProfileRankDialog({
 	userId,
@@ -269,16 +269,16 @@ export function ProfileRankDialog({
 		return null
 	}
 
-	// the page's item joins the order if it is pinned already or the pins are under their limit, which Topic Posts do
-	// not have. a full profile adds it from the picker once a pin is removed
-	const { pinnedItems, candidateItems, limit } = toProfileRankDialogItems(rankedNoun, profile)
-	const isPageItemPinned = pinnedItems.some((pinnedItem) => pinnedItem.id === pageItem.id)
-	const hasPageItem = isPageItemPinned || limit === undefined || pinnedItems.length < limit
+	// the page's item joins the order if it is featured already or the featured items are under their limit, which Topic Posts do
+	// not have. a full profile adds it from the picker once a featured item is removed
+	const { featuredItems, candidateItems, limit } = toProfileRankDialogItems(rankedNoun, profile)
+	const isPageItemFeatured = featuredItems.some((featuredItem) => featuredItem.id === pageItem.id)
+	const hasPageItem = isPageItemFeatured || limit === undefined || featuredItems.length < limit
 
 	// send the moves, and report a rejected one, which keeps the dialog open
-	const handleSave = async (pinnedOrderMoves: PinnedOrderMove[]): Promise<void> => {
+	const handleSave = async (featuredOrderMoves: FeaturedOrderMove[]): Promise<void> => {
 		try {
-			await sendProfileOrderMoves(rankedNoun, pinnedOrderMoves)
+			await sendProfileOrderMoves(rankedNoun, featuredOrderMoves)
 		} catch (error) {
 			onError()
 			throw error
@@ -288,11 +288,11 @@ export function ProfileRankDialog({
 	return (
 		<RankDialog
 			labels={toProfileRankDialogLabels(rankedNoun)}
-			pinnedItems={pinnedItems}
+			featuredItems={featuredItems}
 			candidateItems={candidateItems}
 			limit={limit}
 			pageItem={hasPageItem ? pageItem : undefined}
-			isPageItemPinned={isPageItemPinned}
+			isPageItemFeatured={isPageItemFeatured}
 			onSave={handleSave}
 			onClose={onClose}
 			elements={elements}

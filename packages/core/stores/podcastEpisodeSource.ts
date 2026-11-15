@@ -2,7 +2,7 @@
 // format, which load and which request is current, and how a source is loaded, released, and reloaded
 
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
-import type { PodcastEpisodeAudioAdapter, TopicPodcastEpisodeVideoAdapter } from "../lib/podcastEpisodeAudio"
+import type { PodcastEpisodeAudioAdapter, TopicVideoAdapter } from "../lib/podcastEpisodeAudio"
 import { PODCAST_EPISODE_PLAY_FAILED_TEXT } from "../lib/podcastEpisodeCopy"
 import { toPodcastEpisodeSeekSeconds } from "../lib/podcastEpisodePlayback"
 import { toPodcastEpisodePlayerState, updatePodcastEpisodePlayerState } from "./podcastEpisodePlayerState"
@@ -10,7 +10,7 @@ import { toPodcastEpisodePlayerState, updatePodcastEpisodePlayerState } from "./
 // one platform owner per format. the load and the request identities reject events and delayed work from a source
 // the player has already left, and the reload time limits how often a failed audio source is loaded again
 let audioAdapter: PodcastEpisodeAudioAdapter | null = null
-let videoAdapter: TopicPodcastEpisodeVideoAdapter | null = null
+let videoAdapter: TopicVideoAdapter | null = null
 let hasLoadedSource = false
 let loadId = 0
 let requestVersion = 0
@@ -34,21 +34,21 @@ export function toPodcastEpisodeAudioAdapter(): PodcastEpisodeAudioAdapter | nul
 /**
  * Makes the given film player the owner of the video format, or clears the owner with null.
  */
-export function setTopicPodcastEpisodeVideoAdapter(adapter: TopicPodcastEpisodeVideoAdapter | null): void {
+export function setTopicVideoAdapter(adapter: TopicVideoAdapter | null): void {
 	videoAdapter = adapter
 }
 
 /**
  * Returns the video format's film player.
  */
-export function toTopicPodcastEpisodeVideoAdapter(): TopicPodcastEpisodeVideoAdapter | null {
+export function toTopicVideoAdapter(): TopicVideoAdapter | null {
 	return videoAdapter
 }
 
 /**
  * Returns the adapter of the format that plays.
  */
-export function toPodcastEpisodeSourceAdapter(): TopicPodcastEpisodeVideoAdapter | null {
+export function toPodcastEpisodeSourceAdapter(): TopicVideoAdapter | null {
 	return toPodcastEpisodePlayerState().format === "video" ? videoAdapter : audioAdapter
 }
 
@@ -112,7 +112,7 @@ export function releasePodcastEpisodeSource(): void {
 type LoadPodcastEpisodeSourceOptions = {
 	podcastEpisode: PodcastEpisode
 	positionSeconds: number
-	adapter: TopicPodcastEpisodeVideoAdapter
+	adapter: TopicVideoAdapter
 }
 
 /**
@@ -155,10 +155,7 @@ export async function loadPodcastEpisodeSource({
 /**
  * Plays the loaded source again, and shows the play error if the attempt fails.
  */
-export async function resumePodcastEpisodeSource(
-	adapter: TopicPodcastEpisodeVideoAdapter,
-	version: number,
-): Promise<void> {
+export async function resumePodcastEpisodeSource(adapter: TopicVideoAdapter, version: number): Promise<void> {
 	try {
 		await adapter.play()
 	} catch {

@@ -59,7 +59,7 @@ No route, field, or MCP tool return that a released build reads is removed or ch
   within a Topic, and the notes card reading the newest recap that was written.
 - `podcast-episode-rendering`, `topic-post-discussions`, `topic-images`: the scheduled chapter queue, the encode
   queue, retries that wait, results stored before the next step, and close-outs.
-- `topic-podcast-episode-video-rendering`, `stored-object-deletion`: the film service, a row written when a film is
+- `topic-video-rendering`, `stored-object-deletion`: the film service, a row written when a film is
   queued, stored shots, uncounted interrupted attempts, and the backfill's child workflows.
 - `daily-spend-cutoffs`, `monthly-budget-cutoffs`, `content-moderation`: the spends table, kept out of the
   free-plan spend where the platform paid, and a moderation verdict kept by the text's hash.
@@ -70,7 +70,7 @@ No route, field, or MCP tool return that a released build reads is removed or ch
 
 - `apps/worker`: `temporal.ts` (roles, six new Workers, a metrics endpoint), `schedule.ts`, a close-out module, the
   recording, film, backfill, and discussion workflows, and their activities.
-- `packages/pipeline`: `stageTimeouts.ts`, `review/`, `podcast/`, `topicPodcastEpisodeVideo/`, `topicPosts/`,
+- `packages/pipeline`: `stageTimeouts.ts`, `review/`, `podcast/`, `topicVideo/`, `topicPosts/`,
   `topicImages/`, `temporalClient.ts`, `scanWorkflowClient.ts`, `pushDelivery.ts`, and the cover modules moved in.
 - `packages/db`: tables `filtered_findings` and `spends`, a `restarted_at` column on five tables, eleven indexes,
   `index.ts` (pool shares), `quotas.ts`, `updateCounts.ts`.

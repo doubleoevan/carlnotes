@@ -33,8 +33,8 @@ export type SpendControlOverrides = Pick<
 type NewerSpendControlColumn =
 	| "generatedChapterImageLimit"
 	| "isPodcastEpisodeRecordingPaused"
-	| "isTopicPodcastEpisodeVideoRenderingPaused"
-	| "isHomePinnedOnly"
+	| "isTopicVideoRenderingPaused"
+	| "isHomeFeaturedOnly"
 
 // the cutoff state a reader acts on: the day's free-plan spend and the settings in effect, or unavailable after a failed
 // read, which passes no cutoff and leaves no scan waiting
@@ -42,8 +42,10 @@ export type DailySpendCutoffState =
 	| { status: "loaded"; freePlanSpendCents: number; settings: SpendControlSettings }
 	| { status: "unavailable" }
 
-// the Redis key the overrides are read through, and the prefix of the key each UTC day's free-plan spend is read through
-export const SPEND_CONTROL_SETTINGS_KEY = "spend-control-settings"
+// the Redis key the overrides are read through, and the prefix of the key each UTC day's free-plan spend is read through.
+// the overrides' key gets a new version if a field of the cached settings is renamed, so a replica of one release
+// never reads the cached fields of the other
+export const SPEND_CONTROL_SETTINGS_KEY = "spend-control-settings:v2"
 const FREE_PLAN_SPEND_KEY_PREFIX = "free-plan-spend"
 
 // how long a cached read stays in Redis
@@ -66,8 +68,8 @@ export const NO_SPEND_CONTROL_OVERRIDES: SpendControlOverrides = {
 	isUnverifiedFirstScanLimitOn: false,
 	generatedChapterImageLimit: null,
 	isPodcastEpisodeRecordingPaused: false,
-	isTopicPodcastEpisodeVideoRenderingPaused: false,
-	isHomePinnedOnly: false,
+	isTopicVideoRenderingPaused: false,
+	isHomeFeaturedOnly: false,
 }
 
 // the results of a failed read. each is its own object, so the cache can tell it apart by identity and leave it unstored
@@ -88,8 +90,8 @@ export function defaultSpendControlSettings(): SpendControlSettings {
 		generatedChapterImageLimit: generatedChapterImageLimit(),
 		isUnverifiedFirstScanLimitOn: false,
 		isPodcastEpisodeRecordingPaused: false,
-		isTopicPodcastEpisodeVideoRenderingPaused: false,
-		isHomePinnedOnly: false,
+		isTopicVideoRenderingPaused: false,
+		isHomeFeaturedOnly: false,
 	}
 }
 
@@ -110,8 +112,8 @@ export function toSpendControlSettings(overrides: SpendControlOverrides): SpendC
 		// each switch, off unless it is stored as on
 		isUnverifiedFirstScanLimitOn: overrides.isUnverifiedFirstScanLimitOn,
 		isPodcastEpisodeRecordingPaused: overrides.isPodcastEpisodeRecordingPaused ?? false,
-		isTopicPodcastEpisodeVideoRenderingPaused: overrides.isTopicPodcastEpisodeVideoRenderingPaused ?? false,
-		isHomePinnedOnly: overrides.isHomePinnedOnly ?? false,
+		isTopicVideoRenderingPaused: overrides.isTopicVideoRenderingPaused ?? false,
+		isHomeFeaturedOnly: overrides.isHomeFeaturedOnly ?? false,
 	}
 }
 
@@ -192,8 +194,8 @@ const SPEND_CONTROL_OVERRIDE_COLUMNS = {
 	isUnverifiedFirstScanLimitOn: spendControlSettings.isUnverifiedFirstScanLimitOn,
 	generatedChapterImageLimit: spendControlSettings.generatedChapterImageLimit,
 	isPodcastEpisodeRecordingPaused: spendControlSettings.isPodcastEpisodeRecordingPaused,
-	isTopicPodcastEpisodeVideoRenderingPaused: spendControlSettings.isTopicPodcastEpisodeVideoRenderingPaused,
-	isHomePinnedOnly: spendControlSettings.isHomePinnedOnly,
+	isTopicVideoRenderingPaused: spendControlSettings.isTopicVideoRenderingPaused,
+	isHomeFeaturedOnly: spendControlSettings.isHomeFeaturedOnly,
 }
 
 /**

@@ -515,16 +515,16 @@ test("chat_turns checks the topic post kind's shape and clears a deleted post", 
 	)
 })
 
-// a settings row saved before these columns reads every new switch as off. each pause and the pinned-only home take
+// a settings row saved before these columns reads every new switch as off. each pause and the featured-only home take
 // false, and the generated chapter image limit takes no value, which reads as its default
-test("the pauses and the pinned-only home in spend_control_settings default to false, and the generated chapter image limit is nullable with no default", () => {
-	// each pause and the pinned-only home
+test("the pauses and the featured-only home in spend_control_settings default to false, and the generated chapter image limit is nullable with no default", () => {
+	// each pause and the featured-only home
 	expect(spendControlSettings.isPodcastEpisodeRecordingPaused.notNull).toBe(true)
 	expect(spendControlSettings.isPodcastEpisodeRecordingPaused.default).toBe(false)
-	expect(spendControlSettings.isTopicPodcastEpisodeVideoRenderingPaused.notNull).toBe(true)
-	expect(spendControlSettings.isTopicPodcastEpisodeVideoRenderingPaused.default).toBe(false)
-	expect(spendControlSettings.isHomePinnedOnly.notNull).toBe(true)
-	expect(spendControlSettings.isHomePinnedOnly.default).toBe(false)
+	expect(spendControlSettings.isTopicVideoRenderingPaused.notNull).toBe(true)
+	expect(spendControlSettings.isTopicVideoRenderingPaused.default).toBe(false)
+	expect(spendControlSettings.isHomeFeaturedOnly.notNull).toBe(true)
+	expect(spendControlSettings.isHomeFeaturedOnly.default).toBe(false)
 
 	// the generated chapter image limit
 	expect(spendControlSettings.generatedChapterImageLimit.notNull).toBe(false)

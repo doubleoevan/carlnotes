@@ -4,7 +4,7 @@
 
 import type { Visibility } from "@carlnotes/contracts/enums"
 import { type DbTransaction, db } from "@carlnotes/db"
-import { podcastEpisodes, topicPodcastEpisodeVideos } from "@carlnotes/db/schema/podcast"
+import { podcastEpisodes, topicVideos } from "@carlnotes/db/schema/podcast"
 import { topicPosts } from "@carlnotes/db/schema/topicPosts"
 import { topics } from "@carlnotes/db/schema/topics"
 import {
@@ -19,12 +19,12 @@ import {
 import { reportError } from "@carlnotes/server/monitoring"
 import { and, eq, isNotNull, isNull, or } from "drizzle-orm"
 import { clearPodcastEpisodeImage } from "./podcast/podcastEpisodeImageRenders"
-import { startTopicPodcastEpisodeVideoRebuild } from "./temporalClient"
+import { startTopicVideoRebuild } from "./temporalClient"
 import { forgetTopicCovers } from "./topicImages/topicCovers"
 import { clearTopicImage } from "./topicImages/topicImageRenders"
-import { clearTopicPodcastEpisodeVideoImage } from "./topicPodcastEpisodeVideo/topicPodcastEpisodeVideoImage"
-import { saveImageTopicPodcastEpisodeVideosRendering } from "./topicPodcastEpisodeVideo/topicPodcastEpisodeVideoRows"
 import { clearTopicPostImage } from "./topicPosts/topicPostImageRenders"
+import { clearTopicVideoImage } from "./topicVideo/topicVideoImage"
+import { saveImageTopicVideosRendering } from "./topicVideo/topicVideoRows"
 import {
 	isUncheckedAvatarKind,
 	loadUncheckedImageSubjectState,
@@ -88,7 +88,7 @@ export async function redrawUnpublishedImageFiles(
 	if (uncheckedImageSubjects.some(({ subjectKind }) => subjectKind === "topicImage")) {
 		await forgetTopicCovers(topicId)
 	}
-	await startImageTopicPodcastEpisodeVideoRebuilds(uncheckedImageSubjects)
+	await startImageTopicVideoRebuilds(uncheckedImageSubjects)
 }
 
 /**
@@ -96,9 +96,7 @@ export async function redrawUnpublishedImageFiles(
  * image or of a film's own, and for a Topic's image each of the Topic's films that has no image of its own or of its
  * podcast episode.
  */
-export async function startImageTopicPodcastEpisodeVideoRebuilds(
-	uncheckedImageSubjects: UncheckedImageHashSubject[],
-): Promise<void> {
+export async function startImageTopicVideoRebuilds(uncheckedImageSubjects: UncheckedImageHashSubject[]): Promise<void> {
 	// the podcast episodes whose own image or whose film's image is one of the images
 	const podcastEpisodeIds = uncheckedImageSubjects
 		.filter(({ subjectKind }) => subjectKind !== "topicImage" && subjectKind !== "topicPostImage")
@@ -113,8 +111,8 @@ export async function startImageTopicPodcastEpisodeVideoRebuilds(
 
 	// start each film's rebuild once. a failed start is reported, and the film's next play starts the rebuild
 	for (const podcastEpisodeId of new Set(podcastEpisodeIds)) {
-		await startTopicPodcastEpisodeVideoRebuild(podcastEpisodeId).catch((error: unknown) => {
-			reportError(error, "topic-podcast-episode-video", { podcastEpisodeId, step: "rebuild" })
+		await startTopicVideoRebuild(podcastEpisodeId).catch((error: unknown) => {
+			reportError(error, "topic-video", { podcastEpisodeId, step: "rebuild" })
 		})
 	}
 }
@@ -152,7 +150,7 @@ async function unpublishUncheckedImage(
 
 	// no film drawn from the image plays until it is rebuilt
 	if (imageHash) {
-		await saveImageTopicPodcastEpisodeVideosRendering(transaction, { ...uncheckedImageSubject, imageHash })
+		await saveImageTopicVideosRendering(transaction, { ...uncheckedImageSubject, imageHash })
 	}
 	return uncheckedImageSubject
 }
@@ -187,9 +185,9 @@ async function lockSubjectRow(
 		// a film's row, which its podcast episode names
 		case "topicPodcastEpisodeVideoImage":
 			await transaction
-				.select({ id: topicPodcastEpisodeVideos.id })
-				.from(topicPodcastEpisodeVideos)
-				.where(eq(topicPodcastEpisodeVideos.podcastEpisodeId, subjectId))
+				.select({ id: topicVideos.id })
+				.from(topicVideos)
+				.where(eq(topicVideos.podcastEpisodeId, subjectId))
 				.for("no key update")
 	}
 }
@@ -209,7 +207,7 @@ async function clearSubjectImage(
 		case "topicPostImage":
 			return clearTopicPostImage(transaction, subjectId)
 		case "topicPodcastEpisodeVideoImage":
-			return clearTopicPodcastEpisodeVideoImage(transaction, subjectId)
+			return clearTopicVideoImage(transaction, subjectId)
 	}
 }
 
@@ -218,18 +216,17 @@ async function clearSubjectImage(
 // film was drawn from an image that was unpublished
 async function loadTopicImageFilmPodcastEpisodeIds(topicId: string): Promise<string[]> {
 	const isTopicImageShown = and(
-		eq(topicPodcastEpisodeVideos.status, "ready"),
+		eq(topicVideos.status, "ready"),
 		isNull(podcastEpisodes.imageHash),
-		isNull(topicPodcastEpisodeVideos.imageHash),
+		isNull(topicVideos.imageHash),
 	)
-	const isMarkedRendering = and(
-		eq(topicPodcastEpisodeVideos.status, "rendering"),
-		isNotNull(topicPodcastEpisodeVideos.filmKey),
-	)
+	const isMarkedRendering = and(eq(topicVideos.status, "rendering"), isNotNull(topicVideos.filmKey))
+
+	// the Topic's podcast episodes whose film matches either case
 	const podcastEpisodeRows = await db
 		.select({ id: podcastEpisodes.id })
-		.from(topicPodcastEpisodeVideos)
-		.innerJoin(podcastEpisodes, eq(podcastEpisodes.id, topicPodcastEpisodeVideos.podcastEpisodeId))
+		.from(topicVideos)
+		.innerJoin(podcastEpisodes, eq(podcastEpisodes.id, topicVideos.podcastEpisodeId))
 		.where(and(eq(podcastEpisodes.topicId, topicId), or(isTopicImageShown, isMarkedRendering)))
 	return podcastEpisodeRows.map((podcastEpisodeRow) => podcastEpisodeRow.id)
 }

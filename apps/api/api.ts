@@ -47,9 +47,9 @@ import { podcastEpisodeHomeOrderRoute } from "./podcast/podcastEpisodeHomeOrder"
 import { podcastEpisodeImagesRoute } from "./podcast/podcastEpisodeImagesRoute"
 import { podcastEpisodesRoute } from "./podcast/podcastEpisodes"
 import { podcastFeedsRoute } from "./podcast/podcastFeeds"
-import { topicPodcastEpisodeVideoHomeOrderRoute } from "./podcast/topicPodcastEpisodeVideoHomeOrder"
-import { topicPodcastEpisodeVideoImagesRoute } from "./podcast/topicPodcastEpisodeVideoImagesRoute"
-import { topicPodcastEpisodeVideosRoute } from "./podcast/topicPodcastEpisodeVideoRoutes"
+import { topicVideoHomeOrderRoute } from "./podcast/topicVideoHomeOrder"
+import { topicVideoImagesRoute } from "./podcast/topicVideoImagesRoute"
+import { topicVideosRoute } from "./podcast/topicVideoRoutes"
 import { profileOrderRoute } from "./profileOrder"
 import { profilesRoute } from "./profiles"
 import { pushDevicesRoute } from "./pushDevices"
@@ -258,9 +258,9 @@ export const apiRoute = new Hono<AppEnv>()
 	.route("/", podcastEpisodeImagesRoute)
 	.route("/", homeRoute)
 	.route("/", podcastEpisodeHomeOrderRoute)
-	.route("/", topicPodcastEpisodeVideoHomeOrderRoute)
+	.route("/", topicVideoHomeOrderRoute)
 	.route("/", topicPostHomeOrderRoute)
-	// a topic's, a podcast episode's, and a Topic Post's place among the pins of their person's profile
+	// a topic's, a podcast episode's, and a Topic Post's place among the featured items of their person's profile
 	.route("/", profileOrderRoute)
 	// a topic page's view, and the counts the topic and podcast episode pages read
 	.route("/", countsRoute)
@@ -278,8 +278,8 @@ export const apiRoute = new Hono<AppEnv>()
 	.route("/", newsRoute)
 	// the podcast episode routes, then the podcast feed and cover routes
 	.route("/", podcastEpisodesRoute)
-	.route("/", topicPodcastEpisodeVideosRoute)
-	.route("/", topicPodcastEpisodeVideoImagesRoute)
+	.route("/", topicVideosRoute)
+	.route("/", topicVideoImagesRoute)
 	.route("/", podcastFeedsRoute)
 	// the chat routes
 	.route("/", privateChatRoute)

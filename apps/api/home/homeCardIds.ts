@@ -1,7 +1,7 @@
-// the ids of the home's cards: the home topics, films, podcast episodes, and Topic Posts, the pinned ones first and
+// the ids of the home's cards: the home topics, films, podcast episodes, and Topic Posts, the featured ones first and
 // then the trending or newest ones to fill, and the week's new films, podcast episodes, and Topic Posts, from one
 // cached read every replica shares. an admin block takes its user's topics, their podcast episodes and films, and the
-// Topic Posts the user wrote out of every list, and the pinned-only switch leaves every list its pinned rows alone
+// Topic Posts the user wrote out of every list, and the featured-only switch leaves every list its featured rows alone
 
 import {
 	HOME_PODCAST_EPISODE_COUNT,
@@ -15,7 +15,7 @@ import { db, isPublicAndShown } from "@carlnotes/db"
 import { toNotAdminBlockedAuthorFilter } from "@carlnotes/db/contentFilters"
 import { loadSpendControlSettings } from "@carlnotes/db/dailySpendCutoffs"
 import { cacheJson } from "@carlnotes/db/redis"
-import { podcastEpisodes, topicPodcastEpisodeVideos } from "@carlnotes/db/schema/podcast"
+import { podcastEpisodes, topicVideos } from "@carlnotes/db/schema/podcast"
 import { topicPosts } from "@carlnotes/db/schema/topicPosts"
 import { topics } from "@carlnotes/db/schema/topics"
 import { and, asc, desc, eq, gte, isNotNull, type SQL, sql } from "drizzle-orm"
@@ -41,19 +41,19 @@ export type HomeCardIds = {
 	newestFilmPodcastEpisodeIds?: string[]
 	homePodcastEpisodeIds: string[]
 	newestPodcastEpisodeIds: string[]
-	// the pinned and newest Topic Posts, then the week's
+	// the featured and newest Topic Posts, then the week's
 	homeTopicPostIds?: string[]
 	newestTopicPostIds?: string[]
 }
 
 /**
- * Returns the ids of the home's cards, read through the shared cache: the pinned topics in their order and then the trending
- * public shown topics until twelve, the pinned podcast episodes and then the most listened published ones of public
- * shown topics, one per topic, until twelve, the pinned Topic Posts and then the newest published ones of public shown
+ * Returns the ids of the home's cards, read through the shared cache: the featured topics in their order and then the trending
+ * public shown topics until twelve, the featured podcast episodes and then the most listened published ones of public
+ * shown topics, one per topic, until twelve, the featured Topic Posts and then the newest published ones of public shown
  * topics, one per topic, until twelve, and the podcast episodes and the Topic Posts of public shown topics published
  * in the last week. The films follow the podcast episodes' rules, over the podcast episodes that have a ready film.
  * No list holds a row of a topic whose owner is under an admin block or a Topic Post whose author is, and every list
- * holds its pinned rows alone while the pinned-only switch is on.
+ * holds its featured rows alone while the featured-only switch is on.
  */
 export function loadHomeCardIds(): Promise<HomeCardIds> {
 	return cacheJson({ key: HOME_CARD_IDS_KEY, ttlMs: HOME_CARD_IDS_TTL_MS, load: loadHomeCardIdsFromDatabase })
@@ -61,8 +61,8 @@ export function loadHomeCardIds(): Promise<HomeCardIds> {
 
 // read the seven id lists from the database
 async function loadHomeCardIdsFromDatabase(): Promise<HomeCardIds> {
-	// whether an admin limited the home to its pinned rows
-	const { isHomePinnedOnly: isPinnedOnly } = await loadSpendControlSettings()
+	// whether an admin limited the home to its featured rows
+	const { isHomeFeaturedOnly: isFeaturedOnly } = await loadSpendControlSettings()
 
 	// the seven reads together, in the order the home shows their sections
 	const [
@@ -74,13 +74,13 @@ async function loadHomeCardIdsFromDatabase(): Promise<HomeCardIds> {
 		homeTopicPostIds,
 		newestTopicPostIds,
 	] = await Promise.all([
-		loadHomeTopicIds({ isPinnedOnly }),
-		loadHomePodcastEpisodeIds({ isFilmRead: true, isPinnedOnly }),
-		loadNewestPodcastEpisodeIds({ isFilmRead: true, isPinnedOnly }),
-		loadHomePodcastEpisodeIds({ isFilmRead: false, isPinnedOnly }),
-		loadNewestPodcastEpisodeIds({ isFilmRead: false, isPinnedOnly }),
-		loadHomeTopicPostIds({ isPinnedOnly }),
-		loadNewestTopicPostIds({ isPinnedOnly }),
+		loadHomeTopicIds({ isFeaturedOnly }),
+		loadHomePodcastEpisodeIds({ isFilmRead: true, isFeaturedOnly }),
+		loadNewestPodcastEpisodeIds({ isFilmRead: true, isFeaturedOnly }),
+		loadHomePodcastEpisodeIds({ isFilmRead: false, isFeaturedOnly }),
+		loadNewestPodcastEpisodeIds({ isFilmRead: false, isFeaturedOnly }),
+		loadHomeTopicPostIds({ isFeaturedOnly }),
+		loadNewestTopicPostIds({ isFeaturedOnly }),
 	])
 
 	// each list under its name
@@ -95,19 +95,19 @@ async function loadHomeCardIdsFromDatabase(): Promise<HomeCardIds> {
 	}
 }
 
-// whether a home read takes the rows an admin pinned alone
-type HomeReadOptions = { isPinnedOnly: boolean }
+// whether a home read takes the rows an admin featured alone
+type HomeReadOptions = { isFeaturedOnly: boolean }
 
 // a topic the home may list. it is public and shown, and its owner is under no admin block
 const isTopicListedOnHome = and(isPublicAndShown, toNotAdminBlockedAuthorFilter(topics.ownerId))
 
-// the pinned topics the home may list in their order, then the trending ones: most viewed, then most followed, then
+// the featured topics the home may list in their order, then the trending ones: most viewed, then most followed, then
 // newest
-async function loadHomeTopicIds({ isPinnedOnly }: HomeReadOptions): Promise<string[]> {
+async function loadHomeTopicIds({ isFeaturedOnly }: HomeReadOptions): Promise<string[]> {
 	const topicRows = await db
 		.select({ id: topics.id })
 		.from(topics)
-		.where(and(isTopicListedOnHome, toPinnedOnlyFilter({ homeOrderColumn: topics.homeOrder, isPinnedOnly })))
+		.where(and(isTopicListedOnHome, toFeaturedOnlyFilter({ homeOrderColumn: topics.homeOrder, isFeaturedOnly })))
 		.orderBy(
 			sql`${topics.homeOrder} is null`,
 			asc(topics.homeOrder),
@@ -119,16 +119,16 @@ async function loadHomeTopicIds({ isPinnedOnly }: HomeReadOptions): Promise<stri
 	return topicRows.map((topicRow) => topicRow.id)
 }
 
-// the column that holds a row's home order, and whether the read takes the pinned rows alone
-type ToPinnedOnlyFilterOptions = HomeReadOptions & { homeOrderColumn: AnyPgColumn }
+// the column that holds a row's home order, and whether the read takes the featured rows alone
+type ToFeaturedOnlyFilterOptions = HomeReadOptions & { homeOrderColumn: AnyPgColumn }
 
-// the filter that leaves a pinned-only read the rows that hold a home order, or no filter for a read of every row
-function toPinnedOnlyFilter({ homeOrderColumn, isPinnedOnly }: ToPinnedOnlyFilterOptions): SQL | undefined {
-	return isPinnedOnly ? isNotNull(homeOrderColumn) : undefined
+// the filter that leaves a featured-only read the rows that hold a home order, or no filter for a read of every row
+function toFeaturedOnlyFilter({ homeOrderColumn, isFeaturedOnly }: ToFeaturedOnlyFilterOptions): SQL | undefined {
+	return isFeaturedOnly ? isNotNull(homeOrderColumn) : undefined
 }
 
 // whether a home read covers the podcast episodes that have a ready film, in their films' order, or all of them, and
-// whether it takes the pinned rows alone
+// whether it takes the featured rows alone
 type HomePodcastEpisodeReadOptions = HomeReadOptions & { isFilmRead: boolean }
 
 // the published podcast episodes of the topics the home may list
@@ -138,17 +138,17 @@ const isPublishedPodcastEpisodeOfListedTopic = and(
 	isTopicListedOnHome,
 )
 
-// the pinned published podcast episodes of the topics the home may list in their order, then the most listened, newest
+// the featured published podcast episodes of the topics the home may list in their order, then the most listened, newest
 // first among ties, one per topic. a film read takes the ones with a ready film, in their films' order, each named by
 // its podcast episode's id
 async function loadHomePodcastEpisodeIds({
 	isFilmRead,
-	isPinnedOnly,
+	isFeaturedOnly,
 }: HomePodcastEpisodeReadOptions): Promise<string[]> {
-	// the published podcast episodes the home may list, the pinned ones first
+	// the published podcast episodes the home may list, the featured ones first
 	const homeOrderColumn = toPodcastEpisodeHomeOrderColumn(isFilmRead)
 	const podcastEpisodeRows = await toHomePodcastEpisodeQuery(isFilmRead)
-		.where(and(isPublishedPodcastEpisodeOfListedTopic, toPinnedOnlyFilter({ homeOrderColumn, isPinnedOnly })))
+		.where(and(isPublishedPodcastEpisodeOfListedTopic, toFeaturedOnlyFilter({ homeOrderColumn, isFeaturedOnly })))
 		.orderBy(
 			sql`${homeOrderColumn} is null`,
 			asc(homeOrderColumn),
@@ -163,7 +163,7 @@ async function loadHomePodcastEpisodeIds({
 
 // the column that holds a podcast episode's home order. a film read orders by the one on the film's own row
 function toPodcastEpisodeHomeOrderColumn(isFilmRead: boolean): AnyPgColumn {
-	return isFilmRead ? topicPodcastEpisodeVideos.homeOrder : podcastEpisodes.homeOrder
+	return isFilmRead ? topicVideos.homeOrder : podcastEpisodes.homeOrder
 }
 
 // the read of podcast episodes with their topics, joined to the ready films if the read is the films'
@@ -176,29 +176,27 @@ function toHomePodcastEpisodeQuery(isFilmRead: boolean) {
 		.$dynamic()
 
 	// a film read reaches a podcast episode only through its ready film
-	return isFilmRead
-		? podcastEpisodeQuery.innerJoin(topicPodcastEpisodeVideos, isReadyFilmOfPodcastEpisode)
-		: podcastEpisodeQuery
+	return isFilmRead ? podcastEpisodeQuery.innerJoin(topicVideos, isReadyFilmOfPodcastEpisode) : podcastEpisodeQuery
 }
 
 // a film row that is ready and belongs to the podcast episode
 export const isReadyFilmOfPodcastEpisode = and(
-	eq(topicPodcastEpisodeVideos.podcastEpisodeId, podcastEpisodes.id),
-	eq(topicPodcastEpisodeVideos.status, "ready"),
+	eq(topicVideos.podcastEpisodeId, podcastEpisodes.id),
+	eq(topicVideos.status, "ready"),
 )
 
 // a Topic Post the home may list. its topic is one the home may list, and its author is under no admin block
 const isTopicPostListedOnHome = and(isTopicListedOnHome, toNotAdminBlockedAuthorFilter(topicPosts.authorUserId))
 
-// the pinned published Topic Posts the home may list in their order, then the newest, one per topic
-async function loadHomeTopicPostIds({ isPinnedOnly }: HomeReadOptions): Promise<string[]> {
-	// the published posts the home may list, the pinned ones first
-	const pinnedOnlyFilter = toPinnedOnlyFilter({ homeOrderColumn: topicPosts.homeOrder, isPinnedOnly })
+// the featured published Topic Posts the home may list in their order, then the newest, one per topic
+async function loadHomeTopicPostIds({ isFeaturedOnly }: HomeReadOptions): Promise<string[]> {
+	// the published posts the home may list, the featured ones first
+	const featuredOnlyFilter = toFeaturedOnlyFilter({ homeOrderColumn: topicPosts.homeOrder, isFeaturedOnly })
 	const topicPostRows = await db
 		.select({ id: topicPosts.id, topicId: topicPosts.topicId })
 		.from(topicPosts)
 		.innerJoin(topics, eq(topics.id, topicPosts.topicId))
-		.where(and(isNotNull(topicPosts.publishedAt), isTopicPostListedOnHome, pinnedOnlyFilter))
+		.where(and(isNotNull(topicPosts.publishedAt), isTopicPostListedOnHome, featuredOnlyFilter))
 		.orderBy(sql`${topicPosts.homeOrder} is null`, asc(topicPosts.homeOrder), desc(topicPosts.publishedAt))
 		.limit(TOPIC_POST_CANDIDATE_LIMIT)
 
@@ -206,19 +204,19 @@ async function loadHomeTopicPostIds({ isPinnedOnly }: HomeReadOptions): Promise<
 	return toFirstIdsPerTopic(topicPostRows, HOME_TOPIC_POST_COUNT)
 }
 
-// the Topic Posts the home may list that were published in the last week, newest first, pinned or not unless the read
-// takes the pinned rows alone
-async function loadNewestTopicPostIds({ isPinnedOnly }: HomeReadOptions): Promise<string[]> {
+// the Topic Posts the home may list that were published in the last week, newest first, featured or not unless the read
+// takes the featured rows alone
+async function loadNewestTopicPostIds({ isFeaturedOnly }: HomeReadOptions): Promise<string[]> {
 	// the week starts seven days back
 	const publishedSince = new Date(Date.now() - NEW_TOPIC_POST_DAYS * DAY_MS)
 
 	// the week's published posts the home may list
-	const pinnedOnlyFilter = toPinnedOnlyFilter({ homeOrderColumn: topicPosts.homeOrder, isPinnedOnly })
+	const featuredOnlyFilter = toFeaturedOnlyFilter({ homeOrderColumn: topicPosts.homeOrder, isFeaturedOnly })
 	const topicPostRows = await db
 		.select({ id: topicPosts.id })
 		.from(topicPosts)
 		.innerJoin(topics, eq(topics.id, topicPosts.topicId))
-		.where(and(gte(topicPosts.publishedAt, publishedSince), isTopicPostListedOnHome, pinnedOnlyFilter))
+		.where(and(gte(topicPosts.publishedAt, publishedSince), isTopicPostListedOnHome, featuredOnlyFilter))
 		.orderBy(desc(topicPosts.publishedAt))
 		// ponytail: limits a burst week. page on the server past it
 		.limit(NEW_TOPIC_POST_LIMIT)
@@ -249,7 +247,7 @@ export function toFirstIdsPerTopic(rows: { id: string; topicId: string | null }[
 // takes the ones with a ready film, each named by its podcast episode's id
 async function loadNewestPodcastEpisodeIds({
 	isFilmRead,
-	isPinnedOnly,
+	isFeaturedOnly,
 }: HomePodcastEpisodeReadOptions): Promise<string[]> {
 	// the week starts seven days back
 	const publishedSince = new Date(Date.now() - NEW_PODCAST_EPISODE_DAYS * DAY_MS)
@@ -257,9 +255,9 @@ async function loadNewestPodcastEpisodeIds({
 
 	// the week's published podcast episodes the home may list
 	const homeOrderColumn = toPodcastEpisodeHomeOrderColumn(isFilmRead)
-	const pinnedOnlyFilter = toPinnedOnlyFilter({ homeOrderColumn, isPinnedOnly })
+	const featuredOnlyFilter = toFeaturedOnlyFilter({ homeOrderColumn, isFeaturedOnly })
 	const podcastEpisodeRows = await toHomePodcastEpisodeQuery(isFilmRead)
-		.where(and(isPublishedPodcastEpisodeOfListedTopic, isPublishedThisWeek, pinnedOnlyFilter))
+		.where(and(isPublishedPodcastEpisodeOfListedTopic, isPublishedThisWeek, featuredOnlyFilter))
 		.orderBy(desc(podcastEpisodes.publishedAt))
 		// ponytail: limits a burst week. page on the server past it
 		.limit(NEW_PODCAST_EPISODE_LIMIT)

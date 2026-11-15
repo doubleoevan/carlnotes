@@ -132,7 +132,7 @@ the in-place section fixtures. Personal sources stay outside the fetched Source 
   reads on an interval while the app is focused and online and stops at a time limit, behind the Topic Post discussion
   poll and the film rendering poll), `topicGateCopy.ts` (the invite-only gate's words), `podcastEpisodeCopy.ts` (the
   words shown if a podcast episode fails to load or play, the lines shown while it records and while its film renders,
-  and the film section's title on the topic page and the podcast episode page), `topicPodcastEpisodeVideoDisplay.ts`
+  and the film section's title on the topic page and the podcast episode page), `topicVideoDisplay.ts`
   (what a film section shows for a podcast episode: the film player for a ready film, the rendering card while its film
   renders, or nothing, and the section a topic's page shows while its only film is rendering), and
   `voiceRecordingDecisions.ts` (what the voice recorder decides from each frame, with the `SilenceThresholdSettings`
@@ -265,9 +265,9 @@ profile and a team share, and a team page's four card sections, Featured Films r
 `components/CardsSection` renders one section of cards, paged or whole, through each app's section, grid, and page
 buttons. `lib/profileSections.ts` holds a profile's four Featured sections, Featured Films right before Featured
 Podcasts and Featured Posts last with every post of the person, the rows of its rank dialogs for topics, films,
-podcasts, and posts, whose pins have no limit, the send of their moves, and which of them the action menu offers.
-`lib/rankDialog.ts` holds a rank dialog's rows, a Topic Post as a row, the moves, and the words for the home's pins and
-a profile's, and `components/RankDialog` is the list that orders, adds, and removes pins through each app's frame, rows,
+podcasts, and posts, whose featured items have no limit, the send of their moves, and which of them the action menu offers.
+`lib/rankDialog.ts` holds a rank dialog's rows, a Topic Post as a row, the moves, and the words for the home's featured items and
+a profile's, and `components/RankDialog` is the list that orders, adds, and removes featured items through each app's frame, rows,
 and picker. `components/ProfileSections` lays out a profile's news, its four card sections, and its topics and teams
 tables with their empty and loading states, and `components/TeamSections` a team page's four card sections, its members,
 its topics, and its notes. Both take the `PageSectionsElements` of `components/pageSectionsElements.tsx`: the group
@@ -388,31 +388,28 @@ navigation destinations, grouping, selection, and the Admin permission gate, wit
 The adapters keep DOM/native icons, storage, clipboard, and desktop install URLs out of core.
 `hooks/useAccount` loads billing and activity together in an account-scoped query and retains loaded data on refresh.
 
-`stores/podcastEpisodePlayerStore`, `podcastEpisodePlayActions`, and `podcastEpisodeListenStore` own the loaded
-Podcast Episode, chapter selection, seek/rate actions, deferred-request retirement, next-episode selection, and
-personal listen save interval. `stores/podcastEpisodeSource` holds what the commands act on: which adapter owns each
-format, which load and which request is current, and how a source is loaded, released, and reloaded after an audio
-error. The player store re-exports its request and media-session functions, which both apps import from the player.
-`lib/podcastEpisodeAudio` defines the small audio/status adapter each app supplies.
-The player holds one Podcast Episode, one position, and one format. `playTopicPodcastEpisodeVideo` gives the source to
-the film, `playPodcastEpisodeAudio` gives it to the audio, each from the same second, and `playPodcastEpisode` keeps
-the loaded Podcast Episode's format and plays any other as audio.
-`components/TopicPodcastEpisodeVideoPlayer` puts the play button over the film's frame and keeps the captions and
-mute choices for the session. Its `isCard` draws each app's `Card` element around the film, the seek bar, the
-controls, and its children, which Topic Cinema and the podcast episode page pass and the Video dialog leaves out. The
-skips and the speed show before the film is loaded, and their presses go through `skipTopicPodcastEpisodeVideoBy` and
-`cycleTopicPodcastEpisodeVideoPlaybackRate`, which start a film that is not loaded.
-`stores/podcastEpisodePlayerState` keeps snapshots and subscriptions separate from playback commands. Progress ticks
-notify position readers; chapter changes also notify controls. The player store re-exports them.
-`hooks/useShownPodcastEpisode` selects the Topic's shown episode and polls a linked recording without autoplay.
-Its lifecycle tests use the web's DOM hook harness; its selection rules and player state tests run in core.
+`stores/podcastEpisodePlayerStore`, `podcastEpisodePlayActions`, and `podcastEpisodeListenStore` own the loaded Podcast
+Episode, chapter selection, seek/rate actions, deferred-request retirement, next-episode selection, and personal listen
+save interval. `stores/podcastEpisodeSource` holds what the commands act on: which adapter owns each format, which load
+and which request is current, and how a source is loaded, released, and reloaded after an audio error. The player store
+re-exports its request and media-session functions, which both apps import from the player. `lib/podcastEpisodeAudio`
+defines the small audio/status adapter each app supplies. The player holds one Podcast Episode, one position, and one
+format. `playTopicVideo` gives the source to the film, `playPodcastEpisodeAudio` gives it to the audio, each from the
+same second, and `playPodcastEpisode` keeps the loaded Podcast Episode's format and plays any other as audio.
+`components/TopicVideoPlayer` puts the play button over the film's frame and keeps the captions and mute choices for the
+session. Its `isCard` draws each app's `Card` element around the film, the seek bar, the controls, and its children,
+which the topic video section and the podcast episode page pass and the Video dialog leaves out. The skips and the speed
+show before the film is loaded, and their presses go through `skipTopicVideoBy` and `cycleTopicVideoPlaybackRate`, which
+start a film that is not loaded. `stores/podcastEpisodePlayerState` keeps snapshots and subscriptions separate from
+playback commands. Progress ticks notify position readers; chapter changes also notify controls. The player store
+re-exports them. `hooks/useShownPodcastEpisode` selects the Topic's shown episode and polls a linked recording without
+autoplay. Its lifecycle tests use the web's DOM hook harness; its selection rules and player state tests run in core.
 `components/UnpublishedPodcastEpisodeCard` draws three states in one frame: a recording podcast episode, a failed one
-with the permitted scan control, and, with `isVideoRendering`, a published podcast episode whose film is rendering.
-Each app's `ProgressLine` element draws the shimmering line after its emoji, with the words from
-`lib/podcastEpisodeCopy.ts`. `components/TopicPodcastEpisodeVideoSection` shows that card through its `RenderingCard`
-element in the film player's place while the topic's only film renders, and
-`hooks/useTopicPodcastEpisodeVideoRenderingPoll` reads the page again every 30 seconds while the app is focused and
-online, for at most four hours, so the film player shows once the film is ready.
+with the permitted scan control, and, with `isVideoRendering`, a published podcast episode whose film is rendering. Each
+app's `ProgressLine` element draws the shimmering line after its emoji, with the words from `lib/podcastEpisodeCopy.ts`.
+`components/TopicVideoSection` shows that card through its `RenderingCard` element in the film player's place while the
+topic's only film renders, and `hooks/useTopicVideoRenderingPoll` reads the page again every 30 seconds while the app is
+focused and online, for at most four hours, so the film player shows once the film is ready.
 
 
 Podcast presentation is shared as actual React composition under `components/`: `PodcastEpisodePlayerCard`,
@@ -426,7 +423,7 @@ dialog plays the film once it loads, and a Video pill beside the play pill on a 
 a film, which `lib/newsEvents`' `toNewsEventVideoButton` decides. A film card shows the film's own image from the
 summary's `videoPosterUrl`, and only the title in its title row. Its thumbnail size is a play button over the film's
 poster, which `lib/podcastEpisodePlayback`'s `toPodcastEpisodePosterUrl` returns for it and for the film player.
-`TopicPodcastEpisodeVideoInfoSection` is the film's section of a Topic's info, only for a latest Podcast Episode with a
+`TopicVideoInfoSection` is the film's section of a Topic's info, only for a latest Podcast Episode with a
 ready film: a `PodcastEpisodeRow` with that thumbnail as its `playButton`, in its play button's place. Apps inject
 controls, links, images, scroll containers, and confirmation renderers; core owns ordering, labels, formatting,
 visibility, expansion, and action selection. `lib/podcastEpisodeStories.ts` supplies fictional shared fixtures and an
@@ -568,11 +565,11 @@ fixtures both apps' stories show. `components/ProfileHeader` is the profile page
 `components/cardElements` includes the reaction count, which the topic card shows at the right of its tags' row or,
 with no tag, its byline's row, the podcast episode card at the right of its detail line, and the Topic Post card at
 the right of its date row. `TopicImageEditor` edits a third kind of image, a Topic Post's, and a fourth, a film's own
-image (`topicPodcastEpisodeVideo`), in the one layout: its `Image` element takes an `aspectRatio`, 16:9 for a film
+image (`topicVideo`), in the one layout: its `Image` element takes an `aspectRatio`, 16:9 for a film
 and 3:2 for every other image. `lib/podcastEpisodeEditor` builds the film's editable image from the podcast episode's
 page, and holds the Edit film label and who sees the option on a podcast episode page
-(`isTopicPodcastEpisodeVideoEditShown`) and on a topic page, for the topic's latest film
-(`toTopicPageEditedPodcastEpisode`). `hooks/useTopicPodcastEpisodeVideoEditableImage` reads the podcast episode's page
+(`isTopicVideoEditShown`) and on a topic page, for the topic's latest film
+(`toTopicPageEditedPodcastEpisode`). `hooks/useTopicVideoEditableImage` reads the podcast episode's page
 for the topic page's Edit film. `lib/podcastEpisodeHomeOrder` says who sees the podcast episode page's Home and
 Featured rank options for podcasts and films.
 
@@ -594,5 +591,5 @@ post, `toPrivateChatPlaceholder` in `lib/chatCopy.ts` is the question box's line
 is named, and `toPrivateChatLabel` with `toPrivateChatIdLabel` names a private chat for what it is about: the open
 post, else its Topic, else its team. `components/TopicPostTag` is the tag under such a question, linked to the post
 while it exists. `lib/topicPosts.ts` also holds `isTopicPostUrlStale`, the rule that moves a post page's url to the
-post's titled path, `toTopicPostImageReport`, what a report of a post's image names, and `isTopicPostPinnable`, the
-rule that a published post of a public topic takes a pin, which both apps' post pages read for their rank options.
+post's titled path, `toTopicPostImageReport`, what a report of a post's image names, and `isTopicPostFeaturable`, the
+rule that a published post of a public topic can be featured, which both apps' post pages read for their rank options.

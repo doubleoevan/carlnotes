@@ -53,10 +53,10 @@ export const topics = pgTable(
 		teamId: text("team_id").references(() => teams.id, { onDelete: "set null" }),
 		// free-form category labels, empty by default
 		tags: text("tags").array().notNull().default([]),
-		// an admin can pin this topic to the home page and set its order. the column kept its old name through the
+		// an admin can feature this topic on the home page and set its order. the column kept its old name through the
 		// rename to home order
 		homeOrder: integer("feature_order"),
-		// the owner can pin this topic to the top of their profile page and set its order
+		// the owner can feature this topic at the top of their profile page and set its order
 		profileOrder: integer("profile_order"),
 		// the content hash of the topic's current image, copied from its image row
 		imageHash: text("image_hash"),
@@ -81,9 +81,9 @@ export const topics = pgTable(
 		index("topics_name_lower_trgm").using("gin", sql`lower(${table.name}) gin_trgm_ops`),
 		// covers the owner and team topic lists
 		index("topics_owner_id_idx").on(table.ownerId),
-		// the few pinned topics, which the home's home topic and podcast cards and the admin console read
+		// the few featured topics, which the home's home topic and podcast cards and the admin console read
 		index("topics_feature_order_idx").on(table.homeOrder).where(sql`${table.homeOrder} is not null`),
-		// one owner's few pinned topics, which their profile page reads
+		// one owner's few featured topics, which their profile page reads
 		index("topics_owner_profile_order_idx")
 			.on(table.ownerId, table.profileOrder)
 			.where(sql`${table.profileOrder} is not null`),

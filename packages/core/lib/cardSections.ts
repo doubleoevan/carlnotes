@@ -17,7 +17,7 @@ export const PODCAST_EPISODE_CARD_SECTION = {
 }
 
 // what a section of film cards counts and keys by
-export const TOPIC_PODCAST_EPISODE_VIDEO_CARD_SECTION = { ...PODCAST_EPISODE_CARD_SECTION, noun: "film" }
+export const TOPIC_VIDEO_CARD_SECTION = { ...PODCAST_EPISODE_CARD_SECTION, noun: "film" }
 
 // what a section of Topic Post cards counts and keys by
 export const TOPIC_POST_CARD_SECTION = { noun: "post", toRowKey: (topicPost: TopicPostCard) => topicPost.id }
@@ -33,9 +33,9 @@ export const FEATURED_POSTS_TITLE = "Featured Posts"
 export const TEAM_SECTIONS = {
 	topicCards: { value: "team-topic-cards", title: FEATURED_TOPICS_TITLE, ...TOPIC_CARD_SECTION },
 	topicPodcastEpisodeVideoCards: {
-		value: "team-topic-podcast-episode-video-cards",
+		value: "team-topic-video-cards",
 		title: FEATURED_FILMS_TITLE,
-		...TOPIC_PODCAST_EPISODE_VIDEO_CARD_SECTION,
+		...TOPIC_VIDEO_CARD_SECTION,
 	},
 	podcastEpisodeCards: {
 		value: "team-podcast-episode-cards",

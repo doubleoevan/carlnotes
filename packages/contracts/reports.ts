@@ -63,7 +63,7 @@ const adminReport = z.object({
 	// the version that the url of a reported profile's or team's published avatar names, null if it has none
 	subjectAvatarVersion: z.string().nullable().default(null),
 	// the poster of a reported podcast episode's film, null for a film with no image of its own
-	topicPodcastEpisodeVideoPosterUrl: z.string().nullable().default(null),
+	topicVideoPosterUrl: z.string().nullable().default(null),
 	reason: z.string(),
 	createdAt: z.string(),
 	// the author, null for a subject with none or whose account closed, and who filed the report

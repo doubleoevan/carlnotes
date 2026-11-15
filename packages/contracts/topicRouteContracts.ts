@@ -50,7 +50,7 @@ import {
 } from "./topicImages"
 import {
 	attachmentContextPayload,
-	pinnedOrderPayload,
+	featuredOrderPayload,
 	suggestSourcesPayload,
 	updateTopicPayload,
 } from "./topicPayloads"
@@ -151,7 +151,7 @@ export const topicRouteContracts: Record<string, ApiRouteContract> = {
 		method: "PATCH",
 		path: "/api/topics/:id/profile-order",
 		params: idParam,
-		body: { json: pinnedOrderPayload },
+		body: { json: featuredOrderPayload },
 		response: okResponse,
 	},
 	"updatesClient.fetchUpdatesRecap": {

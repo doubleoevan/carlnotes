@@ -8,7 +8,7 @@ import * as sessions from "@carlnotes/db/sessions"
 import * as temporalClient from "./temporalClient"
 import { toTopicImageObjectKeys } from "./topicImages/topicImageFiles"
 import * as topicImageRenders from "./topicImages/topicImageRenders"
-import { toTopicPodcastEpisodeVideoImageObjectKeys } from "./topicPodcastEpisodeVideo/topicPodcastEpisodeVideoImage"
+import { toTopicVideoImageObjectKeys } from "./topicVideo/topicVideoImage"
 import { checkUncheckedImages } from "./uncheckedImageChecks"
 import {
 	CLEAN,
@@ -20,7 +20,7 @@ import {
 	toUncheckedAvatarRow,
 	toUncheckedImageDeletes,
 	toUncheckedTopicImageRow,
-	toUncheckedTopicPodcastEpisodeVideoImageRow,
+	toUncheckedTopicVideoImageRow,
 	UPLOADED_AT,
 } from "./uncheckedImageCheckTestFixtures"
 
@@ -169,7 +169,7 @@ test("a clean published image keeps the topic's image and drops its unchecked im
 		CLEAN,
 	)
 	const replaceTopicImageSpy = spyOn(topicImageRenders, "replaceTopicImage").mockResolvedValue(undefined)
-	const startRebuildSpy = spyOn(temporalClient, "startTopicPodcastEpisodeVideoRebuild").mockResolvedValue(undefined)
+	const startRebuildSpy = spyOn(temporalClient, "startTopicVideoRebuild").mockResolvedValue(undefined)
 	await checkUncheckedImages()
 	expect(toUncheckedImageDeletes(sentQueries)).toHaveLength(1)
 	expect(replaceTopicImageSpy).not.toHaveBeenCalled()
@@ -242,33 +242,23 @@ test("a flagged published image that was replaced since is only dropped", async 
 
 // an unchecked film image stores its file alone, so a check that still cannot run starts no rebuild
 test("an unchecked film image whose check could not run stays unchecked and starts no rebuild", async () => {
-	const { sentQueries } = stubUncheckedImageCheck(
-		{ uncheckedImageRows: [toUncheckedTopicPodcastEpisodeVideoImageRow()] },
-		FAILED,
-	)
-	const rebuildSpy = spyOn(temporalClient, "startTopicPodcastEpisodeVideoRebuild").mockResolvedValue(undefined)
+	const { sentQueries } = stubUncheckedImageCheck({ uncheckedImageRows: [toUncheckedTopicVideoImageRow()] }, FAILED)
+	const rebuildSpy = spyOn(temporalClient, "startTopicVideoRebuild").mockResolvedValue(undefined)
 	expect(await checkUncheckedImages()).toEqual({ publishedCount: 0, deletedCount: 0, isCheckUnavailable: true })
 	expect(rebuildSpy).not.toHaveBeenCalled()
-	expect(sentQueries.some(({ text }) => text.startsWith('update "topic_podcast_episode_videos"'))).toBe(false)
+	expect(sentQueries.some(({ text }) => text.startsWith('update "topic_videos"'))).toBe(false)
 	expect(toUncheckedImageDeletes(sentQueries)).toEqual([])
 })
 
 // an unchecked film image that passes becomes the film's image, which rebuilds the intro and the sign-off
 test("a clean unchecked film image becomes the film's image and starts the rebuild", async () => {
-	const { sentQueries } = stubUncheckedImageCheck(
-		{ uncheckedImageRows: [toUncheckedTopicPodcastEpisodeVideoImageRow()] },
-		CLEAN,
-	)
-	const rebuildSpy = spyOn(temporalClient, "startTopicPodcastEpisodeVideoRebuild").mockResolvedValue(undefined)
+	const { sentQueries } = stubUncheckedImageCheck({ uncheckedImageRows: [toUncheckedTopicVideoImageRow()] }, CLEAN)
+	const rebuildSpy = spyOn(temporalClient, "startTopicVideoRebuild").mockResolvedValue(undefined)
 	expect(await checkUncheckedImages()).toEqual({ publishedCount: 1, deletedCount: 0, isCheckUnavailable: false })
 
 	// the film's row names the upload, the rebuild starts for its podcast episode, and the unchecked image goes
-	const topicPodcastEpisodeVideoUpdate = sentQueries.find(({ text }) =>
-		text.startsWith('update "topic_podcast_episode_videos"'),
-	)
-	expect(topicPodcastEpisodeVideoUpdate?.values).toEqual(
-		expect.arrayContaining(["unchecked-film-hash", "uploaded", "film-1"]),
-	)
+	const topicVideoUpdate = sentQueries.find(({ text }) => text.startsWith('update "topic_videos"'))
+	expect(topicVideoUpdate?.values).toEqual(expect.arrayContaining(["unchecked-film-hash", "uploaded", "film-1"]))
 	expect(rebuildSpy).toHaveBeenCalledWith("episode-1")
 	expect(toUncheckedImageDeletes(sentQueries).map(({ values }) => values[0])).toEqual(["unchecked-film"])
 })
@@ -276,15 +266,15 @@ test("a clean unchecked film image becomes the film's image and starts the rebui
 // a rejected unchecked film image is deleted, and the film keeps its poster, intro, and sign-off
 test("a flagged unchecked film image is deleted, and the film is neither written nor rebuilt", async () => {
 	const { sentQueries, deletedObjectKeys } = stubUncheckedImageCheck(
-		{ uncheckedImageRows: [toUncheckedTopicPodcastEpisodeVideoImageRow()] },
+		{ uncheckedImageRows: [toUncheckedTopicVideoImageRow()] },
 		FLAGGED,
 	)
-	const rebuildSpy = spyOn(temporalClient, "startTopicPodcastEpisodeVideoRebuild").mockResolvedValue(undefined)
+	const rebuildSpy = spyOn(temporalClient, "startTopicVideoRebuild").mockResolvedValue(undefined)
 	expect(await checkUncheckedImages()).toEqual({ publishedCount: 0, deletedCount: 1, isCheckUnavailable: false })
 
 	// the film's row stays, no rebuild starts, and the unchecked image's two jpegs are recorded as pending, then deleted
-	const uncheckedObjectKeys = toTopicPodcastEpisodeVideoImageObjectKeys("episode-1", "unchecked-film-hash")
-	expect(sentQueries.some(({ text }) => text.startsWith('update "topic_podcast_episode_videos"'))).toBe(false)
+	const uncheckedObjectKeys = toTopicVideoImageObjectKeys("episode-1", "unchecked-film-hash")
+	expect(sentQueries.some(({ text }) => text.startsWith('update "topic_videos"'))).toBe(false)
 	expect(rebuildSpy).not.toHaveBeenCalled()
 	expect(toPendingDeletionKeys(sentQueries)).toEqual(uncheckedObjectKeys)
 	expect(deletedObjectKeys).toEqual(uncheckedObjectKeys)

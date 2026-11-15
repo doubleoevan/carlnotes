@@ -1,7 +1,7 @@
 // a topic's position in the Home topics: the admin's write, the release a delete and a visibility change share,
 // the list, and its route
 
-import { pinnedOrderPayload } from "@carlnotes/contracts/topicPayloads"
+import { featuredOrderPayload } from "@carlnotes/contracts/topicPayloads"
 import { type DbHandle, db } from "@carlnotes/db"
 import { releaseHomeOrder as releaseRowHomeOrder, releaseTopicHomeOrders, setHomeOrder } from "@carlnotes/db/homeOrder"
 import { releaseTopicPodcastEpisodeHomeOrders } from "@carlnotes/db/podcastEpisodeHomeOrder"
@@ -21,7 +21,7 @@ export type HomeOrderResult = "ranked" | "missing" | "notPublic"
 /**
  * Set a public topic's position in the Home topics. Position 0 clears it. Any other position inserts the topic
  * there and pushes whatever held it, and everything below, down one. A position past the end appends.
- * A topic that is already pinned moves: it leaves its old position, and the gap closes before it is inserted into its new position.
+ * A topic that is already featured moves: it leaves its old position, and the gap closes before it is inserted into its new position.
  * A position the topic already holds changes nothing.
  */
 async function setTopicHomeOrder(topicId: string, position: number): Promise<HomeOrderResult> {
@@ -31,7 +31,7 @@ async function setTopicHomeOrder(topicId: string, position: number): Promise<Hom
 		.from(topics)
 		.where(eq(topics.id, topicId))
 
-	// only a public topic can be pinned to the home page. the Home topics is visible to a signed-out visitor
+	// only a public topic can be featured on the home page. the Home topics is visible to a signed-out visitor
 	if (!topic) {
 		return "missing"
 	}
@@ -66,7 +66,7 @@ export async function toHomeOrderAdmin(context: Context<AppEnv>): Promise<HomeOr
 		return { response: context.json({ error: "unauthorized" }, 401) }
 	}
 
-	// only an admin pins a row to the home
+	// only an admin features a row to the home
 	const isAdmin = await isAllowed(userId, "admin:setHomeOrder")
 	return isAdmin ? { userId } : { response: context.json({ error: "forbidden" }, 403) }
 }
@@ -113,7 +113,7 @@ export async function loadHomeTopics(): Promise<{ id: string; name: string; home
 // the Home topics order route, admin only
 export const homeOrderRoute = new Hono<AppEnv>().patch(
 	"/topics/:id/home-order",
-	zValidator("json", pinnedOrderPayload),
+	zValidator("json", featuredOrderPayload),
 	async (context) => {
 		// reject a signed-out visitor, and anyone but an admin
 		const admin = await toHomeOrderAdmin(context)
@@ -130,6 +130,6 @@ export const homeOrderRoute = new Hono<AppEnv>().patch(
 		// the rejection names the rule, so the page shows why
 		return homeOrderResult === "ranked"
 			? context.json({ ok: true })
-			: context.json({ error: "only a public topic can be pinned to the home page" }, 409)
+			: context.json({ error: "only a public topic can be featured on the home page" }, 409)
 	},
 )

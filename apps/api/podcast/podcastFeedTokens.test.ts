@@ -102,7 +102,7 @@ test("the film feed lists only the podcast episodes with a ready film, and the p
 		toPodcastEpisodeRow("episode-1", 1),
 	])
 	stubConnectionPool((sentQuery) =>
-		sentQuery.text.includes('from "topic_podcast_episode_videos"') ? [["episode-2", "ready", 48_000_000]] : [],
+		sentQuery.text.includes('from "topic_videos"') ? [["episode-2", "ready", 48_000_000]] : [],
 	)
 	const listener = { userId: "listener", token: "token-1" }
 
@@ -119,7 +119,7 @@ test("a listener's podcast feed and film feed share one token, so a reset change
 	// the listener's token, and a topic with a ready film
 	spyOn(authorization, "isAllowed").mockResolvedValue(true)
 	stubConnectionPool((sentQuery) => {
-		if (sentQuery.text.includes('from "topic_podcast_episode_videos"')) {
+		if (sentQuery.text.includes('from "topic_videos"')) {
 			return [["film-1"]]
 		}
 		return sentQuery.text.startsWith("select") ? [["token-1"]] : []

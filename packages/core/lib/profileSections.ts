@@ -1,5 +1,5 @@
 // a profile page's card sections, as both apps head them, under the profile payload's field names, and the rows of
-// the rank dialogs that pin to them
+// the rank dialogs that feature items on them
 
 import {
 	sendPodcastEpisodeProfileOrder,
@@ -11,7 +11,7 @@ import { toHomePodcastEpisodeLabel } from "@carlnotes/contracts/podcast"
 import {
 	PROFILE_PODCAST_EPISODE_LIMIT,
 	PROFILE_TOPIC_LIMIT,
-	PROFILE_TOPIC_PODCAST_EPISODE_VIDEO_LIMIT,
+	PROFILE_TOPIC_VIDEO_LIMIT,
 	type ProfilePodcastEpisodeCard,
 	type ProfileResponse,
 	type ProfileTopicCard,
@@ -25,19 +25,19 @@ import {
 	FEATURED_TOPICS_TITLE,
 	PODCAST_EPISODE_CARD_SECTION,
 	TOPIC_CARD_SECTION,
-	TOPIC_PODCAST_EPISODE_VIDEO_CARD_SECTION,
 	TOPIC_POST_CARD_SECTION,
+	TOPIC_VIDEO_CARD_SECTION,
 } from "./cardSections"
-import { type PinnedOrderMove, type RankedItem, type RankedNoun, toTopicPostRankedItem } from "./rankDialog"
+import { type FeaturedOrderMove, type RankedItem, type RankedNoun, toTopicPostRankedItem } from "./rankDialog"
 
-// the person's topics, pinned first, their films, pinned first, right before their podcast episodes, pinned first,
-// and every one of their published Topic Posts, pinned first
+// the person's topics, featured first, their films, featured first, right before their podcast episodes, featured first,
+// and every one of their published Topic Posts, featured first
 export const PROFILE_SECTIONS = {
 	profileTopics: { value: "profile-topics", title: FEATURED_TOPICS_TITLE, ...TOPIC_CARD_SECTION },
 	profileTopicPodcastEpisodeVideos: {
-		value: "profile-topic-podcast-episode-videos",
+		value: "profile-topic-videos",
 		title: FEATURED_FILMS_TITLE,
-		...TOPIC_PODCAST_EPISODE_VIDEO_CARD_SECTION,
+		...TOPIC_VIDEO_CARD_SECTION,
 	},
 	profilePodcastEpisodes: {
 		value: "profile-podcast-episodes",
@@ -55,29 +55,29 @@ export const PROFILE_SECTIONS = {
 // the values of the profile's card sections, which start open
 export const PROFILE_SECTION_VALUES = Object.values(PROFILE_SECTIONS).map((profileSection) => profileSection.value)
 
-// the rows of a profile's rank dialog: the pinned ones in their order, and every one its person may pin
-type ProfileRankItems = { pinnedItems: RankedItem[]; candidateItems: RankedItem[] }
+// the rows of a profile's rank dialog: the featured ones in their order, and every one its person may feature
+type ProfileRankItems = { featuredItems: RankedItem[]; candidateItems: RankedItem[] }
 
-// the profile fields that hold the topic cards and how many of the first are pinned
+// the profile fields that hold the topic cards and how many of the first are featured
 type ProfileTopicCards = Pick<ProfileResponse, "profileTopics" | "pinnedTopicCount">
 
-// the profile fields that hold the film cards and how many of the first are pinned
-type ProfileTopicPodcastEpisodeVideoCards = Pick<
+// the profile fields that hold the film cards and how many of the first are featured
+type ProfileTopicVideoCards = Pick<
 	ProfileResponse,
 	"profileTopicPodcastEpisodeVideos" | "pinnedTopicPodcastEpisodeVideoCount"
 >
 
-// the profile fields that hold the podcast episode cards and how many of the first are pinned
+// the profile fields that hold the podcast episode cards and how many of the first are featured
 type ProfilePodcastEpisodeCards = Pick<ProfileResponse, "profilePodcastEpisodes" | "pinnedPodcastEpisodeCount">
 
 /**
- * Returns the rows of the rank dialog for a profile's topics: the pinned topics, which lead the cards, and every
- * public topic the person owns, which is what they may pin.
+ * Returns the rows of the rank dialog for a profile's topics: the featured topics, which lead the cards, and every
+ * public topic the person owns, which is what they may feature.
  */
 export function toProfileTopicRankItems({ profileTopics, pinnedTopicCount }: ProfileTopicCards): ProfileRankItems {
 	const rankedItems = profileTopics.map((profileTopic) => ({ id: profileTopic.id, label: profileTopic.name }))
 	return {
-		pinnedItems: rankedItems.slice(0, pinnedTopicCount),
+		featuredItems: rankedItems.slice(0, pinnedTopicCount),
 		candidateItems: rankedItems.filter((_rankedItem, index) => {
 			const profileTopic = profileTopics[index]
 			return profileTopic?.isPublic && profileTopic.isOwned
@@ -86,7 +86,7 @@ export function toProfileTopicRankItems({ profileTopics, pinnedTopicCount }: Pro
 }
 
 /**
- * Returns the rows of the rank dialog for a profile's podcast episodes: the pinned ones, which lead the cards, and
+ * Returns the rows of the rank dialog for a profile's podcast episodes: the featured ones, which lead the cards, and
  * every one of a public topic the person owns, each named by its title and its topic.
  */
 export function toProfilePodcastEpisodeRankItems({
@@ -96,17 +96,17 @@ export function toProfilePodcastEpisodeRankItems({
 	return toPodcastEpisodeCardRankItems(profilePodcastEpisodes, pinnedPodcastEpisodeCount)
 }
 
-// the rows of the rank dialog for podcast episode cards or film cards, whose first cards are the pinned ones
+// the rows of the rank dialog for podcast episode cards or film cards, whose first cards are the featured ones
 function toPodcastEpisodeCardRankItems(
 	profilePodcastEpisodeCards: ProfilePodcastEpisodeCard[],
-	pinnedCount: number,
+	featuredCount: number,
 ): ProfileRankItems {
 	const rankedItems = profilePodcastEpisodeCards.map(({ podcastEpisode, topic }) => ({
 		id: podcastEpisode.id,
 		label: toHomePodcastEpisodeLabel({ title: podcastEpisode.title ?? topic.name, topicName: topic.name }),
 	}))
 	return {
-		pinnedItems: rankedItems.slice(0, pinnedCount),
+		featuredItems: rankedItems.slice(0, featuredCount),
 		candidateItems: rankedItems.filter((_rankedItem, index) => {
 			const profilePodcastEpisodeCard = profilePodcastEpisodeCards[index]
 			return profilePodcastEpisodeCard?.isTopicPublic && profilePodcastEpisodeCard.isTopicOwned
@@ -114,11 +114,11 @@ function toPodcastEpisodeCardRankItems(
 	}
 }
 
-// the profile fields that hold every Topic Post card and how many of the first are pinned
+// the profile fields that hold every Topic Post card and how many of the first are featured
 type ProfileTopicPostCards = Pick<ProfileResponse, "profileTopicPosts" | "pinnedTopicPostCount">
 
 /**
- * Returns the rows of the rank dialog for a profile's Topic Posts: the pinned ones, which lead the cards, and every
+ * Returns the rows of the rank dialog for a profile's Topic Posts: the featured ones, which lead the cards, and every
  * published one of a public topic, each named by its title and its topic.
  */
 export function toProfileTopicPostRankItems({
@@ -126,7 +126,7 @@ export function toProfileTopicPostRankItems({
 	pinnedTopicPostCount,
 }: ProfileTopicPostCards): ProfileRankItems {
 	return {
-		pinnedItems: profileTopicPosts.slice(0, pinnedTopicPostCount).map(toTopicPostRankedItem),
+		featuredItems: profileTopicPosts.slice(0, pinnedTopicPostCount).map(toTopicPostRankedItem),
 		candidateItems: profileTopicPosts.filter((topicPost) => topicPost.isTopicPublic).map(toTopicPostRankedItem),
 	}
 }
@@ -145,19 +145,16 @@ const PROFILE_ORDER_SENDS: Record<RankedNoun, (id: string, position: number) => 
  */
 export async function sendProfileOrderMoves(
 	rankedNoun: RankedNoun,
-	pinnedOrderMoves: PinnedOrderMove[],
+	featuredOrderMoves: FeaturedOrderMove[],
 ): Promise<void> {
 	const sendProfileOrder = PROFILE_ORDER_SENDS[rankedNoun]
-	for (const pinnedOrderMove of pinnedOrderMoves) {
-		await sendProfileOrder(pinnedOrderMove.id, pinnedOrderMove.position)
+	for (const featuredOrderMove of featuredOrderMoves) {
+		await sendProfileOrder(featuredOrderMove.id, featuredOrderMove.position)
 	}
 }
 
 // the profile fields that every rank dialog's rows come from
-type ProfileRankCards = ProfileTopicCards &
-	ProfileTopicPodcastEpisodeVideoCards &
-	ProfilePodcastEpisodeCards &
-	ProfileTopicPostCards
+type ProfileRankCards = ProfileTopicCards & ProfileTopicVideoCards & ProfilePodcastEpisodeCards & ProfileTopicPostCards
 
 /**
  * Returns the rows and the limit of a profile's rank dialog for the topics, the films, the podcast episodes, or the
@@ -175,21 +172,21 @@ export function toProfileRankDialogItems(
 		const { profileTopicPodcastEpisodeVideos, pinnedTopicPodcastEpisodeVideoCount } = profile
 		return {
 			...toPodcastEpisodeCardRankItems(profileTopicPodcastEpisodeVideos, pinnedTopicPodcastEpisodeVideoCount),
-			limit: PROFILE_TOPIC_PODCAST_EPISODE_VIDEO_LIMIT,
+			limit: PROFILE_TOPIC_VIDEO_LIMIT,
 		}
 	}
 
-	// the podcast episodes, or the Topic Posts, which a person pins without a limit
+	// the podcast episodes, or the Topic Posts, which a person features without a limit
 	return rankedNoun === "podcasts"
 		? { ...toProfilePodcastEpisodeRankItems(profile), limit: PROFILE_PODCAST_EPISODE_LIMIT }
 		: toProfileTopicPostRankItems(profile)
 }
 
-// what a profile's action menu offers its person to pin, in the card sections' order
+// what a profile's action menu offers its person to feature, in the card sections' order
 const PROFILE_RANKED_NOUNS: RankedNoun[] = ["topics", "films", "podcasts", "posts"]
 
 /**
- * Returns what a profile's action menu offers to pin: each kind for the person on their own profile, in the card
+ * Returns what a profile's action menu offers to feature: each kind for the person on their own profile, in the card
  * sections' order, and none for anyone else.
  */
 export function toProfileRankedNouns(isOwnProfile: boolean): RankedNoun[] {

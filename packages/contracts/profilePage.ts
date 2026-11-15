@@ -6,10 +6,10 @@ import { topic } from "./profiles"
 import { teamSummary } from "./teams"
 import { topicPostCard } from "./topicPosts"
 
-// how many topics, films, and podcast episodes a person pins to the top of their profile. their pinned Topic Posts
+// how many topics, films, and podcast episodes a person features at the top of their profile. their featured Topic Posts
 // have no limit
 export const PROFILE_TOPIC_LIMIT = 12
-export const PROFILE_TOPIC_PODCAST_EPISODE_VIDEO_LIMIT = 12
+export const PROFILE_TOPIC_VIDEO_LIMIT = 12
 export const PROFILE_PODCAST_EPISODE_LIMIT = 12
 
 // a topic's card on a profile, with whether the topic is public and whether the person owns it
@@ -22,7 +22,7 @@ const profilePodcastEpisodeCard = podcastEpisodeCard.extend({ isTopicPublic: z.b
 
 export type ProfilePodcastEpisodeCard = z.infer<typeof profilePodcastEpisodeCard>
 
-// a Topic Post's card on a profile, with whether its topic is public, which decides whether its author may pin it
+// a Topic Post's card on a profile, with whether its topic is public, which decides whether its author may feature it
 const profileTopicPostCard = topicPostCard.extend({ isTopicPublic: z.boolean() })
 
 export type ProfileTopicPostCard = z.infer<typeof profileTopicPostCard>
@@ -47,20 +47,22 @@ export const profileResponse = z.object({
 	ownTopics: z.array(ownerTopic).nullable().optional(),
 	// the teams this user belongs to, as the teams summary rows them. their own profile lists them all
 	teams: z.array(teamSummary),
-	// the person's topics the user may open, as cards: the pinned ones in their order, then the rest in the home's
-	// trending order, with how many of the first are pinned
+	// the person's topics the user may open, as cards: the featured ones in their order, then the rest in the home's
+	// trending order, with how many of the first are featured. each count below keeps the pinned name, because the frozen
+	// api contract reads it
 	profileTopics: z.array(profileTopicCard),
 	pinnedTopicCount: z.number().int().nonnegative(),
-	// the published podcast episodes of those topics that have a ready film, as film cards: the pinned films in their
-	// order, then the most listened one of each other topic, with how many of the first are pinned
+	// the published podcast episodes of those topics that have a ready film, as film cards: the featured films in their
+	// order, then the most listened one of each other topic, with how many of the first are featured. the field's name
+	// must not change, because the frozen api contract reads it
 	profileTopicPodcastEpisodeVideos: z.array(profilePodcastEpisodeCard),
 	pinnedTopicPodcastEpisodeVideoCount: z.number().int().nonnegative(),
-	// the published podcast episodes of those topics, as cards: the pinned ones in their order, then the most listened
-	// one of each other topic, with how many of the first are pinned
+	// the published podcast episodes of those topics, as cards: the featured ones in their order, then the most listened
+	// one of each other topic, with how many of the first are featured
 	profilePodcastEpisodes: z.array(profilePodcastEpisodeCard),
 	pinnedPodcastEpisodeCount: z.number().int().nonnegative(),
-	// every published Topic Post of the person that the user may read, as cards: the pinned ones in their order, then
-	// the rest newest first, with how many of the first are pinned. the person reads every one, and anyone else the
+	// every published Topic Post of the person that the user may read, as cards: the featured ones in their order, then
+	// the rest newest first, with how many of the first are featured. the person reads every one, and anyone else the
 	// posts of public topics alone
 	profileTopicPosts: z.array(profileTopicPostCard),
 	pinnedTopicPostCount: z.number().int().nonnegative(),

@@ -2,8 +2,8 @@
 // or the play button over the film's poster in a topic's info, and the Video dialog its press opens. a film card's
 // press plays the film
 import type { PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
-import { TOPIC_PODCAST_EPISODE_VIDEO_NAME } from "@carlnotes/contracts/podcastEpisodes"
-import type { FilmVisitEvents, TopicPodcastEpisodeVideoDialogSurface } from "@carlnotes/contracts/visitAnalytics"
+import { TOPIC_VIDEO_NAME } from "@carlnotes/contracts/podcastEpisodes"
+import type { FilmVisitEvents, TopicVideoDialogSurface } from "@carlnotes/contracts/visitAnalytics"
 import { type ComponentType, useState } from "react"
 
 // the button's sizes: a film card's play button centered over the card's image, a pill beside a row's play pill, or a
@@ -32,7 +32,7 @@ export type PodcastEpisodeVideoButtonElements = {
 export type PodcastEpisodeVideoButtonProps = {
 	podcastEpisode: PodcastEpisodeSummary
 	label: "Video" | "Play film"
-	surface: TopicPodcastEpisodeVideoDialogSurface
+	surface: TopicVideoDialogSurface
 	size?: PodcastEpisodeVideoButtonSize
 	// the film's poster, which only the thumbnail size draws
 	posterUrl?: string | null
@@ -61,7 +61,7 @@ export function PodcastEpisodeVideoButton({
 			size={size}
 			posterUrl={posterUrl}
 			podcastEpisode={podcastEpisode}
-			dialogTitle={podcastEpisode.title ?? TOPIC_PODCAST_EPISODE_VIDEO_NAME}
+			dialogTitle={podcastEpisode.title ?? TOPIC_VIDEO_NAME}
 			shouldPlayOnLoad={size === "card"}
 			isDialogOpen={isDialogOpen}
 			onPress={() => {

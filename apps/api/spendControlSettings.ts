@@ -80,8 +80,8 @@ export async function loadAdminDailySpendCutoffs(now = new Date()): Promise<Admi
 		),
 		isUnverifiedFirstScanLimitOn: settings.isUnverifiedFirstScanLimitOn,
 		isPodcastEpisodeRecordingPaused: settings.isPodcastEpisodeRecordingPaused,
-		isTopicPodcastEpisodeVideoRenderingPaused: settings.isTopicPodcastEpisodeVideoRenderingPaused,
-		isHomePinnedOnly: settings.isHomePinnedOnly,
+		isTopicVideoRenderingPaused: settings.isTopicVideoRenderingPaused,
+		isHomeFeaturedOnly: settings.isHomeFeaturedOnly,
 		updatedAt: storedRow?.updatedAt.toISOString() ?? null,
 		updatedByUsername: storedRow?.updatedByUsername ?? null,
 	}
@@ -102,8 +102,8 @@ async function loadStoredSpendControlRow(): Promise<StoredSpendControlRow | unde
 			isUnverifiedFirstScanLimitOn: spendControlSettings.isUnverifiedFirstScanLimitOn,
 			generatedChapterImageLimit: spendControlSettings.generatedChapterImageLimit,
 			isPodcastEpisodeRecordingPaused: spendControlSettings.isPodcastEpisodeRecordingPaused,
-			isTopicPodcastEpisodeVideoRenderingPaused: spendControlSettings.isTopicPodcastEpisodeVideoRenderingPaused,
-			isHomePinnedOnly: spendControlSettings.isHomePinnedOnly,
+			isTopicVideoRenderingPaused: spendControlSettings.isTopicVideoRenderingPaused,
+			isHomeFeaturedOnly: spendControlSettings.isHomeFeaturedOnly,
 			updatedAt: spendControlSettings.updatedAt,
 			updatedByUsername: users.username,
 		})
@@ -139,8 +139,8 @@ export async function saveSpendControlSettings({
 		isUnverifiedFirstScanLimitOn: payload.isUnverifiedFirstScanLimitOn,
 		generatedChapterImageLimit: payload.generatedChapterImageLimit,
 		isPodcastEpisodeRecordingPaused: payload.isPodcastEpisodeRecordingPaused,
-		isTopicPodcastEpisodeVideoRenderingPaused: payload.isTopicPodcastEpisodeVideoRenderingPaused,
-		isHomePinnedOnly: payload.isHomePinnedOnly,
+		isTopicVideoRenderingPaused: payload.isTopicVideoRenderingPaused,
+		isHomeFeaturedOnly: payload.isHomeFeaturedOnly,
 		updatedAt: new Date(),
 		updatedByUserId: adminUserId,
 	}

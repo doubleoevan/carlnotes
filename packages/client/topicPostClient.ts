@@ -1,5 +1,5 @@
 // the api client for Topic Posts: one post's read, a draft's create and saves, the publish, the delete, the image's
-// regenerate and upload, a body image's upload, and a post's place among its author's profile pins and the home's pins. a Topic's posts
+// regenerate and upload, a body image's upload, and a post's place among its author's featured profile items and the home's featured items. a Topic's posts
 // come with its page
 import { regenerateTopicImageResponse, uploadTopicImageResponse } from "@carlnotes/contracts/topicImages"
 import {
@@ -98,7 +98,7 @@ export async function deleteTopicPost(topicPostId: string): Promise<boolean> {
 }
 
 /**
- * Sets a Topic Post's position among the Topic Posts its author pinned to their profile. Position zero clears it.
+ * Sets a Topic Post's position among the Topic Posts its author featured on their profile. Position zero clears it.
  * Throws an error on a rejected write.
  */
 export async function sendTopicPostProfileOrder(topicPostId: string, position: number): Promise<void> {
@@ -126,7 +126,7 @@ export async function sendTopicPostHomeOrder(topicPostId: string, position: numb
 }
 
 /**
- * Fetches the Topic Posts an admin orders on the home: the pinned ones in their order, and the ones a pin may name.
+ * Fetches the Topic Posts an admin orders on the home: the featured ones in their order, and the ones an admin may feature.
  * Throws an error on a failed read.
  */
 export async function fetchHomeTopicPosts(): Promise<HomeTopicPostsResponse> {

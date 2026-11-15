@@ -8,8 +8,8 @@ import * as sessions from "@carlnotes/db/sessions"
 import * as store from "@carlnotes/db/store"
 import * as podcastEpisodeImageRenders from "@carlnotes/pipeline/podcast/podcastEpisodeImageRenders"
 import * as topicImageRenders from "@carlnotes/pipeline/topicImages/topicImageRenders"
-import * as topicPodcastEpisodeVideoImage from "@carlnotes/pipeline/topicPodcastEpisodeVideo/topicPodcastEpisodeVideoImage"
 import * as topicPostImageRenders from "@carlnotes/pipeline/topicPosts/topicPostImageRenders"
+import * as topicVideoImage from "@carlnotes/pipeline/topicVideo/topicVideoImage"
 import * as edgePurge from "@carlnotes/server/edgePurge"
 import {
 	expectReportClosed,
@@ -44,10 +44,10 @@ function spyAvatarResetSideEffects(): { purgeSpy: ReturnType<typeof spyOn>; dele
 }
 
 // spy the render's start and the two upload removals, with the film's id if the film's image was an upload
-function spyPodcastEpisodeImageRegeneration(removedTopicPodcastEpisodeVideoId: string | null): {
+function spyPodcastEpisodeImageRegeneration(removedTopicVideoId: string | null): {
 	startRenderSpy: ReturnType<typeof spyOn>
 	removePodcastEpisodeImageUploadSpy: ReturnType<typeof spyOn>
-	removeTopicPodcastEpisodeVideoImageUploadSpy: ReturnType<typeof spyOn>
+	removeTopicVideoImageUploadSpy: ReturnType<typeof spyOn>
 } {
 	const startRenderSpy = spyOn(topicImageRenders, "startTopicImageRender").mockResolvedValue("render-1")
 	const removePodcastEpisodeImageUploadSpy = spyOn(
@@ -56,11 +56,10 @@ function spyPodcastEpisodeImageRegeneration(removedTopicPodcastEpisodeVideoId: s
 	).mockResolvedValue("topic-1")
 
 	// the film's removal returns the film whose upload it removed, or null for a film with none
-	const removeTopicPodcastEpisodeVideoImageUploadSpy = spyOn(
-		topicPodcastEpisodeVideoImage,
-		"removeTopicPodcastEpisodeVideoImageUpload",
-	).mockResolvedValue(removedTopicPodcastEpisodeVideoId)
-	return { startRenderSpy, removePodcastEpisodeImageUploadSpy, removeTopicPodcastEpisodeVideoImageUploadSpy }
+	const removeTopicVideoImageUploadSpy = spyOn(topicVideoImage, "removeTopicVideoImageUpload").mockResolvedValue(
+		removedTopicVideoId,
+	)
+	return { startRenderSpy, removePodcastEpisodeImageUploadSpy, removeTopicVideoImageUploadSpy }
 }
 
 // Remove deletes the comment by its note and id with no author clause, then closes the report
@@ -246,7 +245,7 @@ test("regenerating a reported podcast episode's image renders as the admin, with
 // the same Regenerate draws the film's image again too, if the film's image was an upload
 test("regenerating a reported podcast episode draws its film's uploaded image again", async () => {
 	// the open report of a podcast episode whose film has an uploaded image, and the podcast episode's topic
-	const { startRenderSpy, removeTopicPodcastEpisodeVideoImageUploadSpy } = spyPodcastEpisodeImageRegeneration("video-1")
+	const { startRenderSpy, removeTopicVideoImageUploadSpy } = spyPodcastEpisodeImageRegeneration("video-1")
 	const sentQueries = stubConnectionPool(({ text }) => {
 		if (text.includes('from "reports"')) {
 			return [["report-1", "podcastEpisode", "podcast-episode-1", "owner-1", "Agents that read the docs"]]
@@ -258,12 +257,12 @@ test("regenerating a reported podcast episode draws its film's uploaded image ag
 	await resolveOpenReport("removed")
 
 	// the film's upload is dropped, and a second render names the film and bills the platform's budget
-	expect(removeTopicPodcastEpisodeVideoImageUploadSpy).toHaveBeenCalledWith("podcast-episode-1")
+	expect(removeTopicVideoImageUploadSpy).toHaveBeenCalledWith("podcast-episode-1")
 	expect(startRenderSpy).toHaveBeenCalledTimes(2)
 	expect(startRenderSpy).toHaveBeenCalledWith(
 		expect.objectContaining({
 			topicId: "topic-1",
-			topicPodcastEpisodeVideoId: "video-1",
+			topicVideoId: "video-1",
 			userId: null,
 			kind: "admin",
 		}),
@@ -274,7 +273,7 @@ test("regenerating a reported podcast episode draws its film's uploaded image ag
 // a podcast episode removed after its report has no image to draw
 test("regenerating the image of a removed podcast episode renders nothing, and still closes the report", async () => {
 	// the open report, and no podcast episode that is not removed
-	const { startRenderSpy, removePodcastEpisodeImageUploadSpy, removeTopicPodcastEpisodeVideoImageUploadSpy } =
+	const { startRenderSpy, removePodcastEpisodeImageUploadSpy, removeTopicVideoImageUploadSpy } =
 		spyPodcastEpisodeImageRegeneration("video-1")
 	const sentQueries = stubConnectionPool(({ text }) =>
 		text.includes('from "reports"')
@@ -291,7 +290,7 @@ test("regenerating the image of a removed podcast episode renders nothing, and s
 
 	// no upload is dropped and no render starts, and the report closes as removed
 	expect(removePodcastEpisodeImageUploadSpy).not.toHaveBeenCalled()
-	expect(removeTopicPodcastEpisodeVideoImageUploadSpy).not.toHaveBeenCalled()
+	expect(removeTopicVideoImageUploadSpy).not.toHaveBeenCalled()
 	expect(startRenderSpy).not.toHaveBeenCalled()
 	expectReportClosed(sentQueries, "removed")
 })
@@ -306,7 +305,7 @@ test.each([
 	const replaceAvatarSpy = spyOn(avatars, "replaceAvatar").mockResolvedValue()
 	const replaceTeamAvatarSpy = spyOn(avatars, "replaceTeamAvatar").mockResolvedValue()
 	const { purgeSpy } = spyAvatarResetSideEffects()
-	const { startRenderSpy, removePodcastEpisodeImageUploadSpy, removeTopicPodcastEpisodeVideoImageUploadSpy } =
+	const { startRenderSpy, removePodcastEpisodeImageUploadSpy, removeTopicVideoImageUploadSpy } =
 		spyPodcastEpisodeImageRegeneration("video-1")
 
 	// the open report of the subject, with its author if it has one, and a podcast episode that is not removed
@@ -327,7 +326,7 @@ test.each([
 	expect(replaceTeamAvatarSpy).not.toHaveBeenCalled()
 	expect(purgeSpy).not.toHaveBeenCalled()
 	expect(removePodcastEpisodeImageUploadSpy).not.toHaveBeenCalled()
-	expect(removeTopicPodcastEpisodeVideoImageUploadSpy).not.toHaveBeenCalled()
+	expect(removeTopicVideoImageUploadSpy).not.toHaveBeenCalled()
 	expect(startRenderSpy).not.toHaveBeenCalled()
 })
 

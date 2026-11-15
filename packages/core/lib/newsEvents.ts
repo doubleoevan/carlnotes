@@ -3,11 +3,11 @@
 import type { NewsEvent, NewsPlace } from "@carlnotes/contracts/news"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import { toCountLabel } from "@carlnotes/contracts/text"
-import type { TopicPodcastEpisodeVideoDialogSurface } from "@carlnotes/contracts/visitAnalytics"
+import type { TopicVideoDialogSurface } from "@carlnotes/contracts/visitAnalytics"
 import type { PodcastEpisodeVideoButtonProps } from "../components/PodcastEpisodeVideoButton"
 import { toTimeAgoLabel } from "./chatMessages"
 import { CARL_NAME } from "./socialLabels"
-import { toPodcastEpisodeVideoPill } from "./topicPodcastEpisodeVideoDisplay"
+import { toPodcastEpisodeVideoPill } from "./topicVideoDisplay"
 
 /**
  * Returns a News Event's line. The reactions on the reader's own Comment read as theirs.
@@ -84,7 +84,7 @@ export function toNewsEventPodcastEpisode(
 }
 
 // the section that a row's Video button reports, by where the news shows
-const NEWS_VIDEO_SURFACES: Record<NewsPlace, TopicPodcastEpisodeVideoDialogSurface> = {
+const NEWS_VIDEO_SURFACES: Record<NewsPlace, TopicVideoDialogSurface> = {
 	home: "home-news",
 	profile: "profile-news",
 }

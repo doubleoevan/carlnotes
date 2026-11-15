@@ -4,7 +4,7 @@ import { toDiscussionTopicPostId } from "@carlnotes/contracts/topicPosts"
 import type {
 	PodcastEpisodeAudioAdapter,
 	PodcastEpisodeAudioEvent,
-	TopicPodcastEpisodeVideoAdapter,
+	TopicVideoAdapter,
 } from "../lib/podcastEpisodeAudio"
 import { PODCAST_EPISODE_PLAY_FAILED_TEXT } from "../lib/podcastEpisodeCopy"
 import { toChapterIndexAt, toNextPlaybackRate, toPodcastEpisodeSeekSeconds } from "../lib/podcastEpisodePlayback"
@@ -31,11 +31,11 @@ import {
 	resumePodcastEpisodeSource,
 	retirePodcastEpisodeRequests,
 	setPodcastEpisodeAudioAdapter,
-	setTopicPodcastEpisodeVideoAdapter,
+	setTopicVideoAdapter,
 	toPodcastEpisodeAudioAdapter,
 	toPodcastEpisodeSourceAdapter,
 	toPodcastEpisodeSourceUrl,
-	toTopicPodcastEpisodeVideoAdapter,
+	toTopicVideoAdapter,
 } from "./podcastEpisodeSource"
 
 // the state subscriptions and the source bookkeeping an app reaches through the player
@@ -75,15 +75,15 @@ export function registerPodcastEpisodeAudioAdapter(adapter: PodcastEpisodeAudioA
 /**
  * Registers a film player as the video adapter and returns its cleanup, which returns a playing film to audio.
  */
-export function registerTopicPodcastEpisodeVideoAdapter(adapter: TopicPodcastEpisodeVideoAdapter): () => void {
+export function registerTopicVideoAdapter(adapter: TopicVideoAdapter): () => void {
 	// a film player that replaces another starts from audio
 	returnToPodcastEpisodeAudio()
-	setTopicPodcastEpisodeVideoAdapter(adapter)
+	setTopicVideoAdapter(adapter)
 	// return a cleanup that leaves the film if this film player is still the registered one
 	return () => {
-		if (toTopicPodcastEpisodeVideoAdapter() === adapter) {
+		if (toTopicVideoAdapter() === adapter) {
 			returnToPodcastEpisodeAudio()
-			setTopicPodcastEpisodeVideoAdapter(null)
+			setTopicVideoAdapter(null)
 		}
 	}
 }
@@ -91,11 +91,8 @@ export function registerTopicPodcastEpisodeVideoAdapter(adapter: TopicPodcastEpi
 /**
  * Plays a podcast episode's film from an explicit position, or from where its audio stands or its saved progress.
  */
-export async function playTopicPodcastEpisodeVideo(
-	podcastEpisode: PodcastEpisode,
-	startSeconds?: number,
-): Promise<boolean> {
-	if (!toTopicPodcastEpisodeVideoAdapter() || !podcastEpisode.video) {
+export async function playTopicVideo(podcastEpisode: PodcastEpisode, startSeconds?: number): Promise<boolean> {
+	if (!toTopicVideoAdapter() || !podcastEpisode.video) {
 		return false
 	}
 	// stop the audio before the film plays
@@ -106,24 +103,24 @@ export async function playTopicPodcastEpisodeVideo(
 /**
  * Skips the loaded film, or starts a podcast episode's film a skip away from the second it would start from.
  */
-export function skipTopicPodcastEpisodeVideoBy(podcastEpisode: PodcastEpisode, skipSeconds: number): void {
+export function skipTopicVideoBy(podcastEpisode: PodcastEpisode, skipSeconds: number): void {
 	// skip the loaded film where it stands
-	if (isTopicPodcastEpisodeVideoLoaded(podcastEpisode)) {
+	if (isTopicVideoLoaded(podcastEpisode)) {
 		skipPlaybackBy(skipSeconds)
 		return
 	}
 	// start any other film, with the audio stopped, a skip away from its start
-	void playTopicPodcastEpisodeVideo(podcastEpisode, toPodcastEpisodeStartSeconds(podcastEpisode) + skipSeconds)
+	void playTopicVideo(podcastEpisode, toPodcastEpisodeStartSeconds(podcastEpisode) + skipSeconds)
 }
 
 /**
  * Steps the playback rate, and starts a podcast episode's film if it is not the loaded one.
  */
-export function cycleTopicPodcastEpisodeVideoPlaybackRate(podcastEpisode: PodcastEpisode): void {
+export function cycleTopicVideoPlaybackRate(podcastEpisode: PodcastEpisode): void {
 	// step the rate first, so a film that starts loads at the new rate
 	cyclePlaybackRate()
-	if (!isTopicPodcastEpisodeVideoLoaded(podcastEpisode)) {
-		void playTopicPodcastEpisodeVideo(podcastEpisode)
+	if (!isTopicVideoLoaded(podcastEpisode)) {
+		void playTopicVideo(podcastEpisode)
 	}
 }
 
@@ -381,7 +378,7 @@ export function reportPodcastEpisodeAudioEvent(event: PodcastEpisodeAudioEvent):
 }
 
 // whether a podcast episode is the loaded one, in its film format
-function isTopicPodcastEpisodeVideoLoaded(podcastEpisode: PodcastEpisode): boolean {
+function isTopicVideoLoaded(podcastEpisode: PodcastEpisode): boolean {
 	const { podcastEpisode: loadedPodcastEpisode, format } = toPodcastEpisodePlayerState()
 	return loadedPodcastEpisode?.id === podcastEpisode.id && format === "video"
 }
@@ -422,7 +419,7 @@ async function loadPodcastEpisode({
 }: {
 	podcastEpisode: PodcastEpisode
 	startSeconds: number | undefined
-	adapter: TopicPodcastEpisodeVideoAdapter
+	adapter: TopicVideoAdapter
 }): Promise<void> {
 	// checkpoint the old episode, and count the new one's playback start once
 	savePodcastEpisodeProgress()
@@ -444,7 +441,7 @@ async function reloadPodcastEpisodeFormat({
 }: {
 	loadedPodcastEpisode: PodcastEpisode
 	startSeconds: number | undefined
-	adapter: TopicPodcastEpisodeVideoAdapter
+	adapter: TopicVideoAdapter
 }): Promise<void> {
 	// start a completed podcast episode over
 	if (loadedPodcastEpisode.isCompleted) {

@@ -3,15 +3,15 @@
 import { expect, test } from "bun:test"
 import { toPodcastEpisodeFixture, toTopicPodcastFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import { toTestTopicResponse } from "@carlnotes/contracts/topicFeedTestFixtures"
-import { toPodcastEpisodeImageUrls, toTopicPodcastEpisodeVideoImageUrls } from "@carlnotes/contracts/topicImages"
+import { toPodcastEpisodeImageUrls, toTopicVideoImageUrls } from "@carlnotes/contracts/topicImages"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import {
-	EDIT_TOPIC_PODCAST_EPISODE_VIDEO_LABEL,
-	isTopicPodcastEpisodeVideoEditShown,
+	EDIT_TOPIC_VIDEO_LABEL,
+	isTopicVideoEditShown,
 	type PodcastEpisodeEditorPage,
 	toPodcastEpisodeEditableImage,
 	toTopicPageEditedPodcastEpisode,
-	toTopicPodcastEpisodeVideoEditableImage,
+	toTopicVideoEditableImage,
 } from "./podcastEpisodeEditor"
 
 // a film with its own image, and a podcast episode with that film and its own image
@@ -30,24 +30,18 @@ function toFilmTopic(canEdit: boolean): TopicResponse {
 }
 
 test("the option and the dialog read Edit film", () => {
-	expect(EDIT_TOPIC_PODCAST_EPISODE_VIDEO_LABEL).toBe("Edit film")
+	expect(EDIT_TOPIC_VIDEO_LABEL).toBe("Edit film")
 })
 
 test("Edit film shows for a user who may edit a podcast episode with a ready film", () => {
-	expect(
-		isTopicPodcastEpisodeVideoEditShown({ canEditPodcastEpisode: true, podcastEpisode: FILM_PODCAST_EPISODE }),
-	).toBe(true)
+	expect(isTopicVideoEditShown({ canEditPodcastEpisode: true, podcastEpisode: FILM_PODCAST_EPISODE })).toBe(true)
 })
 
 test("Edit film hides for a user who may not edit, and for a podcast episode with no ready film", () => {
 	const audioOnlyPodcastEpisode = toPodcastEpisodeFixture({ video: null })
-	expect(
-		isTopicPodcastEpisodeVideoEditShown({ canEditPodcastEpisode: false, podcastEpisode: FILM_PODCAST_EPISODE }),
-	).toBe(false)
-	expect(
-		isTopicPodcastEpisodeVideoEditShown({ canEditPodcastEpisode: true, podcastEpisode: audioOnlyPodcastEpisode }),
-	).toBe(false)
-	expect(isTopicPodcastEpisodeVideoEditShown({ canEditPodcastEpisode: true, podcastEpisode: null })).toBe(false)
+	expect(isTopicVideoEditShown({ canEditPodcastEpisode: false, podcastEpisode: FILM_PODCAST_EPISODE })).toBe(false)
+	expect(isTopicVideoEditShown({ canEditPodcastEpisode: true, podcastEpisode: audioOnlyPodcastEpisode })).toBe(false)
+	expect(isTopicVideoEditShown({ canEditPodcastEpisode: true, podcastEpisode: null })).toBe(false)
 })
 
 test("a topic page's Edit film edits the topic's latest film, for the topic's editor alone", () => {
@@ -70,26 +64,24 @@ function toEditorPage(podcastEpisode: PodcastEpisodeEditorPage["podcastEpisode"]
 }
 
 test("the film's image block opens with the film's own image and its image prompt", () => {
-	expect(toTopicPodcastEpisodeVideoEditableImage(toEditorPage(FILM_PODCAST_EPISODE))).toMatchObject({
-		kind: "topicPodcastEpisodeVideo",
+	expect(toTopicVideoEditableImage(toEditorPage(FILM_PODCAST_EPISODE))).toMatchObject({
+		kind: "topicVideo",
 		id: FILM_PODCAST_EPISODE.id,
-		image: toTopicPodcastEpisodeVideoImageUrls(POSTER_URL),
+		image: toTopicVideoImageUrls(POSTER_URL),
 		imagePrompt: "a film set at dawn",
 	})
 })
 
 test("a film with no image of its own opens with the podcast episode's image", () => {
 	const podcastEpisode = { ...FILM_PODCAST_EPISODE, video: { ...FILM, posterUrl: null } }
-	expect(toTopicPodcastEpisodeVideoEditableImage(toEditorPage(podcastEpisode)).image).toEqual(PODCAST_EPISODE_IMAGE)
+	expect(toTopicVideoEditableImage(toEditorPage(podcastEpisode)).image).toEqual(PODCAST_EPISODE_IMAGE)
 })
 
 test("each image block reads whether its own image is unchecked, and not the other's", () => {
-	const uncheckedTopicPodcastEpisodeVideoImagePage = {
+	const uncheckedTopicVideoImagePage = {
 		...toEditorPage(FILM_PODCAST_EPISODE),
-		isTopicPodcastEpisodeVideoImageUnchecked: true,
+		isTopicVideoImageUnchecked: true,
 	}
-	expect(toTopicPodcastEpisodeVideoEditableImage(uncheckedTopicPodcastEpisodeVideoImagePage).isImageUnchecked).toBe(
-		true,
-	)
-	expect(toPodcastEpisodeEditableImage(uncheckedTopicPodcastEpisodeVideoImagePage).isImageUnchecked).toBeUndefined()
+	expect(toTopicVideoEditableImage(uncheckedTopicVideoImagePage).isImageUnchecked).toBe(true)
+	expect(toPodcastEpisodeEditableImage(uncheckedTopicVideoImagePage).isImageUnchecked).toBeUndefined()
 })

@@ -31,6 +31,8 @@ test("a save settles its body images on its own transaction, and a save that los
 		}
 		return text.startsWith('update "topic_posts"') ? [[4]] : []
 	})
+
+	// run the transaction on the stubbed pool, recording the queries sent inside it
 	const transactionSpy = spyOn(db, "transaction").mockImplementation(async (runTransaction) => {
 		isTransactionOpen = true
 		const result = await runTransaction(db as never)
@@ -57,8 +59,8 @@ test("a save settles its body images on its own transaction, and a save that los
 	expect(conflictQueries.some(({ text }) => text.includes("pending_object_deletions"))).toBe(false)
 })
 
-test("a deleted post leaves the home's pins and its author's profile pins before its row goes", async () => {
-	// the post holds the second home position and the first of its author's pins, and a write returns no row
+test("a deleted post leaves the home's featured items and its author's featured profile items before its row goes", async () => {
+	// the post holds the second home position and the first of its author's featured items, and a write returns no row
 	const sentQueries = stubConnectionPool(({ text }) => {
 		if (text.startsWith('select "home_order" from "topic_posts"')) {
 			return [[2]]
@@ -67,7 +69,7 @@ test("a deleted post leaves the home's pins and its author's profile pins before
 			return [["member-1"]]
 		}
 
-		// the post's place among its author's pins
+		// the post's place among its author's featured items
 		return text.startsWith('select "profile_order" from "topic_posts"') ? [[1]] : []
 	})
 	await deleteTopicPost("post-1")

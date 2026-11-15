@@ -3,7 +3,7 @@
 
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import type { PodcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpisodePage"
-import { toTopicPodcastEpisodeVideoImageUrls } from "@carlnotes/contracts/topicImages"
+import { toTopicVideoImageUrls } from "@carlnotes/contracts/topicImages"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import type { EditableImage } from "../components/TopicImageEditor"
 import { EDIT_IMAGE_DIALOG_TITLES } from "./topicImageEditor"
@@ -16,10 +16,10 @@ export const PODCAST_EPISODE_SAVED_TEXT = "Podcast saved."
 export const PODCAST_EPISODE_SAVE_FAILED_TEXT = "The podcast didn't save."
 
 // the menu option that opens a film's image dialog, which the dialog's title repeats
-export const EDIT_TOPIC_PODCAST_EPISODE_VIDEO_LABEL = EDIT_IMAGE_DIALOG_TITLES.topicPodcastEpisodeVideo
+export const EDIT_TOPIC_VIDEO_LABEL = EDIT_IMAGE_DIALOG_TITLES.topicVideo
 
 // whether the user may edit the podcast episode, and the podcast episode, if the page has one
-type IsTopicPodcastEpisodeVideoEditShownOptions = {
+type IsTopicVideoEditShownOptions = {
 	canEditPodcastEpisode: boolean
 	podcastEpisode: Pick<PodcastEpisode, "video"> | null | undefined
 }
@@ -28,10 +28,10 @@ type IsTopicPodcastEpisodeVideoEditShownOptions = {
  * Returns whether a page's action menu offers Edit film: to a user who may edit the podcast episode, for a podcast
  * episode with a ready film.
  */
-export function isTopicPodcastEpisodeVideoEditShown({
+export function isTopicVideoEditShown({
 	canEditPodcastEpisode,
 	podcastEpisode,
-}: IsTopicPodcastEpisodeVideoEditShownOptions): boolean {
+}: IsTopicVideoEditShownOptions): boolean {
 	return canEditPodcastEpisode && Boolean(podcastEpisode?.video)
 }
 
@@ -43,7 +43,7 @@ export function toTopicPageEditedPodcastEpisode(
 	topic: Pick<TopicResponse, "canEdit" | "podcast">,
 ): PodcastEpisode | null {
 	const podcastEpisode = topic.podcast?.topicPodcastEpisodeVideoSection?.podcastEpisode
-	return podcastEpisode && isTopicPodcastEpisodeVideoEditShown({ canEditPodcastEpisode: topic.canEdit, podcastEpisode })
+	return podcastEpisode && isTopicVideoEditShown({ canEditPodcastEpisode: topic.canEdit, podcastEpisode })
 		? podcastEpisode
 		: null
 }
@@ -59,7 +59,7 @@ export type PodcastEpisodeEditorPage = Pick<
 	| "topicPodcastEpisodeVideoImagePrompt"
 	// whether each image is the editor's own upload shown to them alone, and the editor's regenerations this month
 	| "isPodcastEpisodeImageUnchecked"
-	| "isTopicPodcastEpisodeVideoImageUnchecked"
+	| "isTopicVideoImageUnchecked"
 	| "imageRegenerationQuota"
 > & { topic: { name: string } }
 
@@ -84,17 +84,17 @@ export function toPodcastEpisodeEditableImage(podcastEpisodePage: PodcastEpisode
  * Returns the image of the podcast episode's film as the image block edits it, from the podcast episode's page: the
  * film's own image, or the podcast episode's until the film has one.
  */
-export function toTopicPodcastEpisodeVideoEditableImage(podcastEpisodePage: PodcastEpisodeEditorPage): EditableImage {
+export function toTopicVideoEditableImage(podcastEpisodePage: PodcastEpisodeEditorPage): EditableImage {
 	const { podcastEpisode } = podcastEpisodePage
 	const posterUrl = podcastEpisode.video?.posterUrl
 	return {
-		kind: "topicPodcastEpisodeVideo",
+		kind: "topicVideo",
 		id: podcastEpisode.id,
 		name: podcastEpisode.title ?? podcastEpisodePage.topic.name,
-		image: posterUrl ? toTopicPodcastEpisodeVideoImageUrls(posterUrl) : podcastEpisode.image,
+		image: posterUrl ? toTopicVideoImageUrls(posterUrl) : podcastEpisode.image,
 		imageOrigin: podcastEpisodePage.topicPodcastEpisodeVideoImageOrigin ?? null,
 		imagePrompt: podcastEpisodePage.topicPodcastEpisodeVideoImagePrompt ?? null,
-		isImageUnchecked: podcastEpisodePage.isTopicPodcastEpisodeVideoImageUnchecked,
+		isImageUnchecked: podcastEpisodePage.isTopicVideoImageUnchecked,
 		imageRegenerationQuota: podcastEpisodePage.imageRegenerationQuota,
 	}
 }

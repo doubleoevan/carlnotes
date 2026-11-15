@@ -10,7 +10,7 @@ import {
 	type ReportSubjectKind,
 } from "@carlnotes/contracts/reports"
 import { toProfilePath } from "@carlnotes/contracts/seo"
-import { toTopicPodcastEpisodeVideoImageUrls } from "@carlnotes/contracts/topicImages"
+import { toTopicVideoImageUrls } from "@carlnotes/contracts/topicImages"
 import type { ConfirmationCopy } from "@carlnotes/core/lib/confirmationCopy"
 import { toDateLabel } from "@carlnotes/core/lib/labels"
 import { SAVE_FAILED_TEXT } from "@carlnotes/core/lib/sessionCopy"
@@ -144,8 +144,8 @@ function ReportSubjectImages({ report }: { report: AdminReport }) {
 
 	// an image report shows its image even before one is drawn, and a podcast episode its own image and its film's
 	const hasSubjectImage = isImageReportSubjectKind(report.subjectKind) || report.subjectImage !== null
-	const { topicPodcastEpisodeVideoPosterUrl } = report
-	if (!hasSubjectImage && !topicPodcastEpisodeVideoPosterUrl) {
+	const { topicVideoPosterUrl } = report
+	if (!hasSubjectImage && !topicVideoPosterUrl) {
 		return null
 	}
 	return (
@@ -155,9 +155,9 @@ function ReportSubjectImages({ report }: { report: AdminReport }) {
 				<TopicImageLink image={report.subjectImage} size="list" name={report.subjectText} path={report.subjectPath} />
 			)}
 			{/* the film's poster */}
-			{topicPodcastEpisodeVideoPosterUrl && (
+			{topicVideoPosterUrl && (
 				<TopicImageLink
-					image={toTopicPodcastEpisodeVideoImageUrls(topicPodcastEpisodeVideoPosterUrl)}
+					image={toTopicVideoImageUrls(topicVideoPosterUrl)}
 					size="list"
 					name={`the film of ${report.subjectText}`}
 					path={report.subjectPath}
@@ -208,13 +208,13 @@ function toResolutionConfirmation(
 	const removeCopy = toRemoveCopy(report)
 	if (resolution === "removed") {
 		// a podcast episode's Regenerate also draws its film's image again if that image is an upload
-		const topicPodcastEpisodeVideoSentence = report.topicPodcastEpisodeVideoPosterUrl
+		const topicVideoSentence = report.topicVideoPosterUrl
 			? " The film's image is drawn again too if it was uploaded."
 			: ""
 		return {
 			title: removeCopy.title,
 			confirmLabel: removeCopy.label,
-			children: `This ${removeCopy.clause} and closes the report.${topicPodcastEpisodeVideoSentence}`,
+			children: `This ${removeCopy.clause} and closes the report.${topicVideoSentence}`,
 		}
 	}
 

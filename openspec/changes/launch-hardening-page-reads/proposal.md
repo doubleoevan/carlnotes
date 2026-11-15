@@ -45,10 +45,10 @@ No route, field, or MCP tool return that a released build reads is removed or ch
   the visitor caches and what clears them, the per-topic tag, the recorded edge rule, and the budgets.
 - `public-profiles`, `teams`, `home-page`, `topic-detail-page`, `podcast-episode-pages`, `topic-posts`,
   `specials-dashboards`, `ui-routing`: each page's one read, its cache, and its server paging.
-- `feed-api`, `scan-history`, `topic-podcast-episode-video-featuring`: bounded reads and lists paged by request.
+- `feed-api`, `scan-history`, `topic-video-featuring`: bounded reads and lists paged by request.
 - `news`, `updates`: the own group's candidate ids, the count on a cursor read, the person's cached first page, and
   the null opener's marker.
-- `topic-podcast-episode-video-player`, `topic-post-discussions`, `podcast-episode-player`: polls that read a
+- `topic-video-player`, `topic-post-discussions`, `podcast-episode-player`: polls that read a
   status, pause in a hidden tab, and stop on a closed-out row.
 - `site-search`, `podcast-episode-search`, `topic-chat`, `mcp-server`: the bounded search embedding, a chat turn's
   headers before retrieval, and protocol messages counted apart from tool calls.

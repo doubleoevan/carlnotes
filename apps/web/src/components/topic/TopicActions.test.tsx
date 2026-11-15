@@ -3,7 +3,7 @@ import { expect, test } from "bun:test"
 import { toPodcastEpisodeFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import { toTestTopicResponse } from "@carlnotes/contracts/topicFeedTestFixtures"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
-import { toEditTopicPodcastEpisodeVideoOption, toTopicActionLayout, toTopicActionOptions } from "./TopicActions"
+import { toEditTopicVideoOption, toTopicActionLayout, toTopicActionOptions } from "./TopicActions"
 
 // a topic whose latest podcast episode has a ready film, or none, as its editor or as a follower reads it
 function toTopic({ canEdit, hasFilm }: { canEdit: boolean; hasFilm: boolean }): TopicResponse {
@@ -15,7 +15,7 @@ function toTopic({ canEdit, hasFilm }: { canEdit: boolean; hasFilm: boolean }): 
 }
 
 // the labels of the options the topic page gives the actions menu, and the option Edit film selected
-function toOptionLabels(topic: TopicResponse, onEditTopicPodcastEpisodeVideo = () => {}): string[] {
+function toOptionLabels(topic: TopicResponse, onEditTopicVideo = () => {}): string[] {
 	const topicActionLayout = toTopicActionLayout({ topic, isSignedIn: true, isBookmarkedView: false, isJoinable: false })
 	const noop = (): void => {}
 	const topicActionOptions = toTopicActionOptions({
@@ -27,7 +27,7 @@ function toOptionLabels(topic: TopicResponse, onEditTopicPodcastEpisodeVideo = (
 		onToggleFollowTopic: noop,
 		onRankHomeTopic: noop,
 		onRankProfileTopic: noop,
-		onEditTopicPodcastEpisodeVideo,
+		onEditTopicVideo,
 		onEditTopic: noop,
 		onDeleteTopic: noop,
 	})
@@ -51,7 +51,7 @@ test("a topic with no film, and a user who may not edit the topic, get no Edit f
 })
 
 test("the Edit film option has the clapperboard icon and the film's label on both pages", () => {
-	const editTopicPodcastEpisodeVideoOption = toEditTopicPodcastEpisodeVideoOption(() => {})
-	expect(editTopicPodcastEpisodeVideoOption.label).toBe("Edit film")
-	expect(editTopicPodcastEpisodeVideoOption.Icon.displayName).toBe("Clapperboard")
+	const editTopicVideoOption = toEditTopicVideoOption(() => {})
+	expect(editTopicVideoOption.label).toBe("Edit film")
+	expect(editTopicVideoOption.Icon.displayName).toBe("Clapperboard")
 })

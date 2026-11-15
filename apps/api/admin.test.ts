@@ -220,18 +220,18 @@ test("an admin's save writes the overrides in cents, and an empty value clears i
 	expect(spendControlInserts[0]?.values.slice(0, 7)).toEqual([1, null, 4250, null, 0, null, false])
 })
 
-test("an admin's save writes each pause, the pinned-only home, and the image limit", async () => {
+test("an admin's save writes each pause, the featured-only home, and the image limit", async () => {
 	const sentQueries = stubConnectionPool(toMinimumVersionRouteRows)
 	const payload = {
 		...DEFAULT_SPEND_CONTROL_PAYLOAD,
 		generatedChapterImageLimit: 0,
 		isPodcastEpisodeRecordingPaused: true,
-		isTopicPodcastEpisodeVideoRenderingPaused: true,
-		isHomePinnedOnly: true,
+		isTopicVideoRenderingPaused: true,
+		isHomeFeaturedOnly: true,
 	}
 	expect((await saveSpendControlSettings("admin-1", payload)).status).toBe(200)
 
-	// the insert names each new column, and the row holds both pauses, an image limit of zero, and the pinned-only home
+	// the insert names each new column, and the row holds both pauses, an image limit of zero, and the featured-only home
 	const [spendControlInsert] = toSpendControlInserts(sentQueries)
 	expect(spendControlInsert?.text).toContain('"is_podcast_episode_recording_paused" = $')
 	expect(spendControlInsert?.text).toContain('"is_topic_podcast_episode_video_rendering_paused" = $')
@@ -359,20 +359,20 @@ test("the console's waiting scan count reads the waiting scan filter of the sett
 
 // the image limit an admin typed reads back as an override beside its default, each switch reads back as it was saved,
 // and an emptied image limit reads back as its default
-test("the console reads back a stored image limit override, each pause, and the pinned-only home", async () => {
+test("the console reads back a stored image limit override, each pause, and the featured-only home", async () => {
 	// the stored row in the read's column order: five numeric overrides, the unverified accounts switch, the image
-	// limit, the two pauses, the pinned-only home, when it was saved, and the saver's username
+	// limit, the two pauses, the featured-only home, when it was saved, and the saver's username
 	const savedAt = new Date("2026-11-12T09:00:00Z")
 	let storedRow = [null, null, null, null, null, false, 10, true, true, true, savedAt, "vienna"]
 	stubConnectionPool(({ text }) => (text.includes('from "spend_control_settings"') ? [storedRow] : []))
 
-	// an image limit of 10 over its default, both pauses on, and the pinned-only home on
+	// an image limit of 10 over its default, both pauses on, and the featured-only home on
 	const defaultImageLimit = generatedChapterImageLimit()
 	expect(await loadAdminDailySpendCutoffs()).toMatchObject({
 		generatedChapterImageLimit: { value: 10, defaultValue: defaultImageLimit, isOverridden: true },
 		isPodcastEpisodeRecordingPaused: true,
-		isTopicPodcastEpisodeVideoRenderingPaused: true,
-		isHomePinnedOnly: true,
+		isTopicVideoRenderingPaused: true,
+		isHomeFeaturedOnly: true,
 		updatedAt: "2026-11-12T09:00:00.000Z",
 		updatedByUsername: "vienna",
 	})
@@ -382,7 +382,7 @@ test("the console reads back a stored image limit override, each pause, and the 
 	expect(await loadAdminDailySpendCutoffs()).toMatchObject({
 		generatedChapterImageLimit: { value: defaultImageLimit, defaultValue: defaultImageLimit, isOverridden: false },
 		isPodcastEpisodeRecordingPaused: false,
-		isTopicPodcastEpisodeVideoRenderingPaused: false,
-		isHomePinnedOnly: false,
+		isTopicVideoRenderingPaused: false,
+		isHomeFeaturedOnly: false,
 	})
 })

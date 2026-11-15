@@ -5,10 +5,7 @@ import {
 	type PodcastEpisodeSeekBarProps as SharedPodcastEpisodeSeekBarProps,
 } from "@carlnotes/core/components/PodcastEpisodeSeekBar"
 import { type PointerEvent, type ReactNode, useEffect, useRef, useState } from "react"
-import {
-	type ChapterSegmentBox,
-	TopicPodcastEpisodeVideoChapterTooltip,
-} from "./TopicPodcastEpisodeVideoChapterTooltip"
+import { type ChapterSegmentBox, TopicVideoChapterTooltip } from "./TopicVideoChapterTooltip"
 
 // the chapter segments of a seek bar, in the chapters' order
 const CHAPTER_SEGMENT_SELECTOR = "[data-chapter-segment]"
@@ -109,7 +106,7 @@ function ChapterTooltipFrame({ podcastEpisode, children }: { podcastEpisode: Pod
 			{children}
 			{/* the hovered chapter's tooltip, over its segment */}
 			{shownChapterSegment && (
-				<TopicPodcastEpisodeVideoChapterTooltip
+				<TopicVideoChapterTooltip
 					podcastEpisodeId={podcastEpisode.id}
 					chapter={shownChapterSegment.chapter}
 					chapterSegmentBox={shownChapterSegment.chapterSegmentBox}

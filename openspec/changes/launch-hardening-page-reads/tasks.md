@@ -48,9 +48,9 @@ shape.
       edit, a body image taken down by an admin, and a Topic Post summary. The film backfill's swaps clear origin
       keys only. These sit in activity bodies, so no `patched`. Verify: a test for each site that the cached page
       is gone after the write
-- [ ] 2.4 Clear a profile's key on a username change, an avatar change, a profile pin, and an account close, and a
-      team's key on a team edit, a membership change, and a topic added or removed. Verify: a test that an owner's
-      write clears the cached pages that show it
+- [ ] 2.4 Clear a profile's key on a username change, an avatar change, a profile's featured item change, and an account
+      close, and a team's key on a team edit, a membership change, and a topic added or removed. Verify: a test that an
+      owner's write clears the cached pages that show it
 - [ ] 2.5 (finding R11) Add a per-topic page tag and a team tag to `toPageCacheTags`, on the topic page, the podcast
       episode page, and their page reads, and purge the topic's tag on a visibility change and a delete, in one
       purge call with the write's other tags. Verify: `edgeCache.test.ts`, and a test that a topic made private is
@@ -128,7 +128,7 @@ shape.
       the tests that match its text, and `bun run smoke:seo` lists the same topics
 - [ ] 4.2 Add the partial index `episodes_published_at_idx` on published rows: build it by hand in production first,
       then the migration in 0119's shape. Verify: a schema test, and an `EXPLAIN` of both newest reads
-- [ ] 4.3 (close, design D8) Split the home's ranked podcast episode read into pinned and ranked, and build the
+- [ ] 4.3 (close, design D8) Split the home's ranked podcast episode read into featured and ranked, and build the
       listener ranking index only if the seeded plan in 4.9 shows the scan and sort matter. Verify: the plan and
       the choice are recorded in design.md
 - [ ] 4.4 Read the topic page's newest 50 scans without their summaries, one summary, and the month's cost as a

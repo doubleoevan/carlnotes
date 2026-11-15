@@ -1,5 +1,5 @@
 // home topic route tests: a position the topic already holds changes nothing and keeps its home podcast episodes'
-// pins, and a new position moves the topic and clears the home's caches
+// featured items, and a new position moves the topic and clears the home's caches
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { ADMIN_USER_ACCESS_ROW, restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as edgeCache from "../edgeCache"
@@ -13,9 +13,9 @@ afterEach(() => {
 	mock.restore()
 })
 
-// stand in for the reads around a pin: the public topic at the given position, a count of pinned rows, and the
+// stand in for the reads around a featured position: the public topic at the given position, a count of featured rows, and the
 // admin's access row
-function stubPinnedTopic(homeOrder: number | null): {
+function stubFeaturedTopic(homeOrder: number | null): {
 	sentQueries: ReturnType<typeof stubConnectionPool>
 	clearFeedCachesSpy: ReturnType<typeof spyOn>
 } {
@@ -49,25 +49,25 @@ function sendTopicHomeOrder(position: number): Response | Promise<Response> {
 	})
 }
 
-test("saving the position a topic already holds writes nothing and keeps its podcast episodes' pins", async () => {
-	const { sentQueries, clearFeedCachesSpy } = stubPinnedTopic(2)
+test("saving the position a topic already holds writes nothing and keeps its podcast episodes' featured items", async () => {
+	const { sentQueries, clearFeedCachesSpy } = stubFeaturedTopic(2)
 	expect((await sendTopicHomeOrder(2)).status).toBe(200)
 
-	// no read of the topic's pinned podcast episodes, no write, and no cache cleared
+	// no read of the topic's featured podcast episodes, no write, and no cache cleared
 	expect(sentQueries.some(({ text }) => text.includes('"episodes"'))).toBe(false)
 	expect(sentQueries.some(({ text }) => text.startsWith("update"))).toBe(false)
 	expect(clearFeedCachesSpy).not.toHaveBeenCalled()
 })
 
 test("clearing a topic that holds no position writes nothing", async () => {
-	const { sentQueries, clearFeedCachesSpy } = stubPinnedTopic(null)
+	const { sentQueries, clearFeedCachesSpy } = stubFeaturedTopic(null)
 	expect((await sendTopicHomeOrder(0)).status).toBe(200)
 	expect(sentQueries.some(({ text }) => text.startsWith("update"))).toBe(false)
 	expect(clearFeedCachesSpy).not.toHaveBeenCalled()
 })
 
 test("a new position moves the topic and clears the home's caches", async () => {
-	const { sentQueries, clearFeedCachesSpy } = stubPinnedTopic(2)
+	const { sentQueries, clearFeedCachesSpy } = stubFeaturedTopic(2)
 	expect((await sendTopicHomeOrder(1)).status).toBe(200)
 
 	// the topic leaves its position, then takes the new one

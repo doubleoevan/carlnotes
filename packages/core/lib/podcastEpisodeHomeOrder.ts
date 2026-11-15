@@ -20,7 +20,7 @@ export function isPodcastEpisodeHomeOrderShown(podcastEpisodePage: PodcastEpisod
  * Returns whether the page offers Home films: to an admin, on a public topic, for a podcast episode with a ready
  * film.
  */
-export function isTopicPodcastEpisodeVideoHomeOrderShown(podcastEpisodePage: PodcastEpisodeHomeOrderPage): boolean {
+export function isTopicVideoHomeOrderShown(podcastEpisodePage: PodcastEpisodeHomeOrderPage): boolean {
 	return (
 		Boolean(podcastEpisodePage.homeTopicPodcastEpisodeVideos) &&
 		podcastEpisodePage.topic.visibility === "public" &&
@@ -43,7 +43,7 @@ export function isPodcastEpisodeProfileOrderShown({
  * Returns whether the page offers Featured films: to whoever it offers Featured podcasts, for a podcast episode with
  * a ready film.
  */
-export function isTopicPodcastEpisodeVideoProfileOrderShown(
+export function isTopicVideoProfileOrderShown(
 	podcastEpisodePage: Pick<PodcastEpisodePageResponse, "topic" | "podcastEpisode">,
 ): boolean {
 	return isPodcastEpisodeProfileOrderShown(podcastEpisodePage) && Boolean(podcastEpisodePage.podcastEpisode.video)

@@ -386,10 +386,10 @@ the switch when it is flipped, each with the saved cutoffs and never a typed one
 - **WHEN** the admin types a first scan limit of 3 and leaves its field
 - **THEN** the first scan limit is saved as 3 and the podcast episodes cutoff keeps its saved value
 
-### Requirement: The Limits section holds the pauses, the pinned-only home, and the image limit
+### Requirement: The Limits section holds the pauses, the featured-only home, and the image limit
 
 The Limits section SHALL show a switch that pauses new podcast episodes, a switch that pauses new films, a switch
-that limits the home to its pinned items, and a field for the generated chapter image limit with its default as its
+that limits the home to its featured items, and a field for the generated chapter image limit with its default as its
 placeholder. An admin SHALL save each through `isAllowed(user, "admin:console")`, a switch as it is flipped and the
 field as it loses focus, and a save SHALL drop the cached settings. Each switch SHALL show off, and the field empty,
 until an admin changes it.

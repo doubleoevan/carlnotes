@@ -16,7 +16,7 @@ const VISITOR_TOPIC_FEED_KEY_PREFIX = "visitor-topic-feed"
 export const TOPIC_PAGE_KEY_PREFIX = "topic-response"
 
 // the topic whose cached visitor copies to drop, its visibility after the change, its visibility before the change if
-// the change may have set a new one, whether the change released its home order, and the users whose profile pins the
+// the change may have set a new one, whether the change released its home order, and the users whose featured profile items the
 // change released
 type ClearVisitorTopicCachesOptions = {
 	topicId: string
@@ -34,7 +34,7 @@ export async function clearSharedTopicFeedCaches(): Promise<void> {
 }
 
 /**
- * Deletes a topic's cached visitor page, and the visitors' feeds if the topic was or is public or pinned.
+ * Deletes a topic's cached visitor page, and the visitors' feeds if the topic was or is public or featured.
  */
 export async function clearVisitorTopicCaches({
 	topicId,
@@ -47,12 +47,12 @@ export async function clearVisitorTopicCaches({
 	const isListingChanged = isHomeOrderReleased || visibility === "public" || previousVisibility === "public"
 	await deleteRedisKeys(toVisitorTopicPageKey(topicId), ...(isListingChanged ? toSharedTopicFeedKeys() : []))
 
-	// a released pin changes the home's topic, podcast episode, and Topic Post cards
+	// a released featured item changes the home's topic, podcast episode, and Topic Post cards
 	if (isHomeOrderReleased) {
 		await purgeHomeAtEdge()
 	}
 
-	// a released profile pin changes the profile page of the person who pinned it
+	// a released featured profile item changes the profile page of the person who featured it
 	await Promise.all(releasedProfileUserIds.map(purgeProfileAtEdge))
 }
 

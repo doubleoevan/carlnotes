@@ -22,7 +22,7 @@ const latestFilm = toFilm(0)
 const films = [latestFilm, ...Array.from({ length: 6 }, (_, index) => toFilm(index + 1))]
 const audioOnlyPodcastEpisode = toPodcastEpisodeFixture({ id: "audio-only", title: "Audio only", episodeNumber: 1 })
 
-// a topic whose owner may remove podcast episodes, with Topic Cinema on the latest film
+// a topic whose owner may remove podcast episodes, with the topic video section on the latest film
 const topic = toTestTopicResponse({
 	id: "topic-1",
 	latestPodcastEpisode: latestFilm,

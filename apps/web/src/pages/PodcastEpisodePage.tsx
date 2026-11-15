@@ -4,12 +4,12 @@ import { isPublishedPodcastEpisode, type PodcastEpisode } from "@carlnotes/contr
 import type { PodcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpisodePage"
 import { FILM_ANCHOR_ID, PODCAST_NAME } from "@carlnotes/contracts/podcastEpisodes"
 import { isTopicSlugStale, toPodcastEpisodePath, toTopicPath } from "@carlnotes/contracts/seo"
-import { useTopicPodcastEpisodeVideoRenderingPoll } from "@carlnotes/core/hooks/useTopicPodcastEpisodeVideoRenderingPoll"
+import { useTopicVideoRenderingPoll } from "@carlnotes/core/hooks/useTopicVideoRenderingPoll"
 import { toSectionCountLabel } from "@carlnotes/core/lib/labels"
-import { TOPIC_PODCAST_EPISODE_VIDEO_SECTION_TITLE } from "@carlnotes/core/lib/podcastEpisodeCopy"
+import { TOPIC_VIDEO_SECTION_TITLE } from "@carlnotes/core/lib/podcastEpisodeCopy"
 import { toPodcastEpisodeSocialProps } from "@carlnotes/core/lib/podcastEpisodeSocial"
 import { applyPodcastEpisodePageChanges, type TopicFindingChange } from "@carlnotes/core/lib/topicFindingChanges"
-import { toTopicPodcastEpisodeVideoDisplay } from "@carlnotes/core/lib/topicPodcastEpisodeVideoDisplay"
+import { toTopicVideoDisplay } from "@carlnotes/core/lib/topicVideoDisplay"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useMatch, useNavigate, useParams } from "@tanstack/react-router"
 import { Rss } from "lucide-react"
@@ -25,7 +25,7 @@ import { PodcastEpisodeTranscript } from "@/components/podcast/PodcastEpisodeTra
 import { PodcastFeedDialog } from "@/components/podcast/PodcastFeedDialog"
 import { PodcastThemeSongNote } from "@/components/podcast/PodcastThemeSongNote"
 import { useRegisterPodcastEpisodePageActions } from "@/components/podcast/podcastEpisodeActions"
-import { TopicPodcastEpisodeVideoPlayer } from "@/components/podcast/TopicPodcastEpisodeVideoPlayer"
+import { TopicVideoPlayer } from "@/components/podcast/TopicVideoPlayer"
 import { UnpublishedPodcastEpisodeCard } from "@/components/podcast/UnpublishedPodcastEpisodeCard"
 import { SocialSection } from "@/components/social/SocialSection"
 import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
@@ -192,10 +192,7 @@ export function PodcastEpisodePage() {
 
 			{/* the film's section, under the podcast's, for a podcast episode with a film: the film player in its card, or
 			    the card that says the film is rendering */}
-			<TopicPodcastEpisodeVideoPageSection
-				podcastEpisode={podcastEpisode}
-				onVideoRenderingPoll={pollPodcastEpisodePage}
-			/>
+			<PodcastEpisodeTopicVideoSection podcastEpisode={podcastEpisode} onVideoRenderingPoll={pollPodcastEpisodePage} />
 
 			{/* the podcast episode's comment thread, where a comment may name a chapter and a chapter's tag plays from it */}
 			<SocialSection {...toPodcastEpisodeSocialProps(podcastEpisodePage, Boolean(session))} hasClosedDivider />
@@ -259,7 +256,7 @@ export function PodcastEpisodePage() {
 }
 
 // the podcast episode, and the read of its page again while its film renders
-type TopicPodcastEpisodeVideoPageSectionProps = {
+type PodcastEpisodeTopicVideoSectionProps = {
 	podcastEpisode: PodcastEpisode
 	onVideoRenderingPoll: () => Promise<void>
 }
@@ -267,22 +264,22 @@ type TopicPodcastEpisodeVideoPageSectionProps = {
 // the film's collapsible section at the film anchor, for a podcast episode with a film, with the theme song's credits
 // right after its title. it holds the film player in its card, which stays mounted while the section is closed, or the
 // card that says the film is rendering, and the page is read again until the film is ready
-function TopicPodcastEpisodeVideoPageSection({
+function PodcastEpisodeTopicVideoSection({
 	podcastEpisode,
 	onVideoRenderingPoll,
-}: TopicPodcastEpisodeVideoPageSectionProps) {
+}: PodcastEpisodeTopicVideoSectionProps) {
 	// read the page again while the film renders
-	const topicPodcastEpisodeVideoDisplay = toTopicPodcastEpisodeVideoDisplay(podcastEpisode)
-	const isVideoRendering = topicPodcastEpisodeVideoDisplay === "rendering"
-	useTopicPodcastEpisodeVideoRenderingPoll({ isVideoRendering, onPoll: onVideoRenderingPoll })
-	if (!topicPodcastEpisodeVideoDisplay) {
+	const topicVideoDisplay = toTopicVideoDisplay(podcastEpisode)
+	const isVideoRendering = topicVideoDisplay === "rendering"
+	useTopicVideoRenderingPoll({ isVideoRendering, onPoll: onVideoRenderingPoll })
+	if (!topicVideoDisplay) {
 		return null
 	}
 	return (
 		<div id={FILM_ANCHOR_ID} className="scroll-mt-20">
 			<CollapsibleSection
-				value="topic-podcast-episode-video"
-				title={TOPIC_PODCAST_EPISODE_VIDEO_SECTION_TITLE}
+				value="topic-video"
+				title={TOPIC_VIDEO_SECTION_TITLE}
 				titleNote={<PodcastThemeSongNote />}
 				isContentKept
 				hasClosedDivider
@@ -291,7 +288,7 @@ function TopicPodcastEpisodeVideoPageSection({
 				{isVideoRendering ? (
 					<UnpublishedPodcastEpisodeCard podcastEpisode={podcastEpisode} isVideoRendering />
 				) : (
-					<TopicPodcastEpisodeVideoPlayer podcastEpisode={podcastEpisode} isCard />
+					<TopicVideoPlayer podcastEpisode={podcastEpisode} isCard />
 				)}
 			</CollapsibleSection>
 		</div>

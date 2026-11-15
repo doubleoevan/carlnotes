@@ -1,6 +1,6 @@
 // the action menu options that more than one screen offers, and the labels their sheets repeat
 
-import { EDIT_TOPIC_PODCAST_EPISODE_VIDEO_LABEL } from "@carlnotes/core/lib/podcastEpisodeEditor"
+import { EDIT_TOPIC_VIDEO_LABEL } from "@carlnotes/core/lib/podcastEpisodeEditor"
 import { Clapperboard, Share as ShareIcon, Users } from "lucide-react-native"
 import type { PageActionOption } from "@/components/search/PageActionMenu"
 
@@ -25,6 +25,6 @@ export function toShareTopicOption(onSelect: () => void): PageActionOption {
 /**
  * Returns the Edit film option, which opens the image sheet of the film the screen shows.
  */
-export function toEditTopicPodcastEpisodeVideoOption(onSelect: () => void): PageActionOption {
-	return { label: EDIT_TOPIC_PODCAST_EPISODE_VIDEO_LABEL, icon: Clapperboard, onSelect }
+export function toEditTopicVideoOption(onSelect: () => void): PageActionOption {
+	return { label: EDIT_TOPIC_VIDEO_LABEL, icon: Clapperboard, onSelect }
 }

@@ -3,7 +3,7 @@
 import type { HomePodcastEpisode } from "@carlnotes/contracts/podcast"
 import type { PodcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpisodePage"
 import { toPodcastEpisodePath } from "@carlnotes/contracts/seo"
-import { pinnedOrderPayload } from "@carlnotes/contracts/topicPayloads"
+import { featuredOrderPayload } from "@carlnotes/contracts/topicPayloads"
 import { db, isPublicAndShown } from "@carlnotes/db"
 import { setHomeOrder } from "@carlnotes/db/homeOrder"
 import { podcastEpisodes } from "@carlnotes/db/schema/podcast"
@@ -18,7 +18,7 @@ import { clearHomeCaches, type HomeOrderResult, toHomeOrderAdmin } from "../topi
 /**
  * Sets a published podcast episode's position among the home podcast episodes, with the topic rules: position 0 clears it,
  * another position inserts it there and pushes the rest down, and a position past the end appends. Only a published
- * episode of a public shown topic can be pinned to the home page.
+ * episode of a public shown topic can be featured on the home page.
  */
 async function setPodcastEpisodeHomeOrder(podcastEpisodeId: string, position: number): Promise<HomeOrderResult> {
 	// the podcast episode must be published, on a public shown topic
@@ -51,7 +51,7 @@ async function setPodcastEpisodeHomeOrder(podcastEpisodeId: string, position: nu
 
 // load the home podcast episodes in their order, each with its topic's name and its page
 async function loadHomePodcastEpisodes(): Promise<HomePodcastEpisode[]> {
-	// the pinned rows with their topics, in their order
+	// the featured rows with their topics, in their order
 	const homeOrderRows = await db
 		.select(toHomePodcastEpisodeColumns(podcastEpisodes.homeOrder))
 		.from(podcastEpisodes)
@@ -62,7 +62,7 @@ async function loadHomePodcastEpisodes(): Promise<HomePodcastEpisode[]> {
 }
 
 /**
- * Returns the columns a home podcast episode or a home film reads, ordered by the column that holds its pin.
+ * Returns the columns a home podcast episode or a home film reads, ordered by the column that holds its featured position.
  */
 // biome-ignore lint/nursery/useExplicitReturnType: drizzle's column types are generated, and naming them here would break on an upgrade
 export function toHomePodcastEpisodeColumns(homeOrderColumn: AnyPgColumn) {
@@ -78,21 +78,21 @@ export function toHomePodcastEpisodeColumns(homeOrderColumn: AnyPgColumn) {
 	}
 }
 
-// a pinned row as the home shows it. the columns are nullable, and a published episode, the only kind pinned, has them
+// a featured row as the home shows it. the columns are nullable, and a published episode, the only kind featured, has them
 // all
 export type HomePodcastEpisodeRow = {
 	id: string
 	title: string | null
 	season: number | null
 	episodeNumber: number | null
-	// the topic, which names the episode's page, and the position the pin holds
+	// the topic, which names the episode's page, and the position the featured row holds
 	topicId: string
 	topicName: string
 	homeOrder: number | null
 }
 
 /**
- * Returns a pinned row as the home shows it, with the path that opens its podcast episode's page.
+ * Returns a featured row as the home shows it, with the path that opens its podcast episode's page.
  */
 export function toHomePodcastEpisode(homeOrderRow: HomePodcastEpisodeRow): HomePodcastEpisode {
 	return {
@@ -125,7 +125,7 @@ export async function toHomePodcastEpisodes(
 // the home podcasts' order route, admin only
 export const podcastEpisodeHomeOrderRoute = new Hono<AppEnv>().patch(
 	"/podcast-episodes/:id/home-order",
-	zValidator("json", pinnedOrderPayload),
+	zValidator("json", featuredOrderPayload),
 	async (context) => {
 		// reject a signed-out visitor, and anyone but an admin
 		const admin = await toHomeOrderAdmin(context)
@@ -143,6 +143,6 @@ export const podcastEpisodeHomeOrderRoute = new Hono<AppEnv>().patch(
 		}
 		return homeOrderResult === "ranked"
 			? context.json({ ok: true })
-			: context.json({ error: "only a published episode of a public topic can be pinned to the home page" }, 409)
+			: context.json({ error: "only a published episode of a public topic can be featured on the home page" }, 409)
 	},
 )

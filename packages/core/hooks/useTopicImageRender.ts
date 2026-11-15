@@ -6,7 +6,7 @@ import { fetchTopicImageRender } from "@carlnotes/client/topicImageClient"
 import {
 	type TopicImageRenderResponse,
 	type TopicImageUrls,
-	toTopicPodcastEpisodeVideoImageUrls,
+	toTopicVideoImageUrls,
 } from "@carlnotes/contracts/topicImages"
 import { useEffect, useRef, useState } from "react"
 import { TOPIC_IMAGE_RENDER_FAILED_TEXT } from "../lib/topicImageEditor"
@@ -69,7 +69,7 @@ export function useTopicImageRender(
 			}
 
 			// replace the image with the render's, or with a film's poster, and call onImageRendered
-			const posterImage = render.posterUrl ? toTopicPodcastEpisodeVideoImageUrls(render.posterUrl) : null
+			const posterImage = render.posterUrl ? toTopicVideoImageUrls(render.posterUrl) : null
 			setImage(render.image ?? posterImage)
 			onImageRenderedRef.current?.()
 		}

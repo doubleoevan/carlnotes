@@ -45,7 +45,7 @@ const SPEND_CONTROL_ENV_NAMES = [
 	"CHAT_DAILY_SPEND_CUTOFF_USD",
 	"FIRST_SCAN_DISPATCH_LIMIT",
 	"HOURLY_SIGNUP_ALERT_COUNT",
-	"TOPIC_PODCAST_EPISODE_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT",
+	"TOPIC_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT",
 ] as const
 
 // each test reads through an empty in-memory Redis with no Doppler value set
@@ -240,7 +240,7 @@ test("a failed settings read leaves both cutoffs unpassed and is not cached", as
 
 	// the state is unavailable, and no overrides are stored
 	expect(await loadDailySpendCutoffState(new Date("2026-11-10T12:00:00Z"))).toEqual({ status: "unavailable" })
-	expect(storedValueByKey.has("spend-control-settings")).toBe(false)
+	expect(storedValueByKey.has("spend-control-settings:v2")).toBe(false)
 })
 
 // render a waiting scan filter as the where clause of a scan read
@@ -376,7 +376,7 @@ test("the settings read each stored switch and image limit, and an empty table r
 	stubCutoffQueries({})
 	expect(await loadSpendControlSettings()).toEqual(DEFAULT_SPEND_CONTROL_SETTINGS)
 
-	// a row with both pauses and the pinned-only home on, and an image limit of zero
+	// a row with both pauses and the featured-only home on, and an image limit of zero
 	restoreConnectionPool()
 	stubRedisClient()
 	stubCutoffQueries({ overridesRow: [null, null, null, null, null, false, 0, true, true, true] })
@@ -384,8 +384,8 @@ test("the settings read each stored switch and image limit, and an empty table r
 		...DEFAULT_SPEND_CONTROL_SETTINGS,
 		generatedChapterImageLimit: 0,
 		isPodcastEpisodeRecordingPaused: true,
-		isTopicPodcastEpisodeVideoRenderingPaused: true,
-		isHomePinnedOnly: true,
+		isTopicVideoRenderingPaused: true,
+		isHomeFeaturedOnly: true,
 	})
 })
 

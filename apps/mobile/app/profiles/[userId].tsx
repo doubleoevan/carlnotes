@@ -10,7 +10,7 @@ import {
 	toProfileRankedNouns,
 } from "@carlnotes/core/lib/profileSections"
 import {
-	type PinnedOrderMove,
+	type FeaturedOrderMove,
 	PROFILE_RANK_OPTION_LABELS,
 	type RankedNoun,
 	toProfileRankDialogLabels,
@@ -42,7 +42,7 @@ import {
 	PLAIN_PAGE_BUTTON_TEXT_CLASS,
 } from "@/pageButtonClasses"
 
-// the icon of each pin option in the action menu
+// the icon of each feature option in the action menu
 const PROFILE_RANK_OPTION_ICONS: Record<RankedNoun, LucideIcon> = {
 	topics: ListOrdered,
 	films: Clapperboard,
@@ -101,9 +101,9 @@ export default function ProfileScreen() {
 	}
 
 	// send a rank sheet's moves one at a time, then reload the profile once. a rejected move keeps the sheet open
-	async function handleSaveProfileOrder(pinnedOrderMoves: PinnedOrderMove[]): Promise<void> {
+	async function handleSaveProfileOrder(featuredOrderMoves: FeaturedOrderMove[]): Promise<void> {
 		try {
-			await sendProfileOrderMoves(rankedNoun ?? "topics", pinnedOrderMoves)
+			await sendProfileOrderMoves(rankedNoun ?? "topics", featuredOrderMoves)
 		} catch (error) {
 			showClientError(REQUEST_FAILED_TEXT)
 			throw error
@@ -132,7 +132,7 @@ export default function ProfileScreen() {
 				isOwnProfile
 					? [
 							{ label: "Edit Café", icon: Pencil, onSelect: () => setIsEditing(true) },
-							// the pins the person may order, in the card sections' order
+							// the featured items the person may order, in the card sections' order
 							...toProfileRankedNouns(isOwnProfile).map((profileRankedNoun) => ({
 								label: PROFILE_RANK_OPTION_LABELS[profileRankedNoun],
 								icon: PROFILE_RANK_OPTION_ICONS[profileRankedNoun],
@@ -185,8 +185,8 @@ export default function ProfileScreen() {
 				</Sheet>
 			)}
 			{isCreatingTeam && <EditTeamModal onClose={() => setIsCreatingTeam(false)} />}
-			{/* the owner's list of pinned topics, films, podcast episodes, or Topic Posts, with the ones they may still
-			    pin */}
+			{/* the owner's list of featured topics, films, podcast episodes, or Topic Posts, with the ones they may still
+			    feature */}
 			{rankedNoun && isOwnProfile && profile && (
 				<RankDialog
 					labels={toProfileRankDialogLabels(rankedNoun)}

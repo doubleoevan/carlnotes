@@ -58,19 +58,19 @@ test("a discussion's regenerate returns its recording, and a rejection throws th
 	await expect(sendTopicPostDiscussionRegeneration("post-1")).rejects.toThrow("This month's regenerations are used.")
 })
 
-test("a pin's rejection throws, on a profile and on the home, and a kept one resolves", async () => {
-	stubFetch(Response.json({ error: "the profile's pins are at their limit" }, { status: 409 }))
+test("a rejected feature request throws, on a profile and on the home, and an accepted one resolves", async () => {
+	stubFetch(Response.json({ error: "the profile's featured items are at their limit" }, { status: 409 }))
 	await expect(sendTopicPostProfileOrder("post-1", 13)).rejects.toThrow("topic post profile order update failed: 409")
 	await expect(sendTopicPostHomeOrder("post-1", 1)).rejects.toThrow("topic post home order update failed: 409")
 
-	// a kept pin returns nothing
+	// an accepted request returns nothing
 	stubFetch(Response.json({ ok: true }))
 	expect(await sendTopicPostProfileOrder("post-1", 1)).toBeUndefined()
 })
 
-test("the home's Topic Posts read as the pinned rows and the rows a pin may name", async () => {
+test("the home's Topic Posts read as the featured rows and the rows an admin may feature", async () => {
 	const homeTopicPosts = {
-		pinnedTopicPosts: [{ id: "post-1", title: "Dialing in", topicName: "Home espresso" }],
+		featuredTopicPosts: [{ id: "post-1", title: "Dialing in", topicName: "Home espresso" }],
 		candidateTopicPosts: [{ id: "post-2", title: "Pulling shots", topicName: "Home espresso" }],
 	}
 	stubFetch(Response.json(homeTopicPosts))

@@ -1,5 +1,5 @@
-// profile section tests: a rank dialog's pinned rows are the first cards, only a public topic's rows may be pinned,
-// only the person's own action menu offers the pins, and the card sections end with one Topic Posts section
+// profile section tests: a rank dialog's featured rows are the first cards, only a public topic's rows may be featured,
+// only the person's own action menu offers the featured items, and the card sections end with one Topic Posts section
 import { expect, test } from "bun:test"
 import type {
 	ProfilePodcastEpisodeCard,
@@ -38,7 +38,7 @@ function toProfileTopicCard(id: string, isPublic: boolean, isOwned = true): Prof
 	}
 }
 
-test("the pinned topics are the first cards, and a private topic or a team topic is no candidate", () => {
+test("the featured topics are the first cards, and a private topic or a team topic is no candidate", () => {
 	const profileTopicRankItems = toProfileTopicRankItems({
 		profileTopics: [
 			toProfileTopicCard("a", true),
@@ -48,7 +48,7 @@ test("the pinned topics are the first cards, and a private topic or a team topic
 		],
 		pinnedTopicCount: 1,
 	})
-	expect(profileTopicRankItems.pinnedItems).toEqual([{ id: "a", label: "Topic a" }])
+	expect(profileTopicRankItems.featuredItems).toEqual([{ id: "a", label: "Topic a" }])
 	expect(profileTopicRankItems.candidateItems.map((candidateItem) => candidateItem.id)).toEqual(["a", "b"])
 })
 
@@ -87,12 +87,12 @@ test("a podcast episode is named by its title and its topic, and only an owned p
 		],
 		pinnedPodcastEpisodeCount: 0,
 	})
-	expect(profilePodcastEpisodeRankItems.pinnedItems).toEqual([])
+	expect(profilePodcastEpisodeRankItems.featuredItems).toEqual([])
 	expect(profilePodcastEpisodeRankItems.candidateItems).toEqual([{ id: "1", label: "Episode 1 · Home espresso" }])
 })
 
-test("the films dialog holds twelve pins, the pinned films first, and only a public topic's film is a candidate", () => {
-	// one pinned film, then a private topic's film and a public topic's
+test("the films dialog holds twelve featured items, the featured films first, and only a public topic's film is a candidate", () => {
+	// one featured film, then a private topic's film and a public topic's
 	const profileRankDialogItems = toProfileRankDialogItems("films", {
 		...EMPTY_PROFILE_CARDS,
 		profileTopicPodcastEpisodeVideos: [
@@ -103,7 +103,7 @@ test("the films dialog holds twelve pins, the pinned films first, and only a pub
 		pinnedTopicPodcastEpisodeVideoCount: 1,
 	})
 	expect(profileRankDialogItems.limit).toBe(12)
-	expect(profileRankDialogItems.pinnedItems).toEqual([{ id: "1", label: "Episode 1 · Home espresso" }])
+	expect(profileRankDialogItems.featuredItems).toEqual([{ id: "1", label: "Episode 1 · Home espresso" }])
 	expect(profileRankDialogItems.candidateItems.map((candidateItem) => candidateItem.id)).toEqual(["1", "3"])
 
 	// the dialog's words say films
@@ -114,7 +114,7 @@ test("the films dialog holds twelve pins, the pinned films first, and only a pub
 	})
 })
 
-test("only the person's own action menu offers the pins, Featured films right before Featured podcasts", () => {
+test("only the person's own action menu offers the featured items, Featured films right before Featured podcasts", () => {
 	const ownOptionLabels = toProfileRankedNouns(true).map((rankedNoun) => PROFILE_RANK_OPTION_LABELS[rankedNoun])
 	expect(ownOptionLabels).toEqual(["Featured topics", "Featured films", "Featured podcasts", "Featured posts"])
 	expect(toProfileRankedNouns(false)).toEqual([])
@@ -124,8 +124,8 @@ test("only the person's own action menu offers the pins, Featured films right be
 const toProfileTopicPostCard = (id: string, isTopicPublic: boolean): ProfileTopicPostCard =>
 	({ id, title: `Post ${id}`, topicName: "Home espresso", isTopicPublic }) as ProfileTopicPostCard
 
-test("the pinned Topic Posts are the first cards, and every post of a public topic is a candidate", () => {
-	// the cards hold the pinned post, then every other post newest first
+test("the featured Topic Posts are the first cards, and every post of a public topic is a candidate", () => {
+	// the cards hold the featured post, then every other post newest first
 	const profileTopicPostRankItems = toProfileTopicPostRankItems({
 		profileTopicPosts: [
 			toProfileTopicPostCard("1", true),
@@ -134,7 +134,7 @@ test("the pinned Topic Posts are the first cards, and every post of a public top
 		],
 		pinnedTopicPostCount: 1,
 	})
-	expect(profileTopicPostRankItems.pinnedItems).toEqual([{ id: "1", label: "Post 1 · Home espresso" }])
+	expect(profileTopicPostRankItems.featuredItems).toEqual([{ id: "1", label: "Post 1 · Home espresso" }])
 	expect(profileTopicPostRankItems.candidateItems.map((candidateItem) => candidateItem.id)).toEqual(["1", "2"])
 })
 
@@ -150,7 +150,7 @@ test("a profile's card sections end with the Topic Posts, with no second Topic P
 
 test("the posts dialog has no limit and words itself for posts, on a profile and on the home", () => {
 	const profileRankDialogItems = toProfileRankDialogItems("posts", EMPTY_PROFILE_CARDS)
-	expect(profileRankDialogItems).toEqual({ pinnedItems: [], candidateItems: [] })
+	expect(profileRankDialogItems).toEqual({ featuredItems: [], candidateItems: [] })
 
 	// the profile's words and the home's
 	expect(toProfileRankDialogLabels("posts")).toMatchObject({ title: "Featured posts", addLabel: "Add a post" })

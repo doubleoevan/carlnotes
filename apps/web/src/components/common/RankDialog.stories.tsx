@@ -1,5 +1,5 @@
-// the list that orders pinned rows: a topic joining the home's list, the first pin of all, a podcast episode already
-// pinned, a pinned row removed after a confirmation, a person's own pins with the picker that adds a row, and a Topic
+// the list that orders featured rows: a topic joining the home's list, the first featured item of all, a podcast episode already
+// featured, a featured row removed after a confirmation, a person's own featured items with the picker that adds a row, and a Topic
 // Post's page offering its post a place
 import { toHomeRankDialogLabels, toProfileRankDialogLabels } from "@carlnotes/core/lib/rankDialog"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
@@ -20,12 +20,12 @@ const meta = {
 	args: {
 		labels: toHomeRankDialogLabels("topics"),
 		pageItem: PAGE_TOPIC,
-		pinnedItems: HOME_TOPICS,
-		isPageItemPinned: false,
+		featuredItems: HOME_TOPICS,
+		isPageItemFeatured: false,
 		onSave: fn(async () => {}),
 		onClose: fn(),
 	},
-	argTypes: { pageItem: { control: false }, pinnedItems: { control: false }, labels: { control: false } },
+	argTypes: { pageItem: { control: false }, featuredItems: { control: false }, labels: { control: false } },
 	parameters: { session: "admin" },
 } satisfies Meta<typeof RankDialog>
 
@@ -47,12 +47,12 @@ export const Default: Story = {
 	},
 }
 
-// the first pin of all: the page's podcast episode is the only row, and Save pins it at position one
+// the first featured item of all: the page's podcast episode is the only row, and Save features it at position one
 export const First: Story = {
 	args: {
 		labels: toHomeRankDialogLabels("podcasts"),
 		pageItem: { id: "episode-1", label: "E4 · Grinders, scales, and the pour" },
-		pinnedItems: [],
+		featuredItems: [],
 	},
 	play: async ({ userEvent, args }) => {
 		const dialog = within(await screen.findByRole("dialog"))
@@ -61,17 +61,17 @@ export const First: Story = {
 	},
 }
 
-// a podcast episode already pinned, so the list is the pins as they stand
+// a podcast episode already featured, so the list is the featured items as they stand
 export const Episodes: Story = {
 	args: {
 		labels: toHomeRankDialogLabels("podcasts"),
 		pageItem: { id: "episode-1", label: "E4 · Grinders, scales, and the pour" },
-		pinnedItems: [{ id: "episode-1", label: "Grinders, scales, and the pour · Home espresso" }],
-		isPageItemPinned: true,
+		featuredItems: [{ id: "episode-1", label: "Grinders, scales, and the pour · Home espresso" }],
+		isPageItemFeatured: true,
 	},
 }
 
-// the X on a pinned row asks for confirmation, then clears that row alone and keeps the dialog open
+// the X on a featured row asks for confirmation, then clears that row alone and keeps the dialog open
 export const Dropped: Story = {
 	play: async ({ userEvent, args }) => {
 		const dialog = within(await screen.findByRole("dialog"))
@@ -85,12 +85,12 @@ export const Dropped: Story = {
 	},
 }
 
-// a person's own pins: no page item, two pinned topics, and the picker that offers their other public topics
+// a person's own featured items: no page item, two featured topics, and the picker that offers their other public topics
 export const Profile: Story = {
 	args: {
 		labels: toProfileRankDialogLabels("topics"),
 		pageItem: undefined,
-		pinnedItems: HOME_TOPICS.slice(0, 2),
+		featuredItems: HOME_TOPICS.slice(0, 2),
 		candidateItems: [...HOME_TOPICS, PAGE_TOPIC],
 		limit: 12,
 	},
@@ -106,12 +106,12 @@ export const Profile: Story = {
 	},
 }
 
-// a person with no pin yet reads the empty line above the picker
+// a person with nothing featured yet reads the empty line above the picker
 export const ProfileEmpty: Story = {
 	args: {
 		labels: toProfileRankDialogLabels("podcasts"),
 		pageItem: undefined,
-		pinnedItems: [],
+		featuredItems: [],
 		candidateItems: [{ id: "episode-1", label: "Grinders, scales, and the pour · Home espresso" }],
 		limit: 12,
 	},
@@ -122,13 +122,13 @@ export const ProfileEmpty: Story = {
 	},
 }
 
-// a person's own pinned films, each named by its podcast episode's title and its topic, and the picker that offers
+// a person's own featured films, each named by its podcast episode's title and its topic, and the picker that offers
 // their other films
 export const ProfileFilms: Story = {
 	args: {
 		labels: toProfileRankDialogLabels("films"),
 		pageItem: undefined,
-		pinnedItems: [{ id: "episode-1", label: "Grinders, scales, and the pour · Home espresso" }],
+		featuredItems: [{ id: "episode-1", label: "Grinders, scales, and the pour · Home espresso" }],
 		candidateItems: [
 			{ id: "episode-1", label: "Grinders, scales, and the pour · Home espresso" },
 			{ id: "episode-2", label: "The agents that shipped · LLM tooling" },
@@ -144,13 +144,13 @@ export const ProfileFilms: Story = {
 	},
 }
 
-// a person's own pinned posts, each named by its title and its topic, with no limit, and the picker that offers
+// a person's own featured posts, each named by its title and its topic, with no limit, and the picker that offers
 // their other posts
 export const ProfilePosts: Story = {
 	args: {
 		labels: toProfileRankDialogLabels("posts"),
 		pageItem: undefined,
-		pinnedItems: [{ id: "post-1", label: "Dialing in a new grinder · Home espresso" }],
+		featuredItems: [{ id: "post-1", label: "Dialing in a new grinder · Home espresso" }],
 		candidateItems: [
 			{ id: "post-1", label: "Dialing in a new grinder · Home espresso" },
 			{ id: "post-2", label: "What a scale changes · Home espresso" },
@@ -170,7 +170,7 @@ export const HomePosts: Story = {
 	args: {
 		labels: toHomeRankDialogLabels("posts"),
 		pageItem: undefined,
-		pinnedItems: [],
+		featuredItems: [],
 		candidateItems: [{ id: "post-2", label: "What a scale changes · Home espresso" }],
 	},
 	play: async () => {
@@ -186,7 +186,7 @@ export const HomePostsPage: Story = {
 	args: {
 		labels: toHomeRankDialogLabels("posts"),
 		pageItem: { id: "post-2", label: "What a scale changes · Home espresso" },
-		pinnedItems: [{ id: "post-1", label: "Dialing in a new grinder · Home espresso" }],
+		featuredItems: [{ id: "post-1", label: "Dialing in a new grinder · Home espresso" }],
 		candidateItems: [
 			{ id: "post-1", label: "Dialing in a new grinder · Home espresso" },
 			{ id: "post-2", label: "What a scale changes · Home espresso" },
@@ -204,13 +204,13 @@ export const HomePostsPage: Story = {
 	},
 }
 
-// an author's own pinned posts, opened from one of their Topic Post's pages: the page's post appended at the end, and
+// an author's own featured posts, opened from one of their Topic Post's pages: the page's post appended at the end, and
 // a press on the first row moves it there
 export const ProfilePostsPage: Story = {
 	args: {
 		labels: toProfileRankDialogLabels("posts"),
 		pageItem: { id: "post-2", label: "What a scale changes · Home espresso" },
-		pinnedItems: [{ id: "post-1", label: "Dialing in a new grinder · Home espresso" }],
+		featuredItems: [{ id: "post-1", label: "Dialing in a new grinder · Home espresso" }],
 		candidateItems: [
 			{ id: "post-1", label: "Dialing in a new grinder · Home espresso" },
 			{ id: "post-2", label: "What a scale changes · Home espresso" },

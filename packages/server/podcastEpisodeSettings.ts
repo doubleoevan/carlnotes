@@ -23,33 +23,30 @@ export function isPodcastEpisodeRecordingConfigured(): boolean {
 }
 
 // one film renders at a time on a worker replica by default, so long renders never take slots from recordings
-const DEFAULT_TOPIC_PODCAST_EPISODE_VIDEO_CONCURRENCY = 1
-const DEFAULT_TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_CONCURRENCY = 1
+const DEFAULT_TOPIC_VIDEO_CONCURRENCY = 1
+const DEFAULT_TOPIC_VIDEO_BACKFILL_CONCURRENCY = 1
 
 /**
- * Returns how many films render at once on a worker replica, from TOPIC_PODCAST_EPISODE_VIDEO_CONCURRENCY. Zero turns
+ * Returns how many films render at once on a worker replica, from TOPIC_VIDEO_CONCURRENCY. Zero turns
  * films off: no worker polls the film queue, and no recording or backfill starts a film.
  */
-export function topicPodcastEpisodeVideoConcurrency(): number {
-	return toWholeNumber(Bun.env.TOPIC_PODCAST_EPISODE_VIDEO_CONCURRENCY, DEFAULT_TOPIC_PODCAST_EPISODE_VIDEO_CONCURRENCY)
+export function topicVideoConcurrency(): number {
+	return toWholeNumber(Bun.env.TOPIC_VIDEO_CONCURRENCY, DEFAULT_TOPIC_VIDEO_CONCURRENCY)
 }
 
 /**
- * Returns how many films the backfill renders at once, from TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_CONCURRENCY. Zero
+ * Returns how many films the backfill renders at once, from TOPIC_VIDEO_BACKFILL_CONCURRENCY. Zero
  * turns the backfill off.
  */
-export function topicPodcastEpisodeVideoBackfillConcurrency(): number {
-	return toWholeNumber(
-		Bun.env.TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_CONCURRENCY,
-		DEFAULT_TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_CONCURRENCY,
-	)
+export function topicVideoBackfillConcurrency(): number {
+	return toWholeNumber(Bun.env.TOPIC_VIDEO_BACKFILL_CONCURRENCY, DEFAULT_TOPIC_VIDEO_BACKFILL_CONCURRENCY)
 }
 
 /**
  * Whether the film backfill runs: films are on, and the backfill concurrency is above zero.
  */
-export function isTopicPodcastEpisodeVideoBackfillEnabled(): boolean {
-	return topicPodcastEpisodeVideoConcurrency() > 0 && topicPodcastEpisodeVideoBackfillConcurrency() > 0
+export function isTopicVideoBackfillEnabled(): boolean {
+	return topicVideoConcurrency() > 0 && topicVideoBackfillConcurrency() > 0
 }
 
 // how many generated images one film draws at most by default, across all its chapters
@@ -57,13 +54,10 @@ const DEFAULT_GENERATED_CHAPTER_IMAGE_LIMIT = 40
 
 /**
  * Returns how many generated images one film draws at most by default, from
- * TOPIC_PODCAST_EPISODE_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT. Zero turns generated images off.
+ * TOPIC_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT. Zero turns generated images off.
  */
 export function generatedChapterImageLimit(): number {
-	return toWholeNumber(
-		Bun.env.TOPIC_PODCAST_EPISODE_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT,
-		DEFAULT_GENERATED_CHAPTER_IMAGE_LIMIT,
-	)
+	return toWholeNumber(Bun.env.TOPIC_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT, DEFAULT_GENERATED_CHAPTER_IMAGE_LIMIT)
 }
 
 /**

@@ -37,7 +37,7 @@ shipped build keeps working.
 
 - `topic-feed-state`, `note-badges`, `comment-mention-badges`, `mobile-chat`, `activity-page`: the feed's enabled
   rule and the one badges poll.
-- `topic-cards`, `topic-podcast-episode-video-player`, `topic-podcast-episode-video-rendering`, `user-avatars`,
+- `topic-cards`, `topic-video-player`, `topic-video-rendering`, `user-avatars`,
   `home-page`: image priority, the film image's sizes and their backfill, lazy avatars, and the hero image.
 - `topic-posts`, `topic-detail-page`: the body rendered the same on both sides, and the header and the film poster
   left out of the hydrate-in animation.

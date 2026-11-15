@@ -1,9 +1,9 @@
 // home order tests: the position a ranked row takes, and the statements the write and the release send
 import { afterEach, describe, expect, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "./connectionPoolStub"
+import { toTargetPosition } from "./featuredOrder"
 import { releaseHomeOrder, releaseTopicHomeOrders, setHomeOrder } from "./homeOrder"
 import { db } from "./index"
-import { toTargetPosition } from "./pinnedOrder"
 import { podcastEpisodes } from "./schema/podcast"
 import { topicPosts } from "./schema/topicPosts"
 import { topics } from "./schema/topics"
@@ -18,26 +18,26 @@ const UPDATED_AT = expect.any(String)
 
 describe("the position a ranked row takes", () => {
 	test("a row joining an ordering it was not in takes the position offered", () => {
-		// three pinned rows, so the home order selector offers 1 through 4 and none of them is past the end
+		// three featured rows, so the home order selector offers 1 through 4 and none of them is past the end
 		expect(toTargetPosition(1, 3)).toBe(1)
 		expect(toTargetPosition(2, 3)).toBe(2)
 		expect(toTargetPosition(4, 3)).toBe(4)
 	})
 
-	test("a row already pinned appends to the end instead of past it", () => {
-		// the selector offered 4 against four pinned rows, and the row has since left the ordering
+	test("a row already featured appends to the end instead of past it", () => {
+		// the selector offered 4 against four featured rows, and the row has since left the ordering
 		expect(toTargetPosition(4, 3)).toBe(4)
 		expect(toTargetPosition(5, 3)).toBe(4)
 	})
 
-	test("the first pinned row takes position one", () => {
+	test("the first featured row takes position one", () => {
 		expect(toTargetPosition(1, 0)).toBe(1)
 	})
 })
 
 describe("the write", () => {
-	test("a topic not yet pinned is inserted at its position and the rows from there move down", async () => {
-		// the topic has no order, and three topics are pinned
+	test("a topic not yet featured is inserted at its position and the rows from there move down", async () => {
+		// the topic has no order, and three topics are featured
 		const sentQueries = stubConnectionPool(({ text }) => (text.includes("count(*)") ? [[3]] : [[null]]))
 		await db.transaction(async (transaction) => {
 			await setHomeOrder({ table: topics, id: "topic-1", position: 2, transaction })
@@ -55,7 +55,7 @@ describe("the write", () => {
 	})
 
 	test("a position past the end appends", async () => {
-		// three podcast episodes are pinned, and the fifth position is offered
+		// three podcast episodes are featured, and the fifth position is offered
 		const sentQueries = stubConnectionPool(({ text }) => (text.includes("count(*)") ? [[3]] : [[null]]))
 		await db.transaction(async (transaction) => {
 			await setHomeOrder({ table: podcastEpisodes, id: "episode-1", position: 5, transaction })
@@ -89,7 +89,7 @@ describe("the release", () => {
 		expect(sentQueries).toHaveLength(1)
 	})
 
-	test("a pinned row is cleared and the rows below it move up", async () => {
+	test("a featured row is cleared and the rows below it move up", async () => {
 		const sentQueries = stubConnectionPool(() => [[3]])
 		expect(await releaseHomeOrder({ table: podcastEpisodes, id: "episode-1", handle: db })).toBe(true)
 		expect(sentQueries.map(({ text }) => text)).toEqual([
@@ -101,8 +101,8 @@ describe("the release", () => {
 		expect(sentQueries[2]?.values).toEqual([UPDATED_AT, 3])
 	})
 
-	test("a topic's pinned Topic Posts are each cleared in turn, and a topic with none reports none released", async () => {
-		// the topic's two pinned posts, then each one's order, and a write returns no row
+	test("a topic's featured Topic Posts are each cleared in turn, and a topic with none reports none released", async () => {
+		// the topic's two featured posts, then each one's order, and a write returns no row
 		const sentQueries = stubConnectionPool(({ text }) => {
 			if (text.startsWith('select "id" from "topic_posts"')) {
 				return [["post-1"], ["post-2"]]
@@ -111,7 +111,7 @@ describe("the release", () => {
 		})
 		expect(await releaseTopicHomeOrders({ table: topicPosts, topicId: "topic-1", handle: db })).toBe(true)
 
-		// the read takes the topic's pinned posts alone, and each post is cleared
+		// the read takes the topic's featured posts alone, and each post is cleared
 		expect(sentQueries[0]?.text).toBe(
 			'select "id" from "topic_posts" where ("topic_posts"."topic_id" = $1 and "topic_posts"."home_order" is not null)',
 		)
@@ -120,7 +120,7 @@ describe("the release", () => {
 			.map(({ values }) => values[2])
 		expect(clearedIds).toEqual(["post-1", "post-2"])
 
-		// a topic with no pinned post sends the one read
+		// a topic with no featured post sends the one read
 		const emptyQueries = stubConnectionPool(() => [])
 		expect(await releaseTopicHomeOrders({ table: topicPosts, topicId: "topic-2", handle: db })).toBe(false)
 		expect(emptyQueries).toHaveLength(1)

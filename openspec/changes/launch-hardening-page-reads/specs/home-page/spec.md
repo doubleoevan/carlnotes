@@ -12,9 +12,9 @@ opener SHALL stay a read of its own.
 - **WHEN** a thousand visitors load the home inside a minute
 - **THEN** the payload is built only by the reads that found no copy, and a warm read sends no query
 
-#### Scenario: A pin reaches the next visitor
+#### Scenario: A featured item reaches the next visitor
 
-- **WHEN** an admin pins a Topic at position one
+- **WHEN** an admin features a Topic at position one
 - **THEN** the home's cached ids and the visitors' copy are cleared together, and the next visitor's home leads with
   that Topic
 

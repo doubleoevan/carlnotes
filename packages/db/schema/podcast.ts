@@ -13,14 +13,7 @@ import {
 	timestamp,
 	uniqueIndex,
 } from "drizzle-orm/pg-core"
-import {
-	podcastEpisodeStatus,
-	primaryId,
-	rating,
-	timestamps,
-	topicImageOrigin,
-	topicPodcastEpisodeVideoStatus,
-} from "./columns"
+import { podcastEpisodeStatus, primaryId, rating, timestamps, topicImageOrigin, topicVideoStatus } from "./columns"
 import { findings, resources, scans } from "./scans"
 import { topics } from "./topics"
 import { users } from "./users"
@@ -56,10 +49,10 @@ export const podcastEpisodes = pgTable(
 		durationSeconds: integer("duration_seconds"),
 		// the unique people who played or downloaded the podcast episode, all time
 		listenerCount: integer("listener_count").notNull().default(0),
-		// an admin can pin this podcast episode to the home page and set its order. the column kept its old name
+		// an admin can feature this podcast episode on the home page and set its order. the column kept its old name
 		// through the rename to home order
 		homeOrder: integer("feature_order"),
-		// the topic's owner can pin this podcast episode to the top of their profile page and set its order
+		// the topic's owner can feature this podcast episode at the top of their profile page and set its order
 		profileOrder: integer("profile_order"),
 		// the content hash of the podcast episode's own image, drawn once it publishes, or null until it is drawn
 		imageHash: text("image_hash"),
@@ -82,9 +75,9 @@ export const podcastEpisodes = pgTable(
 		uniqueIndex("episodes_scan_unique").on(table.scanId),
 		uniqueIndex("episodes_topic_season_number_unique").on(table.topicId, table.season, table.episodeNumber),
 		index("episodes_topic_published_idx").on(table.topicId, table.publishedAt),
-		// the few pinned podcast episodes, which the home's home topic and podcast cards and the admin console read
+		// the few featured podcast episodes, which the home's home topic and podcast cards and the admin console read
 		index("episodes_feature_order_idx").on(table.homeOrder).where(sql`${table.homeOrder} is not null`),
-		// the few podcast episodes pinned to a profile page
+		// the few podcast episodes featured on a profile page
 		index("episodes_profile_order_idx").on(table.profileOrder).where(sql`${table.profileOrder} is not null`),
 		index("episodes_owner_created_idx").on(table.ownerId, table.createdAt),
 		// the trigram indexes behind the episode search, which matches anywhere in the lowercased title or description
@@ -182,8 +175,8 @@ export const podcastFeedTokens = pgTable(
 )
 
 // the film of one podcast episode: its stored parts, the joined film, and its captions
-export const topicPodcastEpisodeVideos = pgTable(
-	"topic_podcast_episode_videos",
+export const topicVideos = pgTable(
+	"topic_videos",
 	{
 		id: primaryId(),
 		// the podcast episode, which has at most one film
@@ -191,7 +184,7 @@ export const topicPodcastEpisodeVideos = pgTable(
 			.notNull()
 			.references(() => podcastEpisodes.id, { onDelete: "cascade" }),
 		// the film status. rendering until it is ready or fails, and error holds a failure reason
-		status: topicPodcastEpisodeVideoStatus("status").notNull().default("rendering"),
+		status: topicVideoStatus("status").notNull().default("rendering"),
 		error: text("error"),
 		// the object keys of the intro, the chapters, and the sign-off parts, all video only
 		introKey: text("intro_key"),
@@ -218,27 +211,27 @@ export const topicPodcastEpisodeVideos = pgTable(
 		imagePrompt: text("image_prompt"),
 		// what the render and every rebuild cost in dollars
 		cost: numeric("cost", { precision: 12, scale: 6 }).notNull().default("0"),
-		// an admin can pin this film to the home's Featured films and set its order
+		// an admin can feature this film in the home's Featured films and set its order
 		homeOrder: integer("home_order"),
-		// the Topic's owner can pin this film to their Café's Featured Films and set its order
+		// the Topic's owner can feature this film in their Café's Featured Films and set its order
 		profileOrder: integer("profile_order"),
 		// created and updated timestamps
 		...timestamps(),
 	},
-	// one film per podcast episode. the partial index covers the few films pinned to the home
+	// one film per podcast episode. the partial index covers the few films featured on the home
 	(table) => [
-		uniqueIndex("topic_podcast_episode_videos_episode_unique").on(table.podcastEpisodeId),
-		index("topic_podcast_episode_videos_home_order_idx").on(table.homeOrder).where(sql`${table.homeOrder} is not null`),
+		uniqueIndex("topic_videos_episode_unique").on(table.podcastEpisodeId),
+		index("topic_videos_home_order_idx").on(table.homeOrder).where(sql`${table.homeOrder} is not null`),
 	],
 )
 
 /**
- * a user's open or closed choice for one topic's Topic Cinema section. no code reads it, and the table stays so the
+ * a user's open or closed choice for the topic video section of one topic. no code reads it, and the table stays so the
  * api that a deploy replaces can still read it
  * @public drizzle-kit reads it from the schema files
  */
-export const topicPodcastEpisodeVideoSections = pgTable(
-	"topic_podcast_episode_video_sections",
+export const topicVideoSections = pgTable(
+	"topic_video_sections",
 	{
 		id: primaryId(),
 		// the user and the topic
@@ -260,8 +253,8 @@ export const topicPodcastEpisodeVideoSections = pgTable(
 	// one choice per user and topic. the topic index serves a topic's delete, and the podcast episode index a podcast
 	// episode's delete
 	(table) => [
-		uniqueIndex("topic_podcast_episode_video_sections_user_topic_unique").on(table.userId, table.topicId),
-		index("topic_podcast_episode_video_sections_topic_id_idx").on(table.topicId),
-		index("topic_podcast_episode_video_sections_episode_id_idx").on(table.podcastEpisodeId),
+		uniqueIndex("topic_video_sections_user_topic_unique").on(table.userId, table.topicId),
+		index("topic_video_sections_topic_id_idx").on(table.topicId),
+		index("topic_video_sections_episode_id_idx").on(table.podcastEpisodeId),
 	],
 )

@@ -11,8 +11,8 @@ import {
 	type TopicImageUrls,
 	toPodcastEpisodeImageUrls,
 	toTopicImageUrls,
-	toTopicPodcastEpisodeVideoPosterUrl,
 	toTopicPostImageUrls,
+	toTopicVideoPosterUrl,
 	toUncheckedTopicImageUrls,
 } from "@carlnotes/contracts/topicImages"
 import type { TopicPostResponse } from "@carlnotes/contracts/topicPosts"
@@ -104,7 +104,7 @@ export async function overlayUncheckedPodcastEpisodePageImages(
 	}
 
 	// the podcast episode with the unchecked uploads, and which of its two images is unchecked
-	const { podcastEpisode, isPodcastEpisodeImageUnchecked, isTopicPodcastEpisodeVideoImageUnchecked } =
+	const { podcastEpisode, isPodcastEpisodeImageUnchecked, isTopicVideoImageUnchecked } =
 		await overlayUncheckedPodcastEpisodeImages(podcastEpisodePage.podcastEpisode, userId)
 
 	// the editor reads an unchecked image as an upload, which has no image prompt
@@ -115,9 +115,9 @@ export async function overlayUncheckedPodcastEpisodePageImages(
 				podcastEpisodeImagePrompt: null,
 			}
 		: {}
-	const uncheckedTopicPodcastEpisodeVideoImageFields = isTopicPodcastEpisodeVideoImageUnchecked
+	const uncheckedTopicVideoImageFields = isTopicVideoImageUnchecked
 		? {
-				isTopicPodcastEpisodeVideoImageUnchecked,
+				isTopicVideoImageUnchecked,
 				topicPodcastEpisodeVideoImageOrigin: "uploaded" as const,
 				topicPodcastEpisodeVideoImagePrompt: null,
 			}
@@ -126,7 +126,7 @@ export async function overlayUncheckedPodcastEpisodePageImages(
 		...podcastEpisodePage,
 		podcastEpisode,
 		...uncheckedPodcastEpisodeImageFields,
-		...uncheckedTopicPodcastEpisodeVideoImageFields,
+		...uncheckedTopicVideoImageFields,
 	}
 }
 
@@ -134,7 +134,7 @@ export async function overlayUncheckedPodcastEpisodePageImages(
 type UncheckedPodcastEpisodeImages = {
 	podcastEpisode: PodcastEpisode
 	isPodcastEpisodeImageUnchecked: boolean
-	isTopicPodcastEpisodeVideoImageUnchecked: boolean
+	isTopicVideoImageUnchecked: boolean
 }
 
 /**
@@ -154,13 +154,13 @@ export async function overlayUncheckedPodcastEpisodeImages(
 	const toUncheckedImageHash = (subjectKind: UncheckedImageSubjectKind): string | null =>
 		uncheckedImageRows.find((uncheckedImageRow) => uncheckedImageRow.subjectKind === subjectKind)?.imageHash ?? null
 	const podcastEpisodeImageHash = toUncheckedImageHash("podcastEpisodeImage")
-	const topicPodcastEpisodeVideoImageHash = toUncheckedImageHash("topicPodcastEpisodeVideoImage")
+	const topicVideoImageHash = toUncheckedImageHash("topicPodcastEpisodeVideoImage")
 
 	// an unchecked film image shows on a ready film alone, as its poster, at its unchecked path
 	const { video } = podcastEpisode
 	const uncheckedPosterUrl =
-		video && topicPodcastEpisodeVideoImageHash
-			? toUncheckedImagePath(toTopicPodcastEpisodeVideoPosterUrl(podcastEpisode.id, topicPodcastEpisodeVideoImageHash))
+		video && topicVideoImageHash
+			? toUncheckedImagePath(toTopicVideoPosterUrl(podcastEpisode.id, topicVideoImageHash))
 			: null
 
 	// the unchecked poster's url as the podcast episode's field and as its film's
@@ -176,7 +176,7 @@ export async function overlayUncheckedPodcastEpisodeImages(
 	return {
 		podcastEpisode: { ...podcastEpisode, image: shownImage, ...uncheckedPosterFields },
 		isPodcastEpisodeImageUnchecked: podcastEpisodeImageHash !== null,
-		isTopicPodcastEpisodeVideoImageUnchecked: uncheckedPosterUrl !== null,
+		isTopicVideoImageUnchecked: uncheckedPosterUrl !== null,
 	}
 }
 

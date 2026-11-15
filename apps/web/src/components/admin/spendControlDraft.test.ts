@@ -19,8 +19,8 @@ const DEFAULT_DRAFT: SpendControlDraft = {
 	generatedChapterImageLimitText: "",
 	isUnverifiedFirstScanLimitOn: false,
 	isPodcastEpisodeRecordingPaused: false,
-	isTopicPodcastEpisodeVideoRenderingPaused: false,
-	isHomePinnedOnly: false,
+	isTopicVideoRenderingPaused: false,
+	isHomeFeaturedOnly: false,
 }
 
 // the console's read with every setting at its default and every switch off
@@ -39,8 +39,8 @@ const DEFAULT_DAILY_SPEND_CUTOFFS: AdminDailySpendCutoffs = {
 	generatedChapterImageLimit: { value: 40, defaultValue: 40, isOverridden: false },
 	isUnverifiedFirstScanLimitOn: false,
 	isPodcastEpisodeRecordingPaused: false,
-	isTopicPodcastEpisodeVideoRenderingPaused: false,
-	isHomePinnedOnly: false,
+	isTopicVideoRenderingPaused: false,
+	isHomeFeaturedOnly: false,
 	updatedAt: null,
 	updatedByUsername: null,
 }
@@ -56,20 +56,20 @@ test("the draft is empty and every switch is off for a read with every default",
 })
 
 // an image limit override fills its field, a default leaves it empty, and each switch reads as the console returned it
-test("the draft is built from the read's image limit override, each pause, and the pinned-only home", () => {
+test("the draft is built from the read's image limit override, each pause, and the featured-only home", () => {
 	const spendControlDraft = toSpendControlDraft({
 		...DEFAULT_DAILY_SPEND_CUTOFFS,
 		generatedChapterImageLimit: { value: 10, defaultValue: 40, isOverridden: true },
 		isPodcastEpisodeRecordingPaused: true,
-		isTopicPodcastEpisodeVideoRenderingPaused: true,
-		isHomePinnedOnly: true,
+		isTopicVideoRenderingPaused: true,
+		isHomeFeaturedOnly: true,
 	})
 	expect(spendControlDraft).toEqual({
 		...DEFAULT_DRAFT,
 		generatedChapterImageLimitText: "10",
 		isPodcastEpisodeRecordingPaused: true,
-		isTopicPodcastEpisodeVideoRenderingPaused: true,
-		isHomePinnedOnly: true,
+		isTopicVideoRenderingPaused: true,
+		isHomeFeaturedOnly: true,
 	})
 })
 
@@ -80,14 +80,14 @@ test("the save body sends each setting this tab changed", () => {
 		dispatchLimitText: "0",
 		generatedChapterImageLimitText: "0",
 		isUnverifiedFirstScanLimitOn: true,
-		isHomePinnedOnly: true,
+		isHomeFeaturedOnly: true,
 	})
 	expect(savePayload).toStrictEqual({
 		scheduledScansCutoffDollars: 42.5,
 		firstScanDispatchLimit: 0,
 		generatedChapterImageLimit: 0,
 		isUnverifiedFirstScanLimitOn: true,
-		isHomePinnedOnly: true,
+		isHomeFeaturedOnly: true,
 	})
 })
 

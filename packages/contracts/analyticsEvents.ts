@@ -106,7 +106,7 @@ export type UserAnalyticsEvent =
 	// a topic post's discussion recorded again by an editor
 	| "social_topic_post_discussion_regenerate"
 	| `social_${SocialEventFlagSubject}_flag`
-	// a topic, a film, a podcast episode, or a Topic Post pinned to its person's profile, moved there, or dropped from it
+	// a topic, a film, a podcast episode, or a Topic Post featured on its person's profile, moved there, or dropped from it
 	| "social_profile_order_change"
 	// a comment mention marked seen, by scrolling to its comment or by Mark all seen
 	| "social_mention_seen"
@@ -161,7 +161,7 @@ export type VisitAnalyticsEvent =
 	| "visit_share_clicked"
 	| "visit_podcast_subscribe_clicked"
 	| "visit_video_played"
-	// a film's format switch, Topic Cinema's toggle, a Coffee Break films page, and the Video dialog's opening
+	// a film's format switch, the topic video section's toggle, a Coffee Break films page, and the Video dialog's opening
 	| "visit_episode_format_switched"
 	| "visit_episode_video_section_toggled"
 	| "visit_episode_videos_page_viewed"

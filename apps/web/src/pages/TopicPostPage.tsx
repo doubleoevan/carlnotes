@@ -16,7 +16,7 @@ import {
 } from "@carlnotes/core/lib/rankDialog"
 import { EDIT_IMAGE_DIALOG_TITLES } from "@carlnotes/core/lib/topicImageEditor"
 import {
-	isTopicPostPinnable,
+	isTopicPostFeaturable,
 	isTopicPostUrlStale,
 	TOPIC_POST_DELETE,
 	TOPIC_POST_LABELS,
@@ -281,7 +281,7 @@ export function TopicPostPage() {
 	)
 }
 
-// the rank dialogs that the actions menu opens: the home's pinned Topic Posts, and the author's own profile's
+// the rank dialogs that the actions menu opens: the home's featured Topic Posts, and the author's own profile's
 type TopicPostRankDialog = "rank" | "rank-profile"
 
 // a published Topic Post's rank options on a public topic: the home's for an admin and the profile's for the
@@ -291,7 +291,7 @@ function toTopicPostRankOptions(
 	isAdminUser: boolean,
 	onOpenRankDialog: (topicPostRankDialog: TopicPostRankDialog) => void,
 ): PageActionOption[] {
-	if (!isTopicPostPinnable(topicPost)) {
+	if (!isTopicPostFeaturable(topicPost)) {
 		return []
 	}
 	return [

@@ -12,12 +12,12 @@ import type { ComponentProps } from "react"
 import { PLAY_BUTTON_CLASS } from "@/lib/styleClasses"
 import { captureFilmVisitEvent } from "@/lib/visitAnalytics"
 import { PodcastEpisodePlayButton } from "./PodcastEpisodePlayButton"
-import { TopicPodcastEpisodeVideoDialog } from "./TopicPodcastEpisodeVideoDialog"
+import { TopicVideoDialog } from "./TopicVideoDialog"
 
 const ELEMENTS: PodcastEpisodeVideoButtonElements = { Button: VideoButton }
 
 // a film card's play button takes the press inside its frame, and its focus ring is set off from the image
-const TOPIC_PODCAST_EPISODE_VIDEO_CARD_PLAY_BUTTON_CLASS = cn(
+const TOPIC_VIDEO_CARD_PLAY_BUTTON_CLASS = cn(
 	"pointer-events-auto cursor-pointer rounded-full outline-none",
 	"focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
 )
@@ -48,7 +48,7 @@ function VideoButton({
 	onDialogClose,
 }: ComponentProps<PodcastEpisodeVideoButtonElements["Button"]>) {
 	const dialog = isDialogOpen && (
-		<TopicPodcastEpisodeVideoDialog
+		<TopicVideoDialog
 			podcastEpisodeId={podcastEpisode.id}
 			title={dialogTitle}
 			shouldPlayOnLoad={shouldPlayOnLoad}
@@ -101,7 +101,7 @@ function VideoButton({
 					label={label}
 					isPlaying={false}
 					onPress={onPress}
-					className={TOPIC_PODCAST_EPISODE_VIDEO_CARD_PLAY_BUTTON_CLASS}
+					className={TOPIC_VIDEO_CARD_PLAY_BUTTON_CLASS}
 				/>
 			</div>
 			{dialog}

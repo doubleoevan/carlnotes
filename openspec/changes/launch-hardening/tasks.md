@@ -126,9 +126,9 @@ is two steps (design D15): the by-hand concurrent build in production, then the 
 
 - [ ] 6.1 Move the film's and the discussion's timeouts into `stageTimeouts.ts` and export each longest run. Verify:
       unit tests pin both sums, and the bundle check passes
-- [ ] 6.2 Add `restarted_at` to `topic_podcast_episode_videos`, `topic_post_discussions`, `topic_image_renders`, and
+- [ ] 6.2 Add `restarted_at` to `topic_videos`, `topic_post_discussions`, `topic_image_renders`, and
       the attachments table. Verify: schema tests
-- [ ] 6.3 Add a client start for the film render workflow under `toTopicPodcastEpisodeVideoWorkflowId`, and an optional
+- [ ] 6.3 Add a client start for the film render workflow under `toTopicVideoWorkflowId`, and an optional
       `isPlatformBilled` on the workflow's input passed to the activity. A new optional input field changes no
       command. Verify: `temporalClient.test.ts`, and a workflow test that the flag reaches the activity
 - [ ] 6.4 Close out a film at `rendering` whose `updated_at` is past its limit, through group 1's module: restart once
@@ -228,7 +228,7 @@ is two steps (design D15): the by-hand concurrent build in production, then the 
       test of the reader, and a boot test at 0
 - [ ] 9.6 Log the backfill's estimated total cost and remaining films at its start and after each batch. Verify:
       the backfill's workflow test asserts both lines
-- [ ] 9.7 Run each backfill render as a child workflow under `toTopicPodcastEpisodeVideoWorkflowId`, with `patched`
+- [ ] 9.7 Run each backfill render as a child workflow under `toTopicVideoWorkflowId`, with `patched`
       read once at the top of a run, a rejected duplicate counted as skipped, and the backfill's Worker keeping the
       old activities registered. Verify: a workflow test of the rejected duplicate, and a replay of a backfill
       started before the change

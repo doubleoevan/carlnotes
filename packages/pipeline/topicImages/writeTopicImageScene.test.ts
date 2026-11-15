@@ -91,7 +91,7 @@ test("the image prompt is the scene followed by the house style paragraph", asyn
 })
 
 test("a film's image prompt is the scene followed by the film house style paragraph", async () => {
-	const imagePrompt = await toTopicImagePrompt("A harbor at dusk.", "topic-podcast-episode-video-image-style")
+	const imagePrompt = await toTopicImagePrompt("A harbor at dusk.", "topic-video-image-style")
 	expect(imagePrompt.startsWith("A harbor at dusk.\n\nA wide cinematic film still")).toBe(true)
 
 	// the frame is full to the bottom edge, in the palette, with no text

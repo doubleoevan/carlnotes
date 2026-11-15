@@ -2,7 +2,7 @@
 // shape a table row shows, with its chapter count, and each topic's latest of either, limited to what the user may
 // listen to
 
-import type { PodcastEpisode, PodcastEpisodeSummary, TopicPodcastEpisodeVideo } from "@carlnotes/contracts/podcast"
+import type { PodcastEpisode, PodcastEpisodeSummary, TopicVideo } from "@carlnotes/contracts/podcast"
 import { isPublishedPodcastEpisode } from "@carlnotes/contracts/podcast"
 import {
 	FULL_PODCAST_COVER_SIZE,
@@ -10,9 +10,9 @@ import {
 	toPodcastEpisodeCover,
 } from "@carlnotes/contracts/podcastEpisodes"
 import { toPodcastEpisodePath } from "@carlnotes/contracts/seo"
-import { toPodcastEpisodeImageUrls, toTopicPodcastEpisodeVideoPosterUrl } from "@carlnotes/contracts/topicImages"
+import { toPodcastEpisodeImageUrls, toTopicVideoPosterUrl } from "@carlnotes/contracts/topicImages"
 import { db } from "@carlnotes/db"
-import { podcastEpisodeChapters, podcastEpisodes, topicPodcastEpisodeVideos } from "@carlnotes/db/schema/podcast"
+import { podcastEpisodeChapters, podcastEpisodes, topicVideos } from "@carlnotes/db/schema/podcast"
 import { isAfterSubscriberActivation } from "@carlnotes/db/topicPermissions"
 import { toPodcastCoverPath } from "@carlnotes/server/podcastCoverPaths"
 import { isPodcastEpisodeRecordingConfigured } from "@carlnotes/server/podcastEpisodeSettings"
@@ -36,12 +36,12 @@ export type PodcastEpisodeRowTopic = { podcastEpisodeRow: PodcastEpisodeRow; top
 
 // a ready film as a podcast episode's shape reads it: its size in bytes, and the hash of its own image, null for a film
 // that shows its podcast episode's image
-type ReadyTopicPodcastEpisodeVideo = { byteSize: number; imageHash: string | null }
+type ReadyTopicVideo = { byteSize: number; imageHash: string | null }
 
 // the films of a list of podcast episodes: each ready film by its podcast episode's id, and the ids of the podcast
 // episodes whose film is rendering
-export type TopicPodcastEpisodeVideos = {
-	readyTopicPodcastEpisodeVideos: Map<string, ReadyTopicPodcastEpisodeVideo>
+export type TopicVideos = {
+	readyTopicVideos: Map<string, ReadyTopicVideo>
 	videoRenderingPodcastEpisodeIds: Set<string>
 }
 
@@ -50,14 +50,14 @@ export type TopicPodcastEpisodeVideos = {
 type ToPodcastEpisodeOptions = PodcastEpisodeRowTopic & {
 	podcastEpisodeChapterRows?: (typeof podcastEpisodeChapters.$inferSelect)[]
 	podcastEpisodeListenRow?: PodcastEpisodeListenRow
-	readyTopicPodcastEpisodeVideo?: ReadyTopicPodcastEpisodeVideo
+	readyTopicVideo?: ReadyTopicVideo
 	isVideoRendering?: boolean
 }
 
 // the row, topic, chapter count, and ready film if any that a podcast episode summary is built from
 type ToPodcastEpisodeSummaryOptions = PodcastEpisodeRowTopic & {
 	chapterCount: number
-	readyTopicPodcastEpisodeVideo?: ReadyTopicPodcastEpisodeVideo
+	readyTopicVideo?: ReadyTopicVideo
 }
 
 // the podcast episode row, its topic, and the user, null for a visitor
@@ -67,7 +67,7 @@ type LoadPodcastEpisodeOptions = PodcastEpisodeRowTopic & { userId: string | nul
 type LoadPodcastEpisodesOptions = {
 	podcastEpisodeRowTopics: PodcastEpisodeRowTopic[]
 	userId: string | null
-	topicPodcastEpisodeVideos?: TopicPodcastEpisodeVideos
+	topicVideos?: TopicVideos
 }
 
 /**
@@ -129,7 +129,7 @@ export async function loadPodcastEpisode({
 export async function loadPodcastEpisodes({
 	podcastEpisodeRowTopics,
 	userId,
-	topicPodcastEpisodeVideos: loadedTopicPodcastEpisodeVideos,
+	topicVideos: loadedTopicVideos,
 }: LoadPodcastEpisodesOptions): Promise<PodcastEpisode[]> {
 	const podcastEpisodeIds = podcastEpisodeRowTopics.map(({ podcastEpisodeRow }) => podcastEpisodeRow.id)
 	if (podcastEpisodeIds.length === 0) {
@@ -137,18 +137,18 @@ export async function loadPodcastEpisodes({
 	}
 
 	// every podcast episode's chapters in their order, the user's progress through each episode, and its film
-	const [podcastEpisodeChapterRows, podcastEpisodeListenRows, topicPodcastEpisodeVideos] = await Promise.all([
+	const [podcastEpisodeChapterRows, podcastEpisodeListenRows, topicVideos] = await Promise.all([
 		db
 			.select()
 			.from(podcastEpisodeChapters)
 			.where(inArray(podcastEpisodeChapters.podcastEpisodeId, podcastEpisodeIds))
 			.orderBy(podcastEpisodeChapters.position),
 		loadPodcastEpisodeListenRows(userId, podcastEpisodeIds),
-		loadedTopicPodcastEpisodeVideos ?? loadTopicPodcastEpisodeVideos(podcastEpisodeIds),
+		loadedTopicVideos ?? loadTopicVideos(podcastEpisodeIds),
 	])
 
 	// build each podcast episode from its own chapters, listen row, and film
-	const { readyTopicPodcastEpisodeVideos, videoRenderingPodcastEpisodeIds } = topicPodcastEpisodeVideos
+	const { readyTopicVideos, videoRenderingPodcastEpisodeIds } = topicVideos
 	const chapterRowsByPodcastEpisodeId = Map.groupBy(
 		podcastEpisodeChapterRows,
 		(chapterRow) => chapterRow.podcastEpisodeId,
@@ -162,7 +162,7 @@ export async function loadPodcastEpisodes({
 			topic,
 			podcastEpisodeChapterRows: chapterRowsByPodcastEpisodeId.get(podcastEpisodeRow.id),
 			podcastEpisodeListenRow: listenRowByPodcastEpisodeId.get(podcastEpisodeRow.id),
-			readyTopicPodcastEpisodeVideo: readyTopicPodcastEpisodeVideos.get(podcastEpisodeRow.id),
+			readyTopicVideo: readyTopicVideos.get(podcastEpisodeRow.id),
 			isVideoRendering: videoRenderingPodcastEpisodeIds.has(podcastEpisodeRow.id),
 		}),
 	)
@@ -174,7 +174,7 @@ export async function loadPodcastEpisodes({
  */
 export async function loadPodcastEpisodeSummaries(
 	podcastEpisodeRowTopics: PodcastEpisodeRowTopic[],
-	loadedTopicPodcastEpisodeVideos?: TopicPodcastEpisodeVideos,
+	loadedTopicVideos?: TopicVideos,
 ): Promise<PodcastEpisodeSummary[]> {
 	const podcastEpisodeIds = podcastEpisodeRowTopics.map(({ podcastEpisodeRow }) => podcastEpisodeRow.id)
 	if (podcastEpisodeIds.length === 0) {
@@ -182,13 +182,13 @@ export async function loadPodcastEpisodeSummaries(
 	}
 
 	// every podcast episode's chapter count and its film, then each summary with its own count
-	const [chapterCountRows, { readyTopicPodcastEpisodeVideos }] = await Promise.all([
+	const [chapterCountRows, { readyTopicVideos }] = await Promise.all([
 		db
 			.select({ podcastEpisodeId: podcastEpisodeChapters.podcastEpisodeId, chapterCount: count() })
 			.from(podcastEpisodeChapters)
 			.where(inArray(podcastEpisodeChapters.podcastEpisodeId, podcastEpisodeIds))
 			.groupBy(podcastEpisodeChapters.podcastEpisodeId),
-		loadedTopicPodcastEpisodeVideos ?? loadTopicPodcastEpisodeVideos(podcastEpisodeIds),
+		loadedTopicVideos ?? loadTopicVideos(podcastEpisodeIds),
 	])
 	const chapterCountByPodcastEpisodeId = new Map(
 		chapterCountRows.map((chapterCountRow) => [chapterCountRow.podcastEpisodeId, chapterCountRow.chapterCount]),
@@ -198,7 +198,7 @@ export async function loadPodcastEpisodeSummaries(
 			podcastEpisodeRow,
 			topic,
 			chapterCount: chapterCountByPodcastEpisodeId.get(podcastEpisodeRow.id) ?? 0,
-			readyTopicPodcastEpisodeVideo: readyTopicPodcastEpisodeVideos.get(podcastEpisodeRow.id),
+			readyTopicVideo: readyTopicVideos.get(podcastEpisodeRow.id),
 		}),
 	)
 }
@@ -211,7 +211,7 @@ export function toPodcastEpisode({
 	topic,
 	podcastEpisodeChapterRows = [],
 	podcastEpisodeListenRow,
-	readyTopicPodcastEpisodeVideo,
+	readyTopicVideo,
 	isVideoRendering = false,
 }: ToPodcastEpisodeOptions): PodcastEpisode {
 	// the fields the episode shares with its summary, its chapter count among them
@@ -219,7 +219,7 @@ export function toPodcastEpisode({
 		podcastEpisodeRow,
 		topic,
 		chapterCount: podcastEpisodeChapterRows.length,
-		readyTopicPodcastEpisodeVideo,
+		readyTopicVideo,
 	})
 
 	// map a removed status to failed. the loaders never return a removed podcast episode
@@ -239,7 +239,7 @@ export function toPodcastEpisode({
 		coverUrl: podcastCover ? toPodcastCoverPath(podcastCover, FULL_PODCAST_COVER_SIZE) : null,
 		smallCoverUrl: podcastCover ? toPodcastCoverPath(podcastCover, SMALL_PODCAST_COVER_SIZE) : null,
 		// the ready film, and whether the film is rendering
-		video: toTopicPodcastEpisodeVideo(podcastEpisodeRow.id, readyTopicPodcastEpisodeVideo),
+		video: toTopicVideo(podcastEpisodeRow.id, readyTopicVideo),
 		isVideoRendering,
 		chapters: podcastEpisodeChapterRows.map(
 			({ position, title, findingId, sourceUrl, rating, startSeconds, endSeconds }) => ({
@@ -268,10 +268,10 @@ function toPodcastEpisodeSummary({
 	podcastEpisodeRow,
 	topic,
 	chapterCount,
-	readyTopicPodcastEpisodeVideo,
+	readyTopicVideo,
 }: ToPodcastEpisodeSummaryOptions): PodcastEpisodeSummary {
 	// the poster of a ready film with its own image
-	const videoImageHash = readyTopicPodcastEpisodeVideo?.imageHash
+	const videoImageHash = readyTopicVideo?.imageHash
 	return {
 		id: podcastEpisodeRow.id,
 		title: podcastEpisodeRow.title,
@@ -288,8 +288,8 @@ function toPodcastEpisodeSummary({
 		image: podcastEpisodeRow.imageHash
 			? toPodcastEpisodeImageUrls(podcastEpisodeRow.id, podcastEpisodeRow.imageHash)
 			: null,
-		hasVideo: Boolean(readyTopicPodcastEpisodeVideo),
-		videoPosterUrl: videoImageHash ? toTopicPodcastEpisodeVideoPosterUrl(podcastEpisodeRow.id, videoImageHash) : null,
+		hasVideo: Boolean(readyTopicVideo),
+		videoPosterUrl: videoImageHash ? toTopicVideoPosterUrl(podcastEpisodeRow.id, videoImageHash) : null,
 	}
 }
 
@@ -297,24 +297,24 @@ function toPodcastEpisodeSummary({
  * Returns the films of these podcast episodes in one read: each ready film's size and own image hash by its podcast
  * episode's id, and the ids of the podcast episodes whose film is rendering.
  */
-export async function loadTopicPodcastEpisodeVideos(podcastEpisodeIds: string[]): Promise<TopicPodcastEpisodeVideos> {
+export async function loadTopicVideos(podcastEpisodeIds: string[]): Promise<TopicVideos> {
 	if (podcastEpisodeIds.length === 0) {
-		return { readyTopicPodcastEpisodeVideos: new Map(), videoRenderingPodcastEpisodeIds: new Set() }
+		return { readyTopicVideos: new Map(), videoRenderingPodcastEpisodeIds: new Set() }
 	}
 
 	// the ready and the rendering film rows of these podcast episodes
 	const filmRows = await db
 		.select({
-			podcastEpisodeId: topicPodcastEpisodeVideos.podcastEpisodeId,
-			status: topicPodcastEpisodeVideos.status,
-			byteSize: topicPodcastEpisodeVideos.byteSize,
-			imageHash: topicPodcastEpisodeVideos.imageHash,
+			podcastEpisodeId: topicVideos.podcastEpisodeId,
+			status: topicVideos.status,
+			byteSize: topicVideos.byteSize,
+			imageHash: topicVideos.imageHash,
 		})
-		.from(topicPodcastEpisodeVideos)
+		.from(topicVideos)
 		.where(
 			and(
-				inArray(topicPodcastEpisodeVideos.podcastEpisodeId, podcastEpisodeIds),
-				inArray(topicPodcastEpisodeVideos.status, ["ready", "rendering"]),
+				inArray(topicVideos.podcastEpisodeId, podcastEpisodeIds),
+				inArray(topicVideos.status, ["ready", "rendering"]),
 			),
 		)
 
@@ -322,7 +322,7 @@ export async function loadTopicPodcastEpisodeVideos(podcastEpisodeIds: string[])
 	const readyFilmRows = filmRows.filter((filmRow) => filmRow.status === "ready")
 	const renderingFilmRows = filmRows.filter((filmRow) => filmRow.status === "rendering")
 	return {
-		readyTopicPodcastEpisodeVideos: new Map(
+		readyTopicVideos: new Map(
 			readyFilmRows.map(({ podcastEpisodeId, byteSize, imageHash }) => [
 				podcastEpisodeId,
 				{ byteSize: byteSize ?? 0, imageHash },
@@ -336,20 +336,20 @@ export async function loadTopicPodcastEpisodeVideos(podcastEpisodeIds: string[])
  * Returns a podcast episode's film urls, with the poster url of the film's own image if it has one, or null without a
  * ready film.
  */
-export function toTopicPodcastEpisodeVideo(
+export function toTopicVideo(
 	podcastEpisodeId: string,
-	readyTopicPodcastEpisodeVideo: ReadyTopicPodcastEpisodeVideo | undefined,
-): TopicPodcastEpisodeVideo | null {
-	if (!readyTopicPodcastEpisodeVideo) {
+	readyTopicVideo: ReadyTopicVideo | undefined,
+): TopicVideo | null {
+	if (!readyTopicVideo) {
 		return null
 	}
 
 	// the stable film and captions urls, and the poster at the image's hash
-	const { imageHash } = readyTopicPodcastEpisodeVideo
+	const { imageHash } = readyTopicVideo
 	return {
 		videoUrl: `/api/episodes/${podcastEpisodeId}/video.mp4`,
 		captionsUrl: `/api/episodes/${podcastEpisodeId}/captions.vtt`,
-		posterUrl: imageHash ? toTopicPodcastEpisodeVideoPosterUrl(podcastEpisodeId, imageHash) : null,
+		posterUrl: imageHash ? toTopicVideoPosterUrl(podcastEpisodeId, imageHash) : null,
 	}
 }
 

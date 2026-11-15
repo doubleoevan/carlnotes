@@ -2,7 +2,7 @@
 // the images that Remove would take down. Clear closes a report without touching the content, and Block puts an admin
 // block on the author
 import { afterEach, expect, test } from "bun:test"
-import { toPodcastEpisodeImageUrls, toTopicPodcastEpisodeVideoPosterUrl } from "@carlnotes/contracts/topicImages"
+import { toPodcastEpisodeImageUrls, toTopicVideoPosterUrl } from "@carlnotes/contracts/topicImages"
 import { stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import { loadOpenReports } from "./adminReports"
 import {
@@ -39,7 +39,7 @@ test("the open list shapes each report and marks gone content", async () => {
 		subjectPath: "/topics/topic-1/raccoons",
 		subjectImage: null,
 		subjectAvatarVersion: null,
-		topicPodcastEpisodeVideoPosterUrl: null,
+		topicVideoPosterUrl: null,
 		reason: "rude",
 		createdAt: "2026-10-29T10:00:00.000Z",
 		author: { id: "user-2", username: "vienna" },
@@ -130,8 +130,8 @@ test("the open list shows a podcast episode's image and its film's poster, and o
 		null,
 		null,
 	])
-	expect(openReports.map((openReport) => openReport.topicPodcastEpisodeVideoPosterUrl)).toEqual([
-		toTopicPodcastEpisodeVideoPosterUrl("podcast-episode-film", "video-image-hash"),
+	expect(openReports.map((openReport) => openReport.topicVideoPosterUrl)).toEqual([
+		toTopicVideoPosterUrl("podcast-episode-film", "video-image-hash"),
 		null,
 		null,
 	])

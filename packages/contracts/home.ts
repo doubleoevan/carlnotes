@@ -57,6 +57,7 @@ export const yourTopicsQuery = z.object({ page: z.coerce.number().int().min(0).m
 // the home payload. a visitor's holds the home topics, the home and newest films, the home and newest podcast
 // episodes, and the home and newest Topic Posts, and a user's adds the first page of their own and followed topics.
 // the films and the newest Topic Posts are optional, so a released app reads a payload without them
+// the two film fields' names must not change, because the frozen api contract reads them
 export const homeResponse = z.object({
 	homeTopics: z.array(topicCard),
 	homeTopicPodcastEpisodeVideos: z.array(podcastEpisodeCard).optional(),

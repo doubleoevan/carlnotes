@@ -19,7 +19,7 @@ import {
 import { sendTopicPostImageRegeneration, uploadTopicPostImageBody } from "@carlnotes/client/topicPostClient"
 import {
 	TOPIC_IMAGE_PROMPT_CHARS,
-	toTopicPodcastEpisodeVideoImageUrls,
+	toTopicVideoImageUrls,
 	toUncheckedTopicImageUrls,
 } from "@carlnotes/contracts/topicImages"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
@@ -53,11 +53,11 @@ const IMAGE_WRITES = {
 	topic: { sendRegeneration: sendTopicImageRegeneration, uploadBody: uploadTopicImageBody },
 	podcastEpisode: { sendRegeneration: sendPodcastEpisodeImageRegeneration, uploadBody: uploadPodcastEpisodeImageBody },
 	topicPost: { sendRegeneration: sendTopicPostImageRegeneration, uploadBody: uploadTopicPostImageBody },
-	topicPodcastEpisodeVideo: {
+	topicVideo: {
 		sendRegeneration: sendTopicPodcastEpisodeVideoImageRegeneration,
 		uploadBody: async (podcastEpisodeId: string, body: FormData): Promise<UploadedTopicImage> => {
 			const { posterUrl, isImageUnchecked } = await uploadTopicPodcastEpisodeVideoImageBody(podcastEpisodeId, body)
-			return { image: toTopicPodcastEpisodeVideoImageUrls(posterUrl), isImageUnchecked }
+			return { image: toTopicVideoImageUrls(posterUrl), isImageUnchecked }
 		},
 	},
 } satisfies Record<EditableImageKind, unknown>
@@ -131,7 +131,7 @@ export function TopicImageEditor({
 
 	// a film's image has the film's frame. Regenerate shows while the month has regenerations left, and an admin, who
 	// has no count, always may
-	const aspectRatio: EditableImageAspectRatio = editableImage.kind === "topicPodcastEpisodeVideo" ? "16:9" : "3:2"
+	const aspectRatio: EditableImageAspectRatio = editableImage.kind === "topicVideo" ? "16:9" : "3:2"
 	const canRegenerate = !regenerationQuota || hasRegenerationLeft(regenerationQuota)
 
 	// run one write, reporting its rejection

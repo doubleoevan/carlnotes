@@ -7,15 +7,15 @@ import { toPodcastEpisodeFixture } from "@carlnotes/contracts/podcastEpisodeTest
 import {
 	isPodcastEpisodeHomeOrderShown,
 	isPodcastEpisodeProfileOrderShown,
-	isTopicPodcastEpisodeVideoHomeOrderShown,
-	isTopicPodcastEpisodeVideoProfileOrderShown,
+	isTopicVideoHomeOrderShown,
+	isTopicVideoProfileOrderShown,
 } from "./podcastEpisodeHomeOrder"
 
 // the film of the fixture podcast episode
 const FILM = { videoUrl: "https://carlnotes.com/video", captionsUrl: "https://carlnotes.com/captions" }
 
 // the fields an admin's page holds for a podcast episode with a film on a public topic
-type PageFields = Parameters<typeof isTopicPodcastEpisodeVideoHomeOrderShown>[0]
+type PageFields = Parameters<typeof isTopicVideoHomeOrderShown>[0]
 const ADMIN_PAGE: PageFields = {
 	topic: { visibility: "public" } as PodcastEpisodePageResponse["topic"],
 	podcastEpisode: toPodcastEpisodeFixture({ video: FILM }),
@@ -25,21 +25,21 @@ const ADMIN_PAGE: PageFields = {
 
 describe("Home films", () => {
 	test("shows for an admin on a public topic's podcast episode with a film", () => {
-		expect(isTopicPodcastEpisodeVideoHomeOrderShown(ADMIN_PAGE)).toBe(true)
+		expect(isTopicVideoHomeOrderShown(ADMIN_PAGE)).toBe(true)
 	})
 
 	test("hides for anyone but an admin", () => {
-		expect(isTopicPodcastEpisodeVideoHomeOrderShown({ ...ADMIN_PAGE, homeTopicPodcastEpisodeVideos: null })).toBe(false)
+		expect(isTopicVideoHomeOrderShown({ ...ADMIN_PAGE, homeTopicPodcastEpisodeVideos: null })).toBe(false)
 	})
 
 	test("hides on a private topic", () => {
 		const privateTopic = { visibility: "private" } as PodcastEpisodePageResponse["topic"]
-		expect(isTopicPodcastEpisodeVideoHomeOrderShown({ ...ADMIN_PAGE, topic: privateTopic })).toBe(false)
+		expect(isTopicVideoHomeOrderShown({ ...ADMIN_PAGE, topic: privateTopic })).toBe(false)
 	})
 
 	test("hides for a podcast episode with no ready film", () => {
 		const podcastEpisode = toPodcastEpisodeFixture({ video: null })
-		expect(isTopicPodcastEpisodeVideoHomeOrderShown({ ...ADMIN_PAGE, podcastEpisode })).toBe(false)
+		expect(isTopicVideoHomeOrderShown({ ...ADMIN_PAGE, podcastEpisode })).toBe(false)
 	})
 })
 
@@ -62,12 +62,12 @@ const OWNER_PAGE = {
 
 describe("Featured films", () => {
 	test("shows for the topic's owner on a public topic's published podcast episode with a film", () => {
-		expect(isTopicPodcastEpisodeVideoProfileOrderShown(OWNER_PAGE)).toBe(true)
+		expect(isTopicVideoProfileOrderShown(OWNER_PAGE)).toBe(true)
 	})
 
 	test("hides for a podcast episode with no ready film, which keeps Featured podcasts", () => {
 		const audioOnlyPage = { ...OWNER_PAGE, podcastEpisode: toPodcastEpisodeFixture({ video: null }) }
-		expect(isTopicPodcastEpisodeVideoProfileOrderShown(audioOnlyPage)).toBe(false)
+		expect(isTopicVideoProfileOrderShown(audioOnlyPage)).toBe(false)
 		expect(isPodcastEpisodeProfileOrderShown(audioOnlyPage)).toBe(true)
 	})
 
@@ -78,7 +78,7 @@ describe("Featured films", () => {
 
 		// neither option shows on either topic
 		for (const topic of [otherUserTopic, privateTopic]) {
-			expect(isTopicPodcastEpisodeVideoProfileOrderShown({ ...OWNER_PAGE, topic })).toBe(false)
+			expect(isTopicVideoProfileOrderShown({ ...OWNER_PAGE, topic })).toBe(false)
 			expect(isPodcastEpisodeProfileOrderShown({ ...OWNER_PAGE, topic })).toBe(false)
 		}
 	})

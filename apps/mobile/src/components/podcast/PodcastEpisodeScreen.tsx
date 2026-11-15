@@ -5,27 +5,24 @@ import type { PodcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpi
 import { FILM_ANCHOR_ID, PODCAST_NAME } from "@carlnotes/contracts/podcastEpisodes"
 import { usePolledCounts } from "@carlnotes/core/hooks/usePolledCounts"
 import { useTopicFindingActions } from "@carlnotes/core/hooks/useTopicFindingActions"
-import { useTopicPodcastEpisodeVideoRenderingPoll } from "@carlnotes/core/hooks/useTopicPodcastEpisodeVideoRenderingPoll"
+import { useTopicVideoRenderingPoll } from "@carlnotes/core/hooks/useTopicVideoRenderingPoll"
 import { toPodcastEpisodeTitleLabel, toSectionCountLabel } from "@carlnotes/core/lib/labels"
-import {
-	PODCAST_EPISODE_LOAD_FAILED_TEXT,
-	TOPIC_PODCAST_EPISODE_VIDEO_SECTION_TITLE,
-} from "@carlnotes/core/lib/podcastEpisodeCopy"
+import { PODCAST_EPISODE_LOAD_FAILED_TEXT, TOPIC_VIDEO_SECTION_TITLE } from "@carlnotes/core/lib/podcastEpisodeCopy"
 import {
 	EDIT_PODCAST_EPISODE_LABEL,
-	isTopicPodcastEpisodeVideoEditShown,
+	isTopicVideoEditShown,
 	toPodcastEpisodeEditableImage,
-	toTopicPodcastEpisodeVideoEditableImage,
+	toTopicVideoEditableImage,
 } from "@carlnotes/core/lib/podcastEpisodeEditor"
 import {
 	isPodcastEpisodeProfileOrderShown,
-	isTopicPodcastEpisodeVideoProfileOrderShown,
+	isTopicVideoProfileOrderShown,
 } from "@carlnotes/core/lib/podcastEpisodeHomeOrder"
 import { toPodcastEpisodeReportSubject, toPodcastEpisodeSocialProps } from "@carlnotes/core/lib/podcastEpisodeSocial"
 import { PROFILE_RANK_OPTION_LABELS } from "@carlnotes/core/lib/rankDialog"
 import { isAddTopicToTeamShown } from "@carlnotes/core/lib/topicActions"
 import { applyPodcastEpisodePageChanges } from "@carlnotes/core/lib/topicFindingChanges"
-import { toTopicPodcastEpisodeVideoDisplay } from "@carlnotes/core/lib/topicPodcastEpisodeVideoDisplay"
+import { toTopicVideoDisplay } from "@carlnotes/core/lib/topicVideoDisplay"
 import { useQuery } from "@tanstack/react-query"
 import { router, useFocusEffect, useLocalSearchParams, usePathname } from "expo-router"
 import { ListOrdered, Pencil, Trash2 } from "lucide-react-native"
@@ -39,7 +36,7 @@ import { Text } from "@/components/primitives/text"
 import type { PageActionOption } from "@/components/search/PageActionMenu"
 import {
 	toAddTopicToTeamOption,
-	toEditTopicPodcastEpisodeVideoOption,
+	toEditTopicVideoOption,
 	toShareTopicOption,
 } from "@/components/search/pageActionOptions"
 import { ShareTopicSheet } from "@/components/share/ShareTopic"
@@ -60,7 +57,7 @@ import { PodcastEpisodeTranscript } from "./PodcastEpisodeTranscript"
 import { PodcastFeedDialog } from "./PodcastFeedDialog"
 import { PodcastThemeSongNote } from "./PodcastThemeSongNote"
 import { RemovePodcastEpisodeDialog } from "./RemovePodcastEpisodeDialog"
-import { TopicPodcastEpisodeVideoPlayer } from "./TopicPodcastEpisodeVideoPlayer"
+import { TopicVideoPlayer } from "./TopicVideoPlayer"
 import { UnpublishedPodcastEpisodeCard } from "./UnpublishedPodcastEpisodeCard"
 
 type PodcastEpisodeDialog =
@@ -180,9 +177,9 @@ function EpisodeContent({
 	const options = toPodcastEpisodeActionOptions({ page, isSignedIn, onOpenDialog: setDialog })
 
 	// read the page again while the film renders
-	const topicPodcastEpisodeVideoDisplay = toTopicPodcastEpisodeVideoDisplay(podcastEpisode)
-	const isVideoRendering = topicPodcastEpisodeVideoDisplay === "rendering"
-	useTopicPodcastEpisodeVideoRenderingPoll({ isVideoRendering, onPoll: onReload })
+	const topicVideoDisplay = toTopicVideoDisplay(podcastEpisode)
+	const isVideoRendering = topicVideoDisplay === "rendering"
+	useTopicVideoRenderingPoll({ isVideoRendering, onPoll: onReload })
 	return (
 		<PageScreen
 			title="Episode"
@@ -208,10 +205,10 @@ function EpisodeContent({
 			{/* the film's section, under the podcast's, which a link opens the screen at with ?section=film, with the theme
 			    song's credits right after its title: the film player in its card, which stays mounted while the section
 			    is closed, or the card that says the film is rendering */}
-			{topicPodcastEpisodeVideoDisplay && (
+			{topicVideoDisplay && (
 				<SectionAnchor name={FILM_ANCHOR_ID}>
 					<CollapsibleSection
-						title={TOPIC_PODCAST_EPISODE_VIDEO_SECTION_TITLE}
+						title={TOPIC_VIDEO_SECTION_TITLE}
 						titleNote={<PodcastThemeSongNote />}
 						isContentKept
 						hasClosedDivider
@@ -219,7 +216,7 @@ function EpisodeContent({
 						{isVideoRendering ? (
 							<UnpublishedPodcastEpisodeCard podcastEpisode={podcastEpisode} isVideoRendering />
 						) : (
-							<TopicPodcastEpisodeVideoPlayer podcastEpisode={podcastEpisode} isCard />
+							<TopicVideoPlayer podcastEpisode={podcastEpisode} isCard />
 						)}
 					</CollapsibleSection>
 				</SectionAnchor>
@@ -273,9 +270,7 @@ function EpisodeContent({
 			{/* the header image's sheet, or the film's image sheet that the action menu's Edit film opens */}
 			{(dialog === "edit-image" || dialog === "edit-film") && (
 				<EditImageDialog
-					editableImage={
-						dialog === "edit-film" ? toTopicPodcastEpisodeVideoEditableImage(page) : toPodcastEpisodeEditableImage(page)
-					}
+					editableImage={dialog === "edit-film" ? toTopicVideoEditableImage(page) : toPodcastEpisodeEditableImage(page)}
 					onImageChanged={onReload}
 					onClose={() => setDialog(null)}
 				/>
@@ -316,13 +311,11 @@ function toPodcastEpisodeActionOptions({
 	return [
 		...(isAddTopicToTeamShown(page.topic, isSignedIn) ? [toAddTopicToTeamOption(() => onOpenDialog("team"))] : []),
 		toShareTopicOption(() => onOpenDialog("share")),
-		...(isTopicPodcastEpisodeVideoEditShown(page)
-			? [toEditTopicPodcastEpisodeVideoOption(() => onOpenDialog("edit-film"))]
-			: []),
+		...(isTopicVideoEditShown(page) ? [toEditTopicVideoOption(() => onOpenDialog("edit-film"))] : []),
 		...(page.canEditPodcastEpisode
 			? [{ label: EDIT_PODCAST_EPISODE_LABEL, icon: Pencil, onSelect: () => onOpenDialog("edit") }]
 			: []),
-		...(isTopicPodcastEpisodeVideoProfileOrderShown(page)
+		...(isTopicVideoProfileOrderShown(page)
 			? [toProfileRankOption("films", () => onOpenDialog("rank-profile-films"))]
 			: []),
 		...(isPodcastEpisodeProfileOrderShown(page)
@@ -334,7 +327,7 @@ function toPodcastEpisodeActionOptions({
 	]
 }
 
-// the option that opens the owner's profile pins for the films or the podcast episodes
+// the option that opens the owner's featured profile items for the films or the podcast episodes
 function toProfileRankOption(rankedNoun: "films" | "podcasts", onSelect: () => void): PageActionOption {
 	return { label: PROFILE_RANK_OPTION_LABELS[rankedNoun], icon: ListOrdered, onSelect }
 }

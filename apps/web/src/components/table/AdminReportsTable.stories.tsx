@@ -12,7 +12,7 @@ import { SAMPLE_TOPIC_IMAGE } from "../../../.storybook/fixtures/topics"
 import { AdminReportsTable } from "./AdminReportsTable"
 
 // what a report shows of a subject with no image, no avatar, and no film poster
-const NO_SUBJECT_IMAGES = { subjectImage: null, subjectAvatarVersion: null, topicPodcastEpisodeVideoPosterUrl: null }
+const NO_SUBJECT_IMAGES = { subjectImage: null, subjectAvatarVersion: null, topicVideoPosterUrl: null }
 
 // a chat room message, a note comment already deleted by its author, a public topic, and a topic's image, each
 // reported by a different person
@@ -142,7 +142,7 @@ const PODCAST_EPISODE_REPORT_FIXTURES: AdminReport[] = [
 		subjectPath: "/topics/topic-llm-tooling/llm-tooling/episodes/2026/12",
 		...NO_SUBJECT_IMAGES,
 		subjectImage: SAMPLE_TOPIC_IMAGE,
-		topicPodcastEpisodeVideoPosterUrl: SAMPLE_TOPIC_IMAGE.page.url,
+		topicVideoPosterUrl: SAMPLE_TOPIC_IMAGE.page.url,
 		reason: "The image shows a real person.",
 		createdAt: FIXTURE_DATE.toISOString(),
 		author: { id: STORY_PEOPLE[0].userId, username: STORY_PEOPLE[0].username },
@@ -255,10 +255,8 @@ export const RegeneratePodcastEpisodeImage: Story = {
 		// the one podcast episode that still stands offers Regenerate, and its confirmation names the film's image
 		await userEvent.click(canvas.getByRole("button", { name: "Regenerate" }))
 		const confirmDialog = within(await screen.findByRole("dialog"))
-		const topicPodcastEpisodeVideoSentence = confirmDialog.getByText(
-			/The film's image is drawn again too if it was uploaded\./,
-		)
-		await waitFor(() => expect(topicPodcastEpisodeVideoSentence).toBeVisible())
+		const topicVideoSentence = confirmDialog.getByText(/The film's image is drawn again too if it was uploaded\./)
+		await waitFor(() => expect(topicVideoSentence).toBeVisible())
 
 		// confirm the regeneration
 		await userEvent.click(confirmDialog.getByRole("button", { name: "Regenerate" }))

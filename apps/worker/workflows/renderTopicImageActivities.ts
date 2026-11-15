@@ -33,14 +33,14 @@ import {
 } from "@carlnotes/pipeline/topicImages/topicImageRenders"
 import { writeTopicImageScene } from "@carlnotes/pipeline/topicImages/writeTopicImageScene"
 import {
-	loadTopicPodcastEpisodeVideoImageSceneInput,
-	replaceTopicPodcastEpisodeVideoImage,
-	TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_FORMAT,
-} from "@carlnotes/pipeline/topicPodcastEpisodeVideo/topicPodcastEpisodeVideoImage"
-import {
 	loadTopicPostImageSceneInput,
 	replaceTopicPostImage,
 } from "@carlnotes/pipeline/topicPosts/topicPostImageRenders"
+import {
+	loadTopicVideoImageSceneInput,
+	replaceTopicVideoImage,
+	TOPIC_VIDEO_IMAGE_FORMAT,
+} from "@carlnotes/pipeline/topicVideo/topicVideoImage"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { ApplicationFailure } from "@temporalio/activity"
 
@@ -91,8 +91,8 @@ export async function writeTopicImageSceneForRender({
 // what a render's scene is written from: its film's podcast episode's words in the film's framing, its podcast
 // episode's words, its Topic Post's, or its topic's
 function loadRenderSceneInput(render: TopicImageRenderRow): ReturnType<typeof loadTopicImageSceneInput> {
-	if (render.topicPodcastEpisodeVideoId) {
-		return loadTopicPodcastEpisodeVideoImageSceneInput(render.topicPodcastEpisodeVideoId)
+	if (render.topicVideoId) {
+		return loadTopicVideoImageSceneInput(render.topicVideoId)
 	}
 
 	// a podcast episode's own words, then a Topic Post's, then the topic's
@@ -128,11 +128,11 @@ export async function renderAndStoreTopicImage({
 	// if asked for any other image, on the render's key. a spent budget and a rejection fail for good, and a retryable
 	// failure throws for another attempt
 	const model = render.model ?? ""
-	const isTopicPodcastEpisodeVideoImage = Boolean(render.topicPodcastEpisodeVideoId)
-	const format = isTopicPodcastEpisodeVideoImage ? TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_FORMAT : undefined
+	const isTopicVideoImage = Boolean(render.topicVideoId)
+	const format = isTopicVideoImage ? TOPIC_VIDEO_IMAGE_FORMAT : undefined
 	const original = await renderTopicImageOriginal({
 		scene,
-		isHouseStyle: isTopicPodcastEpisodeVideoImage || !imagePrompt,
+		isHouseStyle: isTopicVideoImage || !imagePrompt,
 		model,
 		format,
 		litellmApiKey: await loadRenderLitellmApiKey(render.userId),
@@ -174,9 +174,9 @@ async function storeRenderedImage({
 }: StoreRenderedImageOptions): Promise<void> {
 	// a film render stores its file beside the film's parts, makes it the film's image, and starts the film's rebuild
 	const { id: renderId, podcastEpisodeId, topicPostId } = render
-	if (render.topicPodcastEpisodeVideoId) {
-		const imageHash = await replaceTopicPodcastEpisodeVideoImage({
-			topicPodcastEpisodeVideoId: render.topicPodcastEpisodeVideoId,
+	if (render.topicVideoId) {
+		const imageHash = await replaceTopicVideoImage({
+			topicVideoId: render.topicVideoId,
 			original,
 			renderId,
 			origin: "generated",
@@ -186,10 +186,7 @@ async function storeRenderedImage({
 
 		// a film removed meanwhile has no image to replace
 		if (!imageHash) {
-			throw ApplicationFailure.nonRetryable(
-				`the film of render ${renderId} is gone`,
-				"TopicPodcastEpisodeVideoNotFound",
-			)
+			throw ApplicationFailure.nonRetryable(`the film of render ${renderId} is gone`, "TopicVideoNotFound")
 		}
 		return
 	}
@@ -256,7 +253,7 @@ function trackRenderEvent(render: TopicImageRenderRow): void {
 			topicId: render.topicId,
 			...(render.podcastEpisodeId ? { podcastEpisodeId: render.podcastEpisodeId } : {}),
 			...(render.topicPostId ? { topicPostId: render.topicPostId } : {}),
-			...(render.topicPodcastEpisodeVideoId ? { topicPodcastEpisodeVideoId: render.topicPodcastEpisodeVideoId } : {}),
+			...(render.topicVideoId ? { topicVideoId: render.topicVideoId } : {}),
 			renderKind: render.kind,
 			isOwner: render.topicOwnerId === render.userId,
 			entryPoint: "worker",

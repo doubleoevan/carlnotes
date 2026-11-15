@@ -113,7 +113,7 @@ export async function createTopicPostDraft(topicId: string, authorUserId: string
 
 /**
  * Deletes a Topic Post, which takes its Comments, its reactions, and its discussions with it, and schedules its image's
- * files and its discussions' audio for deletion. A pinned post leaves the home's pins and its author's profile pins,
+ * files and its discussions' audio for deletion. A featured post leaves the home's featured items and its author's featured profile items,
  * and each user its Comments mention reads their unseen Comment Mentions again.
  */
 export async function deleteTopicPost(topicPostId: string): Promise<void> {
@@ -123,7 +123,7 @@ export async function deleteTopicPost(topicPostId: string): Promise<void> {
 		// the keys first. the delete takes the rows that name them
 		const objectKeys = await loadTopicPostObjectKeys({ topicPostId }, transaction)
 
-		// close the gap a pinned post leaves in each order, then delete the row
+		// close the gap a featured post leaves in each order, then delete the row
 		await releaseHomeOrder({ table: topicPosts, id: topicPostId, handle: transaction })
 		await releaseTopicPostProfileOrder(topicPostId, transaction)
 		await transaction.delete(topicPosts).where(eq(topicPosts.id, topicPostId))

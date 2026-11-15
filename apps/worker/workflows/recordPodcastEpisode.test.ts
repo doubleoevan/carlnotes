@@ -1,13 +1,10 @@
 // the recording workflow in the Temporal test environment: a published podcast episode starts its film as an abandoned
 // child on the film queue if films are on, and a failed film never fails the recording
 import { afterAll, beforeAll, expect, test } from "bun:test"
-import {
-	TOPIC_PODCAST_EPISODE_VIDEO_TASK_QUEUE,
-	toTopicPodcastEpisodeVideoWorkflowId,
-} from "@carlnotes/contracts/topicPodcastEpisodeVideoWork"
+import { TOPIC_VIDEO_TASK_QUEUE, toTopicVideoWorkflowId } from "@carlnotes/contracts/topicVideoWork"
 import type { TestWorkflowEnvironment } from "@temporalio/testing"
 import type * as recordActivities from "./recordPodcastEpisodeActivities"
-import type * as renderActivities from "./renderTopicPodcastEpisodeVideoActivities"
+import type * as renderActivities from "./renderTopicVideoActivities"
 import { createWorkflowTestEnvironment, runTestWorkflow } from "./workflowTestFixtures"
 
 // the local test server with time skipping, shared by the tests in this file
@@ -22,7 +19,7 @@ afterAll(async () => {
 // the recording's queue and workflows file, and the film workflows file, on a test server no other worker polls
 const RECORDING_TASK_QUEUE = "episode-recordings"
 const RECORDING_WORKFLOWS_PATH = new URL("./recordPodcastEpisode.ts", import.meta.url).pathname
-const FILM_WORKFLOWS_PATH = new URL("./renderTopicPodcastEpisodeVideo.ts", import.meta.url).pathname
+const FILM_WORKFLOWS_PATH = new URL("./renderTopicVideo.ts", import.meta.url).pathname
 
 // a recording's activities that publish one podcast episode with one chapter, and the films setting
 function toRecordingActivities(podcastEpisodeId: string, isFilmEnabled: boolean): Partial<typeof recordActivities> {
@@ -57,12 +54,12 @@ function runRecording(
 				activities: toRecordingActivities(podcastEpisodeId, isFilmEnabled),
 			},
 			{
-				taskQueue: TOPIC_PODCAST_EPISODE_VIDEO_TASK_QUEUE,
+				taskQueue: TOPIC_VIDEO_TASK_QUEUE,
 				workflowsPath: FILM_WORKFLOWS_PATH,
 				activities: filmActivities,
 			},
 		],
-		childWorkflowIds: isFilmEnabled ? [toTopicPodcastEpisodeVideoWorkflowId(podcastEpisodeId)] : [],
+		childWorkflowIds: isFilmEnabled ? [toTopicVideoWorkflowId(podcastEpisodeId)] : [],
 	})
 }
 
@@ -82,8 +79,8 @@ test("a published podcast episode starts its film on the film queue if films are
 	// the recording finished, and its film rendered under the film's own workflow id
 	expect(recordingResult).toBeUndefined()
 	expect(renderedPodcastEpisodeIds).toEqual(["episode-on"])
-	const filmWorkflow = testEnvironment.client.workflow.getHandle(toTopicPodcastEpisodeVideoWorkflowId("episode-on"))
-	expect((await filmWorkflow.describe()).taskQueue).toBe(TOPIC_PODCAST_EPISODE_VIDEO_TASK_QUEUE)
+	const filmWorkflow = testEnvironment.client.workflow.getHandle(toTopicVideoWorkflowId("episode-on"))
+	expect((await filmWorkflow.describe()).taskQueue).toBe(TOPIC_VIDEO_TASK_QUEUE)
 }, 60_000)
 
 test("films off starts no film", async () => {
@@ -102,7 +99,7 @@ test("films off starts no film", async () => {
 	// the recording finished, and no film workflow exists
 	expect(recordingResult).toBeUndefined()
 	expect(renderedPodcastEpisodeIds).toEqual([])
-	const filmWorkflow = testEnvironment.client.workflow.getHandle(toTopicPodcastEpisodeVideoWorkflowId("episode-off"))
+	const filmWorkflow = testEnvironment.client.workflow.getHandle(toTopicVideoWorkflowId("episode-off"))
 	await expect(filmWorkflow.describe()).rejects.toThrow()
 }, 60_000)
 
@@ -124,8 +121,6 @@ test("a film that fails leaves the recording finished", async () => {
 	// the recording finished, the film was marked failed, and the film workflow failed on its own
 	expect(recordingResult).toBeUndefined()
 	expect(failureMarks).toEqual(["episode-failed-film"])
-	const filmWorkflow = testEnvironment.client.workflow.getHandle(
-		toTopicPodcastEpisodeVideoWorkflowId("episode-failed-film"),
-	)
+	const filmWorkflow = testEnvironment.client.workflow.getHandle(toTopicVideoWorkflowId("episode-failed-film"))
 	expect((await filmWorkflow.describe()).status.name).toBe("FAILED")
 }, 60_000)

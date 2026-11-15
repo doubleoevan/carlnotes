@@ -25,9 +25,9 @@ import { buildScorePrompt } from "@carlnotes/pipeline/review/score"
 import { buildScanReportPrompt } from "@carlnotes/pipeline/review/summarize"
 import { loadScan } from "@carlnotes/pipeline/scan"
 import { toTopicImagePrompt } from "@carlnotes/pipeline/topicImages/writeTopicImageScene"
-import { TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_FORMAT } from "@carlnotes/pipeline/topicPodcastEpisodeVideo/topicPodcastEpisodeVideoImage"
 import { buildTopicPostSummaryPrompt } from "@carlnotes/pipeline/topicPosts/summarizeTopicPost"
 import { buildTopicPostDiscussionPrompt } from "@carlnotes/pipeline/topicPosts/topicPostDiscussionScript"
+import { TOPIC_VIDEO_IMAGE_FORMAT } from "@carlnotes/pipeline/topicVideo/topicVideoImage"
 import { buildUpdatesRecapPrompt } from "@carlnotes/pipeline/updatesRecap"
 import { and, eq, inArray, isNotNull } from "drizzle-orm"
 import { finishScan, ingestForScan, reviewForScan } from "./workflows/runTopicScanActivities"
@@ -375,17 +375,14 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 
 	// the film image prompt is a scene with the film house style after it, which takes no untrusted input
 	const sampleScene = "a sample scene"
-	const topicPodcastEpisodeVideoImagePrompt = await toTopicImagePrompt(
-		sampleScene,
-		TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_FORMAT.stylePromptName,
-	)
+	const topicVideoImagePrompt = await toTopicImagePrompt(sampleScene, TOPIC_VIDEO_IMAGE_FORMAT.stylePromptName)
 	// the dashboard paragraph prompt takes counts and country names alone, so it has nothing untrusted to fence
 	const dashboardParagraphPrompt = dashboardParagraphResult.prompt
 	return [
 		...builtPromptChecks,
 		["dashboard paragraph prompt renders", dashboardParagraphPrompt.length > 0],
 		["dashboard paragraph prompt restates the task last", !dashboardParagraphPrompt.trimEnd().endsWith(">")],
-		["film image prompt renders", topicPodcastEpisodeVideoImagePrompt.trim().length > sampleScene.length],
+		["film image prompt renders", topicVideoImagePrompt.trim().length > sampleScene.length],
 	]
 }
 

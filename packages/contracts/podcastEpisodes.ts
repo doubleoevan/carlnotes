@@ -91,7 +91,7 @@ export const AI_HOSTS_NOTE = `${PODCAST_HOSTS_NAME} are AI hosts`
 export const PODCAST_NAME = "Coffee Break podcast"
 
 // the name of one film, and of a Topic's list of films, in the app's copy
-export const TOPIC_PODCAST_EPISODE_VIDEO_NAME = "Coffee Break film"
+export const TOPIC_VIDEO_NAME = "Coffee Break film"
 export const FILMS_NAME = "Coffee Break films"
 
 // the anchor of the film player on a podcast episode page and a topic page, and of the podcast episode player on a

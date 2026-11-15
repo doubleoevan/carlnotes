@@ -9,14 +9,14 @@ deployment guide's Launch runbook after what to watch and how to add capacity.
 ### Requirement: Every emergency switch is off by default and proven by a test
 
 With no value in Doppler and no saved setting, every emergency switch SHALL read its off value: each pause off, the
-pinned-only home off, the unverified accounts switch off, each daily spend cutoff and dispatch limit at its built-in
+featured-only home off, the unverified accounts switch off, each daily spend cutoff and dispatch limit at its built-in
 default, podcast recording and film rendering on, and no mobile minimum version. One test SHALL read every switch
 with nothing set, and for each switch a test SHALL set it and check the behavior the Launch runbook names for it.
 
 #### Scenario: Nothing set reads every switch as off
 
 - **WHEN** every switch is read with no Doppler value and an empty settings table
-- **THEN** both pauses, the pinned-only home, and the unverified accounts switch read off, the cutoffs read 65, 100,
+- **THEN** both pauses, the featured-only home, and the unverified accounts switch read off, the cutoffs read 65, 100,
   and 150 dollars, the first Scan dispatch limit reads 5, the scan dispatch limit reads 100, the speech model reads
   its default, the film concurrency and the film backfill concurrency read 1, the generated chapter image limit reads
   40, and no mobile minimum version is stored
@@ -93,7 +93,7 @@ on.
 
 ### Requirement: Zero turns the film backfill and the scan dispatch off
 
-`TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_CONCURRENCY` set to 0 SHALL start no film backfill, and `SCAN_DISPATCH_LIMIT`
+`TOPIC_VIDEO_BACKFILL_CONCURRENCY` set to 0 SHALL start no film backfill, and `SCAN_DISPATCH_LIMIT`
 set to 0 SHALL start no scheduled Scan in a sweep. Unset, empty, or invalid, each SHALL read its default, 1 and 100.
 
 #### Scenario: A backfill concurrency of zero starts no backfill
@@ -165,7 +165,7 @@ voice off. Every setting the runbook names SHALL exist in the code.
 
 - **WHEN** an operator opens the runbook's switches
 - **THEN** the three daily spend cutoffs, the first Scan dispatch limit, the unverified accounts switch, both pauses,
-  the pinned-only home, the generated chapter image limit, the film concurrency, the film backfill concurrency, the
+  the featured-only home, the generated chapter image limit, the film concurrency, the film backfill concurrency, the
   scan dispatch limit, the empty speech model, the mobile minimum version, and the edge purge each have a row with
   those facts
 

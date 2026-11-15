@@ -144,11 +144,11 @@ export async function loadTopicPostCards(userId: string | null, topicId: string)
 }
 
 /**
- * Loads the published Topic Posts a filter keeps, in a profile's order: the pinned ones by their position, the newest
+ * Loads the published Topic Posts a filter keeps, in a profile's order: the featured ones by their position, the newest
  * first among those at one position, then the rest newest first.
  */
 export function loadProfileOrderTopicPostRows(topicPostFilter: SQL | undefined): Promise<TopicPostCardRow[]> {
-	// the published posts with their Topics and authors, the pinned ones first
+	// the published posts with their Topics and authors, the featured ones first
 	return toTopicPostCardRowQuery()
 		.where(and(isNotNull(topicPosts.publishedAt), topicPostFilter))
 		.orderBy(sql`${topicPosts.profileOrder} is null`, asc(topicPosts.profileOrder), desc(topicPosts.publishedAt))

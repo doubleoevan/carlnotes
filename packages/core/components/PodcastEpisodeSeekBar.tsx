@@ -1,7 +1,7 @@
 import type { PodcastEpisode, PodcastEpisodeFormat } from "@carlnotes/contracts/podcast"
 import { type ComponentType, type ReactNode, useState } from "react"
 import { toClockLabel } from "../lib/labels"
-import { playPodcastEpisode, playTopicPodcastEpisodeVideo, seekPlaybackTo } from "../stores/podcastEpisodePlayerStore"
+import { playPodcastEpisode, playTopicVideo, seekPlaybackTo } from "../stores/podcastEpisodePlayerStore"
 
 export type PodcastEpisodeSeekBarProps = {
 	podcastEpisode: PodcastEpisode
@@ -42,7 +42,7 @@ export function PodcastEpisodeSeekBar({
 		if (isPodcastEpisodeLoaded) {
 			seekPlaybackTo(seconds)
 		} else if (format === "video") {
-			void playTopicPodcastEpisodeVideo(podcastEpisode, seconds)
+			void playTopicVideo(podcastEpisode, seconds)
 		} else {
 			void playPodcastEpisode(podcastEpisode, seconds)
 		}

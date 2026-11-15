@@ -1,13 +1,18 @@
-// a row's position among the rows pinned to the home, a topic in the Home topics, a podcast episode among the home
+// a row's position among the rows featured on the home, a topic in the Home topics, a podcast episode among the home
 // podcast episodes, a film among the home films, or a Topic Post among the home Topic Posts: the write that inserts
 // it at a position and the release that closes the gap it leaves, for one row and for every row of a topic
 
 import { and, eq, isNotNull } from "drizzle-orm"
+import {
+	type FeaturedOrderTable,
+	releaseFeaturedOrder,
+	setFeaturedOrder,
+	type TopicFeaturedOrderTable,
+} from "./featuredOrder"
 import type { DbHandle, DbTransaction } from "./index"
-import { type PinnedOrderTable, releasePinnedOrder, setPinnedOrder, type TopicPinnedOrderTable } from "./pinnedOrder"
 
 /**
- * Sets a row's position among its table's rows pinned to the home, inside the caller's transaction. Position 0 clears
+ * Sets a row's position among its table's rows featured on the home, inside the caller's transaction. Position 0 clears
  * it. Any other position inserts the row there and pushes whatever held it, and everything below, down one. A
  * position past the end appends.
  */
@@ -17,12 +22,12 @@ export async function setHomeOrder({
 	position,
 	transaction,
 }: {
-	table: PinnedOrderTable
+	table: FeaturedOrderTable
 	id: string
 	position: number
 	transaction: DbTransaction
 }): Promise<void> {
-	await setPinnedOrder({ pinnedOrder: { table, columnKey: "homeOrder" }, id, position, transaction })
+	await setFeaturedOrder({ featuredOrder: { table, columnKey: "homeOrder" }, id, position, transaction })
 }
 
 /**
@@ -34,11 +39,11 @@ export function releaseHomeOrder({
 	id,
 	handle,
 }: {
-	table: PinnedOrderTable
+	table: FeaturedOrderTable
 	id: string
 	handle: DbHandle
 }): Promise<boolean> {
-	return releasePinnedOrder({ pinnedOrder: { table, columnKey: "homeOrder" }, id, handle })
+	return releaseFeaturedOrder({ featuredOrder: { table, columnKey: "homeOrder" }, id, handle })
 }
 
 /**
@@ -50,11 +55,11 @@ export async function releaseTopicHomeOrders({
 	topicId,
 	handle,
 }: {
-	table: TopicPinnedOrderTable
+	table: TopicFeaturedOrderTable
 	topicId: string
 	handle: DbHandle
 }): Promise<boolean> {
-	// the topic's pinned rows, each released on its own so the gap closes each time
+	// the topic's featured rows, each released on its own so the gap closes each time
 	const homeOrderRows = await handle
 		.select({ id: table.id })
 		.from(table)

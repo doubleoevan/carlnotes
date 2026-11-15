@@ -1,6 +1,6 @@
 // home route tests: the home's and the week's Topic Posts come from one read of their cards, each list in its ids'
 // order, the four film and podcast episode lists come from one read of theirs, ids cached before the week's posts
-// were read give an empty list, and a user's own topics stay under the pinned-only switch and an admin block
+// were read give an empty list, and a user's own topics stay under the featured-only switch and an admin block
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import type { HomeResponse, PodcastEpisodeCard } from "@carlnotes/contracts/home"
 import type { TopicPostCard } from "@carlnotes/contracts/topicPosts"
@@ -48,17 +48,20 @@ async function loadVisitorHome(): Promise<Record<string, { id: string }[] | null
 	return (await response.json()) as Record<string, { id: string }[] | null>
 }
 
-test("a pinned post that is new this week shows in both lists, from one read of the cards", async () => {
-	const loadTopicPostCardsSpy = stubHomeReads(["post-pinned", "post-a"], ["post-new", "post-pinned", "post-deleted"])
+test("a featured post that is new this week shows in both lists, from one read of the cards", async () => {
+	const loadTopicPostCardsSpy = stubHomeReads(
+		["post-featured", "post-a"],
+		["post-new", "post-featured", "post-deleted"],
+	)
 	const home = await loadVisitorHome()
 
 	// each list in its ids' order, with no card for the deleted post
-	expect(home.homeTopicPosts?.map(({ id }) => id)).toEqual(["post-pinned", "post-a"])
-	expect(home.newestTopicPosts?.map(({ id }) => id)).toEqual(["post-new", "post-pinned"])
+	expect(home.homeTopicPosts?.map(({ id }) => id)).toEqual(["post-featured", "post-a"])
+	expect(home.newestTopicPosts?.map(({ id }) => id)).toEqual(["post-new", "post-featured"])
 
 	// one read, each id once
 	expect(loadTopicPostCardsSpy).toHaveBeenCalledTimes(1)
-	expect(loadTopicPostCardsSpy.mock.calls[0]?.[0]).toEqual(["post-pinned", "post-a", "post-new", "post-deleted"])
+	expect(loadTopicPostCardsSpy.mock.calls[0]?.[0]).toEqual(["post-featured", "post-a", "post-new", "post-deleted"])
 })
 
 test("the four film and podcast episode lists come from one read of their cards, each in its ids' order", async () => {
@@ -106,11 +109,11 @@ test("a week with no new post, and ids cached before the week's posts were read,
 	expect(home.homeTopicPosts?.map(({ id }) => id)).toEqual(["post-a"])
 })
 
-test("a user's Your topics stays as it is with the pinned-only switch on and the user under an admin block", async () => {
-	// the switch on, an empty cache, and a blocked user who owns one unpinned topic
+test("a user's Your topics stays as it is with the featured-only switch on and the user under an admin block", async () => {
+	// the switch on, an empty cache, and a blocked user who owns one unfeatured topic
 	spyOn(dailySpendCutoffs, "loadSpendControlSettings").mockResolvedValue({
 		...DEFAULT_SPEND_CONTROL_SETTINGS,
-		isHomePinnedOnly: true,
+		isHomeFeaturedOnly: true,
 	})
 	stubRedisClient()
 	const ownTopicRow = toTableRow(topics, { id: "topic-own", ownerId: "user-1", name: "Agents", tags: [] })
@@ -129,7 +132,7 @@ test("a user's Your topics stays as it is with the pinned-only switch on and the
 	const response = await toSignedInApp(homeRoute, "user-1").request("/home")
 	const home = (await response.json()) as HomeResponse
 
-	// the card sections hold their pinned rows alone, which this database has none of
+	// the card sections hold their featured rows alone, which this database has none of
 	expect(sentQueries.filter(({ text }) => text.includes('"topics"."feature_order" is not null'))).toHaveLength(1)
 	expect(home.homeTopics).toEqual([])
 
@@ -141,7 +144,7 @@ test("a user's Your topics stays as it is with the pinned-only switch on and the
 		expect(text).not.toContain('"admin_blocked_at"')
 	}
 
-	// the user's own unpinned topic is listed
+	// the user's own unfeatured topic is listed
 	expect(home.yourTopics?.totalCount).toBe(1)
 	expect(home.yourTopics?.topics.map(({ id }) => id)).toEqual(["topic-own"])
 })

@@ -5,7 +5,7 @@
 
 import type { UncheckedImageSubjectKind, Visibility } from "@carlnotes/contracts/enums"
 import { type DbHandle, type DbTransaction, db } from "@carlnotes/db"
-import { podcastEpisodes, topicPodcastEpisodeVideos } from "@carlnotes/db/schema/podcast"
+import { podcastEpisodes, topicVideos } from "@carlnotes/db/schema/podcast"
 import { teams } from "@carlnotes/db/schema/teams"
 import { topicPosts } from "@carlnotes/db/schema/topicPosts"
 import { topics } from "@carlnotes/db/schema/topics"
@@ -35,11 +35,8 @@ import {
 	toTopicPostImageObjectKeys,
 } from "./topicImages/topicImageFiles"
 import { replaceTopicImage } from "./topicImages/topicImageRenders"
-import {
-	publishTopicPodcastEpisodeVideoImage,
-	toTopicPodcastEpisodeVideoImageObjectKeys,
-} from "./topicPodcastEpisodeVideo/topicPodcastEpisodeVideoImage"
 import { replaceTopicPostImage } from "./topicPosts/topicPostImageRenders"
+import { publishTopicVideoImage, toTopicVideoImageObjectKeys } from "./topicVideo/topicVideoImage"
 
 // the two kinds of unchecked image that are an avatar, which is stored under its own key and no content hash
 type UncheckedAvatarKind = "userAvatar" | "teamAvatar"
@@ -67,7 +64,7 @@ export type PublishUploadedImageOptions = UncheckedImageHashSubject & {
 	imageHash: string
 	width?: number
 	height?: number
-	topicPodcastEpisodeVideoId?: string
+	topicVideoId?: string
 }
 
 /**
@@ -80,7 +77,7 @@ export async function publishUploadedImage({
 	imageHash,
 	width,
 	height,
-	topicPodcastEpisodeVideoId,
+	topicVideoId,
 }: PublishUploadedImageOptions): Promise<void> {
 	// an upload has no render, no image prompt, and no cost
 	const uploadedImageRow = { renderId: null, origin: "uploaded", imagePrompt: null, costDollars: 0 } as const
@@ -98,13 +95,13 @@ export async function publishUploadedImage({
 			return replaceTopicPostImage({ topicPostId: subjectId, ...uploadedImageRow, hash: imageHash })
 		// a film's image also starts the rebuild of its intro and sign-off
 		case "topicPodcastEpisodeVideoImage": {
-			if (!topicPodcastEpisodeVideoId) {
+			if (!topicVideoId) {
 				return
 			}
 
 			// the film, its podcast episode, and the image's hash
-			const filmImageRow = { topicPodcastEpisodeVideoId, podcastEpisodeId: subjectId, imageHash }
-			return publishTopicPodcastEpisodeVideoImage({ ...filmImageRow, ...uploadedImageRow })
+			const filmImageRow = { topicVideoId, podcastEpisodeId: subjectId, imageHash }
+			return publishTopicVideoImage({ ...filmImageRow, ...uploadedImageRow })
 		}
 	}
 }
@@ -248,7 +245,7 @@ export type UncheckedImageSubjectState = {
 	currentImageHash: string | null
 	topicId: string | null
 	topicVisibility: Visibility | null
-	topicPodcastEpisodeVideoId?: string
+	topicVideoId?: string
 }
 
 /**
@@ -301,20 +298,20 @@ export async function loadUncheckedImageSubjectState(
 		}
 		// a film is read by its podcast episode, and is gone with a removed one
 		case "topicPodcastEpisodeVideoImage": {
-			const [topicPodcastEpisodeVideo] = await handle
+			const [topicVideo] = await handle
 				.select({
-					currentImageHash: topicPodcastEpisodeVideos.imageHash,
+					currentImageHash: topicVideos.imageHash,
 					topicId: topics.id,
 					topicVisibility: topics.visibility,
-					topicPodcastEpisodeVideoId: topicPodcastEpisodeVideos.id,
+					topicVideoId: topicVideos.id,
 				})
-				.from(topicPodcastEpisodeVideos)
-				.innerJoin(podcastEpisodes, eq(podcastEpisodes.id, topicPodcastEpisodeVideos.podcastEpisodeId))
+				.from(topicVideos)
+				.innerJoin(podcastEpisodes, eq(podcastEpisodes.id, topicVideos.podcastEpisodeId))
 				.leftJoin(topics, eq(topics.id, podcastEpisodes.topicId))
-				.where(and(eq(topicPodcastEpisodeVideos.podcastEpisodeId, subjectId), ne(podcastEpisodes.status, "removed")))
+				.where(and(eq(topicVideos.podcastEpisodeId, subjectId), ne(podcastEpisodes.status, "removed")))
 
 			// a podcast episode with no film has no film image
-			return topicPodcastEpisodeVideo ?? null
+			return topicVideo ?? null
 		}
 	}
 }
@@ -426,6 +423,6 @@ function toUncheckedImageObjectKeys({
 		case "topicPostImage":
 			return toTopicPostImageObjectKeys(subjectId, imageHash)
 		case "topicPodcastEpisodeVideoImage":
-			return toTopicPodcastEpisodeVideoImageObjectKeys(subjectId, imageHash)
+			return toTopicVideoImageObjectKeys(subjectId, imageHash)
 	}
 }

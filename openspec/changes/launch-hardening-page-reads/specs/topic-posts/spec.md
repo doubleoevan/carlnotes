@@ -82,7 +82,7 @@ list read SHALL hold a post's body.
 #### Scenario: A profile's Featured Posts keeps its whole count
 
 - **WHEN** the web reads the profile of a person with fourteen published Topic Posts
-- **THEN** Featured Posts holds the first six cards, pinned ones first, reads "14 posts", and requests each later page
+- **THEN** Featured Posts holds the first six cards, featured ones first, reads "14 posts", and requests each later page
   from the server
 
 #### Scenario: A released app still gets every post

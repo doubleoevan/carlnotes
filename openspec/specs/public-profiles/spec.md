@@ -410,10 +410,11 @@ the search bar, above the header, SHALL hold, at the left, New team on the perso
 
 ### Requirement: A Topic's and a Podcast Episode's page open the Home and Featured lists by name
 
-On the page of a public Topic, or of a published Podcast Episode of one, the action menu SHALL offer Home topics or
-Home podcasts to an admin, under the home icon, and Featured topics or Featured podcasts to the Topic's owner. Each
-option SHALL open the dialog titled as the option reads: the home's pins for Home, and the owner's own profile pins
-for Featured, with the page's item offered a place. The mobile app SHALL offer the Featured option the same way.
+On the page of a public Topic, or of a published Podcast Episode of one, the action menu SHALL offer Home topics or Home
+podcasts to an admin, under the home icon, and Featured topics or Featured podcasts to the Topic's owner. Each option
+SHALL open the dialog titled as the option reads: the home's featured items for Home, and the owner's own featured
+profile items for Featured, with the page's item offered a place. The mobile app SHALL offer the Featured option the
+same way.
 
 #### Scenario: An admin who owns the Topic gets both options
 
@@ -423,7 +424,8 @@ for Featured, with the page's item offered a place. The mobile app SHALL offer t
 #### Scenario: An owner who is no admin gets Featured alone
 
 - **WHEN** a user opens the action menu on their own public Topic
-- **THEN** the menu lists Featured topics and no Home topics, and Featured topics opens their own profile's pins
+- **THEN** the menu lists Featured topics and no Home topics, and Featured topics opens their own profile's featured
+  items
 
 ### Requirement: The Café's summary line counts its topics, podcast episodes, and teams
 
@@ -482,7 +484,7 @@ listed once.
 #### Scenario: A leader's Café shows their Team's Topics
 
 - **WHEN** anyone opens the Café of a person who leads a public Team holding a public Topic someone else owns
-- **THEN** the Topic is in the tiles and the table, after the person's own pins
+- **THEN** the Topic is in the tiles and the table, after the person's own featured items
 
 #### Scenario: A private Team stays off a visitor's Café
 
@@ -522,16 +524,6 @@ cost, or scans.
 
 - **WHEN** another member owns a private Topic on the person's Team whose Personal sources text is not converted
 - **THEN** the Topic is not in the person's table, and it is listed once the text is converted
-
-### Requirement: Café pins stay the owner's
-
-A pin SHALL count only on a Topic the person owns. The person's own pins lead the tiles in their order, then the rest
-follow in the home's trending order. The rank dialogs SHALL offer owned public Topics alone.
-
-#### Scenario: A team Topic's pin does not lead another member's Café
-
-- **WHEN** the owner of a team Topic has pinned it, and a leader of that Team opens their own Café
-- **THEN** the Topic follows the leader's own pins in the trending order, and their rank dialog does not offer it
 
 ### Requirement: A profile's table names whose Topic each row is
 
@@ -577,3 +569,14 @@ SHALL return what a visitor reads to any reader.
 
 - **WHEN** the person opens their own profile, or a user who is not an admin opens someone else's
 - **THEN** the news card shows no view select
+
+### Requirement: A Café's featured items stay the owner's
+
+A featured item SHALL count only on a Topic the person owns. The person's own featured items lead the tiles in their
+order, then the rest follow in the home's trending order. The rank dialogs SHALL offer owned public Topics alone.
+
+#### Scenario: A team Topic's featured item does not lead another member's Café
+
+- **WHEN** the owner of a team Topic has featured it, and a leader of that Team opens their own Café
+- **THEN** the Topic follows the leader's own featured items in the trending order, and their rank dialog does not offer
+  it

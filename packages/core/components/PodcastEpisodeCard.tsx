@@ -4,8 +4,8 @@
 import type { PodcastEpisodeCard as PodcastEpisodeCardFields } from "@carlnotes/contracts/home"
 import type { PodcastEpisodeFormat, PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
 import { toPodcastEpisodeDetailsLine } from "@carlnotes/contracts/podcastEpisodes"
-import { toTopicPodcastEpisodeVideoImageUrls } from "@carlnotes/contracts/topicImages"
-import type { TopicPodcastEpisodeVideoDialogSurface } from "@carlnotes/contracts/visitAnalytics"
+import { toTopicVideoImageUrls } from "@carlnotes/contracts/topicImages"
+import type { TopicVideoDialogSurface } from "@carlnotes/contracts/visitAnalytics"
 import { cardClasses } from "@carlnotes/nightshift/components/card"
 import type { ComponentType } from "react"
 import type { CardElements } from "./cardElements"
@@ -28,7 +28,7 @@ export type PodcastEpisodeCardProps = {
 	podcastEpisodeCard: PodcastEpisodeCardFields
 	onOpen?: () => void
 	variant?: PodcastEpisodeFormat
-	videoSurface?: TopicPodcastEpisodeVideoDialogSurface
+	videoSurface?: TopicVideoDialogSurface
 }
 
 /**
@@ -49,9 +49,7 @@ export function PodcastEpisodeCard({
 
 	// a film card shows the film's own image, and any card the podcast episode's, or its topic's, until that is drawn
 	const videoPosterUrl = variant === "video" ? podcastEpisode.videoPosterUrl : null
-	const image = videoPosterUrl
-		? toTopicPodcastEpisodeVideoImageUrls(videoPosterUrl)
-		: (podcastEpisode.image ?? topic.image)
+	const image = videoPosterUrl ? toTopicVideoImageUrls(videoPosterUrl) : (podcastEpisode.image ?? topic.image)
 	return (
 		<Card path={path} label={label} className={cardClasses.root} onOpen={onOpen}>
 			<Image image={image} name={podcastEpisode.title ?? topic.name} />

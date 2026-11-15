@@ -1,0 +1,123 @@
+// the podcast episode film routes: the stable film and captions urls, which start a rebuild for a film drawn from an
+// image it no longer shows
+
+import { isMonthlyBudgetCutoffPassed } from "@carlnotes/db/monthlyBudgetCutoffs"
+import { takeRateLimitSlot } from "@carlnotes/db/redisRateLimits"
+import { attachmentStream } from "@carlnotes/db/store"
+import { startTopicVideoRebuild } from "@carlnotes/pipeline/temporalClient"
+import { toShownImage } from "@carlnotes/pipeline/topicVideo/topicVideoInputs"
+import { reportError } from "@carlnotes/server/monitoring"
+import { Hono } from "hono"
+import type { AppEnv } from "../currentUser"
+import { PRIVATE_NO_STORE_CACHE_CONTROL } from "../edgeCache"
+import {
+	countPodcastEpisodePlayRequest,
+	isJsonAccepted,
+	loadPodcastEpisodePlayRequest,
+	toPodcastEpisodeFileResponse,
+} from "./podcastEpisodeFiles"
+import type { AccessiblePodcastEpisode } from "./podcastEpisodeRows"
+import {
+	loadReadyTopicVideoFiles,
+	type ReadyTopicVideoFiles,
+	TOPIC_VIDEO_CAPTIONS_FILE,
+	TOPIC_VIDEO_FILE,
+} from "./topicVideos"
+
+// how long one check of a stale film's spend cutoff and rebuild start holds off the next for its podcast episode
+const STALE_FILM_CHECK_MS = 60_000
+
+// the podcast episode film routes
+export const topicVideosRoute = new Hono<AppEnv>()
+	// the stable film url. hono runs this route for a HEAD too and drops the body
+	.get("/episodes/:id/video.mp4", async (context) => {
+		// read the listener, the podcast episode, and its ready film
+		const podcastEpisodePlayRequest = await loadPodcastEpisodePlayRequest(context)
+		const readyTopicVideoFiles = podcastEpisodePlayRequest
+			? await loadReadyTopicVideoFiles(podcastEpisodePlayRequest.accessiblePodcastEpisode.podcastEpisodeRow.id)
+			: null
+		if (!podcastEpisodePlayRequest || !readyTopicVideoFiles) {
+			return toPodcastEpisodeFileResponse(context, {
+				...TOPIC_VIDEO_FILE,
+				objectKey: null,
+				byteSize: null,
+			})
+		}
+
+		// count a GET, and start a rebuild if the film shows an older image. the film that plays now is served at once
+		if (context.req.method === "GET") {
+			countPodcastEpisodePlayRequest(context, podcastEpisodePlayRequest, "video")
+			void startStaleFilmRebuild(podcastEpisodePlayRequest.accessiblePodcastEpisode, readyTopicVideoFiles)
+		}
+		return toPodcastEpisodeFileResponse(context, {
+			...TOPIC_VIDEO_FILE,
+			objectKey: readyTopicVideoFiles.filmKey,
+			byteSize: readyTopicVideoFiles.byteSize,
+		})
+	})
+	// the film's captions, for the web player's track
+	.get("/episodes/:id/captions.vtt", async (context) => {
+		// read the listener, the podcast episode, and its ready film
+		const podcastEpisodePlayRequest = await loadPodcastEpisodePlayRequest(context)
+		const readyTopicVideoFiles = podcastEpisodePlayRequest
+			? await loadReadyTopicVideoFiles(podcastEpisodePlayRequest.accessiblePodcastEpisode.podcastEpisodeRow.id)
+			: null
+		const captionsKey = readyTopicVideoFiles?.captionsKey ?? null
+
+		// a browser track reads captions only from this origin, so a plain GET returns the file itself
+		if (captionsKey && context.req.method === "GET" && !isJsonAccepted(context)) {
+			context.header("Cache-Control", PRIVATE_NO_STORE_CACHE_CONTROL)
+			return context.body(attachmentStream(captionsKey), 200, { "Content-Type": "text/vtt; charset=utf-8" })
+		}
+		return toPodcastEpisodeFileResponse(context, {
+			...TOPIC_VIDEO_CAPTIONS_FILE,
+			objectKey: captionsKey,
+			byteSize: null,
+		})
+	})
+
+/**
+ * Starts a rebuild of a film drawn from an image it no longer shows, unless the user its podcast episode bills is past
+ * the podcast episode spend cutoff. A film with its own image shows that image, so a changed podcast episode image
+ * never rebuilds it. A stale film is checked at most once a minute. A failed start is reported, and the film that
+ * plays now stays.
+ */
+export async function startStaleFilmRebuild(
+	{ podcastEpisodeRow, topic }: Pick<AccessiblePodcastEpisode, "podcastEpisodeRow" | "topic">,
+	{
+		renderedImageHash,
+		imageHash: topicVideoImageHash,
+		ownerId,
+	}: Pick<ReadyTopicVideoFiles, "renderedImageHash" | "imageHash" | "ownerId">,
+): Promise<void> {
+	// the image the film shows now: its own, or else the one its podcast episode shows
+	const { imageHash } = toShownImage({
+		podcastEpisodeId: podcastEpisodeRow.id,
+		topicId: topic.id,
+		podcastEpisodeImageHash: podcastEpisodeRow.imageHash,
+		topicImageHash: topic.imageHash,
+		topicVideoImageHash,
+	})
+
+	// a film drawn from the shown image is current
+	if (imageHash === renderedImageHash) {
+		return
+	}
+
+	// a stale film rebuilds on the spend of the user its podcast episode bills, checked once a minute for each podcast
+	// episode on every replica. a check that Redis could not count still runs
+	try {
+		const staleFilmCheckWaitMs = await takeRateLimitSlot({
+			key: `stale-film-check:${podcastEpisodeRow.id}`,
+			slotMs: STALE_FILM_CHECK_MS,
+		})
+		if (staleFilmCheckWaitMs || (await isMonthlyBudgetCutoffPassed(ownerId, "podcastEpisodes"))) {
+			return
+		}
+
+		// start the rebuild, which joins one already running
+		await startTopicVideoRebuild(podcastEpisodeRow.id)
+	} catch (error) {
+		reportError(error, "topic-video", { podcastEpisodeId: podcastEpisodeRow.id, step: "rebuild" })
+	}
+}

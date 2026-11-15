@@ -161,7 +161,7 @@ test("Featured Films sits right before Featured Podcasts, and a profile with no 
 
 // every published Topic Post is a card of the one Topic Posts section, whose count is the whole number
 test("Featured Posts lists every Topic Post with the whole count, and the page has no second Topic Post section", async () => {
-	// fourteen posts, more than one page of the section shows and more than a person once pinned
+	// fourteen posts, more than one page of the section shows and more than a person once featured
 	const profileTopicPosts: ProfileTopicPostCard[] = Array.from({ length: 14 }, (_, i) => ({
 		id: `post-${i + 1}`,
 		topicId: "topic-1",

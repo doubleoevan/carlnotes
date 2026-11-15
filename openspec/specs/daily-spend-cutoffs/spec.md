@@ -345,7 +345,7 @@ the Topic page, the Topic's cards, and the MCP scan status the way a Scan that i
 ### Requirement: The spend control settings hold three switches that are off until an admin turns them on
 
 The spend control settings SHALL hold three switches beside the unverified accounts switch: one that pauses new
-podcast episodes, one that pauses new films, and one that limits the home to its pinned items. Each SHALL be off
+podcast episodes, one that pauses new films, and one that limits the home to its featured items. Each SHALL be off
 until an admin turns it on, SHALL be saved with no deploy or restart, and SHALL reach every reader within its next
 read of the settings. If the settings cannot be read, each SHALL read as off, and the failure SHALL be reported.
 
@@ -377,7 +377,7 @@ changed since it loaded or last saved, and SHALL post nothing if it changed none
 
 - **GIVEN** a cached settings value written by a replica that does not know the new switches
 - **WHEN** a new replica reads it
-- **THEN** both pauses and the pinned-only home read as off, and the generated chapter image limit reads its default
+- **THEN** both pauses and the featured-only home read as off, and the generated chapter image limit reads its default
 
 #### Scenario: An admin page loaded before the deploy keeps the new settings
 

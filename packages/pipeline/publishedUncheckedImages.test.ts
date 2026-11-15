@@ -51,7 +51,7 @@ type PublishedUncheckedImageFixture = {
 
 // the row a read of a subject's current image returns, by the table the read starts from
 function toSubjectStateRow(text: string, currentImageHash: string): unknown[] {
-	if (text.includes('from "topic_podcast_episode_videos"')) {
+	if (text.includes('from "topic_videos"')) {
 		return [currentImageHash, "topic-1", "private", "film-1"]
 	}
 	return [currentImageHash, "topic-1", "private"]
@@ -64,7 +64,7 @@ function toCurrentImageHash(text: string, currentImageHash: string | undefined):
 	}
 
 	// a film's read, then a podcast episode's, a Topic Post's, and the Topic's own
-	if (text.includes('from "topic_podcast_episode_videos"')) {
+	if (text.includes('from "topic_videos"')) {
 		return "unchecked-film-hash"
 	}
 	if (text.includes('from "episodes"')) {
@@ -142,13 +142,13 @@ test("a private topic that turns public returns each unchecked image to its uplo
 		'delete from "topic_images"',
 		'update "topics" set',
 		'update "unchecked_images" set',
-		'update "topic_podcast_episode_videos" set',
+		'update "topic_videos" set',
 		'update "episodes" set',
 		'update "unchecked_images" set',
-		'update "topic_podcast_episode_videos" set',
-		'update "topic_podcast_episode_videos" set',
+		'update "topic_videos" set',
+		'update "topic_videos" set',
 		'update "unchecked_images" set',
-		'update "topic_podcast_episode_videos" set',
+		'update "topic_videos" set',
 		'update "topic_posts" set',
 		'update "unchecked_images" set',
 	])
@@ -248,11 +248,9 @@ test("a write that fails throws its error out of the visibility change's transac
 
 // the Topic's image is drawn into its covers and into each film with no image of its own
 test("the covers and the films drawn from a returned image are drawn again, each film once", async () => {
-	stubConnectionPool(({ text }) =>
-		text.includes('from "topic_podcast_episode_videos"') ? [["episode-1"], ["episode-2"]] : [],
-	)
+	stubConnectionPool(({ text }) => (text.includes('from "topic_videos"') ? [["episode-1"], ["episode-2"]] : []))
 	const forgetTopicCoversSpy = spyOn(topicCovers, "forgetTopicCovers").mockResolvedValue(undefined)
-	const rebuildSpy = spyOn(temporalClient, "startTopicPodcastEpisodeVideoRebuild").mockResolvedValue(undefined)
+	const rebuildSpy = spyOn(temporalClient, "startTopicVideoRebuild").mockResolvedValue(undefined)
 	await redrawUnpublishedImageFiles("topic-1", [
 		{ subjectKind: "topicImage", subjectId: "topic-1" },
 		{ subjectKind: "podcastEpisodeImage", subjectId: "episode-1" },
@@ -270,7 +268,7 @@ test("the covers and the films drawn from a returned image are drawn again, each
 test("a returned film image starts its film's rebuild once, and a returned Topic Post image starts nothing", async () => {
 	const sentQueries = stubConnectionPool()
 	const forgetTopicCoversSpy = spyOn(topicCovers, "forgetTopicCovers").mockResolvedValue(undefined)
-	const rebuildSpy = spyOn(temporalClient, "startTopicPodcastEpisodeVideoRebuild").mockResolvedValue(undefined)
+	const rebuildSpy = spyOn(temporalClient, "startTopicVideoRebuild").mockResolvedValue(undefined)
 	await redrawUnpublishedImageFiles("topic-1", [
 		{ subjectKind: "topicPodcastEpisodeVideoImage", subjectId: "episode-1" },
 		{ subjectKind: "topicPostImage", subjectId: "post-1" },

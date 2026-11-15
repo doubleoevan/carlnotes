@@ -1,9 +1,6 @@
 // the browser audio element, the binding its film element shares, and voice effects for the shared podcast player
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
-import type {
-	PodcastEpisodePlayerState,
-	TopicPodcastEpisodeVideoAdapter,
-} from "@carlnotes/core/lib/podcastEpisodeAudio"
+import type { PodcastEpisodePlayerState, TopicVideoAdapter } from "@carlnotes/core/lib/podcastEpisodeAudio"
 import {
 	registerPodcastEpisodeAudioAdapter,
 	reportPodcastEpisodeAudioEvent,
@@ -75,7 +72,7 @@ type BindPodcastEpisodeMediaElementOptions = {
  * Drives a media element from the shared player and reports its events under the current load.
  */
 export function bindPodcastEpisodeMediaElement({ mediaElement, toSourceUrl }: BindPodcastEpisodeMediaElementOptions): {
-	adapter: TopicPodcastEpisodeVideoAdapter
+	adapter: TopicVideoAdapter
 	removeListeners: () => void
 } {
 	// bind each event to the current load identity
@@ -93,7 +90,7 @@ export function bindPodcastEpisodeMediaElement({ mediaElement, toSourceUrl }: Bi
 	])
 
 	// the source operations on the element
-	const adapter: TopicPodcastEpisodeVideoAdapter = {
+	const adapter: TopicVideoAdapter = {
 		load: (options) => {
 			// point the element at the loaded podcast episode, its position, and its speed
 			loadId = options.loadId

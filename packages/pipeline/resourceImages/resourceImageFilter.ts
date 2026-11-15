@@ -3,7 +3,7 @@
 // jpeg within twice the frame
 
 import sharp from "sharp"
-import { VIDEO_HEIGHT, VIDEO_WIDTH } from "../topicPodcastEpisodeVideo/videoFrames"
+import { VIDEO_HEIGHT, VIDEO_WIDTH } from "../topicVideo/videoFrames"
 import { toUprightImageSize } from "../uprightImageSize"
 
 // how many images a Resource keeps

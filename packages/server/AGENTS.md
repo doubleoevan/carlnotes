@@ -23,6 +23,8 @@ every outgoing event passes is `redactEvent` and `redactTransaction` in `monitor
 stage's one error ten times an hour and skips the rest, and the next hour's first report says how many were skipped.
 `exitOnFatalError` logs and reports an error that stops a process, waits for the report to send, and exits with code
 1. Every report is tagged with the release `toSentryRelease` reads, the deployed commit.
+`cronMonitoring.ts` sends a scheduled job's check-ins to its Sentry cron monitor: `startCronCheckIn` when the job
+starts and `finishCronCheckIn` with its result and duration.
 `runtimeGauges.ts` logs a long-running process's connection pool and event loop delay once a minute, reading the delay
 from the histogram in `eventLoopDelay.ts`. Each line's `instance` field names the replica by its host name, so the
 replicas' lines can be told apart. `analytics.ts` holds the PostHog clients: `trackEvent` for the user events keyed to
@@ -38,10 +40,10 @@ turns a counted person into the element their count adds: `u:<userId>` for a use
 the address and the user agent through `hmac.ts`, never stored. `voiceChat.ts` reads the transcription
 model from `CHAT_TRANSCRIPTION_MODEL` and says whether voice chat is on, which needs that model and the podcast speech
 model. `podcastEpisodeSettings.ts` reads `PODCAST_SPEECH_MODEL`, which defaults to `gemini-3.8-flash-tts`, and Podcast
-Episodes are off if it is set empty. It also reads the film settings: `TOPIC_PODCAST_EPISODE_VIDEO_CONCURRENCY` and
-`TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_CONCURRENCY`, both 1 by default. A film concurrency of 0 turns films off, and
-a backfill concurrency of 0 turns the backfill off, which `isTopicPodcastEpisodeVideoBackfillEnabled` returns. The
-generated image setting, `TOPIC_PODCAST_EPISODE_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT`, is the default of the spend
+Episodes are off if it is set empty. It also reads the film settings: `TOPIC_VIDEO_CONCURRENCY` and
+`TOPIC_VIDEO_BACKFILL_CONCURRENCY`, both 1 by default. A film concurrency of 0 turns films off, and
+a backfill concurrency of 0 turns the backfill off, which `isTopicVideoBackfillEnabled` returns. The
+generated image setting, `TOPIC_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT`, is the default of the spend
 control settings' limit: the 40 generated images one film draws at most, where 0 turns them off. `scanSettings.ts`
 reads `SCAN_DISPATCH_LIMIT`, the 100 Scans one sweep may hand to Temporal, where 0 starts none.
 `podcastCoverPaths.ts` signs a cover's key through `hmac.ts` with

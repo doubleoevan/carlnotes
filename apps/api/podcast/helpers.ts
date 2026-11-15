@@ -38,13 +38,13 @@ import {
 	loadPodcastEpisode,
 	loadPodcastEpisodeSummaries,
 	loadPodcastEpisodes,
-	loadTopicPodcastEpisodeVideos,
-	type TopicPodcastEpisodeVideos,
+	loadTopicVideos,
+	type TopicVideos,
 	toPodcastEpisode,
 } from "./podcastEpisodeShapes"
 import { loadRelatedPodcastEpisodeRows, loadTopicPodcastEpisodeRows } from "./relatedPodcastEpisodes"
-import { toHomeTopicPodcastEpisodeVideos } from "./topicPodcastEpisodeVideoHomeOrder"
-import { loadTopicPodcastEpisodeVideoImageEdit } from "./topicPodcastEpisodeVideos"
+import { toHomeTopicVideos } from "./topicVideoHomeOrder"
+import { loadTopicVideoImageEdit } from "./topicVideos"
 
 // the topic page's podcast, its latest podcast episode with chapters, and each scan's published podcast episode
 // by the scan's id
@@ -90,12 +90,12 @@ export async function loadTopicPodcast(topic: TopicRow, userId: string | null): 
 	]
 
 	// the ready and the rendering films of the published podcast episodes, read once for every list below, and the
-	// newest published podcast episode with a ready one, which Topic Cinema shows
-	const topicPodcastEpisodeVideos = await loadTopicPodcastEpisodeVideos(
+	// newest published podcast episode with a ready one, which the topic video section shows
+	const topicVideos = await loadTopicVideos(
 		publishedPodcastEpisodeRows.map((podcastEpisodeRow) => podcastEpisodeRow.id),
 	)
 	const latestFilmRow = publishedPodcastEpisodeRows.find((podcastEpisodeRow) =>
-		topicPodcastEpisodeVideos.readyTopicPodcastEpisodeVideos.has(podcastEpisodeRow.id),
+		topicVideos.readyTopicVideos.has(podcastEpisodeRow.id),
 	)
 
 	// the latest podcast episode and the latest film's podcast episode, listed once if they are the same one
@@ -125,7 +125,7 @@ export async function loadTopicPodcast(topic: TopicRow, userId: string | null): 
 		loadPodcastEpisodes({
 			podcastEpisodeRowTopics: playerPodcastEpisodeRows.map((podcastEpisodeRow) => ({ podcastEpisodeRow, topic })),
 			userId,
-			topicPodcastEpisodeVideos,
+			topicVideos,
 		}),
 		latestSeason === undefined
 			? { podcastEpisodes: [] }
@@ -134,21 +134,22 @@ export async function loadTopicPodcast(topic: TopicRow, userId: string | null): 
 					publishedPodcastEpisodeRows,
 					userId,
 					season: latestSeason,
-					topicPodcastEpisodeVideos,
+					topicVideos,
 				}),
 		loadPodcastEpisodeSummaries(
 			scanPodcastEpisodeRows.map((podcastEpisodeRow) => ({ podcastEpisodeRow, topic })),
-			topicPodcastEpisodeVideos,
+			topicVideos,
 		),
 	])
 
-	// the latest podcast episode, and Topic Cinema's latest film, or null if no podcast episode has a ready film
+	// the latest podcast episode, and the topic video section's latest film, or null if no podcast episode has a ready
+	// film
 	const playerPodcastEpisodeById = new Map(
 		playerPodcastEpisodes.map((podcastEpisode) => [podcastEpisode.id, podcastEpisode]),
 	)
 	const latestPodcastEpisode = playerPodcastEpisodeById.get(latestPublishedPodcastEpisodeRow?.id ?? "") ?? null
 	const latestFilmPodcastEpisode = playerPodcastEpisodeById.get(latestFilmRow?.id ?? "")
-	const topicPodcastEpisodeVideoSection = latestFilmPodcastEpisode ? { podcastEpisode: latestFilmPodcastEpisode } : null
+	const topicVideoSection = latestFilmPodcastEpisode ? { podcastEpisode: latestFilmPodcastEpisode } : null
 
 	// the podcast with its episodes and feed, the latest podcast episode, and each scan's podcast episode
 	return {
@@ -165,10 +166,9 @@ export async function loadTopicPodcast(topic: TopicRow, userId: string | null): 
 			// a public topic's podcast feed url, once the topic has a published podcast episode
 			publicFeedUrl:
 				topic.visibility === "public" && latestPublishedPodcastEpisodeRow ? toPodcastFeedPath(topic.id) : null,
-			// Topic Cinema, and a public topic's film feed url once the topic has a film
-			topicPodcastEpisodeVideoSection,
-			publicVideoFeedUrl:
-				topic.visibility === "public" && topicPodcastEpisodeVideoSection ? toPodcastVideoFeedPath(topic.id) : null,
+			// the topic video section, and a public topic's film feed url once the topic has a film
+			topicPodcastEpisodeVideoSection: topicVideoSection,
+			publicVideoFeedUrl: topic.visibility === "public" && topicVideoSection ? toPodcastVideoFeedPath(topic.id) : null,
 		},
 		latestPodcastEpisode,
 		podcastEpisodeByScanId: toPodcastEpisodeByScanId(scanPodcastEpisodeRows, scanPodcastEpisodeSummaries),
@@ -220,7 +220,7 @@ type ToSeasonPodcastEpisodesOptions = {
 	publishedPodcastEpisodeRows: PodcastEpisodeRow[]
 	userId: string | null
 	season: number
-	topicPodcastEpisodeVideos?: TopicPodcastEpisodeVideos
+	topicVideos?: TopicVideos
 }
 
 // a season's podcast episodes, with the user's progress through each
@@ -229,18 +229,17 @@ async function toSeasonPodcastEpisodes({
 	publishedPodcastEpisodeRows,
 	userId,
 	season,
-	topicPodcastEpisodeVideos: loadedTopicPodcastEpisodeVideos,
+	topicVideos: loadedTopicVideos,
 }: ToSeasonPodcastEpisodesOptions): Promise<SeasonPodcastEpisodes> {
 	// keep the season's podcast episodes, and attach the user's progress and the film to each
 	const seasonPodcastEpisodeRows = publishedPodcastEpisodeRows.filter(
 		(podcastEpisodeRow) => podcastEpisodeRow.season === season,
 	)
 	const seasonPodcastEpisodeIds = seasonPodcastEpisodeRows.map((podcastEpisodeRow) => podcastEpisodeRow.id)
-	const [podcastEpisodeListenRows, { readyTopicPodcastEpisodeVideos, videoRenderingPodcastEpisodeIds }] =
-		await Promise.all([
-			loadPodcastEpisodeListenRows(userId, seasonPodcastEpisodeIds),
-			loadedTopicPodcastEpisodeVideos ?? loadTopicPodcastEpisodeVideos(seasonPodcastEpisodeIds),
-		])
+	const [podcastEpisodeListenRows, { readyTopicVideos, videoRenderingPodcastEpisodeIds }] = await Promise.all([
+		loadPodcastEpisodeListenRows(userId, seasonPodcastEpisodeIds),
+		loadedTopicVideos ?? loadTopicVideos(seasonPodcastEpisodeIds),
+	])
 	return {
 		podcastEpisodes: seasonPodcastEpisodeRows.map((podcastEpisodeRow) =>
 			toPodcastEpisode({
@@ -249,7 +248,7 @@ async function toSeasonPodcastEpisodes({
 				podcastEpisodeListenRow: podcastEpisodeListenRows.find(
 					(podcastEpisodeListenRow) => podcastEpisodeListenRow.podcastEpisodeId === podcastEpisodeRow.id,
 				),
-				readyTopicPodcastEpisodeVideo: readyTopicPodcastEpisodeVideos.get(podcastEpisodeRow.id),
+				readyTopicVideo: readyTopicVideos.get(podcastEpisodeRow.id),
 				isVideoRendering: videoRenderingPodcastEpisodeIds.has(podcastEpisodeRow.id),
 			}),
 		),
@@ -343,24 +342,19 @@ async function loadPodcastEpisodePageFields(
 
 	// read the chapters' findings' reactions and the page's own, the editor's regenerations this month and the film's
 	// image fields, and the admin's home lists, and fill the chapters' favicons, all together
-	const [
-		reactions,
-		imageRegenerationQuota,
-		topicPodcastEpisodeVideoImageEdit,
-		homePodcastEpisodes,
-		homeTopicPodcastEpisodeVideos,
-	] = await Promise.all([
-		attachReactionSummaries({
-			topicFindings: chapterTopicFindings,
-			userId,
-			pageSocialTarget: { kind: "podcastEpisode", id: podcastEpisodeId },
-		}),
-		canEditPodcastEpisode && userId ? loadEditorImageRegenerationQuota(userId) : null,
-		loadTopicPodcastEpisodeVideoImageEdit({ podcastEpisodeId, canEditPodcastEpisode }),
-		toHomePodcastEpisodes(podcastEpisodeScriptRow?.homeOrder ?? null, isAdmin),
-		toHomeTopicPodcastEpisodeVideos(podcastEpisodeId, isAdmin),
-		attachPodcastEpisodeChapterFaviconPaths(podcastEpisode.chapters),
-	])
+	const [reactions, imageRegenerationQuota, topicVideoImageEdit, homePodcastEpisodes, homeTopicPodcastEpisodeVideos] =
+		await Promise.all([
+			attachReactionSummaries({
+				topicFindings: chapterTopicFindings,
+				userId,
+				pageSocialTarget: { kind: "podcastEpisode", id: podcastEpisodeId },
+			}),
+			canEditPodcastEpisode && userId ? loadEditorImageRegenerationQuota(userId) : null,
+			loadTopicVideoImageEdit({ podcastEpisodeId, canEditPodcastEpisode }),
+			toHomePodcastEpisodes(podcastEpisodeScriptRow?.homeOrder ?? null, isAdmin),
+			toHomeTopicVideos(podcastEpisodeId, isAdmin),
+			attachPodcastEpisodeChapterFaviconPaths(podcastEpisode.chapters),
+		])
 	const { id, name, prompt, visibility } = topic
 	return {
 		podcastEpisode,
@@ -372,7 +366,7 @@ async function loadPodcastEpisodePageFields(
 		podcastEpisodeImageOrigin: canEditPodcastEpisode ? (podcastEpisodeScriptRow?.imageOrigin ?? null) : null,
 		podcastEpisodeImagePrompt: canEditPodcastEpisode ? (podcastEpisodeScriptRow?.imagePrompt ?? null) : null,
 		imageRegenerationQuota,
-		...topicPodcastEpisodeVideoImageEdit,
+		...topicVideoImageEdit,
 		...homePodcastEpisodes,
 		...homeTopicPodcastEpisodeVideos,
 		transcript: podcastEpisodeScriptRow?.script ? toTranscriptBlocks(podcastEpisodeScriptRow.script) : [],

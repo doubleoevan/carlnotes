@@ -8,11 +8,7 @@ import {
 	type ReportResolution,
 	type ReportSubjectKind,
 } from "@carlnotes/contracts/reports"
-import {
-	type TopicImageUrls,
-	toPodcastEpisodeImageUrls,
-	toTopicPodcastEpisodeVideoPosterUrl,
-} from "@carlnotes/contracts/topicImages"
+import { type TopicImageUrls, toPodcastEpisodeImageUrls, toTopicVideoPosterUrl } from "@carlnotes/contracts/topicImages"
 import {
 	fromTopicPostBodyImagePath,
 	toTopicPostBodyImageIds,
@@ -21,7 +17,7 @@ import {
 import { db } from "@carlnotes/db"
 import { chatRoomMessages } from "@carlnotes/db/schema/chat"
 import { noteComments, notes } from "@carlnotes/db/schema/notes"
-import { podcastEpisodes, topicPodcastEpisodeVideos } from "@carlnotes/db/schema/podcast"
+import { podcastEpisodes, topicVideos } from "@carlnotes/db/schema/podcast"
 import { reports } from "@carlnotes/db/schema/reports"
 import { comments } from "@carlnotes/db/schema/social"
 import { teams } from "@carlnotes/db/schema/teams"
@@ -44,9 +40,7 @@ const authors = alias(users, "authors")
 
 // the avatar or the images of a reported profile, team, or podcast episode: a published avatar's version, or a podcast
 // episode's own image with its film's poster
-type ReportedSubjectImages = Partial<
-	Pick<AdminReport, "subjectImage" | "subjectAvatarVersion" | "topicPodcastEpisodeVideoPosterUrl">
->
+type ReportedSubjectImages = Partial<Pick<AdminReport, "subjectImage" | "subjectAvatarVersion" | "topicVideoPosterUrl">>
 
 /**
  * Counts the open reports.
@@ -101,7 +95,7 @@ export async function loadOpenReports(): Promise<AdminReport[]> {
 			// a podcast episode's own image, or the reported image
 			subjectImage: subjectImages?.subjectImage ?? toSubjectImage(reportRow),
 			subjectAvatarVersion: subjectImages?.subjectAvatarVersion ?? null,
-			topicPodcastEpisodeVideoPosterUrl: subjectImages?.topicPodcastEpisodeVideoPosterUrl ?? null,
+			topicVideoPosterUrl: subjectImages?.topicVideoPosterUrl ?? null,
 			reason: reportRow.reason,
 			createdAt: reportRow.createdAt.toISOString(),
 			author:
@@ -229,10 +223,10 @@ async function loadPodcastEpisodeImages(podcastEpisodeIds: string[]): Promise<Ma
 			status: podcastEpisodes.status,
 			topicId: podcastEpisodes.topicId,
 			imageHash: podcastEpisodes.imageHash,
-			topicPodcastEpisodeVideoImageHash: topicPodcastEpisodeVideos.imageHash,
+			topicVideoImageHash: topicVideos.imageHash,
 		})
 		.from(podcastEpisodes)
-		.leftJoin(topicPodcastEpisodeVideos, eq(topicPodcastEpisodeVideos.podcastEpisodeId, podcastEpisodes.id))
+		.leftJoin(topicVideos, eq(topicVideos.podcastEpisodeId, podcastEpisodes.id))
 		.where(inArray(podcastEpisodes.id, podcastEpisodeIds))
 
 	// leave out a podcast episode that is removed or left with no topic, which has no image to draw again
@@ -242,13 +236,11 @@ async function loadPodcastEpisodeImages(podcastEpisodeIds: string[]): Promise<Ma
 
 	// map each hash to its urls, null for an image that is not drawn yet and for a film with no image of its own
 	return new Map(
-		standingPodcastEpisodeRows.map(({ id, imageHash, topicPodcastEpisodeVideoImageHash }) => [
+		standingPodcastEpisodeRows.map(({ id, imageHash, topicVideoImageHash }) => [
 			`podcastEpisode:${id}`,
 			{
 				subjectImage: imageHash ? toPodcastEpisodeImageUrls(id, imageHash) : null,
-				topicPodcastEpisodeVideoPosterUrl: topicPodcastEpisodeVideoImageHash
-					? toTopicPodcastEpisodeVideoPosterUrl(id, topicPodcastEpisodeVideoImageHash)
-					: null,
+				topicVideoPosterUrl: topicVideoImageHash ? toTopicVideoPosterUrl(id, topicVideoImageHash) : null,
 			},
 		]),
 	)

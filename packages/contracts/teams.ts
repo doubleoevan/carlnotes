@@ -71,17 +71,17 @@ export const teamPageResponse = teamIdentity.extend({
 	chatMentions: z.array(chatMention),
 	// the same profile-shaped rows the profile page's topic table renders
 	topics: z.array(topic),
-	// those topics as cards: the ones their owners pinned on their profiles first, then the rest in the home's
+	// those topics as cards: the ones their owners featured on their profiles first, then the rest in the home's
 	// trending order
 	topicCards: z.array(topicCard),
 	// the published podcast episodes of those topics that have a ready film, as film cards: the films their topics'
-	// owners pinned on their profiles first, then the most listened one of each other topic. optional, so a released
-	// app reads a payload without them
+	// owners featured on their profiles first, then the most listened one of each other topic. optional, so a released app
+	// reads a payload without them. the field's name must not change, because the frozen api contract reads it
 	topicPodcastEpisodeVideoCards: z.array(podcastEpisodeCard).optional(),
-	// the published podcast episodes of those topics as cards: the pinned ones first, then the most listened one of
+	// the published podcast episodes of those topics as cards: the featured ones first, then the most listened one of
 	// each other topic
 	podcastEpisodeCards: z.array(podcastEpisodeCard),
-	// every published Topic Post of those topics as cards: the ones their authors pinned on their profiles first in
+	// every published Topic Post of those topics as cards: the ones their authors featured on their profiles first in
 	// their order, then the rest newest first
 	topicPostCards: z.array(topicPostCard),
 })

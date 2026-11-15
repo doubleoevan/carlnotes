@@ -6,21 +6,18 @@ import * as dailySpendCutoffs from "@carlnotes/db/dailySpendCutoffs"
 import { DEFAULT_SPEND_CONTROL_SETTINGS } from "@carlnotes/db/dailySpendCutoffTestFixtures"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
 import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
-import { isTopicPodcastEpisodeVideoBackfillEnabled } from "@carlnotes/server/podcastEpisodeSettings"
+import { isTopicVideoBackfillEnabled } from "@carlnotes/server/podcastEpisodeSettings"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import { isTopicPodcastEpisodeVideoEnabled } from "./recordPodcastEpisodeActivities"
 
 // the film settings the tests change
-const TOPIC_PODCAST_EPISODE_VIDEO_SETTINGS = [
-	"TOPIC_PODCAST_EPISODE_VIDEO_CONCURRENCY",
-	"TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_CONCURRENCY",
-]
-const restoreEnvSettings = saveEnvSettings(TOPIC_PODCAST_EPISODE_VIDEO_SETTINGS)
+const TOPIC_VIDEO_SETTINGS = ["TOPIC_VIDEO_CONCURRENCY", "TOPIC_VIDEO_BACKFILL_CONCURRENCY"]
+const restoreEnvSettings = saveEnvSettings(TOPIC_VIDEO_SETTINGS)
 
 // each test starts with no film setting set, an empty in-memory Redis, and an empty spend control settings table
 beforeEach(() => {
-	for (const topicPodcastEpisodeVideoSetting of TOPIC_PODCAST_EPISODE_VIDEO_SETTINGS) {
-		delete Bun.env[topicPodcastEpisodeVideoSetting]
+	for (const topicVideoSetting of TOPIC_VIDEO_SETTINGS) {
+		delete Bun.env[topicVideoSetting]
 	}
 	stubRedisClient()
 	stubConnectionPool()
@@ -41,7 +38,7 @@ test("a new podcast episode starts its film with nothing set", async () => {
 
 // films that are off start none, without a read of the spend control settings
 test("a film concurrency of zero starts no film, and reads no setting", async () => {
-	Bun.env.TOPIC_PODCAST_EPISODE_VIDEO_CONCURRENCY = "0"
+	Bun.env.TOPIC_VIDEO_CONCURRENCY = "0"
 	const loadSpendControlSettingsSpy = spyOn(dailySpendCutoffs, "loadSpendControlSettings")
 	expect(await isTopicPodcastEpisodeVideoEnabled()).toBe(false)
 	expect(loadSpendControlSettingsSpy).not.toHaveBeenCalled()
@@ -53,7 +50,7 @@ test("the pause on new films starts no film for a new podcast episode, and turni
 	// new films paused
 	const loadSpendControlSettingsSpy = spyOn(dailySpendCutoffs, "loadSpendControlSettings").mockResolvedValue({
 		...DEFAULT_SPEND_CONTROL_SETTINGS,
-		isTopicPodcastEpisodeVideoRenderingPaused: true,
+		isTopicVideoRenderingPaused: true,
 	})
 	expect(await isTopicPodcastEpisodeVideoEnabled()).toBe(false)
 
@@ -88,7 +85,7 @@ test("a failed settings read pauses no film", async () => {
 
 // the backfill's switch turns the backfill off alone
 test("a film backfill concurrency of zero starts no backfill, and a new podcast episode's film still starts", async () => {
-	Bun.env.TOPIC_PODCAST_EPISODE_VIDEO_BACKFILL_CONCURRENCY = "0"
-	expect(isTopicPodcastEpisodeVideoBackfillEnabled()).toBe(false)
+	Bun.env.TOPIC_VIDEO_BACKFILL_CONCURRENCY = "0"
+	expect(isTopicVideoBackfillEnabled()).toBe(false)
 	expect(await isTopicPodcastEpisodeVideoEnabled()).toBe(true)
 })

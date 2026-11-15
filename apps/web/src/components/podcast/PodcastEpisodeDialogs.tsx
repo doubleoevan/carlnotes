@@ -1,22 +1,16 @@
-import {
-	sendPodcastEpisodeHomeOrder,
-	sendTopicPodcastEpisodeVideoHomeOrder,
-} from "@carlnotes/client/podcastEpisodeClient"
+import { sendPodcastEpisodeHomeOrder, sendTopicVideoHomeOrder } from "@carlnotes/client/podcastEpisodeClient"
 import { type PodcastEpisode, toHomePodcastEpisodeLabel } from "@carlnotes/contracts/podcast"
 import type { PodcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpisodePage"
 import { toPodcastEpisodeTitleLabel } from "@carlnotes/core/lib/labels"
-import {
-	toPodcastEpisodeEditableImage,
-	toTopicPodcastEpisodeVideoEditableImage,
-} from "@carlnotes/core/lib/podcastEpisodeEditor"
-import { type PinnedOrderMove, toHomeRankDialogLabels } from "@carlnotes/core/lib/rankDialog"
+import { toPodcastEpisodeEditableImage, toTopicVideoEditableImage } from "@carlnotes/core/lib/podcastEpisodeEditor"
+import { type FeaturedOrderMove, toHomeRankDialogLabels } from "@carlnotes/core/lib/rankDialog"
 import { SAVE_FAILED_TEXT } from "@carlnotes/core/lib/sessionCopy"
 import { toast } from "sonner"
 import { ProfileRankDialog, RankDialog } from "@/components/common/RankDialog"
 import { ShareTopic } from "@/components/share/ShareTopic"
 import { AddTopicToTeamDialog } from "@/components/team/AddTopicToTeamDialog"
 import { EditImageDialog } from "@/components/topic/EditImageDialog"
-import { sendPinnedOrderMoves } from "@/lib/pinnedOrderMoves"
+import { sendFeaturedOrderMoves } from "@/lib/featuredOrderMoves"
 import { EditPodcastEpisodeDialog } from "./EditPodcastEpisodeDialog"
 import { RemovePodcastEpisodeDialog } from "./RemovePodcastEpisodeDialog"
 
@@ -116,7 +110,7 @@ function PodcastEpisodeImageDialog({
 	}
 	const editableImage =
 		openDialog === "edit-film"
-			? toTopicPodcastEpisodeVideoEditableImage(podcastEpisodePage)
+			? toTopicVideoEditableImage(podcastEpisodePage)
 			: toPodcastEpisodeEditableImage(podcastEpisodePage)
 	return <EditImageDialog editableImage={editableImage} onImageChanged={onImageChanged} onClose={onClose} />
 }
@@ -141,15 +135,15 @@ function PodcastEpisodeHomeRankDialog({
 	const isFilm = openDialog === "rank-films"
 	const homeItems = isFilm ? podcastEpisodePage.homeTopicPodcastEpisodeVideos : podcastEpisodePage.homePodcastEpisodes
 	const homeOrder = isFilm ? podcastEpisodePage.topicPodcastEpisodeVideoHomeOrder : podcastEpisodePage.homeOrder
-	const sendHomeOrder = isFilm ? sendTopicPodcastEpisodeVideoHomeOrder : sendPodcastEpisodeHomeOrder
+	const sendHomeOrder = isFilm ? sendTopicVideoHomeOrder : sendPodcastEpisodeHomeOrder
 	if ((openDialog !== "rank" && !isFilm) || !homeItems) {
 		return null
 	}
 
 	// send each move, then reload the page
-	const handleSave = async (pinnedOrderMoves: PinnedOrderMove[]): Promise<void> => {
+	const handleSave = async (featuredOrderMoves: FeaturedOrderMove[]): Promise<void> => {
 		try {
-			await sendPinnedOrderMoves(pinnedOrderMoves, sendHomeOrder)
+			await sendFeaturedOrderMoves(featuredOrderMoves, sendHomeOrder)
 		} catch (error) {
 			console.error("podcast episode home order failed", error)
 			toast.error(SAVE_FAILED_TEXT)
@@ -162,8 +156,8 @@ function PodcastEpisodeHomeRankDialog({
 		<RankDialog
 			labels={toHomeRankDialogLabels(isFilm ? "films" : "podcasts")}
 			pageItem={{ id: podcastEpisode.id, label: toPodcastEpisodeTitleLabel(podcastEpisode) }}
-			pinnedItems={homeItems.map((homeItem) => ({ id: homeItem.id, label: toHomePodcastEpisodeLabel(homeItem) }))}
-			isPageItemPinned={homeOrder != null}
+			featuredItems={homeItems.map((homeItem) => ({ id: homeItem.id, label: toHomePodcastEpisodeLabel(homeItem) }))}
+			isPageItemFeatured={homeOrder != null}
 			onSave={handleSave}
 			onClose={onClose}
 		/>
@@ -177,7 +171,7 @@ type PodcastEpisodeProfileRankDialogProps = {
 	onClose: () => void
 }
 
-// the owner's profile pins for the films or the podcast episodes, once the actions menu opens one
+// the owner's featured profile items for the films or the podcast episodes, once the actions menu opens one
 function PodcastEpisodeProfileRankDialog({
 	openDialog,
 	podcastEpisode,

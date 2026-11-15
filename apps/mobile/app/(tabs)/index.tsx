@@ -6,7 +6,7 @@ import type {
 	YourTopicsPage,
 } from "@carlnotes/contracts/home"
 import type { TopicPostCard as TopicPostCardFields } from "@carlnotes/contracts/topicPosts"
-import type { TopicPodcastEpisodeVideoDialogSurface } from "@carlnotes/contracts/visitAnalytics"
+import type { TopicVideoDialogSurface } from "@carlnotes/contracts/visitAnalytics"
 import { useUpdatesRecap } from "@carlnotes/core/hooks/useUpdatesRecap"
 import { useYourTopicsPages } from "@carlnotes/core/hooks/useYourTopicsPages"
 import type { CardSection } from "@carlnotes/core/lib/cardSections"
@@ -186,7 +186,7 @@ function HomePodcastEpisodesSection({
 }: {
 	section: CardSection<PodcastEpisodeCardFields>
 	podcastEpisodes: PodcastEpisodeCardFields[]
-	videoSurface?: TopicPodcastEpisodeVideoDialogSurface
+	videoSurface?: TopicVideoDialogSurface
 }) {
 	return (
 		<PagedCardsSection

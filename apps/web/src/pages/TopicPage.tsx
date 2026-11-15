@@ -4,7 +4,7 @@ import { isAdminRole } from "@carlnotes/contracts/enums"
 import type { TopicFinding } from "@carlnotes/contracts/findings"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { sendTopicViewOnce } from "@carlnotes/core/lib/pageViews"
-import type { PinnedOrderMove } from "@carlnotes/core/lib/rankDialog"
+import type { FeaturedOrderMove } from "@carlnotes/core/lib/rankDialog"
 import { selectTopicFindings } from "@carlnotes/core/lib/topicFeed"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useNavigate, useParams } from "@tanstack/react-router"
@@ -14,7 +14,7 @@ import { toast } from "sonner"
 import { NotesSection } from "@/components/note/NotesSection"
 import { PodcastEpisodePlayer } from "@/components/podcast/PodcastEpisodePlayer"
 import { PodcastEpisodesCard } from "@/components/podcast/PodcastEpisodesCard"
-import { TopicPodcastEpisodeVideoSection } from "@/components/podcast/TopicPodcastEpisodeVideoSection"
+import { TopicVideoSection } from "@/components/podcast/TopicVideoSection"
 import { toSignupNavigation } from "@/components/session/signupPrompts"
 import { SocialSection } from "@/components/social/SocialSection"
 import { JoinTeamButton } from "@/components/team/JoinTeamButton"
@@ -38,7 +38,7 @@ import { TopicPostsSection } from "@/components/topicPost/TopicPostsSection"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { useRevealClassName } from "@/hooks/useRevealClassName"
 import { useTopicPagePayload } from "@/hooks/useTopicPagePayload"
-import { sendPinnedOrderMoves } from "@/lib/pinnedOrderMoves"
+import { sendFeaturedOrderMoves } from "@/lib/featuredOrderMoves"
 import { PAGE_CLASS } from "@/lib/styleClasses"
 import { NEXT_SCAN_DISCLAIMER } from "@/lib/utils"
 import { captureVisitEvent, toPublicTopicProperties } from "@/lib/visitAnalytics"
@@ -127,7 +127,7 @@ export function TopicPage() {
 						onToggleFollowTopic: () => void handleSubscriptionToggle(),
 						onRankHomeTopic: () => setOpenDialog("rank"),
 						onRankProfileTopic: () => setOpenDialog("rank-profile"),
-						onEditTopicPodcastEpisodeVideo: () => setOpenDialog("edit-film"),
+						onEditTopicVideo: () => setOpenDialog("edit-film"),
 						onEditTopic: () => setOpenDialog("edit-choice"),
 						onDeleteTopic: () => setOpenDialog("delete"),
 					}),
@@ -177,8 +177,8 @@ export function TopicPage() {
 	}
 
 	// send the rank dialog's moves one at a time, then reload both feeds once
-	const handleRankTopic = async (pinnedOrderMoves: PinnedOrderMove[]): Promise<void> => {
-		await runThenReload(() => sendPinnedOrderMoves(pinnedOrderMoves, sendTopicHomeOrder))
+	const handleRankTopic = async (featuredOrderMoves: FeaturedOrderMove[]): Promise<void> => {
+		await runThenReload(() => sendFeaturedOrderMoves(featuredOrderMoves, sendTopicHomeOrder))
 		await reloadHomePage()
 	}
 
@@ -237,12 +237,9 @@ export function TopicPage() {
 							onEditImage={() => setOpenDialog("edit-image")}
 						/>
 					</HydrateSection>
-					{/* Topic Cinema, then the podcast episode player */}
+					{/* the topic video section, then the podcast episode player */}
 					<HydrateSection index={1}>
-						<TopicPodcastEpisodeVideoSection
-							topic={topic}
-							onVideoRenderingPoll={() => reloadTopicPage({ isPoll: true })}
-						/>
+						<TopicVideoSection topic={topic} onVideoRenderingPoll={() => reloadTopicPage({ isPoll: true })} />
 						<PodcastEpisodePlayer
 							topic={topic}
 							topicFeedHandlers={topicFeedHandlers}

@@ -1,5 +1,5 @@
-// profile order route tests: only a topic's owner pins it or its ready film, only while it is public, only a Topic
-// Post's author pins it, only once it is published on a public topic, and each rejection changes nothing
+// profile order route tests: only a topic's owner features it or its ready film, only while it is public, only a Topic
+// Post's author features it, only once it is published on a public topic, and each rejection changes nothing
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as analytics from "@carlnotes/server/analytics"
@@ -13,16 +13,16 @@ afterEach(() => {
 	mock.restore()
 })
 
-// a topic row in the gated columns' order, with its owner and its visibility, and the count of its owner's pins
+// a topic row in the gated columns' order, with its owner and its visibility, and the count of its owner's featured items
 function stubTopicRow(
 	ownerId: string,
 	visibility: "public" | "private",
-	pinnedCount = 0,
+	featuredCount = 0,
 ): ReturnType<typeof stubConnectionPool> {
 	return stubConnectionPool(({ text }) => {
-		// how many topics the owner has pinned
+		// how many topics the owner has featured
 		if (text.includes("count(*)")) {
-			return [[pinnedCount]]
+			return [[featuredCount]]
 		}
 
 		// the topic holds no profile order yet, and a write returns no row
@@ -43,7 +43,7 @@ function sendTopicProfileOrder(userId: string | null, position: number): Respons
 	})
 }
 
-test("the owner pins their public topic", async () => {
+test("the owner features their public topic", async () => {
 	const sentQueries = stubTopicRow("owner-1", "public")
 	const response = await sendTopicProfileOrder("owner-1", 1)
 	expect(response.status).toBe(200)
@@ -63,26 +63,26 @@ test("a topic that is not public is rejected as a conflict", async () => {
 	expect(sentQueries.some(({ text }) => text.startsWith("update"))).toBe(false)
 })
 
-test("a thirteenth pin is rejected as a conflict", async () => {
+test("a thirteenth featured item is rejected as a conflict", async () => {
 	const sentQueries = stubTopicRow("owner-1", "public", 12)
 	expect((await sendTopicProfileOrder("owner-1", 13)).status).toBe(409)
 	expect(sentQueries.some(({ text }) => text.startsWith("update"))).toBe(false)
 })
 
-// a Topic Post row with its author, its published time, and its topic's visibility, and the count of its author's pins
+// a Topic Post row with its author, its published time, and its topic's visibility, and the count of its author's featured items
 function stubTopicPostRow({
 	publishedAt = "2026-11-09 12:00:00+00",
 	visibility = "public",
-	pinnedCount = 0,
+	featuredCount = 0,
 }: {
 	publishedAt?: string | null
 	visibility?: "public" | "private"
-	pinnedCount?: number
+	featuredCount?: number
 } = {}): ReturnType<typeof stubConnectionPool> {
 	return stubConnectionPool(({ text }) => {
-		// how many Topic Posts the author has pinned
+		// how many Topic Posts the author has featured
 		if (text.includes("count(*)")) {
-			return [[pinnedCount]]
+			return [[featuredCount]]
 		}
 
 		// the post's author, published time, and topic's visibility
@@ -105,7 +105,7 @@ function sendTopicPostProfileOrder(userId: string | null, position: number): Res
 	})
 }
 
-test("the author pins their published Topic Post of a public topic, inside their own pins", async () => {
+test("the author features their published Topic Post of a public topic, inside their own featured items", async () => {
 	const sentQueries = stubTopicPostRow()
 	expect((await sendTopicPostProfileOrder("author-1", 1)).status).toBe(200)
 	const orderWrite = sentQueries.find(({ text }) => text.startsWith('update "topic_posts" set "profile_order" = $1'))
@@ -132,31 +132,31 @@ test("a draft and a Topic Post of a topic that is not public are each a conflict
 	expect(privateQueries.some(({ text }) => text.startsWith("update"))).toBe(false)
 })
 
-test("an author's pinned Topic Posts have no limit, so a thirteenth pin is set", async () => {
-	// the author already holds twelve pins, and the thirteenth takes the next position
-	const sentQueries = stubTopicPostRow({ pinnedCount: 12 })
+test("an author's featured Topic Posts have no limit, so a thirteenth featured item is set", async () => {
+	// the author already holds twelve featured items, and the thirteenth takes the next position
+	const sentQueries = stubTopicPostRow({ featuredCount: 12 })
 	expect((await sendTopicPostProfileOrder("author-1", 13)).status).toBe(200)
 	const orderWrite = sentQueries.find(({ text }) => text.startsWith('update "topic_posts" set "profile_order" = $1'))
 	expect(orderWrite?.values[0]).toBe(13)
 })
 
 // a film row with its status, its podcast episode's status, and its topic in the gated columns' order, and the count of
-// its topic owner's pinned films
-function stubTopicPodcastEpisodeVideoRow({
+// its topic owner's featured films
+function stubTopicVideoRow({
 	status = "ready",
 	podcastEpisodeStatus = "published",
 	visibility = "public",
-	pinnedCount = 0,
+	featuredCount = 0,
 }: {
 	status?: "rendering" | "ready" | "failed"
 	podcastEpisodeStatus?: "published" | "removed"
 	visibility?: "public" | "private"
-	pinnedCount?: number
+	featuredCount?: number
 } = {}): ReturnType<typeof stubConnectionPool> {
 	return stubConnectionPool(({ text }) => {
-		// how many films the owner has pinned
+		// how many films the owner has featured
 		if (text.includes("count(*)")) {
-			return [[pinnedCount]]
+			return [[featuredCount]]
 		}
 
 		// the film with its podcast episode's status and its topic
@@ -170,10 +170,7 @@ function stubTopicPodcastEpisodeVideoRow({
 }
 
 // send a position for the film of a podcast episode as the given user, or as a visitor
-function sendTopicPodcastEpisodeVideoProfileOrder(
-	userId: string | null,
-	position: number,
-): Response | Promise<Response> {
+function sendTopicVideoProfileOrder(userId: string | null, position: number): Response | Promise<Response> {
 	const app = userId ? toSignedInApp(profileOrderRoute, userId) : profileOrderRoute
 	return app.request("/podcast-episodes/episode-1/video/profile-order", {
 		method: "PATCH",
@@ -182,18 +179,16 @@ function sendTopicPodcastEpisodeVideoProfileOrder(
 	})
 }
 
-test("the owner pins their ready film of a public topic, which purges their profile and reports ids alone", async () => {
-	// the purge and the event the pin sends
+test("the owner features their ready film of a public topic, which purges their profile and reports ids alone", async () => {
+	// the purge and the event the request sends
 	const purgeProfileSpy = spyOn(edgeCache, "purgeProfileAtEdge").mockResolvedValue(undefined)
 	const trackEventSpy = spyOn(analytics, "trackEvent").mockImplementation(() => {})
-	const sentQueries = stubTopicPodcastEpisodeVideoRow()
-	expect((await sendTopicPodcastEpisodeVideoProfileOrder("owner-1", 2)).status).toBe(200)
+	const sentQueries = stubTopicVideoRow()
+	expect((await sendTopicVideoProfileOrder("owner-1", 2)).status).toBe(200)
 
 	// the film is found by its podcast episode, and the write names the film's own row
 	expect(sentQueries[0]?.values).toEqual(["episode-1"])
-	const orderWrite = sentQueries.find(({ text }) =>
-		text.startsWith('update "topic_podcast_episode_videos" set "profile_order" = $1'),
-	)
+	const orderWrite = sentQueries.find(({ text }) => text.startsWith('update "topic_videos" set "profile_order" = $1'))
 	expect(orderWrite?.values[0]).toBe(1)
 	expect(orderWrite?.values.at(-1)).toBe("film-1")
 
@@ -201,30 +196,30 @@ test("the owner pins their ready film of a public topic, which purges their prof
 	expect(purgeProfileSpy).toHaveBeenCalledWith("owner-1")
 	const [eventName, eventUserId, eventProperties] = trackEventSpy.mock.calls[0] ?? []
 	expect([eventName, eventUserId]).toEqual(["social_profile_order_change", "owner-1"])
-	expect(eventProperties).toMatchObject({ kind: "topicPodcastEpisodeVideo", objectId: "episode-1", position: 2 })
+	expect(eventProperties).toMatchObject({ kind: "topicVideo", objectId: "episode-1", position: 2 })
 })
 
 test("a visitor is unauthorized, and anyone but the topic's owner is told the film is missing", async () => {
 	const purgeProfileSpy = spyOn(edgeCache, "purgeProfileAtEdge").mockResolvedValue(undefined)
-	const sentQueries = stubTopicPodcastEpisodeVideoRow()
-	expect((await sendTopicPodcastEpisodeVideoProfileOrder(null, 1)).status).toBe(401)
-	expect((await sendTopicPodcastEpisodeVideoProfileOrder("user-2", 1)).status).toBe(404)
+	const sentQueries = stubTopicVideoRow()
+	expect((await sendTopicVideoProfileOrder(null, 1)).status).toBe(401)
+	expect((await sendTopicVideoProfileOrder("user-2", 1)).status).toBe(404)
 	expect(sentQueries.some(({ text }) => text.startsWith("update"))).toBe(false)
 	expect(purgeProfileSpy).not.toHaveBeenCalled()
 })
 
 test("a film still rendering, a removed podcast episode's, a private topic's, and a thirteenth are each a conflict", async () => {
-	// each film the rules keep off a profile, and a profile that already holds twelve pinned films
+	// each film the rules keep off a profile, and a profile that already holds twelve featured films
 	const purgeProfileSpy = spyOn(edgeCache, "purgeProfileAtEdge").mockResolvedValue(undefined)
 	const rejectedFilmRows = [
 		{ status: "rendering" as const },
 		{ podcastEpisodeStatus: "removed" as const },
 		{ visibility: "private" as const },
-		{ pinnedCount: 12 },
+		{ featuredCount: 12 },
 	]
 	for (const rejectedFilmRow of rejectedFilmRows) {
-		const sentQueries = stubTopicPodcastEpisodeVideoRow(rejectedFilmRow)
-		expect((await sendTopicPodcastEpisodeVideoProfileOrder("owner-1", 13)).status).toBe(409)
+		const sentQueries = stubTopicVideoRow(rejectedFilmRow)
+		expect((await sendTopicVideoProfileOrder("owner-1", 13)).status).toBe(409)
 		expect(sentQueries.some(({ text }) => text.startsWith("update"))).toBe(false)
 	}
 	expect(purgeProfileSpy).not.toHaveBeenCalled()

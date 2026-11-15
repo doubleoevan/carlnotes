@@ -18,7 +18,7 @@ import { memoizeInRequest } from "./requestMemo"
 import { billingSubscriptions } from "./schema/billing"
 import { chatTurns } from "./schema/chat"
 import { personalSourcesSummarySpends } from "./schema/personalSources"
-import { podcastEpisodes, topicPodcastEpisodeVideos } from "./schema/podcast"
+import { podcastEpisodes, topicVideos } from "./schema/podcast"
 import { scans } from "./schema/scans"
 import { teamMembers } from "./schema/teams"
 import { topicImageRenders } from "./schema/topicImages"
@@ -289,7 +289,7 @@ export async function loadSpendSince({ since, userId, billedPlan }: LoadSpendSin
 		[personalSourcesSpendRow],
 		[topicImageSpendRow],
 		[topicPostDiscussionSpendRow],
-		[topicPodcastEpisodeVideoSpendRow],
+		[topicVideoSpendRow],
 	] = await Promise.all([
 		db
 			.select({ dollars: sql<string>`coalesce(sum(${scans.cost}), 0)` })
@@ -325,10 +325,10 @@ export async function loadSpendSince({ since, userId, billedPlan }: LoadSpendSin
 		// the films bill their podcast episode's owner.
 		// ponytail: a rebuild's cost counts in the month the film was made, a cost row per render if that drifts
 		db
-			.select({ dollars: sql<string>`coalesce(sum(${topicPodcastEpisodeVideos.cost}), 0)` })
-			.from(topicPodcastEpisodeVideos)
-			.innerJoin(podcastEpisodes, eq(podcastEpisodes.id, topicPodcastEpisodeVideos.podcastEpisodeId))
-			.where(and(toBilledUserFilter(podcastEpisodes.ownerId), gte(topicPodcastEpisodeVideos.createdAt, since))),
+			.select({ dollars: sql<string>`coalesce(sum(${topicVideos.cost}), 0)` })
+			.from(topicVideos)
+			.innerJoin(podcastEpisodes, eq(podcastEpisodes.id, topicVideos.podcastEpisodeId))
+			.where(and(toBilledUserFilter(podcastEpisodes.ownerId), gte(topicVideos.createdAt, since))),
 	])
 
 	// a discussion is the two hosts recorded, and a film is its podcast episode's, so both count as podcast episode
@@ -336,7 +336,7 @@ export async function loadSpendSince({ since, userId, billedPlan }: LoadSpendSin
 	const podcastEpisodeDollars =
 		Number(podcastEpisodeSpendRow?.dollars ?? 0) +
 		Number(topicPostDiscussionSpendRow?.dollars ?? 0) +
-		Number(topicPodcastEpisodeVideoSpendRow?.dollars ?? 0)
+		Number(topicVideoSpendRow?.dollars ?? 0)
 	return {
 		scanDollars: Number(scanSpendRow?.dollars ?? 0),
 		chatDollars: Number(chatSpendRow?.dollars ?? 0),

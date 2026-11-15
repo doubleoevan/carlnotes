@@ -1,4 +1,4 @@
-// what a rank dialog ranks and says: its rows, the moves its save sends, and its words for the home's pins and for a
+// what a rank dialog ranks and says: its rows, the moves its save sends, and its words for the home's featured items and for a
 // profile's
 
 import { toDotSeparatedText } from "@carlnotes/contracts/text"
@@ -19,7 +19,7 @@ export function toTopicPostRankedItem({
 }
 
 // one move the save sends: a position, or zero to clear
-export type PinnedOrderMove = { id: string; position: number }
+export type FeaturedOrderMove = { id: string; position: number }
 
 // what a rank dialog ranks
 export type RankedNoun = "topics" | "films" | "podcasts" | "posts"
@@ -36,7 +36,7 @@ export type RankDialogLabels = {
 }
 
 /**
- * Returns the words of the admin's rank dialog for the home's pinned topics, films, podcast episodes, or Topic Posts.
+ * Returns the words of the admin's rank dialog for the home's featured topics, films, podcast episodes, or Topic Posts.
  */
 export function toHomeRankDialogLabels(noun: RankedNoun): RankDialogLabels {
 	return {
@@ -50,7 +50,7 @@ export function toHomeRankDialogLabels(noun: RankedNoun): RankDialogLabels {
 }
 
 /**
- * Returns the words of a person's rank dialog for the topics, films, podcast episodes, or Topic Posts pinned to their
+ * Returns the words of a person's rank dialog for the topics, films, podcast episodes, or Topic Posts featured on their
  * own profile.
  */
 export function toProfileRankDialogLabels(noun: RankedNoun): RankDialogLabels {
@@ -69,7 +69,7 @@ function toAddLabel(noun: RankedNoun): string {
 	return `Add a ${noun.slice(0, -1)}`
 }
 
-// the action menu options that open the admin's rank dialogs for the home's pins
+// the action menu options that open the admin's rank dialogs for the home's featured items
 export const HOME_RANK_OPTION_LABELS: Record<RankedNoun, string> = {
 	topics: "Home topics",
 	films: "Home films",
@@ -77,7 +77,7 @@ export const HOME_RANK_OPTION_LABELS: Record<RankedNoun, string> = {
 	posts: "Home posts",
 }
 
-// the action menu options that open a person's rank dialogs for their own profile's pins
+// the action menu options that open a person's rank dialogs for their own profile's featured items
 export const PROFILE_RANK_OPTION_LABELS: Record<RankedNoun, string> = {
 	topics: "Featured topics",
 	films: "Featured films",

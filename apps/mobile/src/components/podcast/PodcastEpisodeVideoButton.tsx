@@ -16,7 +16,7 @@ import { Text, TextClassContext } from "@/components/primitives/text"
 import { useApiImageProps } from "@/hooks/useApiImageProps"
 import { captureFilmVisitEvent } from "@/visitAnalytics"
 import { PodcastEpisodePlayButton } from "./PodcastEpisodePlayButton"
-import { TopicPodcastEpisodeVideoDialog } from "./TopicPodcastEpisodeVideoDialog"
+import { TopicVideoDialog } from "./TopicVideoDialog"
 
 const ELEMENTS: PodcastEpisodeVideoButtonElements = { Button: VideoButton }
 
@@ -55,7 +55,7 @@ function VideoButton({
 		onPress()
 	}
 	const dialog = isDialogOpen && (
-		<TopicPodcastEpisodeVideoDialog
+		<TopicVideoDialog
 			podcastEpisodeId={podcastEpisode.id}
 			title={dialogTitle}
 			shouldPlayOnLoad={shouldPlayOnLoad}

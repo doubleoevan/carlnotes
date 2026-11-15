@@ -44,7 +44,7 @@
 @source "../../../packages/core/components/PodcastEpisodePill.tsx";
 
 /* the shared film player owns its layout, and the film's captions read in Karla on the hero band's espresso */
-@source "../../../packages/core/components/TopicPodcastEpisodeVideoPlayer.tsx";
+@source "../../../packages/core/components/TopicVideoPlayer.tsx";
 video::cue {
 	font-family: "Karla", ui-sans-serif, system-ui, sans-serif;
 	font-weight: 500;

@@ -38,7 +38,7 @@ export type PodcastEpisodeAudioAdapter = {
 }
 
 // the source operations that a film player supplies. the app-wide hooks stay on the audio adapter
-export type TopicPodcastEpisodeVideoAdapter = Pick<
+export type TopicVideoAdapter = Pick<
 	PodcastEpisodeAudioAdapter,
 	"load" | "play" | "pause" | "seek" | "setPlaybackRate" | "unload" | "updateMetadata"
 >

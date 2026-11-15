@@ -3,7 +3,7 @@
 // regenerate starts. an unchecked upload shows at its urls marked as an unchecked image's, and a published one at its
 // plain urls
 import { afterEach, expect, test } from "bun:test"
-import { toTopicImageUrls, toTopicPodcastEpisodeVideoPosterUrl } from "@carlnotes/contracts/topicImages"
+import { toTopicImageUrls, toTopicVideoPosterUrl } from "@carlnotes/contracts/topicImages"
 import { toUncheckedImagePath } from "@carlnotes/contracts/uncheckedImages"
 import {
 	type EditableImage,
@@ -127,9 +127,9 @@ test("an upload that is unchecked shows the line, and a later upload that is pub
 
 test("a film's unchecked upload shows the line under the film's poster", async () => {
 	// the film's upload returns its poster and that it is unchecked
-	const posterUrl = toTopicPodcastEpisodeVideoPosterUrl("episode-1", "unchecked-hash")
+	const posterUrl = toTopicVideoPosterUrl("episode-1", "unchecked-hash")
 	stubApiResponses({ "/api/episodes/episode-1/video/image": [{ posterUrl, isImageUnchecked: true }] })
-	const harness = await renderEditor({ ...TOPIC, kind: "topicPodcastEpisodeVideo", id: "episode-1" })
+	const harness = await renderEditor({ ...TOPIC, kind: "topicVideo", id: "episode-1" })
 	await pressButton(harness, "Upload an image")
 	await waitForHook(() => isUncheckedLineShown(harness))
 	expect(harness.container.querySelector("[data-image-url]")?.getAttribute("data-image-url")).toBe(

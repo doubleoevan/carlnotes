@@ -3,7 +3,7 @@ import { authClient } from "@carlnotes/client/authClient"
 import { type FetchTopicPageOptions, sendDeleteTopic, sendTopicSubscription } from "@carlnotes/client/topicClient"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
-import { useTopicPodcastEpisodeVideoEditableImage } from "@carlnotes/core/hooks/useTopicPodcastEpisodeVideoEditableImage"
+import { useTopicVideoEditableImage } from "@carlnotes/core/hooks/useTopicVideoEditableImage"
 import { toTopicPageEditedPodcastEpisode } from "@carlnotes/core/lib/podcastEpisodeEditor"
 import { PROFILE_RANK_OPTION_LABELS } from "@carlnotes/core/lib/rankDialog"
 import { REQUEST_FAILED_TEXT } from "@carlnotes/core/lib/sessionCopy"
@@ -21,7 +21,7 @@ import { PageActionMenu, type PageActionOption } from "@/components/search/PageA
 import {
 	ADD_TOPIC_TO_TEAM_LABEL,
 	toAddTopicToTeamOption,
-	toEditTopicPodcastEpisodeVideoOption,
+	toEditTopicVideoOption,
 	toShareTopicOption,
 } from "@/components/search/pageActionOptions"
 import { ShareTopic, ShareTopicSheet } from "@/components/share/ShareTopic"
@@ -158,7 +158,7 @@ export function TopicPageActions({
 		}
 		actionOptions.push(toShareTopicOption(() => setDialog("share")))
 		// Edit film, for a topic whose latest podcast episode has a film, leads the editing options, as on the web
-		actionOptions.push(...toEditTopicPodcastEpisodeVideoOptions(topic, () => setDialog("edit-film")))
+		actionOptions.push(...toEditTopicVideoOptions(topic, () => setDialog("edit-film")))
 		if (topic.canEdit) {
 			actionOptions.push(
 				{ label: "Edit topic", icon: Pencil, onSelect: () => setDialog("edit") },
@@ -198,8 +198,8 @@ export function TopicPageActions({
 }
 
 // Edit film for a user who may edit the topic's latest film, and no option for anyone else or a topic with no film
-function toEditTopicPodcastEpisodeVideoOptions(topic: TopicResponse, onSelect: () => void): PageActionOption[] {
-	return toTopicPageEditedPodcastEpisode(topic) ? [toEditTopicPodcastEpisodeVideoOption(onSelect)] : []
+function toEditTopicVideoOptions(topic: TopicResponse, onSelect: () => void): PageActionOption[] {
+	return toTopicPageEditedPodcastEpisode(topic) ? [toEditTopicVideoOption(onSelect)] : []
 }
 
 // a public topic's owner arranges their own profile's featured topics from inside the topic, as on the web
@@ -230,7 +230,7 @@ function TopicActionDialog({
 		<>
 			{/* the image sheet of the topic's latest film, which the action menu's Edit film opens */}
 			{dialog === "edit-film" && editedPodcastEpisode && (
-				<TopicPodcastEpisodeVideoImageDialog
+				<TopicVideoImageDialog
 					podcastEpisode={editedPodcastEpisode}
 					onImageChanged={onRefresh}
 					onClose={() => onClose()}
@@ -260,7 +260,7 @@ function TopicActionDialog({
 }
 
 // the podcast episode whose film's image the sheet edits, the call after each new image is in place, and the close
-type TopicPodcastEpisodeVideoImageDialogProps = {
+type TopicVideoImageDialogProps = {
 	podcastEpisode: PodcastEpisode
 	onImageChanged: () => void
 	onClose: () => void
@@ -268,12 +268,8 @@ type TopicPodcastEpisodeVideoImageDialogProps = {
 
 // the Edit film sheet on the topic screen, which opens once the podcast episode's page loads with the editor's view
 // of the film's image. a page that does not load reports it and closes
-function TopicPodcastEpisodeVideoImageDialog({
-	podcastEpisode,
-	onImageChanged,
-	onClose,
-}: TopicPodcastEpisodeVideoImageDialogProps) {
-	const editableImage = useTopicPodcastEpisodeVideoEditableImage({
+function TopicVideoImageDialog({ podcastEpisode, onImageChanged, onClose }: TopicVideoImageDialogProps) {
+	const editableImage = useTopicVideoEditableImage({
 		podcastEpisode,
 		onLoadFailed: () => {
 			showClientError(REQUEST_FAILED_TEXT)

@@ -31,9 +31,7 @@ import summarizeTopicPostTemplate from "./summarize-topic-post.md" with { type: 
 import summarizeTopicScanTemplate from "./summarize-topic-scan.md" with { type: "text" }
 import topicImageSceneTemplate from "./topic-image-scene.md" with { type: "text" }
 import topicImageStyleTemplate from "./topic-image-style.md" with { type: "text" }
-import topicPodcastEpisodeVideoImageStyleTemplate from "./topic-podcast-episode-video-image-style.md" with {
-	type: "text",
-}
+import topicVideoImageStyleTemplate from "./topic-video-image-style.md" with { type: "text" }
 import updatesRecapTemplate from "./updates-recap.md" with { type: "text" }
 import { stripFrontmatter } from "./write.ts"
 import writeDashboardParagraphTemplate from "./write-dashboard-paragraph.md" with { type: "text" }
@@ -67,7 +65,7 @@ export const FALLBACK_PROMPT_TEMPLATES = {
 	"updates-recap": updatesRecapTemplate,
 	"topic-image-scene": topicImageSceneTemplate,
 	"topic-image-style": topicImageStyleTemplate,
-	"topic-podcast-episode-video-image-style": topicPodcastEpisodeVideoImageStyleTemplate,
+	"topic-video-image-style": topicVideoImageStyleTemplate,
 	"check-agreement": checkAgreementTemplate,
 	"moderate-user-text": moderateUserTextTemplate,
 	"suggest-sources": suggestSourcesTemplate,

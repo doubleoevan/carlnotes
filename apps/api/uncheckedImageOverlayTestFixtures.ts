@@ -6,14 +6,14 @@ import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import { toPodcastEpisodeFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import {
 	toPodcastEpisodeImageUrls,
-	toTopicPodcastEpisodeVideoPosterUrl,
+	toTopicVideoPosterUrl,
 	toUncheckedTopicImageUrls,
 } from "@carlnotes/contracts/topicImages"
 import { toUncheckedImagePath } from "@carlnotes/contracts/uncheckedImages"
 
 // the ready film of episode-1, with the poster of its own published image
-const PUBLISHED_POSTER_URL = toTopicPodcastEpisodeVideoPosterUrl("episode-1", "published-poster-hash")
-const TOPIC_PODCAST_EPISODE_VIDEO = {
+const PUBLISHED_POSTER_URL = toTopicVideoPosterUrl("episode-1", "published-poster-hash")
+const TOPIC_VIDEO = {
 	videoUrl: "/api/episodes/episode-1/video.mp4",
 	captionsUrl: "/api/episodes/episode-1/captions.vtt",
 	posterUrl: PUBLISHED_POSTER_URL,
@@ -25,25 +25,20 @@ export const PUBLISHED_PODCAST_EPISODE: PodcastEpisode = toPodcastEpisodeFixture
 	image: toPodcastEpisodeImageUrls("episode-1", "published-hash"),
 	hasVideo: true,
 	videoPosterUrl: PUBLISHED_POSTER_URL,
-	video: TOPIC_PODCAST_EPISODE_VIDEO,
+	video: TOPIC_VIDEO,
 })
 
 // the unchecked uploads under episode-1's id as the unchecked images read selects them, each by its kind and its
 // content hash: the podcast episode's own image, and its film's
 export const UNCHECKED_PODCAST_EPISODE_IMAGE_ROW = ["podcastEpisodeImage", "unchecked-hash"]
-export const UNCHECKED_TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_ROW = [
-	"topicPodcastEpisodeVideoImage",
-	"unchecked-poster-hash",
-]
+export const UNCHECKED_TOPIC_VIDEO_IMAGE_ROW = ["topicPodcastEpisodeVideoImage", "unchecked-poster-hash"]
 
 // episode-1 as the editor who uploaded both unchecked images reads it, with each upload in its published image's place
 // at a url marked as an unchecked image's
-const UNCHECKED_POSTER_URL = toUncheckedImagePath(
-	toTopicPodcastEpisodeVideoPosterUrl("episode-1", "unchecked-poster-hash"),
-)
+const UNCHECKED_POSTER_URL = toUncheckedImagePath(toTopicVideoPosterUrl("episode-1", "unchecked-poster-hash"))
 export const UNCHECKED_PODCAST_EPISODE: PodcastEpisode = {
 	...PUBLISHED_PODCAST_EPISODE,
 	image: toUncheckedTopicImageUrls(toPodcastEpisodeImageUrls("episode-1", "unchecked-hash")),
 	videoPosterUrl: UNCHECKED_POSTER_URL,
-	video: { ...TOPIC_PODCAST_EPISODE_VIDEO, posterUrl: UNCHECKED_POSTER_URL },
+	video: { ...TOPIC_VIDEO, posterUrl: UNCHECKED_POSTER_URL },
 }

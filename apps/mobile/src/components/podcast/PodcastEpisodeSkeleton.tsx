@@ -7,7 +7,7 @@ import { CollapsibleSectionSkeleton } from "@/components/topic/CollapsibleSectio
 import {
 	EmptySectionCardSkeleton,
 	PodcastEpisodePlayerCardSkeleton,
-	TopicPodcastEpisodeVideoCardSkeleton,
+	TopicVideoCardSkeleton,
 } from "@/components/topic/TopicSkeleton"
 import { PAGE_BUTTON_ROW_CLASS } from "@/pageButtonClasses"
 import { SKELETON_SHAPE_CLASS } from "@/sectionClasses"
@@ -61,7 +61,7 @@ export function PodcastEpisodeSkeleton() {
 						</CollapsibleSectionSkeleton>
 						{/* the film section and the film's card */}
 						<CollapsibleSectionSkeleton>
-							<TopicPodcastEpisodeVideoCardSkeleton />
+							<TopicVideoCardSkeleton />
 						</CollapsibleSectionSkeleton>
 						{/* the comments card */}
 						<CollapsibleSectionSkeleton>

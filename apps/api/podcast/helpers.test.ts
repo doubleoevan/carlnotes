@@ -40,7 +40,7 @@ test("the films filter keeps the season's podcast episodes with a ready film", a
 		toPodcastEpisodeRow("episode-1", 1),
 	])
 	stubConnectionPool((sentQuery) =>
-		sentQuery.text.includes('from "topic_podcast_episode_videos"')
+		sentQuery.text.includes('from "topic_videos"')
 			? [
 					["episode-2", "ready", 5678],
 					["episode-1", "rendering", null],
