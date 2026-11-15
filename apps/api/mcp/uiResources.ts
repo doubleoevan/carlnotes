@@ -28,7 +28,7 @@ const MCP_VIEW_DESCRIPTIONS: Record<McpView, string> = {
 	search: "The search results as a paged table, with play buttons, Follow, and a link to the search page.",
 	topic: "A topic's settings, prompt, and sources, with a proposed edit and its Save button.",
 	findings: "A topic's findings with Carl's notes, the play button, Follow, and thumbs, bookmark, and done.",
-	updates: "Carl's list of unread findings, with his opener and a link to the rest.",
+	updates: "Carl's list of unread findings, with his AI recap and a link to the rest.",
 	scan: "A topic's running brew by stage and source, with stop, then its recap and podcast episode.",
 	news: "Brews News: who mentioned the user, then what happened on their topics over a week, a day, or an hour.",
 	"topic-posts": "A topic's Open Mic posts as cards, newest first, each opening its post.",

@@ -34,7 +34,7 @@ import topicImageStyleTemplate from "./topic-image-style.md" with { type: "text"
 import topicPodcastEpisodeVideoImageStyleTemplate from "./topic-podcast-episode-video-image-style.md" with {
 	type: "text",
 }
-import updatesOpenerTemplate from "./updates-opener.md" with { type: "text" }
+import updatesRecapTemplate from "./updates-recap.md" with { type: "text" }
 import { stripFrontmatter } from "./write.ts"
 import writeDashboardParagraphTemplate from "./write-dashboard-paragraph.md" with { type: "text" }
 import writePodcastEpisodeSegmentTemplate from "./write-podcast-episode-segment.md" with { type: "text" }
@@ -64,7 +64,7 @@ export const FALLBACK_PROMPT_TEMPLATES = {
 	"chat-new-topic": chatNewTopicTemplate,
 	"chat-team": chatTeamTemplate,
 	"chat-room-turn": chatRoomTurnTemplate,
-	"updates-opener": updatesOpenerTemplate,
+	"updates-recap": updatesRecapTemplate,
 	"topic-image-scene": topicImageSceneTemplate,
 	"topic-image-style": topicImageStyleTemplate,
 	"topic-podcast-episode-video-image-style": topicPodcastEpisodeVideoImageStyleTemplate,

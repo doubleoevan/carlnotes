@@ -43,7 +43,7 @@ on every page, never in the hero, and "All of it." SHALL link to the Topics page
 
 The user face SHALL show the visitor face's headline beside the New Topic button, then the Brews News card in how it
 works' place, then the featured cards, then the user's owned and followed Topics as cards under "Your topics". The
-Brews News card SHALL hold Carl's opener for the day, then the user's news with its window picker, and SHALL hold no
+Brews News card SHALL hold Carl's recap for the day, then the user's news with its window picker, and SHALL hold no
 updates list and no reading length button. The home
 payload SHALL hold the first six of those Topics and their total, and each later page of six SHALL be requested from
 the server when the user opens it. A user with no Topic SHALL see the New Topic button in the cards' place.
@@ -61,7 +61,7 @@ the server when the user opens it. A user with no Topic SHALL see the New Topic 
 #### Scenario: The card shows the opener above the news
 
 - **WHEN** a signed-in user with unread Findings opens `/`
-- **THEN** the Brews News card shows Carl's opener, then the week's news with Week selected in the picker, and no
+- **THEN** the Brews News card shows Carl's recap, then the week's news with Week selected in the picker, and no
   Finding is marked read
 
 ### Requirement: Featured topics and podcast episodes are pinned first, then trending, from a cached query

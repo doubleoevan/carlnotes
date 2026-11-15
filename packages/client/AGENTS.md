@@ -40,7 +40,7 @@ session-only account routes. The one-time key response must remain in the curren
   keeps the gate cookie for the sign-up request.
 - Most clients build on `apiClient()`. Some calls, and all of `chatClient.ts`, `flagContentClient.ts`, and
   `voiceClient.ts`, use `fetchApi` instead. `pageHeadClient.ts` reads a page's head data.
-  `updatesClient.ts` reads the day's opener. `newsClient.ts` reads one page of the signed-in user's news or of a
+  `updatesClient.ts` reads the day's recap. `newsClient.ts` reads one page of the signed-in user's news or of a
   profile's, and `commentMentionClient.ts` reads the signed-in user's unseen Comment Mentions and marks them seen.
   `dashboardClient.ts` reads a Dashboard page's snapshot for one chart selection, the full one for its owner or a
   team's member, and the Google Maps settings.

@@ -1,8 +1,8 @@
 ---
-title: Updates opener
+title: Updates recap
 version: 1
 model tier: premium
-description: Writes Carl's short opener above a reader's updates list, which stays true for every list that day.
+description: Writes Carl's short recap above a reader's updates list, which stays true for every list that day.
 updated: 2026-11-05
 ---
 

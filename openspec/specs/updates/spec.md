@@ -126,43 +126,43 @@ Topic, and naming another Topic SHALL be rejected.
 - **WHEN** a call on `/mcp/t/<topicId>` names a different Topic
 - **THEN** the request is rejected without reading that other Topic
 
-### Requirement: Carl writes one opener a day
+### Requirement: Carl writes one recap a day
 
-One `scoreModel` call SHALL write the list's opener in Carl's voice, cached per user per UTC day, and per Topic for a
-scoped list. The prompt SHALL keep the opener true for any list that day, so it names no single Finding or count.
+One `scoreModel` call SHALL write the list's recap in Carl's voice, cached per user per UTC day, and per Topic for a
+scoped list. The prompt SHALL keep the recap true for any list that day, so it names no single Finding or count.
 Findings' text SHALL reach the model fenced as untrusted.
 
 #### Scenario: The second list of the day
 
 - **WHEN** a user asks for a second list on the same day
-- **THEN** it shows the cached opener and no model call runs
+- **THEN** it shows the cached recap and no model call runs
 
 #### Scenario: A scoped list has its own opener
 
 - **WHEN** a user asks for a list on one Topic after a list across Topics on the same day
-- **THEN** one model call writes that Topic's opener
+- **THEN** one model call writes that Topic's recap
 
 #### Scenario: Carl never reports what the reader missed
 
-- **WHEN** the opener prompt is evaluated
-- **THEN** no generated opener says the reader missed anything, guilt-trips them, or asks them to come back
+- **WHEN** the recap prompt is evaluated
+- **THEN** no generated recap says the reader missed anything, guilt-trips them, or asks them to come back
 
-### Requirement: An opener never blocks a list
+### Requirement: A recap never blocks a list
 
-The opener SHALL reserve its largest cost before the call and SHALL bill the user's own LiteLLM key. A spent budget or a
-failed call SHALL return the list without an opener. A list SHALL wait at most 5 seconds for its opener, and a slower
-call SHALL still store its opener for the next list. A list with no Findings SHALL show the empty state and run no
+The recap SHALL reserve its largest cost before the call and SHALL bill the user's own LiteLLM key. A spent budget or a
+failed call SHALL return the list without a recap. A list SHALL wait at most 5 seconds for its recap, and a slower
+call SHALL still store its recap for the next list. A list with no Findings SHALL show the empty state and run no
 model call.
 
 #### Scenario: The budget is spent
 
 - **WHEN** the reservation is rejected
-- **THEN** the list returns its Findings with no opener, and the Findings count as read
+- **THEN** the list returns its Findings with no recap, and the Findings count as read
 
 #### Scenario: The opener is slow
 
 - **WHEN** the model call takes longer than 5 seconds
-- **THEN** the list returns with no opener, and the next list that day reads the opener the call stored
+- **THEN** the list returns with no recap, and the next list that day reads the recap the call stored
 
 #### Scenario: Nothing is unread
 
@@ -172,7 +172,7 @@ model call.
 ### Requirement: The tool result fits the page budget and reads as text
 
 The `read_updates` result SHALL fit the MCP page budget. A Finding that would overflow it SHALL join what did not
-fit and stay unread. The text result SHALL hold the opener, each Finding's title, Topic, link, and explanation, and the
+fit and stay unread. The text result SHALL hold the recap, each Finding's title, Topic, link, and explanation, and the
 more link, so a host without UI gets the whole list.
 
 #### Scenario: A host without UI
@@ -185,17 +185,24 @@ more link, so a host without UI gets the whole list.
 - **WHEN** a 30-minute list's Findings would pass the page budget
 - **THEN** the result ends at a whole Finding, the rest count toward more, and they stay unread
 
-### Requirement: The home reads the day's opener without building a list
+### Requirement: The home reads the day's recap without building a list
 
-A signed-in user's home, and the news on their own profile page, SHALL read the day's opener on its own: the opener a
+A signed-in user's home, and the news on their own profile page, SHALL read the day's recap on its own: the recap a
 list would show, from the same cache, prompt, wait, and budget rule, with no Finding marked read. A user with no
-unread Finding SHALL keep the opener the day already stored, and no model call SHALL run for them. A missing opener
-SHALL leave the card with its news alone.
+unread Finding SHALL keep the recap the day already stored, and no model call SHALL run for them. A missing recap
+SHALL leave the card with its news alone. `GET /api/updates/recap` SHALL return it as `recap`, and
+`GET /api/updates/opener` SHALL return the same recap as `opener` for the 0.1.0 mobile app until that release retires.
+Customer copy SHALL call it the AI recap.
+
+#### Scenario: The 0.1.0 app reads the recap under its first route
+
+- **WHEN** the 0.1.0 mobile app asks `GET /api/updates/opener`
+- **THEN** it receives the day's recap as `opener`
 
 #### Scenario: The home's opener is the list's opener
 
 - **WHEN** a user opens the home and then asks an AI app for a list on the same day
-- **THEN** both show the same opener, and one model call wrote it
+- **THEN** both show the same recap, and one model call wrote it
 
 #### Scenario: Reading the opener marks nothing read
 
@@ -204,13 +211,13 @@ SHALL leave the card with its news alone.
 
 #### Scenario: The day's opener stays after the last Finding is read
 
-- **WHEN** a user's home showed the day's opener and the user then reads every Finding
-- **THEN** the home still shows that opener for the rest of the day, and no model call runs
+- **WHEN** a user's home showed the day's recap and the user then reads every Finding
+- **THEN** the home still shows that recap for the rest of the day, and no model call runs
 
 #### Scenario: A spent budget shows the news alone
 
-- **WHEN** the opener's reservation is rejected
-- **THEN** the home's card shows the news with nothing in the opener's place
+- **WHEN** the recap's reservation is rejected
+- **THEN** the home's card shows the news with nothing in the recap's place
 
 ### Requirement: The updates MCP view is titled Brew Updates
 
@@ -222,23 +229,23 @@ profile page, and in its own MCP view.
 - **WHEN** a host renders a `read_updates` result and a `read_news` result
 - **THEN** the first is headed "Brew Updates" and the second "Brews News"
 
-### Requirement: An admin reads a person's opener
+### Requirement: An admin reads a person's recap
 
-`GET /api/profiles/:userId/opener` SHALL return the opener the person's home shows today, or null, to a signed-in
-admin, and a 403 to anyone else. If the day has no opener yet, it SHALL write one as the home does: on the person's
+`GET /api/profiles/:userId/recap` SHALL return the recap the person's home shows today, or null, to a signed-in
+admin, and a 403 to anyone else. If the day has no recap yet, it SHALL write one as the home does: on the person's
 budget, stored for the person's home, with no Finding marked read. The news on that person's profile SHALL show the
-opener to the admin in the user view, read only.
+recap to the admin in the user view, read only.
 
 #### Scenario: The person already has an opener today
 
-- **WHEN** an admin opens the profile of a person whose home showed the day's opener
-- **THEN** the admin's news card shows that opener, and no model call runs
+- **WHEN** an admin opens the profile of a person whose home showed the day's recap
+- **THEN** the admin's news card shows that recap, and no model call runs
 
 #### Scenario: The person has no opener today
 
 - **WHEN** an admin opens the profile of a person who has not opened the home today and has unread Findings
-- **THEN** Carl writes the day's opener on the person's budget, the admin's news card shows it, and the person's home
-  shows the same opener that day
+- **THEN** Carl writes the day's recap on the person's budget, the admin's news card shows it, and the person's home
+  shows the same recap that day
 
 #### Scenario: The person has an unconverted private Topic
 
@@ -247,5 +254,5 @@ opener to the admin in the user view, read only.
 
 #### Scenario: A non-admin asks
 
-- **WHEN** a signed-in user who is not an admin asks for another person's opener
+- **WHEN** a signed-in user who is not an admin asks for another person's recap
 - **THEN** the route returns 403

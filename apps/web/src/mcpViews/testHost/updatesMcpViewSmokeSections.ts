@@ -28,9 +28,9 @@ test("the updates MCP view shows the list and calls no tool on load", async () =
 	})
 })
 
-test("a list with no opener starts at its first Finding, and an empty list shows the empty state", async () => {
+test("a list with no recap starts at its first Finding, and an empty list shows the empty state", async () => {
 	await withMcpView({ mcpView: "updates" }, async ({ frame, sendToolResult }) => {
-		await sendToolResult(toUpdatesToolResult({ ...UPDATES_RESULT, opener: null }))
+		await sendToolResult(toUpdatesToolResult({ ...UPDATES_RESULT, recap: null }))
 		await frame.getByRole("link", { name: "A model router ships" }).waitFor()
 		expect(await frame.getByText("Three things moved while you were out.").count()).toBe(0)
 

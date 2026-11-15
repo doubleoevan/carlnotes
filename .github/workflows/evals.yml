@@ -16,7 +16,7 @@ on:
       - "packages/pipeline/review/**"
       - "packages/pipeline/suggest.ts"
       - "packages/pipeline/attach.ts"
-      - "packages/pipeline/updatesOpener.ts"
+      - "packages/pipeline/updatesRecap.ts"
       - "packages/pipeline/dashboardParagraph.ts"
       - "packages/pipeline/topicPosts/summarizeTopicPost.ts"
       - "packages/pipeline/ingest/search.ts"
@@ -89,7 +89,7 @@ jobs:
         run: |
           failed_eval_names=""
           for eval_name in grader-calibration podcast-episode-script scan-report topic-chat topic-chat-tools podcast-chat \
-              new-topic-chat team-chat search-queries attachment-summaries source-suggestions updates-opener topic-post-summary \
+              new-topic-chat team-chat search-queries attachment-summaries source-suggestions updates-recap topic-post-summary \
               topic-post-discussion topic-post-chat dashboard-paragraph; do
             if ! bun run "eval:$eval_name" --repeat "$REPEAT_COUNT"; then
               failed_eval_names="$failed_eval_names $eval_name"

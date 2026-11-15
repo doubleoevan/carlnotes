@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as redis from "@carlnotes/db/redis"
 import type { topics } from "@carlnotes/db/schema/topics"
-import * as updatesOpenerWriter from "@carlnotes/pipeline/updatesOpener"
+import * as updatesRecapWriter from "@carlnotes/pipeline/updatesRecap"
 import * as analytics from "@carlnotes/server/analytics"
 import * as monitoring from "@carlnotes/server/monitoring"
 import { TEST_ANALYTICS_PROPERTIES } from "../analyticsTestFixtures"
@@ -15,11 +15,11 @@ import {
 	type BuiltUpdates,
 	buildUpdates,
 	rankFindingRows,
-	readProfileUpdatesOpener,
-	readUpdatesOpener,
+	readProfileUpdatesRecap,
+	readUpdatesRecap,
 	trimToReadingBudget,
 } from "./updates"
-import * as updatesOpener from "./updatesOpener"
+import * as updatesRecap from "./updatesRecap"
 
 // the times around the user's last read time
 const LAST_CONSUMED_AT = new Date("2026-11-01T12:00:00Z")
@@ -153,9 +153,9 @@ async function buildUnscopedUpdates(minutes: 5 | 15 | 30 = 15): Promise<BuiltUpd
 	return updates
 }
 
-// every list reads a fixed opener
+// every list reads a fixed recap
 beforeEach(() => {
-	spyOn(updatesOpener, "loadUpdatesOpener").mockResolvedValue("Carl's line.")
+	spyOn(updatesRecap, "loadUpdatesRecap").mockResolvedValue("Carl's line.")
 })
 
 // put the connection pool and the spies back after each test
@@ -389,19 +389,19 @@ test("a list's consumptions store what a single consumption stores and track one
 	})
 })
 
-test("an empty list runs no opener and writes nothing", async () => {
-	const openerSpy = spyOn(updatesOpener, "loadUpdatesOpener")
+test("an empty list runs no recap and writes nothing", async () => {
+	const recapSpy = spyOn(updatesRecap, "loadUpdatesRecap")
 	const { sentQueries } = stubFindingStore([])
 	const updates = await buildUnscopedUpdates()
 	expect(updates).toEqual({
-		opener: null,
+		recap: null,
 		findings: [],
 		moreCount: 0,
 		morePath: "/topics",
 		topics: [],
 		podcastEpisodes: [],
 	})
-	expect(openerSpy).not.toHaveBeenCalled()
+	expect(recapSpy).not.toHaveBeenCalled()
 	expect(toInserts(sentQueries, "consumptions")).toEqual([])
 })
 
@@ -439,15 +439,15 @@ test("an empty list still reports, and a Topic the user may not read reports not
 	expect(trackEventSpy).not.toHaveBeenCalled()
 })
 
-test("the opener's read marks no Finding read, and reads the opener a list across Topics shares", async () => {
-	const openerSpy = spyOn(updatesOpener, "loadUpdatesOpener").mockResolvedValue("Carl's line.")
+test("the recap's read marks no Finding read, and reads the recap a list across Topics shares", async () => {
+	const recapSpy = spyOn(updatesRecap, "loadUpdatesRecap").mockResolvedValue("Carl's line.")
 	const { sentQueries, consumedFindingIds } = stubFindingStore([{ findingId: "finding-1" }, { findingId: "finding-2" }])
-	expect(await readUpdatesOpener(USER_ID)).toBe("Carl's line.")
+	expect(await readUpdatesRecap(USER_ID)).toBe("Carl's line.")
 
-	// the opener is the unscoped one, written from the Findings the default list would hold
-	const openerOptions = openerSpy.mock.calls[0]?.[0]
-	expect(openerOptions).toMatchObject({ userId: USER_ID, topicId: null })
-	const updatesFindings = (await openerOptions?.loadUpdatesFindings()) ?? []
+	// the recap is the unscoped one, written from the Findings the default list would hold
+	const recapOptions = recapSpy.mock.calls[0]?.[0]
+	expect(recapOptions).toMatchObject({ userId: USER_ID, topicId: null })
+	const updatesFindings = (await recapOptions?.loadUpdatesFindings()) ?? []
 	expect(updatesFindings.map((finding) => finding.findingId)).toEqual(["finding-1", "finding-2"])
 
 	// both Findings stay unread, so the next list still holds them
@@ -456,44 +456,44 @@ test("the opener's read marks no Finding read, and reads the opener a list acros
 	expect((await buildUnscopedUpdates()).findings).toHaveLength(2)
 })
 
-test("the opener's read asks for the day's stored opener with no Finding for a user who has read them all", async () => {
-	const openerSpy = spyOn(updatesOpener, "loadUpdatesOpener").mockResolvedValue("Carl's line.")
+test("the recap's read asks for the day's stored recap with no Finding for a user who has read them all", async () => {
+	const recapSpy = spyOn(updatesRecap, "loadUpdatesRecap").mockResolvedValue("Carl's line.")
 	stubFindingStore([])
-	expect(await readUpdatesOpener(USER_ID)).toBe("Carl's line.")
-	expect(openerSpy.mock.calls[0]?.[0]).toMatchObject({ userId: USER_ID, topicId: null })
-	expect(await openerSpy.mock.calls[0]?.[0].loadUpdatesFindings()).toEqual([])
+	expect(await readUpdatesRecap(USER_ID)).toBe("Carl's line.")
+	expect(recapSpy.mock.calls[0]?.[0]).toMatchObject({ userId: USER_ID, topicId: null })
+	expect(await recapSpy.mock.calls[0]?.[0].loadUpdatesFindings()).toEqual([])
 })
 
-test("the opener's read returns the day's stored opener with no Findings read", async () => {
-	// the real opener read over a cache that holds the day's opener
+test("the recap's read returns the day's stored recap with no Findings read", async () => {
+	// the real recap read over a cache that holds the day's recap
 	mock.restore()
 	const cacheSpy = spyOn(redis, "cacheJson").mockResolvedValue("Carl's stored line.")
 	const { sentQueries } = stubFindingStore([{ findingId: "finding-1" }])
-	expect(await readUpdatesOpener(USER_ID)).toBe("Carl's stored line.")
+	expect(await readUpdatesRecap(USER_ID)).toBe("Carl's stored line.")
 	expect(sentQueries).toEqual([])
 
-	// a day with no stored opener loads the Findings, both reads of them
+	// a day with no stored recap loads the Findings, both reads of them
 	cacheSpy.mockImplementation(async ({ load }) => (await load()) as never)
-	spyOn(updatesOpenerWriter, "writeUpdatesOpener").mockRejectedValue(new Error("no model in this test"))
+	spyOn(updatesRecapWriter, "writeUpdatesRecap").mockRejectedValue(new Error("no model in this test"))
 	spyOn(monitoring, "reportError").mockImplementation(() => {})
-	await readUpdatesOpener(USER_ID)
+	await readUpdatesRecap(USER_ID)
 	expect(sentQueries.some(({ text }) => text.includes("count(*) over ()"))).toBe(true)
 	expect(sentQueries.some(({ text }) => text.startsWith('select max("consumptions"'))).toBe(true)
 })
 
-test("an admin's profile opener is the person's home opener, and null if the person has an unconverted private Topic", async () => {
-	const openerSpy = spyOn(updatesOpener, "loadUpdatesOpener").mockResolvedValue("Carl's line.")
+test("an admin's profile recap is the person's home recap, and null if the person has an unconverted private Topic", async () => {
+	const recapSpy = spyOn(updatesRecap, "loadUpdatesRecap").mockResolvedValue("Carl's line.")
 
-	// no private Topic to convert reads the person's opener, written if the day has none
+	// no private Topic to convert reads the person's recap, written if the day has none
 	stubConnectionPool(() => [])
-	expect(await readProfileUpdatesOpener("person-1")).toBe("Carl's line.")
-	expect(openerSpy.mock.calls[0]?.[0]).toMatchObject({ userId: "person-1", topicId: null })
+	expect(await readProfileUpdatesRecap("person-1")).toBe("Carl's line.")
+	expect(recapSpy.mock.calls[0]?.[0]).toMatchObject({ userId: "person-1", topicId: null })
 
-	// an unconverted private Topic keeps the opener and writes none
-	openerSpy.mockClear()
+	// an unconverted private Topic keeps the recap and writes none
+	recapSpy.mockClear()
 	const sentQueries = stubConnectionPool(() => [{ id: "topic-private" }])
-	expect(await readProfileUpdatesOpener("person-1")).toBeNull()
-	expect(openerSpy).not.toHaveBeenCalled()
+	expect(await readProfileUpdatesRecap("person-1")).toBeNull()
+	expect(recapSpy).not.toHaveBeenCalled()
 	expect(sentQueries[0]?.text).toContain(
 		'not "topics"."id" not in (select "topic_id" from "topic_personal_source_contexts"',
 	)

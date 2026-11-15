@@ -73,7 +73,7 @@ export const NEWS_LIST_ELEMENTS: NewsListElements = {
 			{picker}
 		</View>
 	),
-	Opener: ({ children }) => (
+	Recap: ({ children }) => (
 		<Text className="mb-4 font-display font-normal leading-relaxed tracking-wide">{children}</Text>
 	),
 	WindowPicker: ({ label, children }) => (

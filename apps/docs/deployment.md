@@ -479,7 +479,7 @@ A loss of Redis's data costs:
 - the day's view claims, so a repeat view that day counts again
 - every day-long count: suggestions, social writes, reports, and Dashboard paragraphs
 - the sign-up tokens signed in the last five minutes, so those people pass the challenge again
-- the day's opener, and the open spend reservations
+- the day's recap, and the open spend reservations
 - chat room messages published while the subscriber was down
 - every cache, which loads again from Postgres
 

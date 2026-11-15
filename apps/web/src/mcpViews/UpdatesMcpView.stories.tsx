@@ -1,4 +1,4 @@
-// the updates MCP view: the updates list the tool built, with its opener, the feed's findings as a table, and the link
+// the updates MCP view: the updates list the tool built, with its recap, the feed's findings as a table, and the link
 // to what did not fit. a row's controls and its Topic go through the host. a story has no host
 import { MCP_VIEW_META_KEY } from "@carlnotes/contracts/mcpViews"
 import { UPDATES_STORY } from "@carlnotes/core/lib/updatesStories"
@@ -29,8 +29,8 @@ type Story = StoryObj<typeof meta>
 // a user's updates list
 export const SignedIn: Story = {}
 
-// an updates list with no opener starts at its first row
-export const WithoutOpener: Story = { args: { updates: { ...UPDATES_STORY, opener: null } } }
+// an updates list with no recap starts at its first row
+export const WithoutRecap: Story = { args: { updates: { ...UPDATES_STORY, recap: null } } }
 
 // nothing unread
 export const Empty: Story = { args: { updates: { ...UPDATES_STORY, findings: [], moreCount: 0 } } }

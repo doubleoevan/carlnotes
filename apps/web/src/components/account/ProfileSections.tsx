@@ -6,7 +6,7 @@ import {
 	type ProfileSectionsElements,
 	ProfileSections as SharedProfileSections,
 } from "@carlnotes/core/components/ProfileSections"
-import { useProfileUpdatesOpener } from "@carlnotes/core/hooks/useUpdatesOpener"
+import { useProfileUpdatesRecap } from "@carlnotes/core/hooks/useUpdatesRecap"
 import { PROFILE_SECTION_VALUES } from "@carlnotes/core/lib/profileSections"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useNavigate } from "@tanstack/react-router"
@@ -42,7 +42,7 @@ export function ProfileSections({
 	const navigate = useNavigate()
 	const { data: session } = authClient().useSession()
 	// carl's line for the day shows on the person's own profile, and to an admin on anyone else's in the user audience
-	const opener = useProfileUpdatesOpener({
+	const recap = useProfileUpdatesRecap({
 		profileUserId: profile.userId,
 		userId: session?.user.id ?? null,
 		includesNonPublicTopics: profile.includesNonPublicTopics,
@@ -57,7 +57,7 @@ export function ProfileSections({
 					<NewsList
 						profileUserId={profile.userId}
 						userId={session?.user.id ?? null}
-						opener={opener}
+						recap={recap}
 						audience={audience}
 						onAudienceChange={onAudienceChange}
 						firstPage={firstNewsPage}

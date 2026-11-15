@@ -38,7 +38,7 @@
 				"evals/attachment-summaries/attachmentSummariesEval.ts",
 				"evals/personal-sources-context/personalSourcesContextEval.ts",
 				"evals/personal-sources-context/personalSourcesScoringEval.ts",
-				"evals/updates-opener/updatesOpenerEval.ts",
+				"evals/updates-recap/updatesRecapEval.ts",
 				"evals/dashboard-paragraph/dashboardParagraphEval.ts",
 				"evals/topic-post-summary/topicPostSummaryEval.ts",
 				"evals/topic-post-discussion/topicPostDiscussionEval.ts",

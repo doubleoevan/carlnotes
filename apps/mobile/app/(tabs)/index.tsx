@@ -7,7 +7,7 @@ import type {
 } from "@carlnotes/contracts/home"
 import type { TopicPostCard as TopicPostCardFields } from "@carlnotes/contracts/topicPosts"
 import type { TopicPodcastEpisodeVideoDialogSurface } from "@carlnotes/contracts/visitAnalytics"
-import { useUpdatesOpener } from "@carlnotes/core/hooks/useUpdatesOpener"
+import { useUpdatesRecap } from "@carlnotes/core/hooks/useUpdatesRecap"
 import { useYourTopicsPages } from "@carlnotes/core/hooks/useYourTopicsPages"
 import type { CardSection } from "@carlnotes/core/lib/cardSections"
 import { EMPTY_HOME, HOME_SECTIONS, HOW_IT_WORKS_STEPS, HOW_IT_WORKS_TITLE } from "@carlnotes/core/lib/homeFaces"
@@ -251,12 +251,12 @@ function HowItWorksSection() {
 	)
 }
 
-// a user's Brews News card under the headline: carl's opener for the day, then their news with its window picker
+// a user's Brews News card under the headline: carl's recap for the day, then their news with its window picker
 function NewsSection({ userId }: { userId: string | null }) {
-	const opener = useUpdatesOpener(userId)
+	const recap = useUpdatesRecap(userId)
 	return (
 		<View className="mx-4 mt-6">
-			<NewsList profileUserId={null} userId={userId} opener={opener} />
+			<NewsList profileUserId={null} userId={userId} recap={recap} />
 		</View>
 	)
 }

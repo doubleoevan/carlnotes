@@ -20,7 +20,7 @@ const meta: Meta<typeof NewsList> = {
 	args: {
 		profileUserId: null,
 		userId: "user-evan",
-		opener: "Espresso had a loud week, and the burr debate is not over.",
+		recap: "Espresso had a loud week, and the burr debate is not over.",
 	},
 	parameters: { webReference: "social-newslist--full-week" },
 	decorators: [
@@ -40,7 +40,7 @@ const meta: Meta<typeof NewsList> = {
 export default meta
 type Story = StoryObj<typeof meta>
 
-// 32 rows show five to a page under carl's opener, with the page buttons under them
+// 32 rows show five to a page under carl's recap, with the page buttons under them
 export const FullWeek: Story = {}
 
 // a Podcast Episode with a film shows the Video pill beside its play pill, which opens the Video sheet
@@ -51,10 +51,10 @@ export const WithFilm: Story = {
 // a week with no row shows its empty line and no page buttons
 export const QuietWeek: Story = { parameters: { newsPage: EMPTY_NEWS_STORY } }
 
-// a profile's news as another reader: no opener, and a row names the Comment's author
-export const Profile: Story = { args: { profileUserId: "user-evan", userId: "user-roastfan", opener: null } }
+// a profile's news as another reader: no recap, and a row names the Comment's author
+export const Profile: Story = { args: { profileUserId: "user-evan", userId: "user-roastfan", recap: null } }
 
-// an admin reads someone else's profile as the person does, with the person's opener and the highlighted
+// an admin reads someone else's profile as the person does, with the person's recap and the highlighted
 // select that changes the whole page's audience
 export const AdminView: Story = {
 	args: { profileUserId: "user-evan", userId: "user-laura", audience: "user", onAudienceChange: () => {} },

@@ -566,7 +566,7 @@ SHALL return what a visitor reads to any reader.
 #### Scenario: An admin switches to the visitor view
 
 - **WHEN** the admin chooses "Visitor view"
-- **THEN** the Café, the table, and the news show only what a visitor sees, and the news shows no opener
+- **THEN** the Café, the table, and the news show only what a visitor sees, and the news shows no recap
 
 #### Scenario: Another profile starts in the user view
 

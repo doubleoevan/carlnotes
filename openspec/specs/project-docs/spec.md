@@ -40,7 +40,7 @@ owner's to fill and never stated as fact.
 
 - **WHEN** an operator opens the Redis part
 - **THEN** it lists what a loss of Redis's data costs beyond the buffered counts, the day's view claims, the day-long
-  counts, the unused sign-up tokens, the day's opener, and the open spend reservations among them, and what an
+  counts, the unused sign-up tokens, the day's recap, and the open spend reservations among them, and what an
   outage fails: an account close, which responds 503, and the nightly Dashboard build. It names what no test has
   confirmed: a sign-out during an outage may leave its session usable until that session's next refresh
 

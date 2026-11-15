@@ -64,7 +64,7 @@ import {
 	topicFeedResponse,
 	topicResponse,
 } from "./topics"
-import { updatesOpenerResponse } from "./updates"
+import { updatesOpenerResponse, updatesRecapResponse } from "./updates"
 import { podcastEpisodeCounts, topicCounts, viewerCounts } from "./viewerCounts"
 
 // the entries, in client module order
@@ -154,16 +154,22 @@ export const topicRouteContracts: Record<string, ApiRouteContract> = {
 		body: { json: pinnedOrderPayload },
 		response: okResponse,
 	},
+	"updatesClient.fetchUpdatesRecap": {
+		method: "GET",
+		path: "/api/updates/recap",
+		response: updatesRecapResponse,
+	},
+	// the recap's first route, which the 0.1.0 mobile app reads until that release retires
 	"updatesClient.fetchUpdatesOpener": {
 		method: "GET",
 		path: "/api/updates/opener",
 		response: updatesOpenerResponse,
 	},
-	"updatesClient.fetchProfileUpdatesOpener": {
+	"updatesClient.fetchProfileUpdatesRecap": {
 		method: "GET",
-		path: "/api/profiles/:userId/opener",
+		path: "/api/profiles/:userId/recap",
 		params: userIdParam,
-		response: updatesOpenerResponse,
+		response: updatesRecapResponse,
 	},
 	"topicClient.sendManualScan": {
 		method: "POST",

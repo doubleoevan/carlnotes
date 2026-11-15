@@ -272,7 +272,7 @@ export const apiRoute = new Hono<AppEnv>()
 	.route("/", findingsRoute)
 	// the manual scan route
 	.route("/", scansRoute)
-	// the updates list and the day's opener
+	// the updates list and the day's recap
 	.route("/", updatesRoute)
 	// the news: the user's own, and a profile's
 	.route("/", newsRoute)

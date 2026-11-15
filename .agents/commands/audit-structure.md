@@ -1018,6 +1018,10 @@ Check for:
    - the unapplied `split-web-from-api` OpenSpec change (now folded into `launch-hardening`)
    - CI's `release` job in `.github/workflows/ci.yml` (removed: a push to `main` releases through the push trigger of
      Northflank's `release-main`, without waiting for CI)
+   - the updates opener (now the updates recap): `apps/api/topic/updatesOpener.ts`, `packages/pipeline/updatesOpener.ts`,
+     `packages/core/hooks/useUpdatesOpener.ts`, `packages/models/prompts/updates-opener.md`, `evals/updates-opener/`,
+     and `bun run eval:updates-opener` (now `updatesRecap.ts`, `useUpdatesRecap.ts`, `updates-recap.md`,
+     `evals/updates-recap/`, and `bun run eval:updates-recap`). `GET /api/updates/opener` stays for the 0.1.0 app
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

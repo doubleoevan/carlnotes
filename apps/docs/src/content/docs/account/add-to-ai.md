@@ -161,7 +161,7 @@ tool list. Public tools also read private or invite topics when your account has
 | `block_user` | Blocks or unblocks a person, which hides each one's hot takes, chat messages, and mentions from the other. | Requires a connected account. You cannot block yourself. Not on a topic-bound server. |
 | `send_to_topic` | Saves a summary you explicitly ask an app to send, with up to ten public links. | Requires a live connected account and one to twenty Topics you can edit. Counts once toward the daily send allowance; never pastes a raw conversation. |
 | `suggest_topics` | Lists every editable send destination with the strongest matches first, for the supplied title, summary, and links, with five editable Topics per page. | Requires an account. Stores nothing, spends no send or draft allowance, and uses the existing model budget for transient matching. Uses `list_topics` cursor paging. |
-| `read_updates` | Picks your unread findings to read next, across the topics you follow or on one topic, with Carl's opener. Takes `minutes` of 5, 15, or 30, and 15 if you leave it out. | Requires an account. Marks the findings it picks read, so two lists share none. |
+| `read_updates` | Picks your unread findings to read next, across the topics you follow or on one topic, with Carl's AI recap. Takes `minutes` of 5, 15, or 30, and 15 if you leave it out. | Requires an account. Marks the findings it picks read, so two lists share none. |
 | `start_scan` | Starts a brew of a topic now. | Requires the topic's owner or an admin. Takes one of the account's daily brews, reports and records a podcast episode like any other brew, and never charges an overage. |
 | `read_scan_status` | Reads a topic's running brew by stage, or its latest recap, with what each source found and the state of its podcast episode. | Public topics work without sign-in. Private and invite topics need access. Read-only. |
 | `stop_scan` | Stops a topic's running brew. | Requires the topic's owner or an admin. What Carl kept stays, what the brew spent stays charged, and its daily brew comes back. |
@@ -280,7 +280,7 @@ annotation, and to rate it, tell Carl why, bookmark it, or mark it read. Search,
 a Topic with the same fields you use in Coffee Talk, then choose Save to confirm. Everything uses your connected
 account. If your AI app blocks audio, use the link to listen on CarlNotes.
 
-**Updates** shows Carl's opener and your findings in order, each with its reading time. Choose a Topic to see its
+**Updates** shows Carl's AI recap and your findings in order, each with its reading time. Choose a Topic to see its
 findings. **A brew** shows what it has kept so far and what each source found, with a stop control if you own the
 Topic. Once it finishes, you get the same recap as the Topic page, and you can play its podcast episode. Your AI app's
 colors apply where it shares them, and a row or a recap opens one step in the chat. Anything further opens on CarlNotes.

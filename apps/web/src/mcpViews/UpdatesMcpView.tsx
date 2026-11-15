@@ -64,6 +64,6 @@ const UPDATES_LIST_ELEMENTS: UpdatesListElements = {
 			{children}
 		</h1>
 	),
-	Opener: ({ children }) => <p className="font-display antialiased leading-relaxed tracking-wide mb-4">{children}</p>,
+	Recap: ({ children }) => <p className="font-display antialiased leading-relaxed tracking-wide mb-4">{children}</p>,
 	EmptyState: ({ children }) => <p className="text-muted-foreground text-sm">{children}</p>,
 }

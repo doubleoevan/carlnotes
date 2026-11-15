@@ -4,7 +4,7 @@
 headers for same-thread replies. `emailReplies.ts` rechecks live permissions and delivers each reply using its stable
 provider key.
 
-`updatesOpener.ts` builds the opener prompt and writes Carl's opener above an updates list.
+`updatesRecap.ts` builds the recap prompt and writes Carl's recap above an updates list.
 `personalSources/topicRelevance.ts` holds the attachment score weight and the minimum relevances, and raises a Topic's
 name and prompt score by its attachment score, and `personalSources/matchTopics.ts` filters all editable names before
 ranked MCP cursor paging, leaves weak editable Topics unchecked, uses the minimum filing relevance for email, and marks

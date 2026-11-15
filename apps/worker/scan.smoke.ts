@@ -28,7 +28,7 @@ import { toTopicImagePrompt } from "@carlnotes/pipeline/topicImages/writeTopicIm
 import { TOPIC_PODCAST_EPISODE_VIDEO_IMAGE_FORMAT } from "@carlnotes/pipeline/topicPodcastEpisodeVideo/topicPodcastEpisodeVideoImage"
 import { buildTopicPostSummaryPrompt } from "@carlnotes/pipeline/topicPosts/summarizeTopicPost"
 import { buildTopicPostDiscussionPrompt } from "@carlnotes/pipeline/topicPosts/topicPostDiscussionScript"
-import { buildUpdatesOpenerPrompt } from "@carlnotes/pipeline/updatesOpener"
+import { buildUpdatesRecapPrompt } from "@carlnotes/pipeline/updatesRecap"
 import { and, eq, inArray, isNotNull } from "drizzle-orm"
 import { finishScan, ingestForScan, reviewForScan } from "./workflows/runTopicScanActivities"
 
@@ -255,7 +255,7 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 		hasIncompleteCoverage: false,
 	})
 	const agreementResult = await buildAgreementPrompt("sounds good", "frequency: daily")
-	const updatesOpenerResult = await buildUpdatesOpenerPrompt({
+	const updatesRecapResult = await buildUpdatesRecapPrompt({
 		topicNames: ["Coffee"],
 		findingTitles: ["Sample"],
 	})
@@ -342,7 +342,7 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 		searchResult,
 		contextResult,
 		agreementResult,
-		updatesOpenerResult,
+		updatesRecapResult,
 		dashboardParagraphResult,
 		topicPostSummaryResult,
 		topicPostDiscussionResult,
@@ -359,7 +359,7 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 		["attachment context prompt", contextResult.prompt],
 		["Personal sources context prompt", personalSourcesContextResult.prompt],
 		["agreement check prompt", agreementResult.prompt],
-		["updates opener prompt", updatesOpenerResult.prompt],
+		["updates recap prompt", updatesRecapResult.prompt],
 		["topic post summary prompt", topicPostSummaryResult.prompt],
 		["topic post discussion prompt", topicPostDiscussionResult.prompt],
 		["scan report prompt", reportResult.prompt],

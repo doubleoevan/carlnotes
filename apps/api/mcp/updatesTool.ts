@@ -75,10 +75,10 @@ export function registerUpdatesTool({ mcpServer, toolCaller, routeTopicId }: Reg
  * Returns the list the model reads, with everything a page or a model wrote fenced as data. The rows' Topics and podcast
  * episodes go to the MCP view alone.
  */
-export function toFencedUpdates({ opener, findings, moreCount, morePath }: BuiltUpdates): Updates {
+export function toFencedUpdates({ recap, findings, moreCount, morePath }: BuiltUpdates): Updates {
 	const toFencedText = toUntrustedFence()
 	return {
-		opener: opener && toFencedText(opener),
+		recap: recap && toFencedText(recap),
 		findings: findings.map((finding) => ({
 			...finding,
 			title: finding.title && toFencedText(finding.title),
@@ -93,7 +93,7 @@ export function toFencedUpdates({ opener, findings, moreCount, morePath }: Built
 }
 
 /**
- * Returns the whole list as text: the opener, each finding's title, topic, link, and explanation, and the more link.
+ * Returns the whole list as text: the recap, each finding's title, topic, link, and explanation, and the more link.
  */
 export function toUpdatesText(updates: Updates): string {
 	if (updates.findings.length === 0) {
@@ -110,7 +110,7 @@ export function toUpdatesText(updates: Updates): string {
 		].join("\n"),
 	)
 
-	// the opener and the more link appear only if the list has them
+	// the recap and the more link appear only if the list has them
 	const moreLine = updates.moreCount > 0 ? `And ${updates.moreCount} more: ${SITE_URL}${updates.morePath}` : null
-	return [updates.opener, ...findingBlocks, moreLine].filter(Boolean).join("\n\n")
+	return [updates.recap, ...findingBlocks, moreLine].filter(Boolean).join("\n\n")
 }

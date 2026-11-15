@@ -228,9 +228,9 @@ export const FINDING_SEARCH_PAGE: McpSearchPage = {
 	pageCount: 2,
 }
 
-// an updates list with an opener, ranked Findings, and more that did not fit
+// an updates list with a recap, ranked Findings, and more that did not fit
 export const UPDATES_RESULT: Updates = {
-	opener: "Three things moved while you were out.",
+	recap: "Three things moved while you were out.",
 	findings: [
 		toTestUpdatesFinding({
 			findingId: "finding-4",
@@ -319,7 +319,7 @@ export const TOPIC_EDIT_PREVIEW: Extract<McpViewTopicResult, { status: "confirmR
 }
 
 // the model's fenced copy of an updates list, a Scan status, the news, or a Topic Post
-const MODEL_COPY = { opener: "the model's fenced copy" }
+const MODEL_COPY = { recap: "the model's fenced copy" }
 
 /**
  * Returns a tool result as the api sends it: text for the model, the structured result, and the MCP view's data.

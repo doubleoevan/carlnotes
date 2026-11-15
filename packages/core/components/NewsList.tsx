@@ -40,12 +40,12 @@ export type NewsListRowProps = {
 }
 
 // the platform elements of the news: the card, the heading that opens and closes the list with the window picker
-// beside it, carl's opener, the picker and one of its options, an admin's highlighted audience select, the rows' list, one
+// beside it, carl's recap, the picker and one of its options, an admin's highlighted audience select, the rows' list, one
 // row, a line of text with an optional retry, the placeholder while a page loads, and the page buttons under the rows
 export type NewsListElements = {
 	Card: ComponentType<{ children: ReactNode }>
 	Heading: ComponentType<{ picker: ReactNode; isExpanded: boolean; onToggle: () => void; children: ReactNode }>
-	Opener: ComponentType<{ children: ReactNode }>
+	Recap: ComponentType<{ children: ReactNode }>
 	WindowPicker: ComponentType<{ label: string; children: ReactNode }>
 	WindowOption: ComponentType<{ isSelected: boolean; onSelect: () => void; children: ReactNode }>
 	AudienceSelect: ComponentType<{
@@ -73,7 +73,7 @@ type NewsListProps = {
 	profileUserId: string | null
 	userId: string | null
 	// carl's line for the day, which shows above the rows
-	opener?: string | null
+	recap?: string | null
 	// the profile's audience, and for an admin on someone else's profile, the select's change of the whole page's
 	// audience
 	audience?: ProfileAudience
@@ -92,10 +92,10 @@ type NewsListProps = {
  * the page buttons under the card. The picker beside the title chooses the week, the day, or the hour. An admin
  * reading someone else's profile sees a select above the rows between the user audience and the visitor audience.
  */
-export function NewsList({ opener, onAudienceChange, elements, ...newsListOptions }: NewsListProps) {
+export function NewsList({ recap, onAudienceChange, elements, ...newsListOptions }: NewsListProps) {
 	const { userId } = newsListOptions
 	const newsList = useNewsList(newsListOptions)
-	const { Card, Heading, Opener, WindowPicker, WindowOption, AudienceSelect, Pagination } = elements
+	const { Card, Heading, Recap, WindowPicker, WindowOption, AudienceSelect, Pagination } = elements
 	return (
 		<>
 			<Card>
@@ -130,7 +130,7 @@ export function NewsList({ opener, onAudienceChange, elements, ...newsListOption
 						onChange={onAudienceChange}
 					/>
 				)}
-				{newsList.isExpanded && opener && <Opener>{opener}</Opener>}
+				{newsList.isExpanded && recap && <Recap>{recap}</Recap>}
 				{newsList.isExpanded && (
 					<NewsRows
 						newsPage={newsList.newsPage}

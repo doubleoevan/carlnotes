@@ -34,7 +34,7 @@ import {
 	USER_FINDING_COLUMNS,
 } from "./findings"
 import { toReadingMinutes } from "./readingMinutes"
-import { loadUpdatesOpener } from "./updatesOpener"
+import { loadUpdatesRecap } from "./updatesRecap"
 
 // the most unread Findings that one list ranks
 const MAX_RANKED_FINDINGS = 500
@@ -43,7 +43,7 @@ const MAX_RANKED_FINDINGS = 500
 // top of the scale, so this passes most older Findings
 const RECENCY_BOOST = 0.1
 
-// the characters that a list's Findings may fill, leaving room in the page for the opener and the more link
+// the characters that a list's Findings may fill, leaving room in the page for the recap and the more link
 const UPDATES_FINDINGS_MAX_CHARS = MCP_PAGE_MAX_CHARS - 1024
 
 // what the model's copy adds to a row: a fence of about 110 characters around each of its five untrusted texts
@@ -107,29 +107,30 @@ export async function buildUpdates({
 	// the rows' Topics load before the consumptions, so a failed read can never lose a list
 	const updatesTopics = await loadUpdatesTopics(userId, updatesFindings)
 
-	// the consumptions go first, so a failed opener can never repeat a Finding in the next list
+	// the consumptions go first, so a failed recap can never repeat a Finding in the next list
 	await setFindingsConsumed(
 		userId,
 		updatesFindings.map((finding) => finding.findingId),
 		analyticsProperties,
 	)
-	const opener =
+	const recap =
 		updatesFindings.length > 0
-			? await loadUpdatesOpener({ userId, topicId, loadUpdatesFindings: async () => updatesFindings })
+			? await loadUpdatesRecap({ userId, topicId, loadUpdatesFindings: async () => updatesFindings })
 			: null
 	const moreCount = (unreadRows[0]?.unreadCount ?? 0) - updatesFindings.length
 
-	// report every list, an empty one included, by its counts
+	// report every list, an empty one included, by its counts. hasOpener keeps the property's first name for the event's
+	// history in PostHog
 	trackEvent("updates_requested", userId, {
 		...analyticsProperties,
 		...(topicId ? { topicId } : {}),
 		minutes,
 		findingCount: updatesFindings.length,
 		moreCount,
-		hasOpener: opener !== null,
+		hasOpener: recap !== null,
 	})
 	return {
-		opener,
+		recap,
 		findings: updatesFindings,
 		moreCount,
 		morePath: topic ? toTopicPath(topic) : "/topics",
@@ -138,21 +139,21 @@ export async function buildUpdates({
 }
 
 /**
- * Reads the day's opener across the user's Topics and marks no Finding read. The opener is the one a list across
- * Topics shows, written from the unread Findings the default list would hold. A stored opener returns with no Findings
- * read. A user with no unread Finding keeps the opener the day already stored, and no model call runs for them.
+ * Reads the day's recap across the user's Topics and marks no Finding read. The recap is the one a list across
+ * Topics shows, written from the unread Findings the default list would hold. A stored recap returns with no Findings
+ * read. A user with no unread Finding keeps the recap the day already stored, and no model call runs for them.
  */
-export function readUpdatesOpener(userId: string): Promise<string | null> {
-	return loadUpdatesOpener({ userId, topicId: null, loadUpdatesFindings: () => loadDefaultUpdatesFindings(userId) })
+export function readUpdatesRecap(userId: string): Promise<string | null> {
+	return loadUpdatesRecap({ userId, topicId: null, loadUpdatesFindings: () => loadDefaultUpdatesFindings(userId) })
 }
 
 /**
- * Returns the opener a person's home shows today, for an admin on the person's profile. If the day has none yet, it is
+ * Returns the recap a person's home shows today, for an admin on the person's profile. If the day has none yet, it is
  * written on the person's budget and stored for the person's home, and no Finding is marked read. A person who owns a
- * private Topic whose Personal sources text is not converted gets null, because the opener may be written from that
+ * private Topic whose Personal sources text is not converted gets null, because the recap may be written from that
  * Topic's Findings.
  */
-export async function readProfileUpdatesOpener(profileUserId: string): Promise<string | null> {
+export async function readProfileUpdatesRecap(profileUserId: string): Promise<string | null> {
 	const [unconvertedTopic] = await db
 		.select({ id: topics.id })
 		.from(topics)
@@ -160,7 +161,7 @@ export async function readProfileUpdatesOpener(profileUserId: string): Promise<s
 			and(eq(topics.ownerId, profileUserId), eq(topics.visibility, "private"), not(toConvertedPersonalSourcesFilter())),
 		)
 		.limit(1)
-	return unconvertedTopic ? null : readUpdatesOpener(profileUserId)
+	return unconvertedTopic ? null : readUpdatesRecap(profileUserId)
 }
 
 // the unread Findings that the default list across the user's Topics would hold, ranked and inside its reading budget

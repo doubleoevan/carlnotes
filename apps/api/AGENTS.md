@@ -274,8 +274,8 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   (`read_dashboard`, a person's Topic or Podcast Dashboard or a team's Team Dashboard under the page's access rules,
   defaulting to the caller or the caller's first team, with the summary, Carl's fenced paragraph, the day, and the page
   url, and the read for the dashboard MCP view), `updatesTool.ts` (`read_updates`, the one reader of the updates list;
-  `topic/updatesRoute.ts` is `GET /api/updates/opener`, the day's opener alone for the signed-in home, which marks no
-  Finding read, and `GET /api/profiles/:userId/opener`, the opener a person's home shows, for an admin), `topicContextTool.ts` (`read_topic_context`), `topicContextResults.ts` (the Findings and excerpts it
+  `topic/updatesRoute.ts` is `GET /api/updates/recap`, the day's recap alone for the signed-in home, which marks no
+  Finding read, and `GET /api/profiles/:userId/recap`, the recap a person's home shows, for an admin), `topicContextTool.ts` (`read_topic_context`), `topicContextResults.ts` (the Findings and excerpts it
   returns), `uiResources.ts` (the MCP Apps view resources, each html written from the bundle `build:ui` makes in
   `apps/web/dist/mcp-views`, with the dashboard MCP view's own script and the script every other MCP view shares, every
   stored bundle's version read back from object storage, and the `_meta` a tool names its MCP view with),

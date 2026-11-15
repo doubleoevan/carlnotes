@@ -63,9 +63,9 @@ const UPDATES_STORY_TOPICS: UpdatesResponse["topics"] = [
 	},
 ]
 
-// a list with its opener and a link to what did not fit
+// a list with its recap and a link to what did not fit
 export const UPDATES_STORY: UpdatesResponse = {
-	opener: "I had a good time with the espresso reading this morning, and the coffee trade kept me interested too.",
+	recap: "I had a good time with the espresso reading this morning, and the coffee trade kept me interested too.",
 	findings: UPDATES_STORY_FINDINGS,
 	moreCount: 12,
 	morePath: "/topics",

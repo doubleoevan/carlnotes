@@ -18,7 +18,7 @@ const meta = {
 	args: {
 		profileUserId: null,
 		userId: "user-evan",
-		opener: "Espresso had a loud week, and the burr debate is not over.",
+		recap: "Espresso had a loud week, and the burr debate is not over.",
 	},
 	// the week reads the story's pages, and every other window reads as empty, so no story reaches the api
 	beforeEach: () => {
@@ -40,7 +40,7 @@ const meta = {
 export default meta
 type Story = StoryObj<typeof meta>
 
-// 32 rows show five to a page under carl's opener, numbered across the pages, with the page buttons under them. each
+// 32 rows show five to a page under carl's recap, numbered across the pages, with the page buttons under them. each
 // page has six links: the five rows and the topic link in the podcast episode's row
 export const FullWeek: Story = {
 	play: async ({ canvas, userEvent }) => {
@@ -91,16 +91,16 @@ export const Closed: Story = {
 	},
 }
 
-// a profile's news as another reader: no opener, and a row names the Comment's author
+// a profile's news as another reader: no recap, and a row names the Comment's author
 export const Profile: Story = {
-	args: { profileUserId: "user-evan", userId: "user-roastfan", opener: null },
+	args: { profileUserId: "user-evan", userId: "user-roastfan", recap: null },
 	play: async ({ canvas }) => {
 		await expect(await canvas.findByText("12 reactions on Evan's hot take")).toBeInTheDocument()
 		await expect(canvas.getByRole("heading", { name: "Brews News" })).toBeInTheDocument()
 	},
 }
 
-// an admin reads someone else's profile as the person does, with the person's opener, and the highlighted
+// an admin reads someone else's profile as the person does, with the person's recap, and the highlighted
 // select changes the whole page's audience
 export const AdminView: Story = {
 	args: { profileUserId: "user-evan", userId: "user-laura", audience: "user", onAudienceChange: fn() },
@@ -117,12 +117,12 @@ export const AdminView: Story = {
 	},
 }
 
-// the visitor audience an admin chose: the news a visitor reads, with no opener
+// the visitor audience an admin chose: the news a visitor reads, with no recap
 export const AdminVisitorView: Story = {
 	args: {
 		profileUserId: "user-evan",
 		userId: "user-laura",
-		opener: null,
+		recap: null,
 		audience: "visitor",
 		onAudienceChange: fn(),
 	},

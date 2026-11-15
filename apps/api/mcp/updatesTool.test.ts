@@ -29,7 +29,7 @@ const FINDING = {
 
 // a list with one Finding and more behind it
 const UPDATES_RESULT: BuiltUpdates = {
-	opener: "Carl's line.",
+	recap: "Carl's line.",
 	findings: [FINDING],
 	moreCount: 12,
 	morePath: "/topics",
@@ -70,9 +70,9 @@ test("the model reads a fenced list, and the plain list and the rows' Topics go 
 	const { topics, podcastEpisodes, ...updatesList } = UPDATES_RESULT
 
 	// each text a page or a model wrote sits inside a fence, in the structured copy and in the text
-	const { opener, findings } = toolResult.structuredContent as Updates
+	const { recap, findings } = toolResult.structuredContent as Updates
 	const { title, url, topicName, relevanceExplanation } = findings[0] as UpdatesFinding
-	for (const fencedText of [opener, title, url, topicName, relevanceExplanation]) {
+	for (const fencedText of [recap, title, url, topicName, relevanceExplanation]) {
 		expect(fencedText).toStartWith(`<${UNTRUSTED_DATA_TAG}-`)
 	}
 	expect(toResultText(toolResult)).toContain(`Topic: <${UNTRUSTED_DATA_TAG}-`)
@@ -116,7 +116,7 @@ test("a Topic the user may not read reads as a missing one", async () => {
 	expect(toResultText(toolResult)).toBe("No readable topic has that id.")
 })
 
-test("the text holds the opener, each Finding's title, Topic, link, and explanation, and the more link", () => {
+test("the text holds the recap, each Finding's title, Topic, link, and explanation, and the more link", () => {
 	const text = toUpdatesText(UPDATES_RESULT)
 	for (const expectedText of [
 		"Carl's line.",
@@ -130,8 +130,8 @@ test("the text holds the opener, each Finding's title, Topic, link, and explanat
 	}
 })
 
-test("a list with no opener and nothing more reads as its Findings alone", () => {
-	const text = toUpdatesText({ ...UPDATES_RESULT, opener: null, moreCount: 0 })
+test("a list with no recap and nothing more reads as its Findings alone", () => {
+	const text = toUpdatesText({ ...UPDATES_RESULT, recap: null, moreCount: 0 })
 	expect(text.startsWith("1. Dialing in")).toBe(true)
 	expect(text).not.toContain("more:")
 })
