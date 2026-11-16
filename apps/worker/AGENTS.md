@@ -105,7 +105,7 @@ result, and a failed release job, `migrate`, `docs-sync`, or `edge-purge`, is re
   its page can be read), `sendScanEmail.ts`, `sendPushNotifications.ts`, and `recordPodcastEpisode.ts`, with
   `deliveryRetryPolicy.ts` holding the send retry policy that the email and push workflows share. Temporal bundles a
   workflow file with webpack, so a workflow file imports only `@carlnotes/contracts/scanFailure`,
-  `@carlnotes/contracts/topicVideoWork`,
+  `@carlnotes/contracts/topicVideoWork`, `@carlnotes/contracts/topicMemoryWork`,
   `@carlnotes/pipeline/stageTimeouts`, `@carlnotes/pipeline/pushWorkflows`, types, and its sibling files, and the
   activities file beside it imports the rest. `temporal.ts` resolves each workflow
   by `new URL("./workflows/<name>.ts", import.meta.url)`, and `scripts/check-workflow-bundles.ts` bundles every workflow

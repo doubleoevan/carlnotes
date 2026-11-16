@@ -21,9 +21,13 @@ export function TakeawaysMcpView({ takeaways }: { takeaways: McpViewTakeaways })
 		}
 		setLoadingPage(page)
 		setPageFailed(false)
-		const result = await callMcpViewTool("read_topic_memories", { topic_id: shown.topicId, page }).catch(() => null)
-		const next = result && !result.isError ? toMcpViewData(result._meta).takeaways : undefined
-		if (next?.topicId === shown.topicId && next.pageNumber === page) {
+		const requestedPage = await readTakeawayPage(shown.topicId, page)
+		// a removed takeaway can leave the requested page beyond the current end
+		const next =
+			requestedPage && requestedPage.pageCount > 0 && page > requestedPage.pageCount
+				? await readTakeawayPage(shown.topicId, requestedPage.pageCount)
+				: requestedPage
+		if (next) {
 			setShown(next)
 		} else {
 			setPageFailed(true)
@@ -59,4 +63,11 @@ export function TakeawaysMcpView({ takeaways }: { takeaways: McpViewTakeaways })
 			)}
 		</section>
 	)
+}
+
+async function readTakeawayPage(topicId: string, page: number): Promise<McpViewTakeaways | undefined> {
+	// validate the host result before it can replace the current page
+	const result = await callMcpViewTool("read_topic_memories", { topic_id: topicId, page }).catch(() => null)
+	const takeaways = result && !result.isError ? toMcpViewData(result._meta).takeaways : undefined
+	return takeaways?.topicId === topicId && takeaways.pageNumber === page ? takeaways : undefined
 }

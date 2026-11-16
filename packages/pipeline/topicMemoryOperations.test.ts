@@ -91,6 +91,17 @@ test.each([
 	expect(toTopicMemorySimilarityAction(similarity)).toBe(action)
 })
 
+test.each([
+	["on September 25, 2026", "on September 26, 2026"],
+	["on 25 September 2026", "on 26 September 2026"],
+	["on 09/25/26", "on 09/26/26"],
+	["on Sep. 25", ""],
+] as const)("near-identical text sends mismatched date mentions through review", (first, second) => {
+	expect(
+		toTopicMemorySimilarityAction(0.999, [`The meeting happened ${first}.`, `The meeting happened ${second}.`]),
+	).toBe("flag")
+})
+
 test("person names normalize while evidence-backed namesake identity details stay separate", () => {
 	// exercise the same-name people found bundled together in the earlier evaluation
 	const taipei = toTopicMemoryPersonMatchKey({ name: "  Ｗilson Chen ", identifyingDetail: "Taipei 101 Marketing" })

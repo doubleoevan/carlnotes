@@ -130,11 +130,16 @@ test("an open row shows the finding's reactions, and a press on a type saves thr
 })
 
 test("a failed feedback send keeps the words in the box to send again", async () => {
-	const respondToToolCall: ToolCallResponder = ({ name }) => ({
-		content: [],
-		isError: name === "rate_finding",
-	})
-	await withMcpView({ mcpView: "findings", respondToToolCall }, async ({ frame, toolCalls, sendToolResult }) => {
+	// reject the first rating and accept its retry. note reads do not count as writes
+	const ratingNotes: unknown[] = []
+	const respondToToolCall: ToolCallResponder = ({ name, arguments: args }) => {
+		if (name !== "rate_finding") {
+			return { content: [] }
+		}
+		ratingNotes.push(args?.note)
+		return { content: [], isError: ratingNotes.length === 1 }
+	}
+	await withMcpView({ mcpView: "findings", respondToToolCall }, async ({ frame, sendToolResult }) => {
 		await sendToolResult(toMcpViewToolResult({ mcpViewData: FINDINGS_MCP_VIEW_DATA }))
 		const findingRow = frame.getByRole("row").filter({ hasText: "Agents that read the docs" })
 		await findingRow.getByRole("button", { name: "Show Carl's notes" }).click()
@@ -142,14 +147,16 @@ test("a failed feedback send keeps the words in the box to send again", async ()
 		// the thumb sends the box's words
 		const detailsRow = frame.getByRole("row").filter({ hasText: "Carl's take:" })
 		const feedbackBox = detailsRow.getByRole("textbox", { name: "Feedback for Carl" })
+		const downvote = detailsRow.getByRole("button", { name: "Thumbs down" })
 		await feedbackBox.fill("Too basic for me")
-		await detailsRow.getByRole("button", { name: "Thumbs down" }).click()
-		await waitForRecord(toolCalls)
+		await downvote.click()
+		await waitForRecord(ratingNotes)
 
-		// the box keeps its words, and no thanks replaces it
-		await detailsRow.getByRole("button", { name: "Thumbs down" }).waitFor()
+		// retry the failed rating with the same words still in the box
 		expect(await feedbackBox.inputValue()).toBe("Too basic for me")
-		expect(await detailsRow.getByText("Noted. Carl reads these later.").count()).toBe(0)
+		await downvote.click()
+		await detailsRow.locator('button[aria-label^="Thumbs down"][aria-pressed="true"]').waitFor()
+		expect(ratingNotes).toEqual(["Too basic for me", "Too basic for me"])
 	})
 })
 

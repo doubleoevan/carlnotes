@@ -1,5 +1,5 @@
-SET LOCAL lock_timeout = '3s';
---> statement-breakpoint
+SET LOCAL lock_timeout = '3s';--> statement-breakpoint
+-- The previous release no longer reads these names. The Journal first ships with this schema.
 ALTER TYPE "topic_memory_kind" RENAME TO "topic_memory_kind_legacy";
 --> statement-breakpoint
 CREATE TYPE "topic_memory_kind" AS ENUM ('fact', 'correction');

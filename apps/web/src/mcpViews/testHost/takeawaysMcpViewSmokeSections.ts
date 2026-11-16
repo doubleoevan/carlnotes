@@ -44,3 +44,25 @@ test("the Takeaways MCP view keeps the same read-only list and skeleton while it
 		},
 	)
 })
+
+test("the Takeaways MCP view recovers when the requested page is gone", async () => {
+	// page two disappears after the initial read
+	const topicId = "coffee-journal"
+	const toResult = (pageNumber: number, pageCount: number, items: { id: string; text: string }[]) =>
+		toMcpViewToolResult({
+			mcpViewData: { session: null, podcastEpisodes: [], takeaways: { topicId, pageNumber, pageCount, items } },
+		})
+	await withMcpView(
+		{
+			mcpView: "takeaways",
+			respondToToolCall: ({ arguments: args }) =>
+				args?.page === 2 ? toResult(2, 1, []) : toResult(1, 1, [{ id: "two", text: "The last takeaway." }]),
+		},
+		async ({ frame, sendToolResult, toolCalls }) => {
+			await sendToolResult(toResult(1, 2, [{ id: "one", text: "The first takeaway." }]))
+			await frame.getByRole("button", { name: "Next page" }).click()
+			await frame.getByText("The last takeaway.").waitFor()
+			expect(toolCalls.map(({ arguments: args }) => args?.page)).toEqual([2, 1])
+		},
+	)
+})

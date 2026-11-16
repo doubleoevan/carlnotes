@@ -87,12 +87,19 @@ export function toTopicMemorySimilarityAction(
 	return similarity >= TOPIC_MEMORY_REVIEW_SIMILARITY ? "flag" : "add"
 }
 
-// a changed event date can leave the vector almost identical while changing the claim
+// date mentions must match before similarity alone can combine two claims
+const MONTH_NAME =
+	"(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember|t)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\\.?"
+const DAY_OF_MONTH = "\\d{1,2}(?:st|nd|rd|th)?"
+const DATE_MENTION = new RegExp(
+	`\\b(?:\\d{4}-\\d{2}-\\d{2}|\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4}|${MONTH_NAME}\\s+(?:\\d{4}|${DAY_OF_MONTH}(?:,?\\s+\\d{4})?)|${DAY_OF_MONTH}\\s+${MONTH_NAME}(?:\\s+\\d{4})?)\\b`,
+	"gi",
+)
+
 function shareTopicMemoryDates([first, second]: readonly [string, string]): boolean {
-	const isoDates = /\b\d{4}-\d{2}-\d{2}\b/g
-	const left = new Set(first.match(isoDates) ?? [])
-	const right = new Set(second.match(isoDates) ?? [])
-	return !left.size || !right.size || (left.size === right.size && [...left].every((date) => right.has(date)))
+	const left = new Set(first.toLowerCase().match(DATE_MENTION) ?? [])
+	const right = new Set(second.toLowerCase().match(DATE_MENTION) ?? [])
+	return left.size === right.size && [...left].every((date) => right.has(date))
 }
 
 /** Normalizes both parts of a person's identity. A namesake's context stays distinct. */
