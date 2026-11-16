@@ -5,7 +5,9 @@ sidebar:
   order: 8
 ---
 
-Carl gets smarter with every brew. Your Brew diary now has a 📙 Journal of the takeaways Carl has learned about your topic. He uses them in everything he writes, from finding descriptions to Coffee Break podcasts, films and discussions.
+The Journal is in preview. The 📙 Journal button appears in the Brew diary when the preview is enabled.
+
+Carl gets smarter with every brew. The Journal shows the takeaways Carl has learned about your topic. He uses them in everything he writes, from finding descriptions to Coffee Break podcasts, films and discussions.
 
 ![The Keeping Up with the Chens Brew diary shows its list of brews beside the Journal button.](../../../assets/screenshots/brew-diary-journal.png)
 
