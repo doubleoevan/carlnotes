@@ -6,10 +6,11 @@ import { canRateTopicMemories } from "@carlnotes/db/findingPermissions"
 import { scans } from "@carlnotes/db/schema/scans"
 import { attachments, sources, type topics } from "@carlnotes/db/schema/topics"
 import { loadTopicImageForUser } from "@carlnotes/db/topicImages"
-import { toVisibleTopicMemoryCount } from "@carlnotes/db/topicMemories"
+import { toVisibleTopicMemoryGroupRows, type VisibleTopicMemoryGroupRow } from "@carlnotes/db/topicMemories"
+import { groupTopicMemories } from "@carlnotes/db/topicMemoryGroups"
 import { toTopicRole } from "@carlnotes/db/topicPermissions"
 import { traceRequestStage } from "@carlnotes/server/monitoring"
-import { desc, eq } from "drizzle-orm"
+import { desc, eq, sql } from "drizzle-orm"
 import { isAllowed, loadUserAccess } from "../authorization"
 import { loadTopicChatMentions } from "../chat/mentions"
 import { loadTopicPodcast } from "../podcast/helpers"
@@ -92,7 +93,7 @@ export async function loadTopicPage(
 			// every Source row, and the attachment rows and their context, each narrowed once the reads finish
 			db.select().from(sources).where(eq(sources.topicId, topic.id)),
 			loadTopicAttachmentRows(topic.id),
-			// every scan, newest first, and the reader's takeaway count in the same query
+			// every scan newest first, with the reader's Journal groups on the first row
 			loadTopicScanRows(topic, userId),
 			// this user's own subscription state. a signed-out visitor subscribes to nothing
 			userId ? loadDirectSubscription(userId, topic.id) : null,
@@ -187,8 +188,10 @@ export async function loadTopicPage(
 		attachments: attachmentRows,
 		sources: visibleTopicSourceRows.flatMap(toTopicSourceSummary),
 		scans: scanHistory,
-		takeawayCount: scanRows[0]?.takeawayCount ?? 0,
-		canRateTakeaways: canRateTopicMemories(topicRole),
+		topicMemoryCount: isTopicJournalEnabled()
+			? groupTopicMemories(scanRows[0]?.topicMemoryGroupRows ?? []).length
+			: undefined,
+		canRateTopicMemories: canRateTopicMemories(topicRole),
 		podcast,
 		latestPodcastEpisode,
 		// the topic's image urls, null until its first render lands, and null for a user who reported this image
@@ -267,11 +270,17 @@ type TopicScanRow = Pick<
 	| "scanSummary"
 >
 
-// the scalar count runs once for the topic, which can only have takeaways if it has scans
+// read the brew history in display order
 async function loadTopicScanRows(
 	{ id: topicId, visibility }: Pick<typeof topics.$inferSelect, "id" | "visibility">,
 	userId: string | null,
-): Promise<(TopicScanRow & { takeawayCount: number })[]> {
+): Promise<(TopicScanRow & { topicMemoryGroupRows: VisibleTopicMemoryGroupRow[] | null })[]> {
+	// keep the grouped count out of the page query while the button is disabled
+	const groupRows = isTopicJournalEnabled()
+		? sql<VisibleTopicMemoryGroupRow[] | null>`case when
+			row_number() over (order by ${scans.startedAt} desc, ${scans.id}) = 1
+			then ${toVisibleTopicMemoryGroupRows({ topicId, userId, visibility })} end`
+		: sql<null>`null`
 	return db
 		.select({
 			id: scans.id,
@@ -285,11 +294,20 @@ async function loadTopicScanRows(
 			cost: scans.cost,
 			error: scans.error,
 			scanSummary: scans.scanSummary,
-			takeawayCount: toVisibleTopicMemoryCount({ topicId, userId, visibility }),
+			topicMemoryGroupRows: groupRows,
 		})
 		.from(scans)
 		.where(eq(scans.topicId, topicId))
-		.orderBy(desc(scans.startedAt))
+		.orderBy(desc(scans.startedAt), scans.id)
+}
+
+function isTopicJournalEnabled(): boolean {
+	// production requires an explicit rollout. dev keeps the button available for review
+	const flag = Bun.env.TOPIC_JOURNAL_ENABLED
+	if (flag !== undefined) {
+		return flag === "true"
+	}
+	return Bun.env.DOPPLER_ENVIRONMENT ? Bun.env.DOPPLER_ENVIRONMENT === "dev" : Bun.env.NODE_ENV !== "production"
 }
 
 // this month's total scan spend, summed from the raw scans since the first of the utc month

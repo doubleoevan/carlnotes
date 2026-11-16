@@ -10,7 +10,7 @@ const SheetTextInput = withUniwind(BottomSheetTextInput)
 
 type FeedbackInputProps = ComponentProps<RatingWithFeedbackElements["Input"]> & { className: string }
 
-/** Draws the keyboard-aware feedback field for findings and takeaways. */
+/** Draws the keyboard-aware feedback field for findings and topic memories. */
 export function FeedbackInput({
 	label,
 	placeholder,

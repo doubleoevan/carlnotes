@@ -25,11 +25,16 @@ import { buildScorePrompt } from "@carlnotes/pipeline/review/score"
 import { buildScanReportPrompt } from "@carlnotes/pipeline/review/summarize"
 import { loadScan } from "@carlnotes/pipeline/scan"
 import { toTopicImagePrompt } from "@carlnotes/pipeline/topicImages/writeTopicImageScene"
+import {
+	buildTopicMemoryClaimCheckPrompt,
+	buildTopicMemorySplitPrompt,
+} from "@carlnotes/pipeline/topicMemoryClaimReview"
+import { buildTopicMemoryReplacementPrompt } from "@carlnotes/pipeline/topicMemoryReplacements"
 import { buildTopicPostSummaryPrompt } from "@carlnotes/pipeline/topicPosts/summarizeTopicPost"
 import { buildTopicPostDiscussionPrompt } from "@carlnotes/pipeline/topicPosts/topicPostDiscussionScript"
 import { TOPIC_VIDEO_IMAGE_FORMAT } from "@carlnotes/pipeline/topicVideo/topicVideoImage"
 import { buildUpdatesRecapPrompt } from "@carlnotes/pipeline/updatesRecap"
-import { buildTopicMemoryProposalPrompt } from "@carlnotes/pipeline/updateTopicTakeaways"
+import { buildTopicMemoryProposalPrompt } from "@carlnotes/pipeline/updateTopicMemories"
 import { and, eq, inArray, isNotNull } from "drizzle-orm"
 import { finishScan, ingestForScan, reviewForScan } from "./workflows/runTopicScanActivities"
 
@@ -253,6 +258,23 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 		neighbors: [],
 		scanStartedAt: new Date(),
 	})
+	const sampleTopicMemory = { text: "The cafe opened and won an award.", factDate: null, person: null }
+	const topicMemoryCheckResult = await buildTopicMemoryClaimCheckPrompt([sampleTopicMemory])
+	const topicMemorySplitResult = await buildTopicMemorySplitPrompt({
+		claim: sampleTopicMemory,
+		findings: [{ id: "opening", title: "The cafe opened", snippet: null, description: "The cafe opened." }],
+	})
+	const topicMemoryReplacementResult = await buildTopicMemoryReplacementPrompt([
+		{
+			claimType: "runtime",
+			earlier: { text: "The festival cut ran 91 minutes.", factDate: "2026-11-01", observedDay: "2026-11-03" },
+			newer: {
+				text: "The festival cut's corrected runtime is 92 minutes.",
+				factDate: "2026-11-01",
+				observedDay: "2026-11-04",
+			},
+		},
+	])
 	const searchResult = await buildSearchPrompt("sample topic context", "sample topic")
 	const contextResult = await buildContextPrompt("sample document text")
 	const personalSourcesContextResult = await buildPersonalSourcesContextPrompt({
@@ -346,6 +368,9 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 	const servedFromRegistry = [
 		scoreResult,
 		topicMemoryResult,
+		topicMemoryCheckResult,
+		topicMemorySplitResult,
+		topicMemoryReplacementResult,
 		searchResult,
 		contextResult,
 		agreementResult,
@@ -363,6 +388,9 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 	const builtPrompts: [string, string][] = [
 		["score prompt", scoreResult.prompt],
 		["topic memory proposal prompt", topicMemoryResult.prompt],
+		["topic memory claim check prompt", topicMemoryCheckResult.prompt],
+		["topic memory split prompt", topicMemorySplitResult.prompt],
+		["topic memory replacement prompt", topicMemoryReplacementResult.prompt],
 		["search prompt", searchResult.prompt],
 		["attachment context prompt", contextResult.prompt],
 		["Personal sources context prompt", personalSourcesContextResult.prompt],

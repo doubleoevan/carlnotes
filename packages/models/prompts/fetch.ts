@@ -19,15 +19,18 @@ import chatTeamTemplate from "./chat-team.md" with { type: "text" }
 import chatTopicTemplate from "./chat-topic.md" with { type: "text" }
 import chatTopicPostTemplate from "./chat-topic-post.md" with { type: "text" }
 import checkAgreementTemplate from "./check-agreement.md" with { type: "text" }
-import confirmTopicMemoryPairsTemplate from "./confirm-topic-memory-pairs.md" with { type: "text" }
+import checkTopicMemoryClaimsTemplate from "./check-topic-memory-claims.md" with { type: "text" }
+import confirmTopicMemoryReplacementsTemplate from "./confirm-topic-memory-replacements.md" with { type: "text" }
 import currentDayContextTemplate from "./current-day-context.md" with { type: "text" }
 import judgeTopicMemoryDuplicatesTemplate from "./judge-topic-memory-duplicates.md" with { type: "text" }
 import moderateUserTextTemplate from "./moderate-user-text.md" with { type: "text" }
 import outlinePodcastEpisodeTemplate from "./outline-podcast-episode.md" with { type: "text" }
 import podcastEpisodeHostsTemplate from "./podcast-episode-hosts.md" with { type: "text" }
-import proposeTopicTakeawaysTemplate from "./propose-topic-takeaways.md" with { type: "text" }
+import proposeTopicMemoriesTemplate from "./propose-topic-memories.md" with { type: "text" }
+import reconcileTopicMemoryClaimsTemplate from "./reconcile-topic-memory-claims.md" with { type: "text" }
 import scorePersonalSourceResourceTemplate from "./score-personal-source-resource.md" with { type: "text" }
 import searchTopicTemplate from "./search-topic.md" with { type: "text" }
+import splitTopicMemoryTemplate from "./split-topic-memory.md" with { type: "text" }
 import suggestSourcesTemplate from "./suggest-sources.md" with { type: "text" }
 import summarizePersonalSourcesContextTemplate from "./summarize-personal-sources-context.md" with { type: "text" }
 import summarizeResourceTemplate from "./summarize-resource.md" with { type: "text" }
@@ -47,8 +50,11 @@ import writeTopicPostDiscussionTemplate from "./write-topic-post-discussion.md" 
 export const FALLBACK_PROMPT_TEMPLATES = {
 	"current-day-context": currentDayContextTemplate,
 	"topic-memory-background": topicMemoryBackgroundTemplate,
-	"propose-topic-takeaways": proposeTopicTakeawaysTemplate,
-	"confirm-topic-memory-pairs": confirmTopicMemoryPairsTemplate,
+	"propose-topic-memories": proposeTopicMemoriesTemplate,
+	"reconcile-topic-memory-claims": reconcileTopicMemoryClaimsTemplate,
+	"check-topic-memory-claims": checkTopicMemoryClaimsTemplate,
+	"confirm-topic-memory-replacements": confirmTopicMemoryReplacementsTemplate,
+	"split-topic-memory": splitTopicMemoryTemplate,
 	"judge-topic-memory-duplicates": judgeTopicMemoryDuplicatesTemplate,
 	"score-personal-source-resource": scorePersonalSourceResourceTemplate,
 	"summarize-personal-sources-context": summarizePersonalSourcesContextTemplate,

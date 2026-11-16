@@ -30,7 +30,7 @@ beforeAll(async () => {
 		"expandable-row",
 		"card",
 		"topic-image",
-		"takeaways-list",
+		"topic-memories-list",
 		"rating-with-feedback",
 	]) {
 		writeFixture(`packages/nightshift/components/${name}.ts`, 'export const platforms = ["web", "mobile"]')

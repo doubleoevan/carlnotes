@@ -2,7 +2,7 @@
 title: Current day context
 version: 1
 model tier: shared
-description: Anchors dated evidence and takeaways to the current calendar day.
+description: Anchors dated evidence and topic memories to the current calendar day.
 updated: 2026-11-15
 ---
 

@@ -1,15 +1,15 @@
-import type { McpViewTakeaways } from "@carlnotes/contracts/mcpViews"
-import { TOPIC_MEMORY_PAGE_SIZE } from "@carlnotes/contracts/topicMemories"
-import { TAKEAWAYS_TITLE } from "@carlnotes/core/components/TopicMemoriesDialog"
+import type { McpViewTopicMemories } from "@carlnotes/contracts/mcpViews"
+import { TOPIC_MEMORY_PAGE_SIZE, toTopicMemoryPageNumber } from "@carlnotes/contracts/topicMemories"
+import { TOPIC_MEMORIES_TITLE } from "@carlnotes/core/components/TopicMemoriesDialog"
 import { useState } from "react"
 import { Pagination } from "@/components/common/Pagination"
-import { TakeawayRow, TakeawaySkeleton, TakeawaysList } from "@/components/primitives/takeaways-list"
+import { TopicMemoriesList, TopicMemoryRow, TopicMemorySkeleton } from "@/components/primitives/topic-memories-list"
 import { callMcpViewTool, PAGE_FAILED_TEXT, toMcpViewData } from "./mcpViewHost"
 
 /** Shows the Journal's read-only Nightshift list and pages through the authorized MCP tool. */
-export function TakeawaysMcpView({ takeaways }: { takeaways: McpViewTakeaways }) {
+export function TopicMemoriesMcpView({ topicMemories }: { topicMemories: McpViewTopicMemories }) {
 	// retain the previous page for skeleton sizing and for recovery when a tool call fails
-	const [shown, setShown] = useState(takeaways)
+	const [shown, setShown] = useState(topicMemories)
 	const [loadingPage, setLoadingPage] = useState<number | null>(null)
 	const [pageFailed, setPageFailed] = useState(false)
 	const firstItemNumber = (shown.pageNumber - 1) * TOPIC_MEMORY_PAGE_SIZE + 1
@@ -19,15 +19,11 @@ export function TakeawaysMcpView({ takeaways }: { takeaways: McpViewTakeaways })
 		if (loadingPage !== null || page === shown.pageNumber) {
 			return
 		}
+		// use the page from the tool's current grouped snapshot
 		setLoadingPage(page)
 		setPageFailed(false)
-		const requestedPage = await readTakeawayPage(shown.topicId, page)
-		// a removed takeaway can leave the requested page beyond the current end
-		const next =
-			requestedPage && requestedPage.pageCount > 0 && page > requestedPage.pageCount
-				? await readTakeawayPage(shown.topicId, requestedPage.pageCount)
-				: requestedPage
-		if (next && (next.pageCount === 0 || next.pageNumber <= next.pageCount)) {
+		const next = await readTopicMemoryPage(shown.topicId, page)
+		if (next) {
 			setShown(next)
 		} else {
 			setPageFailed(true)
@@ -36,17 +32,21 @@ export function TakeawaysMcpView({ takeaways }: { takeaways: McpViewTakeaways })
 	}
 	return (
 		<section className="grid gap-3">
-			<h2 className="font-display text-xl">{TAKEAWAYS_TITLE}</h2>
+			<h2 className="font-display text-xl">{TOPIC_MEMORIES_TITLE}</h2>
 			{/* preserve the list and pager while the host reads the next page */}
 			{shown.pageCount === 0 ? (
 				<p className="text-muted-foreground text-sm">Carl hasn’t written any takeaways yet.</p>
 			) : (
-				<TakeawaysList isLoading={loadingPage !== null}>
+				<TopicMemoriesList isLoading={loadingPage !== null}>
 					{shown.items.map(({ id, text }, index) => {
 						const row = { text, itemNumber: firstItemNumber + index, isLast: index === shown.items.length - 1 }
-						return loadingPage !== null ? <TakeawaySkeleton key={id} {...row} /> : <TakeawayRow key={id} {...row} />
+						return loadingPage !== null ? (
+							<TopicMemorySkeleton key={id} {...row} />
+						) : (
+							<TopicMemoryRow key={id} {...row} />
+						)
 					})}
-				</TakeawaysList>
+				</TopicMemoriesList>
 			)}
 			{shown.pageCount > 1 && (
 				<Pagination
@@ -65,9 +65,12 @@ export function TakeawaysMcpView({ takeaways }: { takeaways: McpViewTakeaways })
 	)
 }
 
-async function readTakeawayPage(topicId: string, page: number): Promise<McpViewTakeaways | undefined> {
+async function readTopicMemoryPage(topicId: string, page: number): Promise<McpViewTopicMemories | undefined> {
 	// validate the host result before it can replace the current page
 	const result = await callMcpViewTool("read_topic_memories", { topic_id: topicId, page }).catch(() => null)
-	const takeaways = result && !result.isError ? toMcpViewData(result._meta).takeaways : undefined
-	return takeaways?.topicId === topicId && takeaways.pageNumber === page ? takeaways : undefined
+	const topicMemories = result && !result.isError ? toMcpViewData(result._meta).topicMemories : undefined
+	return topicMemories?.topicId === topicId &&
+		topicMemories.pageNumber === toTopicMemoryPageNumber(page, topicMemories.pageCount)
+		? topicMemories
+		: undefined
 }

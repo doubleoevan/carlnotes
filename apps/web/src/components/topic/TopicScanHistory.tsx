@@ -2,6 +2,7 @@ import { type RemoveTopicSourceStatus, removeTopicSource } from "@carlnotes/clie
 import type { TopicFinding } from "@carlnotes/contracts/findings"
 import { KEEP_ONE_SOURCE_MESSAGE } from "@carlnotes/contracts/sources"
 import type { ScanNote, TopicScan } from "@carlnotes/contracts/topics"
+import { toScanHistoryCounts } from "@carlnotes/core/components/TopicMemoriesDialog"
 import { toScanTimestamp } from "@carlnotes/core/lib/labels"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useState } from "react"
@@ -47,8 +48,8 @@ type RemovableTopicSource = { sourceId: string; label: string }
  */
 export function TopicScanHistory({
 	scans,
-	takeawayCount,
-	canRateTakeaways,
+	topicMemoryCount,
+	canRateTopicMemories,
 	allowedUrls,
 	findings,
 	topic,
@@ -57,8 +58,8 @@ export function TopicScanHistory({
 	onReloadTopicPage,
 }: {
 	scans: TopicScan[]
-	takeawayCount?: number
-	canRateTakeaways?: boolean
+	topicMemoryCount?: number
+	canRateTopicMemories?: boolean
 	allowedUrls?: AllowedScanNoteUrls
 	findings?: TopicFinding[]
 	// names the topic in each diary's copied Markdown
@@ -98,14 +99,19 @@ export function TopicScanHistory({
 		<CollapsibleSection
 			value="history"
 			title="Brew diary"
+			canWrapHeader
 			titleAside={
-				<TopicMemoriesDialog
-					topicId={topic.id}
-					entryCount={scans.length}
-					takeawayCount={takeawayCount}
-					canRateTakeaways={canRateTakeaways}
-					onTakeawayRemoved={onReloadTopicPage}
-				/>
+				topicMemoryCount === undefined ? (
+					<span className="text-muted-foreground text-sm">{toScanHistoryCounts(scans.length)}</span>
+				) : (
+					<TopicMemoriesDialog
+						topicId={topic.id}
+						entryCount={scans.length}
+						topicMemoryCount={topicMemoryCount}
+						canRateTopicMemories={canRateTopicMemories}
+						onTopicMemoryRemoved={onReloadTopicPage}
+					/>
+				)
 			}
 			hasStackedClosedDivider
 			hasCompactHeader

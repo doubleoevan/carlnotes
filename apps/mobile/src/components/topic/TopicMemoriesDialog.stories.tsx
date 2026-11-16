@@ -9,13 +9,13 @@ const meta: Meta<typeof TopicMemoriesDialog> = {
 	title: "Topic/TopicMemoriesDialog",
 	component: TopicMemoriesDialog,
 	parameters: { webReference: "Topic/TopicMemoriesDialog at 375px" },
-	args: { topicId: "journal-story", entryCount: 3, takeawayCount: 6 },
+	args: { topicId: "journal-story", entryCount: 3, topicMemoryCount: 6 },
 }
 export default meta
 type Story = StoryObj<typeof meta>
 
 export const Owner: Story = {
-	args: { canRateTakeaways: true },
+	args: { canRateTopicMemories: true },
 	render: (args) => <JournalStory key="owner" {...args} />,
 }
 
@@ -24,7 +24,7 @@ export const ReadOnly: Story = {
 }
 
 export const Empty: Story = {
-	args: { entryCount: 0, takeawayCount: 0 },
+	args: { entryCount: 0, topicMemoryCount: 0 },
 	render: (args) => <JournalStory key="empty" {...args} />,
 }
 
@@ -37,8 +37,8 @@ function JournalStory(args: ComponentProps<typeof TopicMemoriesDialog>) {
 			read: async ({ page }) => {
 				const result = toTopicMemoryStoryPage({
 					page,
-					canRate: args.canRateTakeaways ?? false,
-					isEmpty: args.takeawayCount === 0,
+					canRate: args.canRateTopicMemories ?? false,
+					isEmpty: args.topicMemoryCount === 0,
 				})
 				return {
 					...result,

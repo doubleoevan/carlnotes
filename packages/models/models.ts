@@ -36,6 +36,11 @@ export function isBudgetRejection(error: unknown): boolean {
 	return false
 }
 
+/** Detects a gateway authentication rejection without exposing its response body. */
+export function isModelAuthenticationRejection(error: unknown): boolean {
+	return toErrorCauses(error).some((cause) => (cause as { statusCode?: unknown }).statusCode === 401)
+}
+
 /**
  * Returns the error itself, whatever it wraps, and whatever a retry collected.
  */

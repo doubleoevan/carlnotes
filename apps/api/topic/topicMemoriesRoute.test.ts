@@ -16,11 +16,11 @@ test("feedback validation rejects control characters before storage", () => {
 	expect(topicMemoryFeedbackPayload.safeParse({ rating: "down", note: "A\u0000B" }).success).toBe(false)
 })
 
-test("pages beyond the eviction target can show protected takeaways", () => {
+test("pages beyond the eviction target can show protected topic memories", () => {
 	expect(topicMemoriesQuery.parse({ page: "21" })).toEqual({ page: 21 })
 })
 
-test("a private Topic's Journal never queries takeaways for a visitor", async () => {
+test("a private Topic's Journal never queries topic memories for a visitor", async () => {
 	const queries = stubConnectionPool(() => [["topic-1", "owner-1", "private", null]])
 	expect(await readTopicMemories({ topicId: "topic-1", userId: null, page: 1 })).toBeNull()
 	expect(queries.some(({ text }) => text.includes('from "topic_memories"'))).toBe(false)
@@ -37,7 +37,7 @@ test("a visitor can read a public Topic's Journal with no rating controls", asyn
 	})
 })
 
-test("MCP withholds private takeaways from an admin who has no Topic membership", async () => {
+test("MCP withholds private topic memories from an admin who has no Topic membership", async () => {
 	const queries = stubConnectionPool(() => [])
 	expect(
 		await readTopicMemories({ topicId: "topic-1", userId: "admin-1", page: 1, requiresPrivateMembership: true }),

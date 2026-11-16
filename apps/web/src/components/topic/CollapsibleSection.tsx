@@ -23,6 +23,7 @@ export function CollapsibleSection({
 	hasClosedDivider,
 	hasStackedClosedDivider,
 	hasCompactHeader,
+	canWrapHeader,
 	isOpen,
 	onOpenChange,
 	id,
@@ -49,6 +50,8 @@ export function CollapsibleSection({
 	hasStackedClosedDivider?: boolean
 	// give a header action the same space above its card as the compact Tasting Notes header
 	hasCompactHeader?: boolean
+	// allow actions that do not fit to flow to a second line
+	canWrapHeader?: boolean
 	// the section's open state and its change, for a section whose state is saved. open by default if left out
 	isOpen?: boolean
 	onOpenChange?: (isOpen: boolean) => void
@@ -77,7 +80,12 @@ export function CollapsibleSection({
 				    the trigger fills the row, which puts the aside and the count at the far right. with a note, the trigger
 				    ends at the title and the aside moves to the far right */}
 				<div
-					className={cn("flex items-center gap-2", !titleNote && "[&>:first-child]:flex-1", hasCompactHeader && "mb-2")}
+					className={cn(
+						"flex items-center gap-2",
+						!titleNote && "[&>:first-child]:flex-1",
+						hasCompactHeader && "mb-2",
+						canWrapHeader && "max-sm:flex-wrap max-sm:gap-y-0 max-sm:[&>:first-child]:min-w-max",
+					)}
 				>
 					<AccordionTrigger className={cn("py-2", titleNote && "flex-none")}>
 						<span className="font-display text-xl">{title}</span>

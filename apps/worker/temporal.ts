@@ -158,7 +158,7 @@ async function run(): Promise<void> {
 			shutdownGraceTime: SHUTDOWN_GRACE_MS,
 			maxConcurrentActivityTaskExecutions: SCAN_CONCURRENCY,
 		}),
-		// consolidate takeaways independently of the brew and podcast slots
+		// consolidate topic memories independently of the brew and podcast slots
 		Worker.create({
 			connection,
 			workflowsPath: new URL("./workflows/topicMemories.ts", import.meta.url).pathname,

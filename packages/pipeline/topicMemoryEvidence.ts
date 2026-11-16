@@ -1,19 +1,30 @@
-// selects the public Findings and existing Topic Memories used to update takeaways
+// selects the public Findings and existing Topic Memories used to update topic memories
 
+import { toUtcDay } from "@carlnotes/contracts/time"
 import type { TopicMemoryPerson } from "@carlnotes/contracts/topicMemories"
-import { TOPIC_MEMORY_FACT_FORMAT_VERSION, TOPIC_MEMORY_NEIGHBOR_LIMIT } from "@carlnotes/contracts/topicMemoryWork"
+import {
+	TOPIC_MEMORY_FACT_FORMAT_VERSION,
+	TOPIC_MEMORY_GROUP_CANDIDATE_LIMIT,
+	TOPIC_MEMORY_NEIGHBOR_LIMIT,
+} from "@carlnotes/contracts/topicMemoryWork"
 import { type DbHandle, db, isFindingShown } from "@carlnotes/db"
-import { EMBED_MODEL_NAME, findings, resources, scans } from "@carlnotes/db/schema/scans"
-import { topicMemories } from "@carlnotes/db/schema/topicMemories"
-import { type TopicMemoryPromptFeedback, topicMemoryPromptFeedback } from "@carlnotes/db/topicMemories"
-import { and, cosineDistance, desc, eq, inArray, isNull, or, type SQL, sql } from "drizzle-orm"
+import { findings, resources, scans } from "@carlnotes/db/schema/scans"
+import { TOPIC_MEMORY_EMBEDDING_MODEL, topicMemories } from "@carlnotes/db/schema/topicMemories"
+import { getResourceContent } from "@carlnotes/db/store"
+import {
+	type TopicMemoryPromptFeedback,
+	topicMemoryGroupingColumns,
+	topicMemoryPromptFeedback,
+} from "@carlnotes/db/topicMemories"
+import { groupTopicMemories } from "@carlnotes/db/topicMemoryGroups"
+import { and, cosineDistance, desc, eq, inArray, isNotNull, isNull, or, type SQL, sql } from "drizzle-orm"
 import { toExternalTopicMemorySourceFilter } from "./review/ownTopicPages"
 
 type TopicMemoryScan = Pick<
 	typeof scans.$inferSelect,
 	"id" | "topicId" | "ownerId" | "startedAt" | "topicMemoriesUpdatedAt" | "topicMemoriesWrittenAt"
 >
-// only public evidence and its Resource vector feed the takeaway update
+// only public evidence and its Resource vector feed the topic memory update
 type TopicMemoryFinding = {
 	id: string
 	title: string | null
@@ -21,11 +32,20 @@ type TopicMemoryFinding = {
 	description: string
 	embedding: number[] | null
 	embeddingModel: string | null
+	articleContext?: string | null
+	publicationDateHint?: string | null
 }
 
 type TopicMemoryRow = typeof topicMemories.$inferSelect
 
-/** A succeeded scan alone can feed its Journal. */
+// a dated article path supplies a hint. dates are never inferred from a Scan
+const topicMemoryPublicationDateHint = sql<string | null>`substring(
+	split_part(${resources.url}, '?', 1) from '/((?:19|20)[0-9]{2}/(?:0[1-9]|1[0-2])(?:/[0-9]{2})?)/'
+)`
+
+/**
+ * A succeeded scan alone can feed its Journal.
+ */
 export async function loadTopicMemoryScan(scanId: string, handle: DbHandle = db): Promise<TopicMemoryScan | undefined> {
 	const [scan] = await handle
 		.select({
@@ -45,7 +65,9 @@ export async function loadTopicMemoryScan(scanId: string, handle: DbHandle = db)
 	return { ...scan, topicMemoriesUpdatedAt: null, topicMemoriesWrittenAt: null }
 }
 
-/** Reads bounded public evidence, excluding Findings credited to Personal sources. */
+/**
+ * Reads bounded public evidence, excluding Findings credited to Personal sources.
+ */
 export async function loadTopicMemoryFindings(
 	scanId: string,
 	topicId: string,
@@ -60,6 +82,8 @@ export async function loadTopicMemoryFindings(
 			description: sql<string>`left(${findings.relevanceExplanation}, 300)`,
 			embedding: resources.embedding,
 			embeddingModel: resources.embeddingModel,
+			articleContext: sql<string | null>`left(${resources.content}, 640)`,
+			publicationDateHint: topicMemoryPublicationDateHint,
 		})
 		.from(findings)
 		.innerJoin(resources, eq(resources.id, findings.resourceId))
@@ -68,7 +92,9 @@ export async function loadTopicMemoryFindings(
 		.limit(30)
 }
 
-/** Rechecks eligible Finding IDs without transferring excerpts and vectors into the write transaction. */
+/**
+ * Rechecks eligible Finding IDs without transferring excerpts and vectors into the write transaction.
+ */
 export async function loadEligibleTopicMemoryFindingIds(
 	scanId: string,
 	topicId: string,
@@ -88,18 +114,44 @@ function toTopicMemoryScanFindingFilter(scanId: string, topicId: string): SQL | 
 	return and(toTopicMemoryFindingFilter(topicId), or(eq(findings.scanId, scanId), eq(findings.foundScanId, scanId)))
 }
 
-/** Returns at most five active or outdated neighbors, with rejected takeaways excluded. */
+/**
+ * Returns at most five active or outdated neighbors, with rejected topic memories excluded.
+ */
 export async function loadTopicMemoryNeighbors(
 	topicId: string,
 	embedding: number[],
+	{ activeOnly = false }: { activeOnly?: boolean } = {},
 ): Promise<
 	(Pick<TopicMemoryRow, "id" | "kind" | "text" | "status" | "factDate" | "isAtomic"> & {
 		person: TopicMemoryPerson | null
 		lastSeenAt: Date
+		updatedAt: Date
 		feedback: TopicMemoryPromptFeedback[]
 	})[]
 > {
-	return db
+	// shortlist by distance before running grouping windows and reading feedback
+	const distance = cosineDistance(topicMemories.embedding, embedding)
+	const nearest = db.$with("nearest_topic_memories").as(
+		db
+			.select({ id: topicMemories.id, distance: distance.as("distance") })
+			.from(topicMemories)
+			.where(
+				and(
+					eq(topicMemories.topicId, topicId),
+					isNotNull(topicMemories.subject),
+					isNotNull(topicMemories.claimType),
+					inArray(topicMemories.status, activeOnly ? ["active"] : ["active", "outdated"]),
+					isNull(topicMemories.replacedById),
+					eq(topicMemories.embeddingModel, TOPIC_MEMORY_EMBEDDING_MODEL),
+					eq(topicMemories.isAtomic, true),
+					eq(topicMemories.needsReview, false),
+				),
+			)
+			.orderBy(distance, topicMemories.id)
+			.limit(TOPIC_MEMORY_GROUP_CANDIDATE_LIMIT),
+	)
+	const candidates = await db
+		.with(nearest)
 		.select({
 			id: topicMemories.id,
 			kind: topicMemories.kind,
@@ -110,24 +162,35 @@ export async function loadTopicMemoryNeighbors(
 			feedback: topicMemoryPromptFeedback,
 			status: topicMemories.status,
 			lastSeenAt: scans.startedAt,
+			updatedAt: topicMemories.updatedAt,
+			...topicMemoryGroupingColumns(),
 		})
-		.from(topicMemories)
+		.from(nearest)
+		.innerJoin(topicMemories, eq(topicMemories.id, nearest.id))
 		.innerJoin(scans, eq(scans.id, topicMemories.lastSeenScanId))
-		.where(
-			and(
-				eq(topicMemories.topicId, topicId),
-				inArray(topicMemories.status, ["active", "outdated"]),
-				isNull(topicMemories.replacedById),
-				eq(topicMemories.embeddingModel, EMBED_MODEL_NAME),
-				or(eq(topicMemories.isAtomic, true), sql`jsonb_array_length(${topicMemoryPromptFeedback}) > 0`),
-			),
-		)
-		.orderBy(cosineDistance(topicMemories.embedding, embedding), topicMemories.id)
-		.limit(TOPIC_MEMORY_NEIGHBOR_LIMIT)
+		.orderBy(nearest.distance, nearest.id)
+	return groupTopicMemories(candidates)
+		.slice(0, TOPIC_MEMORY_NEIGHBOR_LIMIT)
+		.flatMap(([first]) => {
+			if (!first) {
+				return []
+			}
+			const {
+				subject: _subject,
+				claimType: _claimType,
+				value: _value,
+				embedding: _embedding,
+				embeddingModel: _model,
+				...row
+			} = first
+			return [row]
+		})
 }
 
-/** Restricts Journal evidence to shown external Findings from public Sources. */
-export function toTopicMemoryFindingFilter(topicId: string): SQL | undefined {
+/**
+ * Restricts Journal evidence to shown external Findings from public Sources.
+ */
+function toTopicMemoryFindingFilter(topicId: string): SQL | undefined {
 	return and(
 		eq(findings.topicId, topicId),
 		eq(findings.sourceVisibility, "public"),
@@ -135,4 +198,82 @@ export function toTopicMemoryFindingFilter(topicId: string): SQL | undefined {
 		eq(findings.personalSourceScoreBonus, 0),
 		isFindingShown,
 	)
+}
+
+/**
+ * Reads bounded excerpts of existing claim evidence for a split or duplicate review.
+ */
+export async function loadTopicMemoryFindingEvidence(
+	topicId: string,
+	findingIds: string[],
+	handle: DbHandle = db,
+	claimText?: string,
+): Promise<
+	Map<
+		string,
+		{
+			day: string
+			title: string | null
+			snippet: string | null
+			description: string
+			articleContext?: string
+			publicationDateHint?: string | null
+		}
+	>
+> {
+	if (!findingIds.length) {
+		return new Map()
+	}
+	// recheck each source's visibility on the caller's handle
+	const rows = await handle
+		.select({
+			id: findings.id,
+			startedAt: scans.startedAt,
+			title: sql<string | null>`left(${resources.title}, 180)`,
+			snippet: sql<string | null>`left(${resources.snippet}, ${claimText ? 6000 : 240})`,
+			description: sql<string>`left(${findings.relevanceExplanation}, 800)`,
+			article: claimText ? sql<string | null>`left(${resources.content}, 6000)` : sql<null>`null`,
+			contentKey: resources.contentKey,
+			publicationDateHint: topicMemoryPublicationDateHint,
+		})
+		.from(findings)
+		.innerJoin(resources, eq(resources.id, findings.resourceId))
+		.innerJoin(scans, eq(scans.id, findings.scanId))
+		.where(and(toTopicMemoryFindingFilter(topicId), inArray(findings.id, findingIds)))
+	// load at most three public articles outside the write transaction
+	const evidence = await Promise.all(
+		rows
+			.toSorted((a, b) => findingIds.indexOf(a.id) - findingIds.indexOf(b.id))
+			.map(async ({ id, startedAt, article, contentKey, ...finding }, index) => {
+				const articleContext =
+					claimText && index < 3 ? await toArticleExcerpt(article, contentKey, claimText, finding.snippet) : undefined
+				return [
+					id,
+					{ ...finding, snippet: finding.snippet?.slice(0, 240) ?? null, day: toUtcDay(startedAt), articleContext },
+				] as const
+			}),
+	)
+	return new Map(evidence)
+}
+
+async function toArticleExcerpt(
+	inline: string | null,
+	contentKey: string | null,
+	claimText: string,
+	snippet: string | null,
+): Promise<string | undefined> {
+	// use retained article text and fall back to the selected Finding excerpt if it has expired
+	const article = inline || (contentKey ? await getResourceContent(contentKey).catch(() => "") : "") || snippet || ""
+	const searchable = article.toLowerCase()
+	const phrase = claimText.toLowerCase().replace(/[.!?]+$/, "")
+	const names = claimText.match(/\b[\p{Lu}][\p{L}’'-]+(?: +[\p{Lu}][\p{L}’'-]+)+/gu) ?? []
+	// a fragment often paraphrases the source while still quoting a person or institution by name
+	const match =
+		[phrase, ...names.map((name) => name.toLowerCase())]
+			.map((anchor) => searchable.indexOf(anchor))
+			.find((position) => position >= 0) ?? 0
+	const start = Math.max(0, match - 550)
+	const excerpt = article.slice(start, start + 1400)
+	const dateline = article.match(/^(?:Posted On|Published(?: On)?)\s*:?\s+([A-Za-z]+ \d{1,2},? \d{4})/im)?.[1]
+	return dateline ? `Reported ${dateline}.\n${excerpt}` : excerpt || undefined
 }

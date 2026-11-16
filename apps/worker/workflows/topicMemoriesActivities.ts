@@ -4,22 +4,27 @@ import { db } from "@carlnotes/db"
 import { scans } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
 import { HEARTBEAT_INTERVAL_MS } from "@carlnotes/pipeline/stageTimeouts"
-import { updateTopicTakeaways } from "@carlnotes/pipeline/updateTopicTakeaways"
+import { TopicMemoryAuthenticationError, updateTopicMemories } from "@carlnotes/pipeline/updateTopicMemories"
+import { reportError } from "@carlnotes/server/monitoring"
 import { ApplicationFailure, Context } from "@temporalio/activity"
 import { and, desc, eq, gt, lte, sql } from "drizzle-orm"
 
-/** Runs one idempotent takeaway update outside the workflow sandbox. */
-export async function updateTopicTakeawaysActivity(scanId: string): ReturnType<typeof updateTopicTakeaways> {
+/** Runs one idempotent topic memory update outside the workflow sandbox. */
+export async function updateTopicMemoriesActivity(scanId: string): ReturnType<typeof updateTopicMemories> {
 	// heartbeat so Temporal can cancel in-flight model calls, and stop before the activity's hard timeout
 	const activity = Context.current()
 	const signal = AbortSignal.any([activity.cancellationSignal, AbortSignal.timeout(TOPIC_MEMORY_ATTEMPT_DEADLINE_MS)])
 	const heartbeat = setInterval(() => activity.heartbeat(), HEARTBEAT_INTERVAL_MS)
 	try {
-		return await updateTopicTakeaways(scanId, signal)
-	} catch {
+		return await updateTopicMemories(scanId, signal)
+	} catch (error) {
 		// provider errors can include prompts or credential details. do not copy them to workflow history or logs
 		signal.throwIfAborted()
-		throw ApplicationFailure.retryable("Journal takeaway update failed", "TopicTakeawayUpdateFailed")
+		if (error instanceof TopicMemoryAuthenticationError) {
+			reportError(error, "worker", { scanId, operation: "topicMemories" })
+			throw ApplicationFailure.nonRetryable(error.message, "TopicMemoryAuthenticationFailed")
+		}
+		throw ApplicationFailure.retryable("Journal topic memory update failed", "TopicMemoryUpdateFailed")
 	} finally {
 		clearInterval(heartbeat)
 	}

@@ -42,7 +42,7 @@ import {
 	sendScanEmailWorkflow,
 } from "./sendScanEmail"
 
-import { updateTopicTakeawaysWorkflow } from "./topicMemories"
+import { updateTopicMemoriesWorkflow } from "./topicMemories"
 
 // the queue that a Scan's closing writes run on, apart from the scan slots
 export const SCAN_CLOSING_TASK_QUEUE = "scan-closing"
@@ -264,11 +264,11 @@ async function startTopicMemories(
 	scanId: string,
 	status: scanActivities.IngestStageResult["status"] | undefined,
 ): Promise<void> {
-	if (status !== "succeeded" || !patched("topic-takeaway-update")) {
+	if (status !== "succeeded" || !patched("topic-memory-update")) {
 		return
 	}
 	try {
-		await startChild(updateTopicTakeawaysWorkflow, {
+		await startChild(updateTopicMemoriesWorkflow, {
 			workflowId: `topic-memories-${scanId}`,
 			taskQueue: TOPIC_MEMORY_TASK_QUEUE,
 			parentClosePolicy: ParentClosePolicy.ABANDON,
@@ -276,7 +276,7 @@ async function startTopicMemories(
 		})
 	} catch (error) {
 		if (!(error instanceof Error && error.name === "WorkflowExecutionAlreadyStartedError")) {
-			log.warn("could not start the takeaway update", { scanId })
+			log.warn("could not start the topic memory update", { scanId })
 		}
 	}
 }

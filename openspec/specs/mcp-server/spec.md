@@ -1289,9 +1289,9 @@ in its text that only the caller can see the new image until Carl finishes check
 
 ### Requirement: MCP can read a Topic's Journal
 
-The server SHALL advertise `read_topic_memories` as a paginated read. It SHALL apply Topic visibility before reading takeaways.
+The server SHALL advertise `read_topic_memories` as a paginated read. It SHALL apply Topic visibility before reading topic memories.
 
-#### Scenario: A visitor requests a private Topic's takeaways
+#### Scenario: A visitor requests a private Topic's topic memories
 
 - **WHEN** the visitor calls the tool for that Topic
-- **THEN** the tool withholds its takeaways
+- **THEN** the tool withholds its topic memories

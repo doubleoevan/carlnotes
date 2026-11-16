@@ -12,13 +12,13 @@ import { TopicSettingsCard } from "./TopicSettingsCard"
 type TopicPageCardsProps = {
 	topic: TopicResponse
 	onNoteCountChange?: (noteCount: number | null) => void
-	onTakeawayRemoved?: () => void
+	onTopicMemoryRemoved?: () => void
 }
 
 /**
  * Presents the web Topic page's cards in their phone-width order.
  */
-export function TopicPageCards({ topic, onNoteCountChange, onTakeawayRemoved }: TopicPageCardsProps) {
+export function TopicPageCards({ topic, onNoteCountChange, onTopicMemoryRemoved }: TopicPageCardsProps) {
 	return (
 		<View className="mx-4">
 			{/* the prompt and recap precede the read-only configuration */}
@@ -31,7 +31,7 @@ export function TopicPageCards({ topic, onNoteCountChange, onTakeawayRemoved }: 
 			{/* the topic's films, history, and neighboring topics follow its configuration */}
 			<PodcastEpisodesCard topic={topic} format="video" />
 			<PodcastEpisodesCard topic={topic} />
-			<TopicScanHistory topic={topic} onTakeawayRemoved={onTakeawayRemoved} />
+			<TopicScanHistory topic={topic} onTopicMemoryRemoved={onTopicMemoryRemoved} />
 			<NotesSection topic={topic} onNoteCountChange={onNoteCountChange} />
 			<RelatedTopicsSection relatedTopics={topic.relatedTopics} />
 		</View>

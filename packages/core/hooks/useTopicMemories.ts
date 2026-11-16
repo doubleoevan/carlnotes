@@ -1,6 +1,11 @@
 // read only the open Journal's current page and keep unsent feedback after a failed write
 import { fetchTopicMemories, rateTopicMemory } from "@carlnotes/client/topicMemoriesClient"
-import type { TopicMemoriesPage, TopicMemory, TopicMemoryFeedback } from "@carlnotes/contracts/topicMemories"
+import {
+	type TopicMemoriesPage,
+	type TopicMemory,
+	type TopicMemoryFeedback,
+	toTopicMemoryPageNumber,
+} from "@carlnotes/contracts/topicMemories"
 import { type UseQueryResult, useMutation, useQuery } from "@tanstack/react-query"
 import { useEffect, useState } from "react"
 
@@ -15,7 +20,7 @@ type TopicMemoriesDialogState = {
 	pageNumber: number
 	isSaving: boolean
 	hasSaveError: boolean
-	hasReachedSavedTakeawayLimit: boolean
+	hasReachedSavedTopicMemoryLimit: boolean
 	// both platform adapters call the same paging and feedback actions
 	handleRate: (item: TopicMemory, feedback: TopicMemoryFeedback) => void
 	handleOpenPage: (page: number) => void
@@ -25,51 +30,48 @@ type TopicMemoriesDialogState = {
 export function useTopicMemories({
 	topicId,
 	userId,
-	onTakeawayRemoved,
+	onTopicMemoryRemoved,
 	client = DEFAULT_CLIENT,
 }: {
 	topicId: string
 	userId: string | null
-	onTakeawayRemoved?: () => void
+	onTopicMemoryRemoved?: () => void
 	client?: TopicMemoriesClient
 }): TopicMemoriesDialogState {
 	// a different viewer cannot reuse the previous viewer's page
 	const [pageNumber, setPageNumber] = useState(1)
 	const query = useQuery({
 		queryKey: ["topic-journal", userId, topicId, pageNumber],
-		queryFn: async ({ signal }) => ({
-			...(await client.read({ topicId, page: pageNumber, signal })),
-			pageNumber,
-		}),
+		queryFn: async ({ signal }) => {
+			// number the rows using the page served by the current count
+			const page = await client.read({ topicId, page: pageNumber, signal })
+			return { ...page, pageNumber: toTopicMemoryPageNumber(pageNumber, page.pageCount) }
+		},
 		gcTime: 0,
 		placeholderData: (previous, previousQuery) => {
 			const key = previousQuery?.queryKey
 			return key?.[1] === userId && key?.[2] === topicId ? previous : undefined
 		},
 	})
-	// an out-of-band removal can make the page disappear during a background refresh
-	const loadedPage = query.data?.pageNumber
-	const pageCount = query.data?.pageCount
+	// keep the next refresh on the page the server served after a removal or regroup
+	const shownPage = query.isPlaceholderData ? pageNumber : (query.data?.pageNumber ?? pageNumber)
 	useEffect(() => {
-		if (loadedPage === pageNumber && pageCount !== undefined) {
-			const lastPage = Math.max(1, pageCount)
-			if (pageNumber > lastPage) {
-				setPageNumber(lastPage)
-			}
+		if (shownPage !== pageNumber) {
+			setPageNumber(shownPage)
 		}
-	}, [loadedPage, pageCount, pageNumber])
+	}, [shownPage, pageNumber])
 
-	// refresh after a vote moves a takeaway or removes the page's last row
+	// refresh after a vote moves a topic memory or removes the page's last row
 	const mutation = useMutation({
 		mutationFn: ({ id, feedback }: { id: string; feedback: TopicMemoryFeedback }) =>
 			client.rate({ topicId, topicMemoryId: id, feedback }),
 		onSuccess: async ({ status }, { feedback }) => {
-			if (status === "savedTakeawayLimit") {
+			if (status === "savedTopicMemoryLimit") {
 				return
 			}
-			// a downvote without a correction removes the takeaway from the header count
+			// a downvote without a correction removes the topic memory from the header count
 			if (feedback.rating === "down" && !feedback.note?.trim()) {
-				onTakeawayRemoved?.()
+				onTopicMemoryRemoved?.()
 			}
 			await query.refetch()
 		},
@@ -77,10 +79,10 @@ export function useTopicMemories({
 
 	return {
 		query,
-		pageNumber,
+		pageNumber: shownPage,
 		isSaving: mutation.isPending,
 		hasSaveError: mutation.isError,
-		hasReachedSavedTakeawayLimit: mutation.data?.status === "savedTakeawayLimit",
+		hasReachedSavedTopicMemoryLimit: mutation.data?.status === "savedTopicMemoryLimit",
 		handleRate: (item, feedback) => mutation.mutate({ id: item.id, feedback }),
 		handleOpenPage: setPageNumber,
 	}

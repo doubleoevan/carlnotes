@@ -1,13 +1,13 @@
-// the shared Journal section used by each prompt that reads takeaways
+// the shared Journal section used by each prompt that reads topic memories
 import { FALLBACK_PROMPT_TEMPLATES } from "./fetch"
 import { writePrompt } from "./write"
 
-/** Renders the background fragment with the takeaways and feedback in its untrusted block. */
+/** Renders the background fragment with the topic memories and feedback in its untrusted block. */
 export function writeTopicMemoryBackground(
-	takeaways: string,
+	topicMemories: string,
 	template = FALLBACK_PROMPT_TEMPLATES["topic-memory-background"],
 ): string {
-	return writePrompt(template, { takeaways })
+	return writePrompt(template, { topicMemories })
 }
 
 /** Gives a previous registry version the background slot until the new templates are synced. */

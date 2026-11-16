@@ -1,10 +1,10 @@
 import { cn } from "@carlnotes/nightshift/classNames"
 import {
-	type TakeawayRowContent,
-	type TakeawaySkeletonProps,
-	takeawaysListClasses,
-	takeawaysSkeletonMetrics,
-} from "@carlnotes/nightshift/components/takeaways-list"
+	type TopicMemoryRowContent,
+	type TopicMemorySkeletonProps,
+	topicMemoriesListClasses,
+	topicMemoriesSkeletonMetrics,
+} from "@carlnotes/nightshift/components/topic-memories-list"
 import { type ReactNode, useState } from "react"
 import { View } from "react-native"
 import { SkeletonPulse } from "@/components/common/SkeletonPulse"
@@ -13,26 +13,26 @@ import { Text } from "./text"
 
 // line up the text and number with the web while the native feedback controls keep equal heights
 const TEXT_ROW_CLASS = "flex-row items-start gap-2.5"
-const NUMBER_CLASS = cn(takeawaysListClasses.text, "shrink-0 font-normal text-muted-foreground")
-const BODY_CLASS = cn(takeawaysListClasses.text, "font-normal pb-1")
+const NUMBER_CLASS = cn(topicMemoriesListClasses.text, "shrink-0 font-normal text-muted-foreground")
+const BODY_CLASS = cn(topicMemoriesListClasses.text, "font-normal pb-1")
 const CONTENT_CLASS = "min-w-0 flex-1"
 
 /** Shows the same Nightshift card as the web and MCP Journal. */
-export function TakeawaysList({ children, isLoading }: { children: ReactNode; isLoading: boolean }) {
+export function TopicMemoriesList({ children, isLoading }: { children: ReactNode; isLoading: boolean }) {
 	return (
-		<View accessibilityState={{ busy: isLoading }} className={takeawaysListClasses.card}>
+		<View accessibilityState={{ busy: isLoading }} className={topicMemoriesListClasses.card}>
 			{isLoading ? <SkeletonPulse>{children}</SkeletonPulse> : children}
 		</View>
 	)
 }
 
-/** Aligns the native feedback field with the takeaway text. */
-export function TakeawayRow({
+/** Aligns the native feedback field with the topic memory text. */
+export function TopicMemoryRow({
 	text,
 	itemNumber,
 	isLast,
 	children,
-}: TakeawayRowContent & { text: string; children?: ReactNode }) {
+}: TopicMemoryRowContent & { text: string; children?: ReactNode }) {
 	return (
 		<View className={rowClass(Boolean(children), isLast)}>
 			<View className={TEXT_ROW_CLASS}>
@@ -47,10 +47,10 @@ export function TakeawayRow({
 }
 
 /** Fills one bar per wrapped text line, including when the system font is larger. */
-export function TakeawaySkeleton({ text, itemNumber, isLast, canRate = false }: TakeawaySkeletonProps) {
+export function TopicMemorySkeleton({ text, itemNumber, isLast, canRate = false }: TopicMemorySkeletonProps) {
 	// start with three lines until the previous text's wrapped line count is available
-	const [lines, setLines] = useState({ count: 3, height: Number(takeawaysSkeletonMetrics.lineHeight) })
-	const barInset = Math.max(0, (lines.height - takeawaysSkeletonMetrics.barHeight) / 2)
+	const [lines, setLines] = useState({ count: 3, height: Number(topicMemoriesSkeletonMetrics.lineHeight) })
+	const barInset = Math.max(0, (lines.height - topicMemoriesSkeletonMetrics.barHeight) / 2)
 	const lineKeys = Array.from({ length: lines.count }, (_, line) => `line-${line}`)
 	return (
 		<View
@@ -61,7 +61,7 @@ export function TakeawaySkeleton({ text, itemNumber, isLast, canRate = false }: 
 			<View className={TEXT_ROW_CLASS}>
 				<View className="relative shrink-0">
 					<Text className={cn(NUMBER_CLASS, "opacity-0")}>{itemNumber}</Text>
-					<View className={cn(takeawaysListClasses.skeletonBar, "absolute inset-x-0")} style={{ top: barInset }} />
+					<View className={cn(topicMemoriesListClasses.skeletonBar, "absolute inset-x-0")} style={{ top: barInset }} />
 				</View>
 				<View className={CONTENT_CLASS}>
 					{/* match the platform's actual wrapping instead of stretching a fixed set of bars */}
@@ -88,7 +88,7 @@ export function TakeawaySkeleton({ text, itemNumber, isLast, canRate = false }: 
 						)}
 						<View className="absolute inset-x-0" style={{ top: barInset, gap: barInset * 2 }}>
 							{lineKeys.map((lineKey) => (
-								<View key={lineKey} className={takeawaysListClasses.skeletonBar} />
+								<View key={lineKey} className={topicMemoriesListClasses.skeletonBar} />
 							))}
 						</View>
 					</View>
@@ -102,8 +102,8 @@ export function TakeawaySkeleton({ text, itemNumber, isLast, canRate = false }: 
 // reserve the same insets in the loaded row and its skeleton
 function rowClass(canRate: boolean, isLast: boolean): string {
 	return cn(
-		takeawaysListClasses.row,
-		canRate ? takeawaysListClasses.feedbackInset : takeawaysListClasses.readOnlyInset,
+		topicMemoriesListClasses.row,
+		canRate ? topicMemoriesListClasses.feedbackInset : topicMemoriesListClasses.readOnlyInset,
 		!isLast && "border-b border-dashed border-separator-strong",
 	)
 }

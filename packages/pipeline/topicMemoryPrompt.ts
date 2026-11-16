@@ -7,7 +7,7 @@ import { fetchPromptTemplate } from "@carlnotes/models/prompts/fetch"
 import { writeTopicMemoryBackground } from "@carlnotes/models/prompts/topicMemoryBackground"
 
 // UTF-8 bytes provide a conservative bound for byte-pair tokenization, even for short non-English text
-const TAKEAWAY_TOKEN_BUDGET = 1800
+const TOPIC_MEMORY_PROMPT_BYTE_LIMIT = 1800
 const encoder = new TextEncoder()
 
 type TopicMemoryPromptRow = {
@@ -19,7 +19,7 @@ type TopicMemoryPromptRow = {
 	feedback?: TopicMemoryPromptFeedback[]
 }
 
-/** Reads ranked takeaways for one Topic. Published scripts request public Topics only. */
+/** Reads ranked topic memories for one Topic. Published scripts request public Topics only. */
 export async function loadTopicMemoryPrompt({
 	topicId,
 	embeddings,
@@ -42,7 +42,7 @@ export async function loadTopicMemoryPrompt({
 export function toTopicMemoryPromptText(rows: TopicMemoryPromptRow[], template?: string): string {
 	// budget the formatted lines before fencing them with a fixed overhead
 	const lines: string[] = []
-	let remainingBytes = TAKEAWAY_TOKEN_BUDGET
+	let remainingBytes = TOPIC_MEMORY_PROMPT_BYTE_LIMIT
 	// a longer correction can exhaust the remaining budget before the page limit
 	for (const row of rows.slice(0, TOPIC_MEMORY_PROMPT_LIMIT)) {
 		const line = toDatedClaimLine(row)
@@ -68,7 +68,8 @@ export function toTopicMemoryPromptText(rows: TopicMemoryPromptRow[], template?:
 // keep event and observation dates separate so Carl can interpret dates in a historical Scan
 function toDatedClaimLine({ text, correction, factDate, person, lastSeenAt }: TopicMemoryPromptRow): string {
 	const claim = correction ? `do not say ${text}; the correction says ${correction}` : text
-	const eventDate = factDate ? `Event date ${factDate}. ` : ""
+	const datePrecision = factDate?.length === 4 ? "year" : factDate?.length === 7 ? "month" : "date"
+	const eventDate = factDate ? `Event ${datePrecision} ${factDate}. ` : ""
 	const identity = person ? `Person ${person.name} (${person.identifyingDetail}). ` : ""
 	return `- [${eventDate}${identity}Last seen in the ${toUtcDay(lastSeenAt)} Scan] ${claim}`
 }

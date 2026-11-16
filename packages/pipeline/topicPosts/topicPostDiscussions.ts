@@ -121,7 +121,7 @@ export async function writeTopicPostDiscussionScript(discussionId: string, hint?
 			script: topicPostDiscussions.script,
 			topicPostId: topicPosts.id,
 			topicId: topicPosts.topicId,
-			hasPublicTakeaways: sql<boolean>`exists (select 1 from ${topicMemories}
+			hasPublicTopicMemories: sql<boolean>`exists (select 1 from ${topicMemories}
 				inner join ${topics} on ${topics.id} = ${topicMemories.topicId}
 				where ${topicMemories.topicId} = ${topicPosts.topicId}
 				and ${topicMemories.status} = 'active' and ${topics.visibility} = 'public')`,
@@ -154,10 +154,10 @@ export async function writeTopicPostDiscussionScript(discussionId: string, hint?
 		isUsernameSpeakable(discussion.authorUsername),
 	])
 
-	// embed a bounded excerpt only when the public Topic has takeaways
+	// embed a bounded excerpt only when the public Topic has topic memories
 	const litellmApiKey = await loadOrProvisionUserLiteLLMKey(discussion.userId)
 	let topicMemoryPrompt = ""
-	if (discussion.hasPublicTakeaways) {
+	if (discussion.hasPublicTopicMemories) {
 		const text = `${discussion.title}\n${toHtmlText(discussion.html)}`.slice(0, 4000)
 		const embedding = await embedVector(text, { litellmApiKey, maxRetries: 0 })
 		const cost = tokenCost(toEstimatedTokens(text.length), EMBED_COST_PER_MILLION_TOKENS)

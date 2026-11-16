@@ -42,7 +42,7 @@ export const MCP_VIEWS = [
 	"activity",
 	"account",
 	"topics",
-	"takeaways",
+	"topic-memories",
 ] as const
 
 export type McpView = (typeof MCP_VIEWS)[number]
@@ -130,11 +130,11 @@ export type McpViewData = {
 	activity?: McpViewActivity
 	account?: McpViewAccount
 	topics?: McpViewTopics
-	takeaways?: McpViewTakeaways
+	topicMemories?: McpViewTopicMemories
 }
 
 // the Journal view shows public-facing text and pages through the same read-only tool
-export type McpViewTakeaways = {
+export type McpViewTopicMemories = {
 	topicId: string
 	pageNumber: number
 	pageCount: number

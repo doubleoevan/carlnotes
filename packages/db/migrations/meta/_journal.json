@@ -1268,6 +1268,27 @@
       "when": 1794809492209,
       "tag": "0180_rename_scan_takeaway_update_time",
       "breakpoints": true
+    },
+    {
+      "idx": 181,
+      "version": "7",
+      "when": 1794839762480,
+      "tag": "0181_structured_topic_memories",
+      "breakpoints": true
+    },
+    {
+      "idx": 182,
+      "version": "7",
+      "when": 1794849221057,
+      "tag": "0182_topic_memory_date_precision",
+      "breakpoints": true
+    },
+    {
+      "idx": 183,
+      "version": "7",
+      "when": 1794871519552,
+      "tag": "0183_topic_memory_subject_aliases",
+      "breakpoints": true
     }
   ]
 }

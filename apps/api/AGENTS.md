@@ -726,7 +726,7 @@ no topic tool, and `chat/chatTurns.ts` stores the turn with the kind `topic_post
 and replays it in the topic's private chat with the post's title and page.
 
 `topic/topicMemoriesRoute.ts` gates Journal reads and rate-limited feedback. `mcp/topicMemoriesTool.ts` registers
-`read_topic_memories` with the same Topic visibility gate. Its read-only `takeaways` view receives the authorized page's
+`read_topic_memories` with the same Topic visibility gate. Its read-only `topic-memories` view receives the authorized page's
 text and pagination metadata.
 
 `rate_finding` saves the optional note in the same write as the rating. The view-only

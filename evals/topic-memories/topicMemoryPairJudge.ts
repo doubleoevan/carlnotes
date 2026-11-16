@@ -2,22 +2,23 @@
 
 import { toChunks } from "@carlnotes/contracts/arrays"
 import type { TopicMemoryPerson } from "@carlnotes/contracts/topicMemories"
-import { TOPIC_MEMORY_MERGE_SIMILARITY, TOPIC_MEMORY_REVIEW_SIMILARITY } from "@carlnotes/contracts/topicMemoryWork"
+import { toTopicMemorySimilarity } from "@carlnotes/db/topicMemoryGroups"
 import { LOW_REASONING_PROVIDER_OPTIONS, SCORE_OUTPUT_TOKENS, scoreModel } from "@carlnotes/models/models"
+import { PRIVATE_MODEL_OPTIONS } from "@carlnotes/models/privateModelOptions"
 import { fetchPromptTemplate, promptTelemetry } from "@carlnotes/models/prompts/fetch"
 import { writePrompt } from "@carlnotes/models/prompts/write"
-import { toLinkedTopicMemoryGroups, toTopicMemorySimilarity } from "@carlnotes/pipeline/topicMemoryOperations"
+import { toLinkedTopicMemoryGroups } from "@carlnotes/pipeline/topicMemoryOperations"
 import { runWithConcurrency } from "@carlnotes/server/concurrency"
 import { generateText, Output } from "ai"
 import { z } from "zod"
 
 const JUDGE_COSINE_FLOOR = 0.8
-const EVAL_THRESHOLDS = [TOPIC_MEMORY_REVIEW_SIMILARITY, 0.85, 0.92, 0.94, 0.95, 0.96, TOPIC_MEMORY_MERGE_SIMILARITY]
+const EVAL_THRESHOLDS = [0.8, 0.85, 0.92, 0.94, 0.95, 0.96, 0.98]
 const JUDGE_BATCH_SIZE = 8
 const CONCURRENT_JUDGE_BATCHES = 4
 const verdicts = z.object({ pairs: z.array(z.object({ id: z.string(), duplicate: z.boolean() })) })
 
-export type Takeaway = {
+export type EvaluatedTopicMemory = {
 	text: string
 	embedding: number[]
 	memoryId?: string
@@ -50,13 +51,13 @@ type JudgedStage = {
 	thresholds: ({ threshold: number } & ThresholdMetrics)[]
 }
 
-export async function judgeTakeaways({
+export async function judgeTopicMemories({
 	before,
 	after,
 	apiKey,
 }: {
-	before: Takeaway[]
-	after: Takeaway[]
+	before: EvaluatedTopicMemory[]
+	after: EvaluatedTopicMemory[]
 	apiKey: string
 }): Promise<{
 	before: JudgedStage
@@ -69,6 +70,26 @@ export async function judgeTakeaways({
 	const beforePairs = toCandidatePairs(before, "a")
 	const afterPairs = toCandidatePairs(after, "b")
 	const texts = [...toPairTexts(before, beforePairs), ...toPairTexts(after, afterPairs)]
+	const labels = await labelTopicMemoryPairs(texts, apiKey)
+	return {
+		before: summarize(before, beforePairs, labels),
+		after: summarize(after, afterPairs, labels),
+		judgeComparisons: labels.size,
+		pipeline: scorePipeline(beforePairs, labels),
+		pairs: [
+			...toJudgedPairs(before, beforePairs, labels, "before"),
+			...toJudgedPairs(after, afterPairs, labels, "after"),
+		],
+	}
+}
+
+type TopicMemoryJudgePair = ReturnType<typeof toPairTexts>[number]
+
+/** Labels the supplied statements with the same blind judge used by the replay. */
+export async function labelTopicMemoryPairs(
+	texts: TopicMemoryJudgePair[],
+	apiKey: string,
+): Promise<Map<string, boolean>> {
 	const batches = toChunks(texts, JUDGE_BATCH_SIZE)
 	const { template, name, registryPrompt } = await fetchPromptTemplate("judge-topic-memory-duplicates")
 	const labels = new Map<string, boolean>()
@@ -100,6 +121,7 @@ export async function judgeTakeaways({
 			maxOutputTokens: SCORE_OUTPUT_TOKENS,
 			providerOptions: LOW_REASONING_PROVIDER_OPTIONS,
 			...promptTelemetry({ prompt, name, registryPrompt }),
+			...PRIVATE_MODEL_OPTIONS,
 		})
 		// missing or extra verdicts invalidate the batch. every candidate pair needs a label
 		const expected = new Set(pairs.map(({ id }) => id))
@@ -114,21 +136,12 @@ export async function judgeTakeaways({
 		return output.pairs
 	}
 
-	return {
-		before: summarize(before, beforePairs, labels),
-		after: summarize(after, afterPairs, labels),
-		judgeComparisons: labels.size,
-		pipeline: scorePipeline(beforePairs, labels),
-		pairs: [
-			...toJudgedPairs(before, beforePairs, labels, "before"),
-			...toJudgedPairs(after, afterPairs, labels, "after"),
-		],
-	}
+	return labels
 }
 
 // keep the independent labels and their actual input texts for audit and further threshold sweeps
 function toJudgedPairs(
-	rows: Takeaway[],
+	rows: EvaluatedTopicMemory[],
 	pairs: Pair[],
 	labels: Map<string, boolean>,
 	stage: JudgedPair["stage"],
@@ -148,7 +161,7 @@ function toJudgedPairs(
 	}))
 }
 
-function toCandidatePairs(rows: Takeaway[], prefix: string): Pair[] {
+function toCandidatePairs(rows: EvaluatedTopicMemory[], prefix: string): Pair[] {
 	const pairs: Pair[] = []
 	for (const [right, second] of rows.entries()) {
 		for (let left = 0; left < right; left++) {
@@ -185,7 +198,7 @@ function scorePipeline(pairs: Pair[], labels: Map<string, boolean>): ThresholdMe
 }
 
 function toPairTexts(
-	rows: Takeaway[],
+	rows: EvaluatedTopicMemory[],
 	pairs: Pair[],
 ): Omit<JudgedPair, "stage" | "duplicate" | "combined" | "cosine">[] {
 	return pairs.map(({ id, left, right }) => ({
@@ -199,7 +212,7 @@ function toPairTexts(
 	}))
 }
 
-function summarize(rows: Takeaway[], pairs: Pair[], labels: Map<string, boolean>): JudgedStage {
+function summarize(rows: EvaluatedTopicMemory[], pairs: Pair[], labels: Map<string, boolean>): JudgedStage {
 	// count redundant rows by the connected components of positively labelled pairs
 	const positivePairs = pairs.filter(({ id }) => labels.get(id) === true)
 	const links = new Set(positivePairs.map(({ left, right }) => `${left}:${right}`))

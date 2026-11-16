@@ -3,7 +3,7 @@ import { fn } from "storybook/test"
 import { useSyncedArg } from "../../../.storybook/useSyncedArg"
 import { RatingWithFeedback, RatingWithFeedbackSkeleton } from "./rating-with-feedback"
 
-// preview the row on the card surface used by Findings and Takeaways
+// preview the row on the card surface used by Findings and TopicMemories
 const meta = {
 	title: "Primitives/RatingWithFeedback",
 	component: RatingWithFeedback,

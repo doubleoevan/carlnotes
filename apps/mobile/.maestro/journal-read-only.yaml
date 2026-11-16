@@ -11,10 +11,10 @@ name: Journal story - ReadOnly
     visible: "3 entries · 6 takeaways"
     timeout: 20000
 - tapOn: "^Journal$"
-- assertVisible: "Topic Takeaways 🧠"
+- assertVisible: "6 Topic Takeaways 🧠"
 - assertVisible: "A coarser grind can reduce bitterness in a slow pour-over."
 - assertNotVisible: "Feedback for Carl .*"
 - assertNotVisible: "Thumbs (up|down) for takeaway:.*"
 - tapOn: "Takeaways pages: next page"
 - assertVisible: "Cafés are using more low-caffeine blends."
-- tapOn: "Close Topic Takeaways.*"
+- tapOn: "Close 6 Topic Takeaways.*"

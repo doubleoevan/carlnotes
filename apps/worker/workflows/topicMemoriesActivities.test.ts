@@ -1,41 +1,61 @@
 import { afterEach, expect, spyOn, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
-import * as topicMemories from "@carlnotes/pipeline/updateTopicTakeaways"
+import * as topicMemories from "@carlnotes/pipeline/updateTopicMemories"
+import * as monitoring from "@carlnotes/server/monitoring"
 import { MockActivityEnvironment } from "@temporalio/testing"
-import { listTopicMemoryBackfillPage, updateTopicTakeawaysActivity } from "./topicMemoriesActivities"
+import { listTopicMemoryBackfillPage, updateTopicMemoriesActivity } from "./topicMemoriesActivities"
 
 afterEach(restoreConnectionPool)
 
-test("the takeaway update propagates a spend pause without scheduling a retry", async () => {
-	const updateTakeaways = spyOn(topicMemories, "updateTopicTakeaways").mockResolvedValue("paused")
+test("the topic memory update propagates a spend pause without scheduling a retry", async () => {
+	const updateTopicMemories = spyOn(topicMemories, "updateTopicMemories").mockResolvedValue("paused")
 	try {
 		// run inside the activity context so the caller supplies its cancellation signal
 		const environment = new MockActivityEnvironment()
-		expect(await environment.run(updateTopicTakeawaysActivity, "brew-1")).toBe("paused")
-		expect(updateTakeaways).toHaveBeenCalledTimes(1)
-		expect(updateTakeaways).toHaveBeenCalledWith("brew-1", expect.any(AbortSignal))
+		expect(await environment.run(updateTopicMemoriesActivity, "brew-1")).toBe("paused")
+		expect(updateTopicMemories).toHaveBeenCalledTimes(1)
+		expect(updateTopicMemories).toHaveBeenCalledWith("brew-1", expect.any(AbortSignal))
 	} finally {
-		updateTakeaways.mockRestore()
+		updateTopicMemories.mockRestore()
 	}
 })
 
 test("Journal cancellation stops the activity and provider errors omit the original message", async () => {
 	// cancellation reaches the pipeline and the provider's original error never crosses the activity boundary
-	const updateTakeaways = spyOn(topicMemories, "updateTopicTakeaways").mockImplementation((_, signal) => {
+	const updateTopicMemories = spyOn(topicMemories, "updateTopicMemories").mockImplementation((_, signal) => {
 		return Promise.reject(signal.aborted ? signal.reason : new Error("provider returned credential data"))
 	})
 	try {
 		const environment = new MockActivityEnvironment()
-		await expect(environment.run(updateTopicTakeawaysActivity, "brew-1")).rejects.toThrow(
-			"Journal takeaway update failed",
+		await expect(environment.run(updateTopicMemoriesActivity, "brew-1")).rejects.toThrow(
+			"Journal topic memory update failed",
 		)
 
 		// cancelling the attempt aborts the exact signal sent to the pipeline
 		environment.cancel()
-		const signal = updateTakeaways.mock.calls[0]?.[1]
+		const signal = updateTopicMemories.mock.calls[0]?.[1]
 		expect(signal?.aborted).toBe(true)
 	} finally {
-		updateTakeaways.mockRestore()
+		updateTopicMemories.mockRestore()
+	}
+})
+
+test("a rejected owner key is reported as a visible nonretryable Journal failure", async () => {
+	// a typed pipeline error exposes only a safe message and the Scan identifier
+	const failure = new topicMemories.TopicMemoryAuthenticationError()
+	const update = spyOn(topicMemories, "updateTopicMemories").mockRejectedValue(failure)
+	const report = spyOn(monitoring, "reportError").mockImplementation(() => {})
+	try {
+		const environment = new MockActivityEnvironment()
+		await expect(environment.run(updateTopicMemoriesActivity, "brew-1")).rejects.toMatchObject({
+			type: "TopicMemoryAuthenticationFailed",
+			nonRetryable: true,
+			message: failure.message,
+		})
+		expect(report).toHaveBeenCalledWith(failure, "worker", { scanId: "brew-1", operation: "topicMemories" })
+	} finally {
+		update.mockRestore()
+		report.mockRestore()
 	}
 })
 

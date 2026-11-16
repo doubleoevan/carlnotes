@@ -3,6 +3,7 @@ import { authClient } from "@carlnotes/client/authClient"
 import { fetchScanNote, removeTopicSource } from "@carlnotes/client/topicClient"
 import { KEEP_ONE_SOURCE_MESSAGE } from "@carlnotes/contracts/sources"
 import type { TopicResponse, TopicScan } from "@carlnotes/contracts/topics"
+import { toScanHistoryCounts } from "@carlnotes/core/components/TopicMemoriesDialog"
 import { usePagination } from "@carlnotes/core/hooks/usePagination"
 import { toScanTimestamp } from "@carlnotes/core/lib/labels"
 import { cn } from "@carlnotes/nightshift/classNames"
@@ -26,10 +27,10 @@ import { TopicScanRecap } from "./TopicScanRecap"
  */
 export function TopicScanHistory({
 	topic,
-	onTakeawayRemoved,
+	onTopicMemoryRemoved,
 }: {
 	topic: TopicResponse
-	onTakeawayRemoved?: () => void
+	onTopicMemoryRemoved?: () => void
 }) {
 	// use the web's five-row pages while keeping each scan's note lazy
 	const { pageRows: scans, pagination } = usePagination(topic.scans)
@@ -37,13 +38,17 @@ export function TopicScanHistory({
 		<CollapsibleSection
 			title="Brew diary"
 			titleAside={
-				<TopicMemoriesDialog
-					topicId={topic.id}
-					entryCount={topic.scans.length}
-					takeawayCount={topic.takeawayCount}
-					canRateTakeaways={topic.canRateTakeaways}
-					onTakeawayRemoved={onTakeawayRemoved}
-				/>
+				topic.topicMemoryCount === undefined ? (
+					<Text className="text-muted-foreground text-sm">{toScanHistoryCounts(topic.scans.length)}</Text>
+				) : (
+					<TopicMemoriesDialog
+						topicId={topic.id}
+						entryCount={topic.scans.length}
+						topicMemoryCount={topic.topicMemoryCount}
+						canRateTopicMemories={topic.canRateTopicMemories}
+						onTopicMemoryRemoved={onTopicMemoryRemoved}
+					/>
+				)
 			}
 			hasClosedDivider
 		>

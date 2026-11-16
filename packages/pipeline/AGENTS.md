@@ -360,12 +360,25 @@ turn reads of a Topic Post, its text and its shared Comments the reader may see,
 `chat/topicPostQuestionPrompt.ts` builds the `chat-topic-post` fragment and the fenced post block the topic chat
 prompt splices on that turn alone.
 
-`updateTopicTakeaways.ts` clusters kept public Findings and bills a proposal for each cluster.
+`updateTopicMemories.ts` clusters kept public Findings and bills a proposal for each cluster.
+`topicMemoryClaimReview.ts` checks one claim per topic memory and verifies split claims against their public Findings.
+`topicMemorySubjects.ts` loads each Topic’s canonical names and evidence-backed aliases for extraction. People match on the resolved name and identifying detail.
+`topicMemoryReconciliation.ts` matches checked claims and split pieces against the active Journal, with a token-budget fallback to neighbors.
+`applyTopicMemoryJournalUpdate.ts` checks the approved ID under the Topic lock and keeps replaced wording and evidence in history.
+`topicMemoryEmbeddings.ts` embeds checked claim text. `repairTopicMemoryClaims.ts` powers `topic-memories:repair-dev`.
+Pass `--compound-ids <json-file>` to repair the topic memories marked compound by a dev audit. The file contains an array of row IDs.
+Pass `--audit <json-file>` with a map of row IDs to compound, incomplete, or nonclaim to repair a reviewed batch. Incomplete
+claims use their linked Findings for a rewrite. Nonclaims move to history with their feedback.
 `topicMemoryEvidence.ts` selects eligible Findings and neighbors. `topicMemoryWrites.ts` commits a completed Scan's
-proposals before any cleanup calls. `applyTopicMemoryWrite.ts` applies a proposal and can reactivate matching history.
-`topicMemoryCleanupPairs.ts` loads flagged pairs and their dated evidence. `topicMemoryCleanupReview.ts` sends them to the
-model. `topicMemoryCleanup.ts` checks the reviewed rows under the Topic lock, preserves feedback and evidence, and
-evicts unprotected rows by recency. `topicMemoryPrompt.ts` builds the shared untrusted prompt slice.
-That slice gives each takeaway's last-seen Scan date so the model can distinguish provenance from the event's date.
+proposals, eviction, and completion marker in one transaction. `topicMemorySpend.ts` records model charges when each
+call finishes. `applyTopicMemoryWrite.ts` applies a proposal and can reactivate matching history.
+`topicMemoryReplacements.ts` asks the model whether a newer runtime or air date corrects the same event and edition.
+`topicMemoryCleanup.ts` limits ready active rows and copies feedback for splits. The 100-row target applies through
+eviction of unprotected rows. Saved topic memories and corrections stay active even if they alone exceed the target.
+Queued repairs are outside the ready set. Exact matches require the same value. The
+write rechecks an approved replacement under the Topic lock before moving its predecessor to history.
+`packages/db/topicMemoryGroups.ts` owns the reversible grouping used by the Journal, MCP view, and label export.
+`topicMemoryPrompt.ts` builds the shared untrusted prompt slice from one ranked claim per group.
+That slice gives each claim's event date precision and last-seen Scan date.
 Run `bun run smoke:topic-memories` against disposable Postgres with pgvector to exercise the write transaction and
 MCP membership gate. `evals/topic-memories/` replays dev Findings through the same production proposal and write paths.

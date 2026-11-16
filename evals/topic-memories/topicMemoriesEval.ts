@@ -6,17 +6,26 @@ import { topicMemories } from "@carlnotes/db/schema/topicMemories"
 import { topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
 import type { EmbeddedTopicMemoryWrite, TopicMemoryMergedPair } from "@carlnotes/pipeline/applyTopicMemoryWrite"
-import { confirmTopicMemoryCleanupPairs } from "@carlnotes/pipeline/topicMemoryCleanupReview"
+import { repairTopicMemoryClaims } from "@carlnotes/pipeline/repairTopicMemoryClaims"
+import { checkTopicMemoryClaims, type TopicMemoryClaimCounts } from "@carlnotes/pipeline/topicMemoryClaimReview"
 import { loadTopicMemoryFindings } from "@carlnotes/pipeline/topicMemoryEvidence"
 import { saveTopicMemoryUpdates } from "@carlnotes/pipeline/topicMemoryWrites"
-import { proposeTopicMemoryWrites } from "@carlnotes/pipeline/updateTopicTakeaways"
+import { proposeTopicMemoryWrites } from "@carlnotes/pipeline/updateTopicMemories"
 import { runWithConcurrency } from "@carlnotes/server/concurrency"
 import { and, eq, sql } from "drizzle-orm"
 import { loadTopicMemorySnapshot, type TopicMemorySnapshot } from "./topicMemoriesSnapshot"
-import { judgeTakeaways, type Takeaway, toThresholdMetrics } from "./topicMemoryPairJudge"
+import { type EvaluatedTopicMemory, judgeTopicMemories, toThresholdMetrics } from "./topicMemoryPairJudge"
 
 const [stage, snapshotPath, pairAuditPath] = Bun.argv.slice(2)
-type ReplayResult = { before: Takeaway[]; after: Takeaway[]; samples: TopicMemoryMergedPair[]; nonemptyBrews: number }
+type ReplayResult = {
+	before: EvaluatedTopicMemory[]
+	after: EvaluatedTopicMemory[]
+	samples: TopicMemoryMergedPair[]
+	nonemptyBrews: number
+	claimChecks: TopicMemoryClaimCounts
+	compoundTopicMemories: number
+	compoundRepair: { flagged: number; repaired: number }
+}
 class EvalSetupError extends Error {}
 
 // validate the command and reserve the audit path before any paid replay
@@ -92,14 +101,18 @@ async function evaluateReplay({
 	const failedTopics: string[] = []
 	const results = await runWithConcurrency(snapshot, 4, async (topic) => {
 		try {
-			const { before, after, samples, nonemptyBrews } = await replayTopic(topic, apiKey)
-			const { pairs, ...judged } = await judgeTakeaways({ before, after, apiKey })
+			const { before, after, samples, nonemptyBrews, claimChecks, compoundTopicMemories, compoundRepair } =
+				await replayTopic(topic, apiKey)
+			const { pairs, ...judged } = await judgeTopicMemories({ before, after, apiKey })
 			const report = {
 				topicId: topic.topicId,
 				name: topic.isPublic ? topic.name : undefined,
 				previouslyActive: topic.previouslyActive,
 				brews: 10,
 				nonemptyBrews,
+				claimChecks,
+				compoundTopicMemories,
+				compoundRepair,
 				...judged,
 			}
 			console.log(JSON.stringify({ topic: report }))
@@ -137,7 +150,7 @@ async function evaluateReplay({
 	const mergedPairs = reports
 		.filter(({ topic }) => topic.isPublic)
 		.flatMap(({ report, samples }) => samples.map((pair) => ({ topic: report.name, ...pair })))
-		.sort((left, right) => Number(right.source === "similarity") - Number(left.source === "similarity"))
+
 		.slice(0, 5)
 	const pipeline = toThresholdMetrics(
 		reports.reduce(
@@ -149,14 +162,24 @@ async function evaluateReplay({
 			{ truePositive: 0, falsePositive: 0, falseNegative: 0 },
 		),
 	)
-	console.log(JSON.stringify({ pipeline, thresholds, mergedPairs, failedTopics }))
+	const claimChecks = reports.reduce(
+		(totals, { report }) => ({
+			checked: totals.checked + report.claimChecks.checked,
+			split: totals.split + report.claimChecks.split,
+			rejected: totals.rejected + report.claimChecks.rejected,
+			compound: totals.compound + report.compoundTopicMemories,
+			active: totals.active + report.after.memoryCount,
+		}),
+		{ checked: 0, split: 0, rejected: 0, compound: 0, active: 0 },
+	)
+	console.log(JSON.stringify({ pipeline, claimChecks, thresholds, mergedPairs, failedTopics }))
 	if (failedTopics.length > 0) {
 		process.exitCode = 1
 	}
 }
 
 async function replayTopic(topic: TopicMemorySnapshot, apiKey: string): Promise<ReplayResult> {
-	// use a fresh Topic identity and keep the original scan order for the cleanup every fifth Scan
+	// use a fresh Topic identity and keep the original scan order for exact replacement chronology
 	const ownerId = crypto.randomUUID()
 	const topicId = crypto.randomUUID()
 	const username = `jr${ownerId.replaceAll("-", "").slice(0, 12)}`
@@ -173,6 +196,7 @@ async function replayTopic(topic: TopicMemorySnapshot, apiKey: string): Promise<
 	const proposals: EmbeddedTopicMemoryWrite[] = []
 	const writeResults = new Map<EmbeddedTopicMemoryWrite, string>()
 	const samples: TopicMemoryMergedPair[] = []
+	const claimChecks: TopicMemoryClaimCounts = { checked: 0, split: 0, rejected: 0 }
 	let nonemptyBrews = 0
 	const signal = new AbortController().signal
 	try {
@@ -191,14 +215,16 @@ async function replayTopic(topic: TopicMemorySnapshot, apiKey: string): Promise<
 			}
 			const input = { scanId, topicId, scanStartedAt, signal }
 			const evidence = await loadTopicMemoryFindings(scanId, topicId)
-			const writes = await proposeTopicMemoryWrites({ ...input, findings: evidence, litellmApiKey: apiKey })
+			const { writes, counts } = await proposeTopicMemoryWrites({ ...input, findings: evidence, litellmApiKey: apiKey })
+			claimChecks.checked += counts.checked
+			claimChecks.split += counts.split
+			claimChecks.rejected += counts.rejected
 			proposals.push(...writes)
 			await saveTopicMemoryUpdates({
 				...input,
 				writes,
 				writeResults,
 				mergedPairs: samples,
-				confirmCleanup: (pairs) => confirmTopicMemoryCleanupPairs({ ...input, pairs, litellmApiKey: apiKey }),
 			})
 			console.log(
 				JSON.stringify({
@@ -210,28 +236,57 @@ async function replayTopic(topic: TopicMemorySnapshot, apiKey: string): Promise<
 			)
 		}
 
-		// retention can change which rows are active, so read the actual final Journal
-		const survivors = await db
-			.select({
-				id: topicMemories.id,
-				text: topicMemories.text,
-				embedding: topicMemories.embedding,
-				factDate: topicMemories.factDate,
-				person: topicMemories.person,
-				replacedById: topicMemories.replacedById,
-				status: topicMemories.status,
-			})
-			.from(topicMemories)
-			.where(and(eq(topicMemories.topicId, topicId), eq(topicMemories.isAtomic, true)))
-			.orderBy(topicMemories.id)
-		const replacementIds = new Map(survivors.map(({ id, replacedById }) => [id, replacedById ?? id]))
+		// exact replacements can change which rows are active, so read the actual final Journal
+		const readSurvivors = () =>
+			db
+				.select({
+					id: topicMemories.id,
+					text: topicMemories.text,
+					embedding: topicMemories.embedding,
+					factDate: topicMemories.factDate,
+					person: topicMemories.person,
+					replacedById: topicMemories.replacedById,
+					status: topicMemories.status,
+				})
+				.from(topicMemories)
+				.where(
+					and(eq(topicMemories.topicId, topicId), eq(topicMemories.isAtomic, true), eq(topicMemories.status, "active")),
+				)
+				.orderBy(topicMemories.id)
+
 		const before = proposals.map((proposal) => {
 			const { text, embedding, factDate, person } = proposal
 			const memoryId = writeResults.get(proposal)
-			return { text, embedding, factDate, person, memoryId: memoryId ? replacementIds.get(memoryId) : undefined }
+			return { text, embedding, factDate, person, memoryId }
 		})
-		const after = survivors.filter(({ status }) => status === "active")
-		return { before, after, samples, nonemptyBrews }
+		const survivors = await readSurvivors()
+		// regrade stored topic memories with the premium model, independently of the write gate
+		const verdicts = await checkTopicMemoryClaims({
+			claims: survivors,
+			litellmApiKey: apiKey,
+			signal,
+			usePremiumModel: true,
+		})
+		const compoundIds = survivors.flatMap(({ id }, index) => (verdicts[index] === "compound" ? [id] : []))
+		const repair = compoundIds.length
+			? await repairTopicMemoryClaims({
+					litellmApiKey: apiKey,
+					signal,
+					compoundIds,
+					scope: { topicId },
+				})
+			: undefined
+		const after = repair ? await readSurvivors() : survivors
+		const repaired = (repair?.rewritten ?? 0) + (repair?.split ?? 0)
+		return {
+			before,
+			after,
+			samples,
+			nonemptyBrews,
+			claimChecks,
+			compoundTopicMemories: compoundIds.length - repaired,
+			compoundRepair: { flagged: compoundIds.length, repaired },
+		}
 	} finally {
 		// fixture identities own all copied scans and memories
 		await db.delete(topics).where(eq(topics.id, topicId))

@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Review Takeaways</title>
+<style>
+:root { color-scheme: light dark; }
+body { margin: 0; font: 17px/1.5 system-ui, sans-serif; color: CanvasText; background: Canvas; }
+main { max-width: 38rem; padding: 1rem; margin: auto; }
+h1 { margin: 0; font-size: 1.65rem; }
+article { padding: .8rem; border: 1px solid GrayText; border-radius: .65rem; margin-block: .65rem; }
+article p { margin-block: 0 .35rem; overflow-wrap: anywhere; }
+small { color: GrayText; }
+.actions { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; margin-block: .8rem; }
+button { min-height: 44px; padding: .5rem; font: inherit; border-radius: .5rem; border: 1px solid GrayText; }
+button[aria-pressed="true"] { background: Highlight; color: HighlightText; }
+</style>
+<main>
+  <h1>Review Takeaways</h1>
+  <p>Do these statements describe the same fact?</p>
+  <p><a id="review-filter" href="?unlabeled">Review unlabeled pairs</a></p>
+  <p id="progress" aria-live="polite"></p>
+  <section id="pair" aria-label="Statements">
+    <article><p id="a"></p><small id="a-date"></small></article>
+    <article><p id="b"></p><small id="b-date"></small></article>
+    <div class="actions">
+      <button type="button" id="same">Same fact</button><button type="button" id="different">Different</button>
+    </div>
+    <div class="actions">
+      <button type="button" id="previous">Previous</button><button type="button" id="next">Next</button>
+    </div>
+  </section>
+  <p id="status" role="status"></p>
+</main>
+<script id="review-data" type="application/json">"REVIEW_DATA"</script>
+<script>
+// start at the first unlabeled pair in either view
+const byId = (id) => document.getElementById(id)
+const { pairs, labels } = JSON.parse(byId("review-data").textContent)
+const unlabeledOnly = new URLSearchParams(location.search).has("unlabeled")
+const isUnlabeled = ({ id }) => typeof labels[id] !== "boolean"
+const visiblePairs = () => unlabeledOnly ? pairs.filter(isUnlabeled) : pairs
+let index = unlabeledOnly ? 0 : Math.max(0, pairs.findIndex(isUnlabeled))
+let saving = false
+
+function show() {
+  // keep navigation within the current view
+  const visible = visiblePairs()
+  const pair = visible[index]
+  byId("progress").textContent = pair
+    ? `Pair ${index + 1} of ${visible.length} · ${Object.keys(labels).length} labeled`
+    : pairs.length ? "All pairs labeled." : "The sample is empty."
+  byId("pair").hidden = !pair
+  if (!pair) { return }
+
+  // show the pair and any saved label
+  byId("a").textContent = pair.a
+  byId("b").textContent = pair.b
+  byId("a-date").textContent = pair.aFactDate || "Date unknown"
+  byId("b-date").textContent = pair.bFactDate || "Date unknown"
+  byId("same").setAttribute("aria-pressed", String(labels[pair.id] === true))
+  byId("different").setAttribute("aria-pressed", String(labels[pair.id] === false))
+  byId("same").disabled = saving
+  byId("different").disabled = saving
+  byId("previous").disabled = saving || index === 0
+  byId("next").disabled = saving || index === visible.length - 1
+}
+
+async function label(same) {
+  if (saving) { return }
+
+  // save the visible pair before advancing
+  const { id } = visiblePairs()[index]
+  saving = true
+  show()
+  try {
+    const response = await fetch(location.pathname, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, same }),
+    })
+    if (!response.ok) { throw new Error("Save failed") }
+
+    // the newly labeled pair leaves the filtered view
+    labels[id] = same
+    byId("status").textContent = "Label saved."
+    const lastIndex = Math.max(0, visiblePairs().length - 1)
+    index = Math.min(unlabeledOnly ? index : index + 1, lastIndex)
+  } catch {
+    byId("status").textContent = "Couldn’t save. Try again."
+  } finally {
+    saving = false
+    show()
+  }
+}
+
+// offer a way back to the full list for editing previous labels
+if (unlabeledOnly) {
+  byId("review-filter").href = location.pathname
+  byId("review-filter").textContent = "View all pairs"
+}
+
+// connect the review controls and render the starting pair
+byId("same").onclick = () => void label(true)
+byId("different").onclick = () => void label(false)
+byId("previous").onclick = () => { index--; show() }
+byId("next").onclick = () => { index++; show() }
+show()
+</script>
+</html>

@@ -255,6 +255,6 @@ Rules agents and reviewers must honor, source copies at `.agents/skills/`:
 Personal sources items, private summaries, and annotations have no automatic expiry. Their content remains encrypted until explicit deletion. Released read contracts retain nullable expiry fields as null. Optional conversation URLs survive the MCP picker outside matching and open from the shared AI sender label; missing references remain plain labels.
 
 Topic Memories use `packages/contracts/topicMemories.ts`, `packages/db/schema/topicMemories.ts`, and
-`packages/pipeline/updateTopicTakeaways.ts`. The worker's `topicMemories.ts` runs the scan child and historical
+`packages/pipeline/updateTopicMemories.ts`. The worker's `topicMemories.ts` runs the scan child and historical
 backfill. The Brew diary opens the shared Journal through web and Expo adapters. The root commands are
-`topic-memories:backfill`, `eval:topic-memories`, and `smoke:topic-memories`.
+`topic-memories:backfill`, `topic-memories:repair-dev`, `eval:topic-memories`, and `smoke:topic-memories`.

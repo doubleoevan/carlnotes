@@ -1,106 +1,139 @@
 import { expect, test } from "bun:test"
-import { TOPIC_MEMORY_TEXT_LIMIT } from "@carlnotes/contracts/topicMemories"
+import { TOPIC_MEMORY_TEXT_LIMIT, toTopicMemoryDisplayText } from "@carlnotes/contracts/topicMemories"
+import { canModelCombineTopicMemories } from "@carlnotes/contracts/topicMemoryWork"
 import {
+	normalizeTopicMemoryValue,
 	topicMemoryProposal,
-	toTopicMemoryClusters,
+	toTopicMemoryEmbeddingText,
 	toTopicMemoryPersonMatchKey,
-	toTopicMemorySimilarityAction,
 	toTopicMemoryWrite,
 } from "./topicMemoryOperations"
+import { haveCompatibleTopicMemoryPeople } from "./topicMemoryReconciliation"
+import {
+	resolveTopicMemorySubject,
+	supportsTopicMemoryAlias,
+	toCanonicalTopicMemoryPerson,
+} from "./topicMemorySubjects"
 
-const fact = { kind: "fact" as const, importance: 0.7, factDate: null, person: null, sourceFindingIndexes: [0] }
+const fact = {
+	operation: "add" as const,
+	kind: "fact" as const,
+	importance: 0.8,
+	subject: "Example lab",
+	claimType: "founding" as const,
+	value: "founded",
+	text: "Example lab was founded.",
+	factDate: "2026-11-01",
+	person: null,
+	sourceFindingIndexes: [0],
+}
 
-test("the same story forms one cluster, including a finding that bridges groups", () => {
-	const findings = [
-		{ id: "first", embedding: [1, 0, 0] },
-		{ id: "connected", embedding: [0.75, 0.66, 0] },
-		{ id: "other", embedding: [0, 0, 1] },
-		{ id: "bridge", embedding: [0.94, 0.34, 0] },
-	]
-	expect(toTopicMemoryClusters(findings).map((group) => group.map(({ id }) => id))).toEqual([
-		["first", "bridge", "connected"],
-		["other"],
-	])
+test("structured proposals keep their fields and cannot nominate a merge", () => {
+	const [parsed] = topicMemoryProposal.parse({ facts: [fact] }).facts
+	expect(parsed && toTopicMemoryWrite(parsed)).toMatchObject({
+		subject: fact.subject,
+		claimType: fact.claimType,
+		value: fact.value,
+	})
+	expect(topicMemoryProposal.safeParse({ facts: [{ ...fact, operation: "merge" }] }).success).toBe(false)
+	expect(toTopicMemoryWrite({ ...fact, operation: "skip", text: null })).toBeNull()
+	expect(toTopicMemoryWrite({ ...fact, claimType: null })?.claimType).toBe("other")
 })
 
-test("a cluster can propose separate facts and nominate only a shown neighbor", () => {
-	// the model returns two claims, which cite their own Findings
-	const merge = { ...fact, operation: "merge" as const, id: "neighbor", text: "Maya became CTO." }
-	const add = {
-		...fact,
-		operation: "add" as const,
-		id: null,
-		text: "Maya won a robotics grant.",
-		sourceFindingIndexes: [1],
+test("values normalize formatting while preserving currency, qualifiers and billing units", () => {
+	const normalized = normalizeTopicMemoryValue("US$1.2M per million output tokens")
+	expect(normalized).toBe(normalizeTopicMemoryValue("USD 1,200,000 per million output tokens"))
+	expect(normalized).not.toBe(normalizeTopicMemoryValue("USD 1.2 million per million input tokens"))
+	expect(normalized).not.toBe(normalizeTopicMemoryValue("€1.2 million per million output tokens"))
+	expect(normalizeTopicMemoryValue("December 1, 2026")).toBe("2026-12-01")
+	expect(normalizeTopicMemoryValue("about 1,000 subscribers")).not.toBe(normalizeTopicMemoryValue("1,000 subscribers"))
+})
+
+test("subject spelling variants reuse identifying detail without bridging different people", () => {
+	const identifyingDetail = "Chief operating officer at East Bay Community Foundation"
+	const person = { name: "James M Cerenio", identifyingDetail }
+	const established = [{ subject: "James M Cerenio", person }]
+	expect(toCanonicalTopicMemoryPerson({ name: "James Cerenio", identifyingDetail }, established)).toEqual(person)
+	const other = { name: "James A Cerenio", identifyingDetail }
+	expect(toCanonicalTopicMemoryPerson(other, established)).toEqual(other)
+	const namesake = { name: "James Cerenio", identifyingDetail: "University instructor" }
+	expect(toCanonicalTopicMemoryPerson(namesake, established)).toEqual(namesake)
+})
+
+test("an alias resolves to its Topic identity while a namesake stays separate", () => {
+	// use a verified surname alias with the exact identifying detail from the known appointment
+	const person = {
+		name: "James M Cerenio",
+		identifyingDetail: "Chief operating officer at East Bay Community Foundation",
 	}
-	const proposal = topicMemoryProposal.parse({ facts: [merge, add] })
-	expect(proposal.facts.map(({ sourceFindingIndexes }) => sourceFindingIndexes)).toEqual([[0], [1]])
-	expect(toTopicMemoryWrite(merge, new Set(["neighbor"]))).toMatchObject({ operation: "merge", id: "neighbor" })
-	expect(toTopicMemoryWrite(merge, new Set(["elsewhere"]))).toBeNull()
-	expect(toTopicMemoryWrite({ ...merge, operation: "skip", text: null }, new Set())).toBeNull()
-	expect(toTopicMemoryWrite({ ...merge, text: "A\u0000B" }, new Set(["neighbor"]))).toBeNull()
-	expect(
-		toTopicMemoryWrite({ ...merge, text: "a".repeat(TOPIC_MEMORY_TEXT_LIMIT + 1) }, new Set(["neighbor"])),
-	).toBeNull()
+	const subjects = [{ subject: person.name, person, aliases: ["James Cerenio", "Cerenio"] }]
+	const named = resolveTopicMemorySubject({ subject: "Cerenio", person: { ...person, name: "Cerenio" } }, subjects)
+	const namesake = resolveTopicMemorySubject(
+		{
+			subject: "Cerenio",
+			person: { name: "Cerenio", identifyingDetail: "University instructor" },
+		},
+		subjects,
+	)
+	expect(named.person).toEqual(person)
+	expect(haveCompatibleTopicMemoryPeople(named.person, person)).toBe(true)
+	expect(haveCompatibleTopicMemoryPeople(namesake.person, person)).toBe(false)
+	expect(haveCompatibleTopicMemoryPeople(null, person)).toBe(false)
 })
 
-test("a no-op written as text cannot add or replace a takeaway", () => {
-	// reject both write operations while keeping a complete statement about no-ops
-	const merge = { ...fact, operation: "merge", id: "neighbor" } as const
-	const add = { ...fact, operation: "add", id: null } as const
-	const neighbors = new Set(["neighbor"])
-	expect(toTopicMemoryWrite({ ...add, text: "no-op" }, neighbors)).toBeNull()
-	expect(toTopicMemoryWrite({ ...merge, text: " NO–OP. " }, neighbors)).toBeNull()
-	expect(toTopicMemoryWrite({ ...merge, text: "The deployment is a no-op." }, neighbors)).not.toBeNull()
+test("an alias proposal must quote an explicit name match from the linked Finding", () => {
+	const organization = { canonical: "Golden State Warriors", alias: "GSW", quote: "Golden State Warriors (GSW)" }
 	expect(
-		toTopicMemoryWrite(
-			{ ...merge, text: "James Cerenio is COO. No event date in evidence (scan 2026-11-16)." },
-			neighbors,
-		),
-	).toBeNull()
+		supportsTopicMemoryAlias({ ...organization, source: "The Golden State Warriors (GSW) announced a game." }),
+	).toBe(true)
+	expect(supportsTopicMemoryAlias({ ...organization, source: "Golden State Warriors played a game." })).toBe(false)
+	const different = "Golden State Warriors (front office)"
+	expect(
+		supportsTopicMemoryAlias({
+			canonical: organization.canonical,
+			alias: "front office",
+			quote: different,
+			source: different,
+		}),
+	).toBe(false)
 })
 
-test("reader bookmark activity stays out of takeaway text", () => {
-	const add = { ...fact, operation: "add", id: null } as const
-	const neighbors = new Set<string>()
+test("Flag Day Conspiracy's air date and runtime remain distinct for the same episode", () => {
+	const subject = "the devil's lightning s4e2 flag day conspiracy"
 	expect(
-		toTopicMemoryWrite(
-			{ ...add, text: "The reader bookmarked the s.k. manor hill clothing store homepage." },
-			neighbors,
+		canModelCombineTopicMemories(
+			{ subject, claimType: "airDate", value: "2023-02-26" },
+			{ subject, claimType: "runtime", value: "2023-02-26" },
 		),
-	).toBeNull()
+	).toBe(false)
+})
+
+test("the Tuesday/Thursday and Sunday SportsHouse leagues stay distinct", () => {
+	const subject = "adult basketball events at sportshouse in redwood city"
 	expect(
-		toTopicMemoryWrite(
-			{ ...add, text: "Joseph Chen's UC San Diego Profiles page was bookmarked under the title 'joseph'." },
-			neighbors,
+		canModelCombineTopicMemories(
+			{ subject, claimType: "other", value: "tuesday/thursday co-rec beginner night league" },
+			{ subject, claimType: "other", value: "sunday night co-rec league" },
 		),
-	).toBeNull()
-	expect(
-		toTopicMemoryWrite({ ...add, text: "Joseph Chen is Emeritus Professor of Physics at UC San Diego." }, neighbors),
-	).not.toBeNull()
+	).toBe(false)
+})
+
+test("model combine eligibility requires matching subjects and whole value containment", () => {
+	const key = { subject: "festival cut", claimType: "runtime", value: "92 minutes" } as const
+	expect(canModelCombineTopicMemories(key, { ...key, value: "92 minutes and 15 seconds" })).toBe(true)
+	expect(canModelCombineTopicMemories(key, { ...key, subject: "theatrical cut" })).toBe(false)
+	expect(canModelCombineTopicMemories(key, { ...key, value: "192 minutes" })).toBe(false)
+	expect(canModelCombineTopicMemories(key, { ...key, value: "92.5 minutes" })).toBe(false)
 })
 
 test.each([
-	[0.799, "add"],
-	[0.8, "flag"],
-	[0.92, "flag"],
-	[0.979, "flag"],
-	[0.98, "merge"],
-	[1, "merge"],
-] as const)("similarity %s chooses %s", (similarity, action) => {
-	expect(toTopicMemorySimilarityAction(similarity)).toBe(action)
-})
-
-test.each([
-	["on September 25, 2026", "on September 26, 2026"],
-	["on 25 September 2026", "on 26 September 2026"],
-	["on 25 September, 2026", "on 25 September, 2027"],
-	["on 09/25/26", "on 09/26/26"],
-	["on Sep. 25", ""],
-] as const)("near-identical text sends mismatched date mentions through review", (first, second) => {
-	expect(
-		toTopicMemorySimilarityAction(0.999, [`The meeting happened ${first}.`, `The meeting happened ${second}.`]),
-	).toBe("flag")
+	"no-op",
+	"The reader bookmarked the storefront.",
+	"James Cerenio is COO. No event date in evidence (scan 2026-11-16).",
+	"A\u0000B",
+	"a".repeat(TOPIC_MEMORY_TEXT_LIMIT + 1),
+])("a claim must contain usable fact wording", (text) => {
+	expect(toTopicMemoryWrite({ ...fact, text })).toBeNull()
 })
 
 test("person names normalize while evidence-backed namesake identity details stay separate", () => {
@@ -112,9 +145,91 @@ test("person names normalize while evidence-backed namesake identity details sta
 	)
 })
 
+test("date-free vectors drop the attribution while written years still distinguish events", () => {
+	// both embedding inputs use the same claim wording
+	const first = "According to the source article, Jordan joined the lab in 2024."
+	const second = "Jordan joined the lab in 2025, as reported by the source article."
+	expect(toTopicMemoryEmbeddingText(first)).toBe("Jordan joined the lab.")
+	expect(toTopicMemoryEmbeddingText(second)).toBe("Jordan joined the lab.")
+	expect(toTopicMemoryEmbeddingText("The team released version 2.1 on 25 September,2026.")).toBe(
+		"The team released version 2.1.",
+	)
+})
+
 test("person match keys distinguish roles that depend on punctuation", () => {
 	const name = "Jordan Kim"
 	expect(toTopicMemoryPersonMatchKey({ name, identifyingDetail: "C++ instructor" })).not.toBe(
 		toTopicMemoryPersonMatchKey({ name, identifyingDetail: "C# instructor" }),
 	)
+})
+
+test("a topic memory names the person who earned the degree", () => {
+	const statement = { ...fact, claimType: "education" as const, text: "He holds an MA from UC Irvine." }
+	expect(toTopicMemoryWrite(statement)).toBeNull()
+	expect(
+		toTopicMemoryWrite({
+			...statement,
+			person: { name: "Wilson Chen", identifyingDetail: "Benedictine University" },
+		})?.text,
+	).toBe("Wilson Chen holds an MA from UC Irvine.")
+})
+
+test("trip duration needs both the traveler and a destination", () => {
+	const travel = { ...fact, claimType: "other" as const }
+	expect(toTopicMemoryWrite({ ...travel, text: "The trip took about a month." })).toBeNull()
+	expect(toTopicMemoryWrite({ ...travel, text: "Traveled for about a month." })).toBeNull()
+	expect(toTopicMemoryWrite({ ...travel, text: "Traveled to China for about a month." })).toBeNull()
+	expect(
+		toTopicMemoryWrite({ ...travel, text: "Mara traveled through Kyoto and Osaka for about a month." })?.text,
+	).toBe("Mara traveled through Kyoto and Osaka for about a month.")
+})
+
+test("incomplete source claims stay out of writes until the missing context is supplied", () => {
+	const person = { name: "Madelyn Wang", identifyingDetail: "Michael Kors Collection" }
+	for (const text of [
+		"Clients include schools and nonprofits.",
+		"Selected for the EVPRI Ascending STARS program.",
+		"Attends alongside Shala Monroque.",
+		"Madelyn Wang started a new position at Michael Kors Collection as Associate Account Executive.",
+	]) {
+		expect(toTopicMemoryWrite({ ...fact, text, person })).toBeNull()
+	}
+	const text =
+		"Madelyn Wang started a new position at Michael Kors Collection as Associate Account Executive in July 2025."
+	expect(toTopicMemoryWrite({ ...fact, text, person, factDate: "2025-07-01" })).toMatchObject({
+		text,
+		factDate: "2025-07",
+	})
+	expect(toTopicMemoryEmbeddingText(text)).not.toContain("July 2025")
+})
+
+test("the claim and displayed date keep the source's year, month or day precision", () => {
+	const text = "Example lab was founded."
+	for (const [factDate, display] of [
+		["2025", "2025"],
+		["2025-07", "July 2025"],
+		["2025-07-04", "July 4, 2025"],
+	] as const) {
+		expect(toTopicMemoryWrite({ ...fact, factDate })?.factDate).toBe(factDate)
+		expect(toTopicMemoryDisplayText(text, factDate)).toBe(`${text} · ${display}`)
+	}
+	expect(toTopicMemoryDisplayText("The cafe opened in July 2025.", "2025-07")).toBe("The cafe opened in July 2025.")
+	expect(toTopicMemoryEmbeddingText("The cafe opened in 2025-07.")).toBe("The cafe opened.")
+	expect(toTopicMemoryWrite({ ...fact, factDate: "2025-13" })).toBeNull()
+})
+
+test("a stored full name replaces a leading surname or verb fragment", () => {
+	const person = { name: "Joseph Chen", identifyingDetail: "University of Louisville Bioengineering" }
+	const statement = { ...fact, person, text: "Chen was selected for the EVPRI Ascending STARS program." }
+	expect(toTopicMemoryWrite(statement)?.text).toStartWith("Joseph Chen was selected")
+	const founder = { name: "Jennifer Abrams Wang", identifyingDetail: "nest s.o.s. co-founder" }
+	expect(toTopicMemoryWrite({ ...fact, text: "Co-founded nest s.o.s.", person: founder })?.text).toBe(
+		"Jennifer Abrams Wang co-founded nest s.o.s.",
+	)
+})
+
+test("an as-of date stays in the readable claim and out of its vector input", () => {
+	const text = "Lillian Von Stauffenberg was living in London as of June 4, 2010."
+	expect(toTopicMemoryWrite({ ...fact, text })?.text).toBe(text)
+	expect(toTopicMemoryEmbeddingText(text)).toBe("Lillian Von Stauffenberg was living in London.")
 })

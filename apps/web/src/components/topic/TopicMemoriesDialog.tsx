@@ -3,8 +3,8 @@ import {
 	JOURNAL_BUTTON_ICON,
 	JOURNAL_BUTTON_LABEL,
 	TopicMemoriesDialog as SharedTopicMemoriesDialog,
-	TAKEAWAYS_TITLE,
 	toScanHistoryCounts,
+	toTopicMemoriesTitle,
 } from "@carlnotes/core/components/TopicMemoriesDialog"
 import { useRef, useState } from "react"
 import { Dialog, DialogContent, DialogTitle } from "@/components/primitives/dialog"
@@ -14,18 +14,18 @@ import { topicMemoriesDialogElements } from "./topicMemoriesDialogElements"
 type TopicMemoriesDialogProps = {
 	topicId: string
 	entryCount: number
-	takeawayCount?: number
-	canRateTakeaways?: boolean
-	onTakeawayRemoved?: () => void
+	topicMemoryCount?: number
+	canRateTopicMemories?: boolean
+	onTopicMemoryRemoved?: () => void
 }
 
 /** Places the Journal next to the Brew diary's count and reads it on open. */
 export function TopicMemoriesDialog({
 	topicId,
 	entryCount,
-	takeawayCount,
-	canRateTakeaways,
-	onTakeawayRemoved,
+	topicMemoryCount,
+	canRateTopicMemories,
+	onTopicMemoryRemoved,
 }: TopicMemoriesDialogProps) {
 	// use the normal dialog's focus behavior and return focus to the Journal button
 	const { data: session } = authClient().useSession()
@@ -35,9 +35,9 @@ export function TopicMemoriesDialog({
 	return (
 		<>
 			{/* The Journal button is independent of the Brew diary's accordion trigger. */}
-			<div className="flex min-w-0 max-w-[60%] flex-wrap items-center justify-end gap-2 sm:max-w-none">
-				<span className="text-muted-foreground text-right text-sm">
-					{toScanHistoryCounts(entryCount, takeawayCount)}
+			<div className="contents sm:flex sm:items-center sm:justify-end sm:gap-2">
+				<span className="whitespace-nowrap text-muted-foreground text-right text-sm">
+					{toScanHistoryCounts(entryCount, topicMemoryCount)}
 				</span>
 				<button
 					ref={triggerRef}
@@ -62,14 +62,14 @@ export function TopicMemoriesDialog({
 							triggerRef.current?.focus()
 						}}
 					>
-						<DialogTitle>{TAKEAWAYS_TITLE}</DialogTitle>
+						<DialogTitle>{toTopicMemoriesTitle(topicMemoryCount)}</DialogTitle>
 						<SharedTopicMemoriesDialog
 							key={`${topicId}:${userId ?? ""}`}
 							topicId={topicId}
 							userId={userId}
 							elements={topicMemoriesDialogElements}
-							canRateTakeaways={canRateTakeaways}
-							onTakeawayRemoved={onTakeawayRemoved}
+							canRateTopicMemories={canRateTopicMemories}
+							onTopicMemoryRemoved={onTopicMemoryRemoved}
 						/>
 					</DialogContent>
 				</Dialog>

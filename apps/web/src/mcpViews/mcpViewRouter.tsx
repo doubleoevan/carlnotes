@@ -28,9 +28,9 @@ import { NoteMcpView } from "./NoteMcpView"
 import { ProfileMcpView } from "./ProfileMcpView"
 import { ScanMcpView } from "./ScanMcpView"
 import { SearchMcpView } from "./SearchMcpView"
-import { TakeawaysMcpView } from "./TakeawaysMcpView"
 import { TeamMcpView } from "./TeamMcpView"
 import { TopicMcpView } from "./TopicMcpView"
+import { TopicMemoriesMcpView } from "./TopicMemoriesMcpView"
 import { TopicPostMcpView } from "./TopicPostMcpView"
 import { TopicPostsMcpView } from "./TopicPostsMcpView"
 import { TopicSuggestionsMcpView } from "./TopicSuggestionsMcpView"
@@ -68,7 +68,7 @@ const routeTree = rootRoute.addChildren([
 	createRoute({ getParentRoute: () => rootRoute, path: "/activity", component: ActivityRoute }),
 	createRoute({ getParentRoute: () => rootRoute, path: "/account", component: AccountRoute }),
 	createRoute({ getParentRoute: () => rootRoute, path: "/topics", component: TopicsRoute }),
-	createRoute({ getParentRoute: () => rootRoute, path: "/takeaways", component: TakeawaysRoute }),
+	createRoute({ getParentRoute: () => rootRoute, path: "/topic-memories", component: TopicMemoriesRoute }),
 ])
 
 /**
@@ -99,7 +99,7 @@ export function toMcpViewOpeningPath(mcpView: McpView, { toolResult }: McpViewTo
 		activity: "/activity",
 		account: "/account",
 		topics: "/topics",
-		takeaways: "/takeaways",
+		"topic-memories": "/topic-memories",
 	}
 	return openingPaths[mcpView]
 }
@@ -110,9 +110,11 @@ function useMcpViewToolCall(): McpViewToolCall | null {
 }
 
 // the Journal the read-only tool opened
-function TakeawaysRoute(): ReactNode {
-	const { takeaways } = toMcpViewData(useMcpViewToolCall()?.toolResult._meta)
-	return takeaways ? <TakeawaysMcpView key={JSON.stringify(takeaways)} takeaways={takeaways} /> : null
+function TopicMemoriesRoute(): ReactNode {
+	const { topicMemories } = toMcpViewData(useMcpViewToolCall()?.toolResult._meta)
+	return topicMemories ? (
+		<TopicMemoriesMcpView key={JSON.stringify(topicMemories)} topicMemories={topicMemories} />
+	) : null
 }
 
 // an updates list, which the tool built before the MCP view opened

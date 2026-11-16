@@ -1,8 +1,8 @@
 // shared fictional Journal pages for Nightshift on web and Expo
 import type { TopicMemoriesPage } from "@carlnotes/contracts/topicMemories"
 
-export const TAKEAWAY_STORY_TEXT = "A coarser grind can reduce bitterness in a slow pour-over."
-export const TAKEAWAY_STORY_CORRECTION = "This applies to the slow pour-over recipe from E3."
+export const TOPIC_MEMORY_STORY_TEXT = "A coarser grind can reduce bitterness in a slow pour-over."
+export const TOPIC_MEMORY_STORY_CORRECTION = "This applies to the slow pour-over recipe from E3."
 
 /** Provides the same ordered pages to the web and Expo component stories. */
 export function toTopicMemoryStoryPage({
@@ -21,9 +21,9 @@ export function toTopicMemoryStoryPage({
 			? []
 			: [
 					{
-						id: `takeaway-${page}`,
+						id: `topic-memory-${page}`,
 						kind: "fact",
-						text: page === 1 ? TAKEAWAY_STORY_TEXT : "Cafés are using more low-caffeine blends.",
+						text: page === 1 ? TOPIC_MEMORY_STORY_TEXT : "Cafés are using more low-caffeine blends.",
 						firstScanAt: "2026-11-12T12:00:00.000Z",
 						episodeNumber: page === 1 ? 3 : null,
 						note: null,

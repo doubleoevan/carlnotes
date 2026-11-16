@@ -47,7 +47,7 @@ export const scans = pgTable(
 		dispatchedAt: timestamp("dispatched_at", { withTimezone: true }),
 		// when a worker first began the scan's first stage. null while the dispatched scan waits for a scan slot
 		pickedUpAt: timestamp("picked_up_at", { withTimezone: true }),
-		// the Journal writes this in the same transaction as its takeaways
+		// the Journal writes this in the same transaction as its topic memories
 		// a cleanup brew can commit proposals before it asks the model to confirm flagged pairs
 		topicMemoriesWrittenAt: timestamp("topic_memories_written_at", { withTimezone: true }),
 		topicMemoriesFormatVersion: integer("topic_memories_format_version").default(0).notNull(),

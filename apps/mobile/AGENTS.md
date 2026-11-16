@@ -482,5 +482,5 @@ screen's report in its actions sheet, beside a Report image N in post option for
 `src/components/chat/TopicPostTag.tsx` adapts the shared tag to a pressable
 link.
 
-`src/components/topic/TopicMemoriesDialog.tsx` adds Journal to the Brew diary. It renders the core Takeaways view
-in the focus-restoring `Sheet` with the Nightshift Takeaways list and a keyboard-aware feedback field.
+`src/components/topic/TopicMemoriesDialog.tsx` adds Journal to the Brew diary. It renders the shared Journal
+in the focus-restoring `Sheet` with the Nightshift `topic-memories-list` and a keyboard-aware feedback field.

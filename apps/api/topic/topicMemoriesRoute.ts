@@ -47,7 +47,7 @@ export const topicMemoriesRoute = new Hono<AppEnv>()
 			if (!topic) {
 				return context.json({ error: "not found" }, 404)
 			}
-			// the storage write checks that the named takeaway still belongs to the active Journal
+			// the storage write checks that the named topic memory still belongs to the active Journal
 			const status = await saveTopicMemoryFeedback({
 				topicId,
 				topicMemoryId,
@@ -82,7 +82,7 @@ export async function readTopicMemories({
 		return { ...result.page, canRate: false }
 	}
 
-	// never load takeaways for a caller outside the Topic's visibility
+	// never load topic memories for a caller outside the Topic's visibility
 	const topic = await loadReadableTopic(topicId, userId)
 	if (!topic) {
 		return null

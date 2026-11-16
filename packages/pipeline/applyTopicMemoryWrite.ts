@@ -1,136 +1,265 @@
-// applies one proposed fact after checking identity and similarity
-import { TOPIC_MEMORY_REVIEW_SIMILARITY } from "@carlnotes/contracts/topicMemoryWork"
-import type { DbTransaction } from "@carlnotes/db"
-import { EMBED_MODEL_NAME, scans } from "@carlnotes/db/schema/scans"
-import { topicMemories, topicMemoryDecisions } from "@carlnotes/db/schema/topicMemories"
-import { topicMemoryCorrection } from "@carlnotes/db/topicMemories"
-import { and, cosineDistance, eq, inArray, isNull, or, sql } from "drizzle-orm"
+// applies exact structured facts under the Topic lock
 import {
+	areTopicMemoryDatesCompatible,
+	canModelCombineTopicMemories,
+	hasExactTopicMemoryKey,
+	toMostPreciseTopicMemoryDate,
+} from "@carlnotes/contracts/topicMemoryWork"
+import { type DbHandle, type DbTransaction, db } from "@carlnotes/db"
+import { scans } from "@carlnotes/db/schema/scans"
+import { TOPIC_MEMORY_EMBEDDING_MODEL, topicMemories, topicMemoryDecisions } from "@carlnotes/db/schema/topicMemories"
+import { topicMemoryCorrection } from "@carlnotes/db/topicMemories"
+import { toTopicMemorySimilarity } from "@carlnotes/db/topicMemoryGroups"
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm"
+import { applyTopicMemoryJournalUpdate } from "./applyTopicMemoryJournalUpdate"
+import { copyTopicMemoryFeedback } from "./topicMemoryCleanup"
+import {
+	normalizeTopicMemoryValue,
 	type TopicMemoryWrite,
 	toTopicMemoryPersonMatchKey,
-	toTopicMemorySimilarity,
-	toTopicMemorySimilarityAction,
+	toTopicMemorySubject,
 } from "./topicMemoryOperations"
+import type { TopicMemoryReconciliation } from "./topicMemoryReconciliation"
 
-type TopicMemoryRow = typeof topicMemories.$inferSelect
-type TopicMemoryMergeTarget = Pick<
-	TopicMemoryRow,
-	| "id"
-	| "text"
-	| "kind"
-	| "factDate"
-	| "personMatchKey"
-	| "status"
-	| "replacedById"
-	| "importance"
-	| "findingIds"
-	| "firstScanId"
-	| "lastSeenScanId"
-	| "embedding"
-	| "embeddingModel"
-> & { firstSeenAt: Date; lastSeenAt: Date; hasCorrection: boolean }
-type TopicMemoryMergeMatch = {
-	id: string
-	matchMemoryId: string
-	text: string
-	similarity: number | null
-	factDate: string | null
+const TOPIC_MEMORY_EXACT_CANDIDATE_LIMIT = 128
+
+export type EmbeddedTopicMemoryWrite = TopicMemoryWrite & {
+	embedding: number[]
+	findingIds: string[]
+	reconciliation?: { operation: "add" } | Extract<TopicMemoryReconciliation, { operation: "update" }>
 }
-
-export type EmbeddedTopicMemoryWrite = TopicMemoryWrite & { embedding: number[]; findingIds: string[] }
-
 export type TopicMemoryMergedPair = { candidate: string; matched: string; cosine: number | null; source: string }
 
 export type ApplyTopicMemoryWriteOptions = {
 	write: EmbeddedTopicMemoryWrite
 	scanId: string
 	startedAt: Date
+	firstScan?: { id: string; startedAt: Date }
 	topicId: string
 	now: Date
 	mergedPairs?: TopicMemoryMergedPair[]
+	replacement?: TopicMemoryReplacementCandidate
+	existingRowId?: string
 }
-type TopicMemoryAddOptions = ApplyTopicMemoryWriteOptions & {
-	write: Extract<EmbeddedTopicMemoryWrite, { operation: "add" }>
-}
-type TopicMemoryReviewMatch = { id: string; similarity: number | null }
 
-// validate the nomination and its identity under the lock before persisting the claim
+/** Combines an exact value and only replaces a claim with a current semantic approval. */
 export async function applyTopicMemoryWrite(
 	transaction: DbTransaction,
 	options: ApplyTopicMemoryWriteOptions,
 ): Promise<string | undefined> {
+	// use the same person identity for rejected wording and the exact subject key
 	const { write, topicId } = options
 	const personMatchKey = toTopicMemoryPersonMatchKey(write.person)
+	const subject = toTopicMemorySubject(write.subject, write.person)
+	const value = normalizeTopicMemoryValue(write.value)
 	if (await isRejectedTopicMemoryText(transaction, { topicId, personMatchKey, text: write.text })) {
 		return
 	}
-	if (write.operation === "add") {
-		return applyTopicMemoryAdd(transaction, { ...options, write })
+
+	if (write.reconciliation?.operation === "update") {
+		return applyTopicMemoryJournalUpdate(transaction, options, write.reconciliation)
 	}
 
-	// the first model nominates. namesakes and different event dates stay separate even if it chose to merge
-	const target = await loadMergeTarget(transaction, topicId, write.id)
-	const compatible =
-		target &&
-		target.status !== "rejected" &&
-		!target.replacedById &&
-		target.personMatchKey === personMatchKey &&
-		(!target.factDate || !write.factDate || target.factDate === write.factDate)
-	const similarity = compatible ? toMergeSimilarity(write.embedding, target) : null
-	const action = toTopicMemorySimilarityAction(similarity ?? -1, [write.text, target?.text ?? ""])
-	if (target && action === "merge") {
-		return mergeTopicMemory(transaction, options, { id: target.id, source: "model", target })
-	}
-
-	const draft = { ...write, operation: "add" as const }
-	const nominated = target && action === "flag" ? { id: target.id, similarity } : undefined
-	return applyTopicMemoryAdd(transaction, { ...options, write: draft }, nominated)
-}
-
-async function applyTopicMemoryAdd(
-	transaction: DbTransaction,
-	options: TopicMemoryAddOptions,
-	nominated?: TopicMemoryReviewMatch,
-): Promise<string | undefined> {
-	// compare only facts about the same person and a compatible event date
-	const { write, topicId } = options
-	const personMatchKey = toTopicMemoryPersonMatchKey(write.person)
-	const nearest = await loadNearestTopicMemory(transaction, {
+	// match the value as well as the earliest keys so another value cannot mask an exact match
+	const existing = await loadExactTopicMemory(transaction, {
 		topicId,
-		personMatchKey,
+		subject,
+		claimType: write.claimType,
 		factDate: write.factDate,
-		embedding: write.embedding,
+		value,
+		excludeId: options.existingRowId,
 	})
-	const action = toTopicMemorySimilarityAction(nearest?.similarity ?? -1, [write.text, nearest?.text ?? ""])
-	if (nearest && action === "merge") {
-		return mergeTopicMemory(transaction, options, { id: nearest.id, source: "similarity", match: nearest })
+	// an explicit add stays separate when the model saw distinct claims sharing structured fields
+	const canCombine =
+		write.reconciliation?.operation !== "add" ||
+		(existing && normalizeTopicMemoryValue(existing.text) === normalizeTopicMemoryValue(write.text))
+	if (existing && canCombine) {
+		return combineTopicMemoryEvidence(transaction, options, existing, isNewerTopicMemoryObservation(options, existing))
+	}
+	if (options.existingRowId) {
+		return options.existingRowId
 	}
 
-	const review = nominated ?? (action === "flag" ? nearest : undefined)
-	return insertTopicMemoryAdd(transaction, {
-		...options,
-		personMatchKey,
-		review,
-		reviewSource: nominated ? "model" : "similarity",
-	})
+	// recheck the exact snapshot the model reviewed after acquiring the Topic lock
+	const reviewed = options.replacement
+	const current = reviewed ? await loadTopicMemoryReplacementCandidate(options, transaction) : undefined
+	const replacement = reviewed && current && isSameReplacementCandidate(reviewed, current) ? current : undefined
+	return insertTopicMemoryValue(transaction, options, { subject, value, personMatchKey, replacement })
 }
 
-async function insertTopicMemoryAdd(
+type ExactTopicMemory = NonNullable<Awaited<ReturnType<typeof loadExactTopicMemory>>>
+type TopicMemoryReplacementCandidate = Pick<
+	ExactTopicMemory,
+	"id" | "text" | "factDate" | "value" | "lastSeenScanId" | "lastSeenAt" | "updatedAt" | "embedding" | "embeddingModel"
+>
+type ReplacementInput = Pick<ApplyTopicMemoryWriteOptions, "write" | "topicId" | "startedAt">
+
+/** Finds the only active predecessor for an edition-specific runtime or air date. */
+export async function loadTopicMemoryReplacementCandidate(
+	{ write, topicId, startedAt }: ReplacementInput,
+	handle: DbHandle = db,
+): Promise<TopicMemoryReplacementCandidate | undefined> {
+	const { claimType, factDate } = write
+	if (
+		(claimType !== "runtime" && claimType !== "airDate") ||
+		!factDate ||
+		!hasExactTopicMemoryKey(factDate, claimType)
+	) {
+		return
+	}
+	const subject = toTopicMemorySubject(write.subject, write.person)
+	const value = normalizeTopicMemoryValue(write.value)
+
+	// ambiguous slots stay separate when there is more than one plausible predecessor
+	const candidates = await handle
+		.select({
+			id: topicMemories.id,
+			text: topicMemories.text,
+			factDate: topicMemories.factDate,
+			subject: topicMemories.subject,
+			claimType: topicMemories.claimType,
+			value: topicMemories.value,
+			lastSeenScanId: topicMemories.lastSeenScanId,
+			lastSeenAt: scans.startedAt,
+			updatedAt: topicMemories.updatedAt,
+			embedding: topicMemories.embedding,
+			embeddingModel: topicMemories.embeddingModel,
+		})
+		.from(topicMemories)
+		.innerJoin(scans, eq(scans.id, topicMemories.lastSeenScanId))
+		.where(
+			and(
+				eq(topicMemories.topicId, topicId),
+				eq(topicMemories.subject, subject),
+				eq(topicMemories.claimType, claimType),
+				eq(topicMemories.factDate, factDate),
+				eq(topicMemories.status, "active"),
+				eq(topicMemories.isAtomic, true),
+				eq(topicMemories.needsReview, false),
+				isNull(topicMemories.replacedById),
+			),
+		)
+		.limit(2)
+	const [candidate] = candidates
+	return candidates.length === 1 &&
+		candidate &&
+		candidate.value !== value &&
+		canModelCombineTopicMemories(candidate, { subject, claimType, value }) &&
+		startedAt > candidate.lastSeenAt
+		? candidate
+		: undefined
+}
+
+function isNewerTopicMemoryObservation(
+	{ scanId, startedAt }: Pick<ApplyTopicMemoryWriteOptions, "scanId" | "startedAt">,
+	{ lastSeenAt, lastSeenScanId }: Pick<ExactTopicMemory, "lastSeenAt" | "lastSeenScanId">,
+): boolean {
+	return startedAt > lastSeenAt || (startedAt.getTime() === lastSeenAt.getTime() && scanId > lastSeenScanId)
+}
+
+function isSameReplacementCandidate(
+	previous: TopicMemoryReplacementCandidate,
+	current: TopicMemoryReplacementCandidate,
+): boolean {
+	return (
+		previous.id === current.id &&
+		previous.text === current.text &&
+		previous.factDate === current.factDate &&
+		previous.value === current.value &&
+		previous.lastSeenScanId === current.lastSeenScanId &&
+		previous.updatedAt.getTime() === current.updatedAt.getTime()
+	)
+}
+
+async function combineTopicMemoryEvidence(
 	transaction: DbTransaction,
+	options: ApplyTopicMemoryWriteOptions,
+	existing: ExactTopicMemory,
+	isNewer: boolean,
+): Promise<string> {
+	const { write, scanId, startedAt, firstScan = { id: scanId, startedAt }, now } = options
+	// keep both original statements and union their evidence on the survivor
+	const findingIds = [...new Set([...existing.findingIds, ...write.findingIds])]
+	const factDate = toMostPreciseTopicMemoryDate(existing.factDate, write.factDate)
+	const sameEvidence = findingIds.length === existing.findingIds.length && factDate === existing.factDate
+	const revisited =
+		sameEvidence && (write.text === existing.text || (await hasArchivedObservation(transaction, options, existing.id)))
+	// save the actual incoming claim with its own evidence before promoting its contents to the survivor
+	if (options.existingRowId) {
+		await transaction
+			.update(topicMemories)
+			.set({ status: "outdated", replacedById: existing.id, updatedAt: now })
+			.where(eq(topicMemories.id, options.existingRowId))
+		await copyTopicMemoryFeedback(transaction, { targetId: existing.id, sourceIds: [options.existingRowId] })
+		await saveExactDecision(transaction, options, existing, existing.id, "merge", options.existingRowId)
+	} else if (!revisited) {
+		const archived = await insertTopicMemoryValue(transaction, options, {
+			subject: toTopicMemorySubject(write.subject, write.person),
+			value: normalizeTopicMemoryValue(write.value),
+			personMatchKey: toTopicMemoryPersonMatchKey(write.person),
+			archivedUnderId: existing.id,
+		})
+		if (!archived) {
+			throw new Error("Could not preserve the combined topic memory")
+		}
+		await saveExactDecision(transaction, options, existing, existing.id, "merge", archived)
+	}
+	await transaction
+		.update(topicMemories)
+		.set({
+			factDate,
+			status: "active",
+			updatedAt: now,
+			importance: Math.max(existing.importance, write.importance),
+			firstScanId: existing.firstSeenAt > firstScan.startedAt ? firstScan.id : existing.firstScanId,
+			lastSeenScanId: isNewer ? scanId : existing.lastSeenScanId,
+			findingIds,
+		})
+		.where(eq(topicMemories.id, existing.id))
+	return existing.id
+}
+
+async function hasArchivedObservation(
+	transaction: DbTransaction,
+	{ write, topicId, scanId }: ApplyTopicMemoryWriteOptions,
+	survivorId: string,
+): Promise<boolean> {
+	const [archived] = await transaction
+		.select({ id: topicMemories.id })
+		.from(topicMemories)
+		.where(
+			and(
+				eq(topicMemories.topicId, topicId),
+				eq(topicMemories.lastSeenScanId, scanId),
+				eq(topicMemories.replacedById, survivorId),
+				eq(topicMemories.text, write.text),
+				sql`${topicMemories.factDate} is not distinct from ${write.factDate}`,
+			),
+		)
+		.limit(1)
+	return Boolean(archived)
+}
+
+async function insertTopicMemoryValue(
+	transaction: DbTransaction,
+	options: ApplyTopicMemoryWriteOptions,
 	{
-		write,
-		topicId,
-		scanId,
-		now,
+		subject,
+		value,
 		personMatchKey,
-		review,
-		reviewSource,
-	}: TopicMemoryAddOptions & {
+		replacement,
+		archivedUnderId,
+	}: {
+		subject: string
+		value: string
 		personMatchKey: string | null
-		review?: TopicMemoryReviewMatch
-		reviewSource: "model" | "similarity"
+		replacement?: TopicMemoryReplacementCandidate
+		archivedUnderId?: string
 	},
 ): Promise<string | undefined> {
+	const { write, topicId, scanId, startedAt, firstScan = { id: scanId, startedAt }, now } = options
+
+	// distinct facts start active, including facts discovered in older brews
 	const [added] = await transaction
 		.insert(topicMemories)
 		.values({
@@ -140,170 +269,60 @@ async function insertTopicMemoryAdd(
 			factDate: write.factDate,
 			person: write.person,
 			personMatchKey,
+			subject,
+			claimType: write.claimType,
+			value,
 			isAtomic: true,
 			findingIds: write.findingIds,
 			importance: write.importance,
 			embedding: write.embedding,
-			embeddingModel: EMBED_MODEL_NAME,
-			needsReview: Boolean(review),
-			reviewMatchId: review?.id ?? null,
-			firstScanId: scanId,
+			embeddingModel: TOPIC_MEMORY_EMBEDDING_MODEL,
+			firstScanId: firstScan.id,
 			lastSeenScanId: scanId,
+			status: archivedUnderId ? "outdated" : "active",
+			replacedById: archivedUnderId,
 			updatedAt: now,
 		})
 		.returning({ id: topicMemories.id })
-	if (added && review) {
-		await transaction.insert(topicMemoryDecisions).values({
-			scanId,
-			memoryId: added.id,
-			candidateMemoryId: added.id,
-			matchMemoryId: review.id,
-			kind: "flag",
-			source: reviewSource,
-			cosine: review.similarity,
-		})
+	if (added && replacement) {
+		// ratings stay on the claim the reader saw
+		await transaction
+			.update(topicMemories)
+			.set({ status: "outdated", replacedById: added.id, updatedAt: now })
+			.where(eq(topicMemories.id, replacement.id))
+		await saveExactDecision(transaction, options, replacement, added.id, "replace")
 	}
 	return added?.id
 }
 
-async function isRejectedTopicMemoryText(
-	transaction: DbTransaction,
-	{ topicId, personMatchKey, text }: { topicId: string; personMatchKey: string | null; text: string },
-): Promise<boolean> {
-	// compare the rejected statement for the same person, ignoring case and whitespace
-	const [rejected] = await transaction
-		.select({ id: topicMemories.id })
-		.from(topicMemories)
-		.where(
-			and(
-				eq(topicMemories.topicId, topicId),
-				eq(topicMemories.status, "rejected"),
-				sql`${topicMemories.personMatchKey} is not distinct from ${personMatchKey}`,
-				sql`lower(regexp_replace(trim(${topicMemories.text}), '[[:space:]]+', ' ', 'g')) =
-			lower(regexp_replace(trim(${text}), '[[:space:]]+', ' ', 'g'))`,
-			),
-		)
-		.limit(1)
-	return rejected !== undefined
-}
-
-async function loadNearestTopicMemory(
+// find only an exact, current fact or an evicted fact without a replacement
+async function loadExactTopicMemory(
 	transaction: DbTransaction,
 	{
 		topicId,
-		personMatchKey,
+		subject,
+		claimType,
 		factDate,
-		embedding,
+		value,
+		excludeId,
 	}: {
 		topicId: string
-		personMatchKey: string | null
+		subject: string
+		claimType: EmbeddedTopicMemoryWrite["claimType"]
 		factDate: string | null
-		embedding: number[]
+		value: string
+		excludeId?: string
 	},
-): Promise<TopicMemoryMergeMatch | undefined> {
-	// legacy and replaced text stay in history. an evicted compatible fact can still reactivate
-	const distance = cosineDistance(topicMemories.embedding, embedding)
-	const [nearest] = await transaction
-		.select({
-			id: topicMemories.id,
-			matchMemoryId: topicMemories.id,
-			text: topicMemories.text,
-			factDate: topicMemories.factDate,
-			similarity: sql<number>`1 - (${distance})`,
-		})
-		.from(topicMemories)
-		.where(
-			and(
-				eq(topicMemories.topicId, topicId),
-				eq(topicMemories.isAtomic, true),
-				inArray(topicMemories.status, ["active", "outdated"]),
-				isNull(topicMemories.replacedById),
-				personMatchKey ? eq(topicMemories.personMatchKey, personMatchKey) : isNull(topicMemories.personMatchKey),
-				factDate ? or(isNull(topicMemories.factDate), eq(topicMemories.factDate, factDate)) : undefined,
-				eq(topicMemories.embeddingModel, EMBED_MODEL_NAME),
-				sql`1 - (${distance}) >= ${TOPIC_MEMORY_REVIEW_SIMILARITY}`,
-			),
-		)
-		.orderBy(distance, topicMemories.id)
-		.limit(1)
-	return nearest
-}
-
-async function mergeTopicMemory(
-	transaction: DbTransaction,
-	options: ApplyTopicMemoryWriteOptions,
-	{
-		id,
-		source,
-		match,
-		target,
-	}: {
-		id: string
-		source: "model" | "similarity"
-		match?: TopicMemoryMergeMatch
-		target?: TopicMemoryMergeTarget
-	},
-): Promise<string | undefined> {
-	// a model only approved the specific neighbor it saw, so skip an obsolete replacement
-	const { write, topicId, scanId, startedAt, now } = options
-	const memory = target ?? (await loadMergeTarget(transaction, topicId, id))
-	if (!memory || memory.replacedById || memory.status === "rejected") {
-		return
-	}
-
-	// a backfill can add provenance without overwriting the wording or latest brew that newer evidence supplied
-	const isNewer = memory.lastSeenAt <= startedAt
-	const phrasing =
-		isNewer && !memory.hasCorrection
-			? { text: write.text, embedding: write.embedding, embeddingModel: EMBED_MODEL_NAME }
-			: {}
-	await transaction
-		.update(topicMemories)
-		.set({
-			...phrasing,
-			status: "active",
-			factDate: write.factDate ?? memory.factDate,
-			replacedById: null,
-			updatedAt: now,
-			importance: Math.max(memory.importance, write.importance),
-			firstScanId: memory.firstSeenAt > startedAt ? scanId : memory.firstScanId,
-			lastSeenScanId: isNewer ? scanId : memory.lastSeenScanId,
-			findingIds: [...new Set([...memory.findingIds, ...write.findingIds])],
-		})
-		.where(eq(topicMemories.id, memory.id))
-
-	// use the vector that participated in the decision before replacing any text or embedding
-	const cosine = match ? match.similarity : toMergeSimilarity(write.embedding, memory)
-	await transaction.insert(topicMemoryDecisions).values({
-		scanId,
-		memoryId: memory.id,
-		matchMemoryId: match?.matchMemoryId ?? memory.id,
-		kind: "merge",
-		source,
-		cosine,
-	})
-	options.mergedPairs?.push({ candidate: write.text, matched: match?.text ?? memory.text, cosine, source })
-	return memory.id
-}
-
-// vectors from different embedding models have no comparable cosine
-function toMergeSimilarity(embedding: number[], target: TopicMemoryMergeTarget): number | null {
-	return target.embeddingModel === EMBED_MODEL_NAME ? toTopicMemorySimilarity(embedding, target.embedding) : null
-}
-
-async function loadMergeTarget(
-	transaction: DbTransaction,
-	topicId: string,
-	id: string,
-): Promise<TopicMemoryMergeTarget | undefined> {
-	// both brew dates stay available for historical writes
+) {
 	const firstScans = transaction.select({ id: scans.id, startedAt: scans.startedAt }).from(scans).as("first_brew")
-	const [memory] = await transaction
+	const candidates = await transaction
 		.select({
 			id: topicMemories.id,
-			text: topicMemories.text,
 			status: topicMemories.status,
-			replacedById: topicMemories.replacedById,
+			text: topicMemories.text,
+			value: topicMemories.value,
+			factDate: topicMemories.factDate,
+			updatedAt: topicMemories.updatedAt,
 			importance: topicMemories.importance,
 			findingIds: topicMemories.findingIds,
 			firstScanId: topicMemories.firstScanId,
@@ -313,14 +332,97 @@ async function loadMergeTarget(
 			hasCorrection: sql<boolean>`${topicMemoryCorrection} is not null`,
 			embedding: topicMemories.embedding,
 			embeddingModel: topicMemories.embeddingModel,
-			kind: topicMemories.kind,
-			factDate: topicMemories.factDate,
-			personMatchKey: topicMemories.personMatchKey,
 		})
 		.from(topicMemories)
 		.innerJoin(firstScans, eq(firstScans.id, topicMemories.firstScanId))
 		.innerJoin(scans, eq(scans.id, topicMemories.lastSeenScanId))
-		.where(and(eq(topicMemories.id, id), eq(topicMemories.topicId, topicId), eq(topicMemories.isAtomic, true)))
+		.where(
+			and(
+				eq(topicMemories.topicId, topicId),
+				eq(topicMemories.subject, subject),
+				eq(topicMemories.claimType, claimType),
+				factDate
+					? sql`(${topicMemories.factDate} is null or ${topicMemories.factDate} = ${factDate}
+						or ${topicMemories.factDate} like ${`${factDate}-%`}
+						or ${factDate} like ${topicMemories.factDate} || '-%')`
+					: undefined,
+				eq(topicMemories.value, value),
+				excludeId ? sql`${topicMemories.id} <> ${excludeId}` : undefined,
+				eq(topicMemories.isAtomic, true),
+				eq(topicMemories.needsReview, false),
+				inArray(topicMemories.status, ["active", "outdated"]),
+				isNull(topicMemories.replacedById),
+			),
+		)
+		.orderBy(
+			sql`${topicMemories.status} = 'active' desc`,
+			desc(scans.startedAt),
+			desc(topicMemories.lastSeenScanId),
+			topicMemories.id,
+		)
+		.limit(TOPIC_MEMORY_EXACT_CANDIDATE_LIMIT + 1)
+	// a large candidate set may hide a conflict beyond the rows we can safely read
+	if (candidates.length > TOPIC_MEMORY_EXACT_CANDIDATE_LIMIT) {
+		return undefined
+	}
+	// a coarse or undated observation must never bridge conflicting dated occurrences
+	const mostPrecise = candidates.reduce(
+		(date, candidate) => toMostPreciseTopicMemoryDate(date, candidate.factDate),
+		factDate,
+	)
+	const first = candidates[0]
+	return first &&
+		(!excludeId || first.status === "active") &&
+		candidates.every(({ factDate }) => areTopicMemoryDatesCompatible(mostPrecise, factDate))
+		? first
+		: undefined
+}
+
+// retain both immutable texts for the blinded evaluation
+async function saveExactDecision(
+	transaction: DbTransaction,
+	{ write, scanId, mergedPairs }: ApplyTopicMemoryWriteOptions,
+	match: TopicMemoryReplacementCandidate,
+	memoryId: string,
+	kind: "merge" | "replace",
+	archivedId?: string,
+): Promise<void> {
+	const cosine =
+		match.embeddingModel === TOPIC_MEMORY_EMBEDDING_MODEL
+			? toTopicMemorySimilarity(write.embedding, match.embedding)
+			: null
+	await transaction.insert(topicMemoryDecisions).values({
+		scanId,
+		memoryId,
+		matchMemoryId: archivedId ?? match.id,
+		kind,
+		source: kind === "replace" ? "model" : "exact",
+		cosine,
+		candidateText: write.text,
+		matchText: match.text,
+	})
+	if (kind === "merge") {
+		mergedPairs?.push({ candidate: write.text, matched: match.text, cosine, source: "exact" })
+	}
+}
+
+// compare the rejected statement for the same person, ignoring case and whitespace
+async function isRejectedTopicMemoryText(
+	transaction: DbTransaction,
+	{ topicId, personMatchKey, text }: { topicId: string; personMatchKey: string | null; text: string },
+): Promise<boolean> {
+	const [rejected] = await transaction
+		.select({ id: topicMemories.id })
+		.from(topicMemories)
+		.where(
+			and(
+				eq(topicMemories.topicId, topicId),
+				eq(topicMemories.status, "rejected"),
+				sql`${topicMemories.personMatchKey} is not distinct from ${personMatchKey}`,
+				sql`lower(regexp_replace(trim(${topicMemories.text}), '[[:space:]]+', ' ', 'g')) =
+		lower(regexp_replace(trim(${text}), '[[:space:]]+', ' ', 'g'))`,
+			),
+		)
 		.limit(1)
-	return memory
+	return rejected !== undefined
 }

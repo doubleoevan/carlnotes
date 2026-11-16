@@ -11,8 +11,8 @@ name: Journal story - Empty
     visible: "0 entries · 0 takeaways"
     timeout: 20000
 - tapOn: "^Journal$"
-- assertVisible: "Topic Takeaways 🧠"
+- assertVisible: "0 Topic Takeaways 🧠"
 - assertVisible: "Carl hasn’t written any takeaways yet.*"
 - assertNotVisible: "Takeaways pages: next page"
-- tapOn: "Close Topic Takeaways.*"
+- tapOn: "Close 0 Topic Takeaways.*"
 - assertVisible: "^Journal$"

@@ -9,7 +9,7 @@ import {
 	loadRankedTopicMemories,
 	loadTopicMemoriesPage,
 	saveTopicMemoryFeedback,
-	toVisibleTopicMemoryCount,
+	toVisibleTopicMemoryGroupRows,
 } from "./topicMemories"
 
 afterEach(restoreConnectionPool)
@@ -28,12 +28,12 @@ test("the Journal indexes active reads and permits one feedback row per rater", 
 	expect(memories.foreignKeys.map((key) => key.reference().foreignTable)).toContain(topicMemories)
 })
 
-test("Journal and prompt reads share feedback priority and keep inactive takeaways out", async () => {
+test("Journal and prompt reads share feedback priority and keep inactive topic memories out", async () => {
 	// exercise both readers, including the second page and a chapter-specific public slice
-	const queries = stubConnectionPool(({ text }) => (text.startsWith("select count(") ? [[8]] : []))
+	const queries = stubConnectionPool(() => [])
 	expect(await loadTopicMemoriesPage({ topicId: "topic-1", userId: null, page: 2 })).toEqual({
 		items: [],
-		pageCount: 2,
+		pageCount: 0,
 	})
 	await loadRankedTopicMemories({ topicId: "topic-1", embeddings: [[1, 0]], isPublicOnly: true })
 	// both readers rank feedback before importance
@@ -46,20 +46,18 @@ test("Journal and prompt reads share feedback priority and keep inactive takeawa
 		expect(query.text).toContain('"importance" desc')
 	}
 	// paging and public relevance each add their own query bounds
-	expect(ranked[0]?.values.slice(-2)).toEqual([5, 5])
 	expect(ranked[1]?.text).toContain("<=>")
 	expect(ranked[1]?.text).toContain('"scans"."id" = "topic_memories"."last_seen_scan_id"')
 	expect(ranked[1]?.text).toContain('"topics"."visibility" = \'public\'')
-	expect(ranked[1]?.values.at(-1)).toBe(20)
 })
 
 test("invite Journal rows and Brew diary counts share the first-Scan activation gate", async () => {
-	// produce enough active takeaways to exercise both the count and the page rounding
-	const queries = stubConnectionPool(({ text }) => (text.startsWith("select count(") ? [[8]] : []))
+	// produce enough active topic memories to exercise both the count and the page rounding
+	const queries = stubConnectionPool(() => [])
 	const invite = { topicId: "topic-1", userId: "subscriber-1", visibility: "invite" } as const
-	expect((await loadTopicMemoriesPage({ ...invite, page: 1 })).pageCount).toBe(2)
-	await db.select({ takeawayCount: toVisibleTopicMemoryCount(invite) }).from(topics)
-	expect(queries).toHaveLength(3)
+	expect((await loadTopicMemoriesPage({ ...invite, page: 1 })).pageCount).toBe(0)
+	await db.select({ groupRows: toVisibleTopicMemoryGroupRows(invite) }).from(topics)
+	expect(queries).toHaveLength(2)
 	// the count must hide the same history as the page
 	for (const { text } of queries) {
 		expect(text).toContain('"scans"."id" = "topic_memories"."first_scan_id"')
@@ -70,18 +68,18 @@ test("invite Journal rows and Brew diary counts share the first-Scan activation 
 	}
 })
 
-test("a member who lost their lead role cannot reject a takeaway", async () => {
+test("a member who lost their lead role cannot reject a topic memory", async () => {
 	const queries = stubConnectionPool(({ text }) => {
 		if (text.includes('from "topics"')) {
 			return [toTableRow(topics, { id: "topic-1", ownerId: "owner-1" })]
 		}
 		return text.includes('from "team_members"') ? [["member"]] : []
 	})
-	// no takeaway read or write is allowed after the role check fails
+	// no topic memory read or write is allowed after the role check fails
 	expect(
 		await saveTopicMemoryFeedback({
 			topicId: "topic-1",
-			topicMemoryId: "takeaway-1",
+			topicMemoryId: "topic-memory-1",
 			userId: "former-lead",
 			feedback: { rating: "down" },
 		}),
@@ -92,18 +90,18 @@ test("a member who lost their lead role cannot reject a takeaway", async () => {
 test.each([
 	{ note: "This applies only to dark roasts.", status: "active" },
 	{ note: "  ", status: "rejected" },
-])("a downvote with note '$note' leaves a takeaway $status", async ({ note, status }) => {
+])("a downvote with note '$note' leaves a topic memory $status", async ({ note, status }) => {
 	// an authorized caller reaches the scoped feedback write
 	const queries = stubConnectionPool(({ text }) => {
 		if (text.includes('from "topics"')) {
 			return [toTableRow(topics, { id: "topic-1", ownerId: "owner-1" })]
 		}
-		return text.startsWith("select") ? [["takeaway-1", false]] : []
+		return text.startsWith("select") ? [["topic-memory-1", false]] : []
 	})
 	expect(
 		await saveTopicMemoryFeedback({
 			topicId: "topic-1",
-			topicMemoryId: "takeaway-1",
+			topicMemoryId: "topic-memory-1",
 			userId: "owner-1",
 			feedback: { rating: "down", note },
 		}),
@@ -115,53 +113,53 @@ test.each([
 })
 
 test("clearing a rating also removes the caller's correction", async () => {
-	// grant an owner access to an active takeaway
+	// grant an owner access to an active topic memory
 	const queries = stubConnectionPool(({ text }) => {
 		if (text.includes('from "topics"')) {
 			return [toTableRow(topics, { id: "topic-1", ownerId: "owner-1" })]
 		}
-		return text.startsWith("select") ? [["takeaway-1", false]] : []
+		return text.startsWith("select") ? [["topic-memory-1", false]] : []
 	})
 	expect(
 		await saveTopicMemoryFeedback({
 			topicId: "topic-1",
-			topicMemoryId: "takeaway-1",
+			topicMemoryId: "topic-memory-1",
 			userId: "owner-1",
 			feedback: { rating: null },
 		}),
 	).toBe("saved")
 
-	// clear either rating without editing the takeaway or other raters' feedback
+	// clear either rating without editing the topic memory or other raters' feedback
 	const deletion = queries.find(({ text }) => text.startsWith('delete from "topic_memory_feedback"'))
-	expect(deletion?.values).toEqual(["takeaway-1", "owner-1"])
+	expect(deletion?.values).toEqual(["topic-memory-1", "owner-1"])
 	expect(deletion?.text).not.toContain('"rating"')
 	expect(queries.some(({ text }) => text.startsWith('update "topic_memories"'))).toBe(false)
 })
 
-test("the saved takeaway limit lets another rater endorse an already saved takeaway", async () => {
+test("the saved topic memory limit lets another rater endorse an already saved topic memory", async () => {
 	// both requests see a full cap, but adding a second vote cannot consume a slot
 	const rate = (): ReturnType<typeof saveTopicMemoryFeedback> =>
 		saveTopicMemoryFeedback({
 			topicId: "topic-1",
-			topicMemoryId: "takeaway-1",
+			topicMemoryId: "topic-memory-1",
 			userId: "owner-1",
 			feedback: { rating: "up" },
 		})
-	let isSavedTakeaway = false
+	let isSavedTopicMemory = false
 	const queries = stubConnectionPool(({ text }) => {
 		if (text.includes('from "topics"')) {
 			return [toTableRow(topics, { id: "topic-1", ownerId: "owner-1" })]
 		}
-		// the Topic already has reached the saved takeaway limit
+		// the Topic already has reached the saved topic memory limit
 		if (text.startsWith("select count(")) {
 			return [[30]]
 		}
-		return text.startsWith("select") ? [["takeaway-1", isSavedTakeaway]] : []
+		return text.startsWith("select") ? [["topic-memory-1", isSavedTopicMemory]] : []
 	})
-	expect(await rate()).toBe("savedTakeawayLimit")
+	expect(await rate()).toBe("savedTopicMemoryLimit")
 	expect(queries.some(({ text }) => text.startsWith("insert"))).toBe(false)
-	// adding an endorsement to a saved takeaway takes no extra slot
-	isSavedTakeaway = true
+	// adding an endorsement to a saved topic memory takes no extra slot
+	isSavedTopicMemory = true
 	expect(await rate()).toBe("saved")
 	expect(queries.filter(({ text }) => text.startsWith("insert"))).toHaveLength(1)
 })

@@ -416,20 +416,12 @@ nothing.
 
 ## Topic memories eval
 
-`bun run eval:topic-memories snapshot /tmp/journal-eval.json` reads the five dev Topics with the most active
-takeaways among those with at least ten successful brews. It copies the public Findings from their latest ten brews.
-Use a migrated disposable Postgres database with pgvector named `journal_eval_*` for the replay. Set `DATABASE_URL`
-and `DATABASE_WS_PROXY` for that database, then run the command below. The dev public model key pays for the eval;
-the replay uses the production proposal and Journal write code against the isolated database.
+`bun run eval:topic-memories snapshot /tmp/journal-eval.json` copies the public Finding evidence from ten successful
+Scans for each selected dev Topic. Pass a Topic count after the output path to select more than five. Run `replay`
+against a disposable migrated pgvector database named `journal_eval_*`. It measures exact same-value combines and
+reports the independent judge's labels. The private audit destination is an optional second path after the snapshot.
 
-```sh
-doppler run --project carlnotes --config dev --preserve-env=DATABASE_URL,DATABASE_WS_PROXY -- bun evals/topic-memories/topicMemoriesEval.ts replay /tmp/journal-eval.json /tmp/journal-pair-audit.json
-```
-
-The report compares pre-write model proposals with final active takeaways. `score-model` labels every same-Topic
-pair above 0.80 without seeing its cosine. Each Topic reports the redundant-row rate, where a connected group of
-labelled duplicates contributes all but one row. The pipeline precision and recall compare the judge's labels against
-which proposals share a stored survivor, traced through their written row IDs and replacement links. The judge also labels any combined pair
-below 0.80. The scores cover valid text proposals, since a cluster that yielded no takeaway has no text pair to grade.
-The report includes the similarity-only cutoffs and up to five applied merges from public Topics. The optional final
-path writes both texts, the cosine, the combined state, and the judge's verdict in a private file.
+`bun run eval:topic-memories:labels <local-ip> <private-dataset-path> <random-review-id> [port]` serves the blinded
+phone review on port 3102 by default. It samples up to 50 distinct exact combines and 50 computed groups from public dev Topics.
+The browser shows event dates and saves labels to a private file beside the dataset. The results endpoint adds
+`/results` to the review URL. The report measures recall within the sampled action classes.

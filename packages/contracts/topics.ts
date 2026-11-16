@@ -261,10 +261,10 @@ export const topicResponse = topicDetails.extend({
 	podcast: topicPodcast.nullable(),
 	// the scan history, latest first
 	scans: z.array(topicScan),
-	// the active takeaways this reader may open. older API builds omit the count
-	takeawayCount: z.number().int().nonnegative().optional(),
+	// the active topic memories this reader may open. older API builds omit the count
+	topicMemoryCount: z.number().int().nonnegative().optional(),
 	// whether to reserve the feedback controls while the reader's Journal opens
-	canRateTakeaways: z.boolean().optional(),
+	canRateTopicMemories: z.boolean().optional(),
 	// the topic's pending invites, both the addresses it named and the links it created. empty for anyone but the owner
 	invites: z.array(invite),
 	// number of manual scans left today. null for topics the user does not own

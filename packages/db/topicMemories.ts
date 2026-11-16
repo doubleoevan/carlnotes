@@ -1,20 +1,33 @@
-// reads active takeaways in shared rank order and stores authorized feedback
+// reads active topic memories in shared rank order and stores authorized feedback
 import {
+	TOPIC_MEMORY_CALENDAR_DATE_PATTERN,
+	TOPIC_MEMORY_INCOMPLETE_CONTEXT_PATTERN,
+	TOPIC_MEMORY_JOB_START_PATTERN,
 	TOPIC_MEMORY_PAGE_SIZE,
+	TOPIC_MEMORY_UNNAMED_SUBJECT_PATTERN,
 	type TopicMemoriesPage,
 	type TopicMemory,
 	type TopicMemoryFeedback,
+	toNamedTopicMemoryText,
+	toTopicMemoryPageNumber,
 } from "@carlnotes/contracts/topicMemories"
-import { TOPIC_MEMORY_PROMPT_LIMIT, TOPIC_MEMORY_SAVED_TAKEAWAY_LIMIT } from "@carlnotes/contracts/topicMemoryWork"
+import {
+	TOPIC_MEMORY_GROUP_CANDIDATE_LIMIT,
+	TOPIC_MEMORY_PROMPT_LIMIT,
+	TOPIC_MEMORY_SAVED_LIMIT,
+	toMostPreciseTopicMemoryDate,
+} from "@carlnotes/contracts/topicMemoryWork"
 import { and, cosineDistance, count, desc, eq, ne, or, type SQL, sql } from "drizzle-orm"
+import { alias } from "drizzle-orm/pg-core"
 import { toActivatedScanFilter, toPlatformAdminFilter, toTopicRoleFilter } from "./contentFilters"
 import { canRateTopicMemories } from "./findingPermissions"
 import { type DbHandle, type DbTransaction, db } from "./index"
 import { lockPersonalSourcesTopic } from "./personalSourcesLocks"
 import { podcastEpisodes } from "./schema/podcast"
-import { EMBED_MODEL_NAME, scans } from "./schema/scans"
-import { topicMemories, topicMemoryFeedback } from "./schema/topicMemories"
+import { scans } from "./schema/scans"
+import { TOPIC_MEMORY_EMBEDDING_MODEL, topicMemories, topicMemoryFeedback } from "./schema/topicMemories"
 import { topics } from "./schema/topics"
+import { groupTopicMemories, preferTopicMemoryRepresentative } from "./topicMemoryGroups"
 import { gatedTopicColumns, loadTopicRole, toTopicAccessFilter } from "./topicPermissions"
 
 // the latest correction wins when several authorized raters have supplied notes
@@ -37,7 +50,7 @@ export const topicMemoryPromptFeedback = sql<TopicMemoryPromptFeedback[]>`coales
 		order by updated_at desc, user_id limit ${TOPIC_MEMORY_FEEDBACK_PER_PROMPT}) as journal_feedback
 ), '[]'::jsonb)`
 
-// count a takeaway with a thumbs-up once, regardless of how many raters agree
+// count a topic memory with a thumbs-up once, regardless of how many raters agree
 export const topicMemoryIsSaved = sql<boolean>`exists (
 	select 1 from ${topicMemoryFeedback}
 	where ${topicMemoryFeedback.topicMemoryId} = ${topicMemories.id} and ${topicMemoryFeedback.rating} = 'up'
@@ -46,7 +59,17 @@ export const topicMemoryIsSaved = sql<boolean>`exists (
 const feedbackPriority = sql`case when ${topicMemoryIsSaved} then 0 when ${topicMemoryCorrection} is not null then 1 else 2 end`
 
 type JournalPage = Omit<TopicMemoriesPage, "canRate">
-type JournalRow = Omit<TopicMemory, "firstScanAt"> & { firstScanAt: Date }
+type JournalRow = Omit<TopicMemory, "firstScanAt" | "factDate"> & {
+	rank?: number
+	factDate: string | null
+	firstScanAt: Date
+	subject: (typeof topicMemories.$inferSelect)["subject"]
+	claimType: (typeof topicMemories.$inferSelect)["claimType"]
+	value: (typeof topicMemories.$inferSelect)["value"]
+	embedding: number[] | null
+	embeddingModel: string
+	lastSeenAt: Date
+}
 
 /** Reads one Journal page without revealing other raters' notes. */
 export async function loadTopicMemoriesPage({
@@ -60,12 +83,9 @@ export async function loadTopicMemoriesPage({
 	page: number
 	visibility?: (typeof topics.$inferSelect)["visibility"]
 }): Promise<JournalPage> {
-	// the app has already enforced its Topic entitlement
-	const [rows, takeawayCount] = await Promise.all([
-		selectTopicMemoryPage({ topicId, userId, page, visibility }),
-		countVisibleTopicMemories({ topicId, userId, visibility }),
-	])
-	return toTopicMemoryPage(rows, takeawayCount)
+	// group authorized rows before slicing. a group never straddles pages
+	const rows = await selectTopicMemoryRows({ topicId, userId, visibility })
+	return toTopicMemoryPage(rows, page)
 }
 
 /** Reads the Topic, count and page in the same snapshot as the private membership check. */
@@ -79,7 +99,7 @@ export async function loadMemberTopicMemoriesPage({
 	page: number
 }): Promise<{ topic: Pick<typeof topics.$inferSelect, keyof typeof gatedTopicColumns>; page: JournalPage } | null> {
 	// anchor the count and page to the permitted Topic so an empty page is distinct from a denied read
-	const entries = selectTopicMemoryPage({ topicId, userId, page }).as("journal_entries")
+	const entries = selectTopicMemoryRows({ topicId, userId }).as("journal_entries")
 	const canReadPrivateTopic = userId ? toTopicRoleFilter(userId) : undefined
 	const rows = await db
 		.select({
@@ -94,27 +114,35 @@ export async function loadMemberTopicMemoriesPage({
 				episodeNumber: entries.episodeNumber,
 				rating: entries.rating,
 				note: entries.note,
+				subject: entries.subject,
+				claimType: entries.claimType,
+				value: entries.value,
+				embedding: entries.embedding,
+				embeddingModel: entries.embeddingModel,
+				lastSeenAt: entries.lastSeenAt,
 			},
-			takeawayCount: toVisibleTopicMemoryCount({ topicId, userId }),
 		})
 		.from(topics)
 		.leftJoinLateral(entries, sql`true`)
 		.where(and(eq(topics.id, topicId), or(ne(topics.visibility, "private"), canReadPrivateTopic)))
+		.orderBy(entries.rank)
 	const first = rows[0]
 	return first
 		? {
 				topic: first.topic,
 				page: toTopicMemoryPage(
 					rows.flatMap(({ entry }) => (entry ? [entry] : [])),
-					first.takeawayCount,
+					page,
 				),
 			}
 		: null
 }
 
 // compare the user's invite activation with the first Scan
-function selectTopicMemoryPage({ page, ...options }: VisibleTopicMemoriesOptions & { page: number }) {
+function selectTopicMemoryRows(options: VisibleTopicMemoriesOptions) {
 	const { userId } = options
+	const latestScan = alias(scans, "journal_latest_scan")
+	const rank = sql`${feedbackPriority}, ${topicMemories.importance} desc, ${topicMemories.updatedAt} desc, ${topicMemories.id}`
 	return db
 		.select({
 			id: topicMemories.id,
@@ -125,13 +153,17 @@ function selectTopicMemoryPage({ page, ...options }: VisibleTopicMemoriesOptions
 				then 'correction' else 'fact' end`.as("memory_kind"),
 			factDate: topicMemories.factDate,
 			person: topicMemories.person,
-			firstScanAt: scans.startedAt,
+			firstScanAt: sql<Date>`${scans.startedAt}`.mapWith(scans.startedAt).as("first_scan_at"),
 			episodeNumber: podcastEpisodes.episodeNumber,
 			rating: topicMemoryFeedback.rating,
 			note: topicMemoryFeedback.note,
+			...topicMemoryGroupingColumns(),
+			rank: sql<number>`row_number() over (order by ${rank})`.as("journal_rank"),
+			lastSeenAt: sql<Date>`${latestScan.startedAt}`.mapWith(latestScan.startedAt).as("last_seen_at"),
 		})
 		.from(topicMemories)
 		.innerJoin(scans, eq(scans.id, topicMemories.firstScanId))
+		.innerJoin(latestScan, eq(latestScan.id, topicMemories.lastSeenScanId))
 		.innerJoin(topics, eq(topics.id, topicMemories.topicId))
 		.leftJoin(podcastEpisodes, eq(podcastEpisodes.scanId, scans.id))
 		.leftJoin(
@@ -141,15 +173,53 @@ function selectTopicMemoryPage({ page, ...options }: VisibleTopicMemoriesOptions
 				: sql`false`,
 		)
 		.where(toVisibleTopicMemories(options))
-		.orderBy(feedbackPriority, desc(topicMemories.importance), desc(topicMemories.updatedAt), topicMemories.id)
-		.limit(TOPIC_MEMORY_PAGE_SIZE)
-		.offset((page - 1) * TOPIC_MEMORY_PAGE_SIZE)
+		.orderBy(rank)
 }
 
-function toTopicMemoryPage(rows: JournalRow[], takeawayCount: number): JournalPage {
+/** Fetches vectors only for comparable rows in the bounded grouping buckets. */
+export function topicMemoryGroupingColumns() {
 	return {
-		items: rows.map((row) => ({ ...row, firstScanAt: row.firstScanAt.toISOString() })),
-		pageCount: Math.ceil(takeawayCount / TOPIC_MEMORY_PAGE_SIZE),
+		subject: topicMemories.subject,
+		claimType: topicMemories.claimType,
+		value: topicMemories.value,
+		embeddingModel: topicMemories.embeddingModel,
+		embedding: sql<number[] | null>`case when ${topicMemories.subject} is not null
+			and ${topicMemories.value} is not null
+			and count(*) over (partition by ${topicMemories.subject}, ${topicMemories.claimType}, ${topicMemories.value}) > 1
+			and row_number() over (partition by ${topicMemories.subject}, ${topicMemories.claimType}, ${topicMemories.value} order by ${topicMemories.id}) <= ${TOPIC_MEMORY_GROUP_CANDIDATE_LIMIT}
+			then ${topicMemories.embedding} end`
+			.mapWith(topicMemories.embedding)
+			.as("group_embedding"),
+	}
+}
+
+function toTopicMemoryPage(rows: JournalRow[], page: number): JournalPage {
+	// clamp to the last page of the same grouped snapshot used to choose the representatives
+	const groups = groupTopicMemories(rows, preferTopicMemoryRepresentative)
+	const pageCount = Math.ceil(groups.length / TOPIC_MEMORY_PAGE_SIZE)
+	const start = (toTopicMemoryPageNumber(page, pageCount) - 1) * TOPIC_MEMORY_PAGE_SIZE
+	return {
+		items: groups.slice(start, start + TOPIC_MEMORY_PAGE_SIZE).flatMap((group) => {
+			const [first] = group
+			if (!first) {
+				return []
+			}
+			const {
+				subject: _subject,
+				claimType: _claimType,
+				value: _value,
+				embedding: _embedding,
+				embeddingModel: _model,
+				lastSeenAt: _lastSeenAt,
+				rank: _rank,
+				...row
+			} = first
+			const text = toNamedTopicMemoryText(row.text, row.person) ?? row.text
+			// a newer statement with no date must not hide compatible evidence of the event day
+			const factDate = group.reduce((date, member) => toMostPreciseTopicMemoryDate(date, member.factDate), row.factDate)
+			return [{ ...row, text, factDate, firstScanAt: row.firstScanAt.toISOString() }]
+		}),
+		pageCount,
 	}
 }
 
@@ -159,28 +229,28 @@ type VisibleTopicMemoriesOptions = {
 	visibility?: (typeof topics.$inferSelect)["visibility"]
 }
 
-/** Projects the visible takeaway count alongside the already authorized Topic's scan history. */
-export function toVisibleTopicMemoryCount(options: VisibleTopicMemoriesOptions): SQL<number> {
-	return sql<number>`(${selectVisibleTopicMemoryCount(options)})`.mapWith(Number)
-}
-
-// use the same first-brew visibility filter as the Journal rows
-function selectVisibleTopicMemoryCount(options: VisibleTopicMemoriesOptions) {
+function selectVisibleTopicMemoryGroupRows(options: VisibleTopicMemoriesOptions) {
 	return db
-		.select({ count: count() })
+		.select({ id: topicMemories.id, factDate: topicMemories.factDate, ...topicMemoryGroupingColumns() })
 		.from(topicMemories)
 		.innerJoin(scans, eq(scans.id, topicMemories.firstScanId))
 		.innerJoin(topics, eq(topics.id, topicMemories.topicId))
 		.where(toVisibleTopicMemories(options))
 }
 
-// read the total on its own when getting a Journal page
-async function countVisibleTopicMemories(options: VisibleTopicMemoriesOptions): Promise<number> {
-	const [total] = await selectVisibleTopicMemoryCount(options)
-	return total?.count ?? 0
+export type VisibleTopicMemoryGroupRow = Awaited<ReturnType<typeof selectVisibleTopicMemoryGroupRows>>[number]
+
+/** Projects authorized group inputs into the existing Topic Scan query. */
+export function toVisibleTopicMemoryGroupRows(options: VisibleTopicMemoriesOptions): SQL<VisibleTopicMemoryGroupRow[]> {
+	// decode only the candidate vectors rather than exposing any text or feedback
+	const rows = selectVisibleTopicMemoryGroupRows(options).as("visible_topic_memory_groups")
+	return sql<VisibleTopicMemoryGroupRow[]>`(select coalesce(json_agg(json_build_object(
+		'id', ${rows.id}, 'subject', ${rows.subject}, 'claimType', ${rows.claimType}, 'value', ${rows.value},
+		'factDate', ${rows.factDate}, 'embeddingModel', ${rows.embeddingModel},
+		'embedding', ${rows.embedding}::text::json
+	)), '[]'::json) from ${rows})`
 }
 
-// recheck nonpublic Topic access when the app reads the count or rows
 function toVisibleTopicMemories({ topicId, userId, visibility }: VisibleTopicMemoriesOptions): SQL | undefined {
 	return and(
 		toActiveTopicMemories(topicId),
@@ -218,16 +288,18 @@ export async function loadRankedTopicMemories({
 	const relevance =
 		distances.length > 0
 			? [
-					sql`case when ${topicMemories.embeddingModel} = ${EMBED_MODEL_NAME}
+					sql`case when ${topicMemories.embeddingModel} = ${TOPIC_MEMORY_EMBEDDING_MODEL}
 			then least(${sql.join(distances, sql`, `)}) end asc nulls last`,
 				]
 			: []
 	const publicOnly = isPublicOnly
 		? sql`exists (select 1 from ${topics} where ${topics.id} = ${topicMemories.topicId} and ${topics.visibility} = 'public')`
 		: undefined
-	return db
+	const rows = await db
 		.select({
+			id: topicMemories.id,
 			text: topicMemories.text,
+			...topicMemoryGroupingColumns(),
 			correction: topicMemoryCorrection,
 			factDate: topicMemories.factDate,
 			person: topicMemories.person,
@@ -237,7 +309,7 @@ export async function loadRankedTopicMemories({
 		})
 		.from(topicMemories)
 		.innerJoin(scans, eq(scans.id, topicMemories.lastSeenScanId))
-		.where(and(toActiveTopicMemories(topicId), publicOnly))
+		.where(and(toActiveTopicMemories(topicId), eq(topicMemories.needsReview, false), publicOnly))
 		.orderBy(
 			feedbackPriority,
 			...relevance,
@@ -245,7 +317,26 @@ export async function loadRankedTopicMemories({
 			desc(topicMemories.updatedAt),
 			topicMemories.id,
 		)
-		.limit(TOPIC_MEMORY_PROMPT_LIMIT)
+	// use the Journal grouping and retain each group's bounded feedback and source links
+	return groupTopicMemories(rows, preferTopicMemoryRepresentative)
+		.slice(0, TOPIC_MEMORY_PROMPT_LIMIT)
+		.flatMap((group) => {
+			const [first] = group
+			if (!first) {
+				return []
+			}
+			return [
+				{
+					text: toNamedTopicMemoryText(first.text, first.person) ?? first.text,
+					correction: first.correction,
+					factDate: first.factDate,
+					person: first.person,
+					lastSeenAt: first.lastSeenAt,
+					feedback: group.flatMap(({ feedback }) => feedback).slice(0, TOPIC_MEMORY_FEEDBACK_PER_PROMPT),
+					findingIds: [...new Set(group.flatMap(({ findingIds }) => findingIds))].slice(0, 30),
+				},
+			]
+		})
 }
 
 type SaveTopicMemoryFeedbackOptions = {
@@ -255,10 +346,10 @@ type SaveTopicMemoryFeedbackOptions = {
 	feedback: TopicMemoryFeedback
 }
 
-/** Saves one user's vote on an active takeaway. A downvote without a note retires it immediately. */
+/** Saves one user's vote on an active topic memory. A downvote without a note retires it immediately. */
 export function saveTopicMemoryFeedback(
 	options: SaveTopicMemoryFeedbackOptions,
-): Promise<"saved" | "missing" | "forbidden" | "savedTakeawayLimit"> {
+): Promise<"saved" | "missing" | "forbidden" | "savedTopicMemoryLimit"> {
 	return db.transaction(async (transaction) => {
 		// recheck the sender's authority after waiting for writes on the same Topic
 		const { topicId, userId } = options
@@ -278,10 +369,10 @@ export function saveTopicMemoryFeedback(
 async function writeTopicMemoryFeedback(
 	transaction: DbTransaction,
 	{ topicId, topicMemoryId, userId, feedback }: SaveTopicMemoryFeedbackOptions,
-): Promise<"saved" | "missing" | "savedTakeawayLimit"> {
-	// only the named Topic's active takeaways may change
+): Promise<"saved" | "missing" | "savedTopicMemoryLimit"> {
+	// only the named Topic's active topic memories may change
 	const [memory] = await transaction
-		.select({ id: topicMemories.id, isSavedTakeaway: topicMemoryIsSaved })
+		.select({ id: topicMemories.id, isSavedTopicMemory: topicMemoryIsSaved })
 		.from(topicMemories)
 		.where(and(toActiveTopicMemories(topicId), eq(topicMemories.id, topicMemoryId)))
 	if (!memory) {
@@ -296,16 +387,16 @@ async function writeTopicMemoryFeedback(
 		return "saved"
 	}
 
-	// check the cap under the same Topic lock as the vote. another vote on a saved takeaway uses no slot
+	// check the cap under the same Topic lock as the vote. another vote on a saved topic memory uses no slot
 	if (
 		feedback.rating === "up" &&
-		!memory.isSavedTakeaway &&
-		(await hasReachedSavedTakeawayLimit(transaction, topicId))
+		!memory.isSavedTopicMemory &&
+		(await hasReachedSavedTopicMemoryLimit(transaction, topicId))
 	) {
-		return "savedTakeawayLimit"
+		return "savedTopicMemoryLimit"
 	}
 
-	// both thumbs save their own note. only a downvote's note corrects the takeaway
+	// both thumbs save their own note. only a downvote's note corrects the topic memory
 	const note = feedback.note?.trim() || null
 	const updatedAt = new Date()
 	const values = { rating: feedback.rating, note, updatedAt }
@@ -313,7 +404,7 @@ async function writeTopicMemoryFeedback(
 		.insert(topicMemoryFeedback)
 		.values({ topicMemoryId, userId, ...values })
 		.onConflictDoUpdate({ target: [topicMemoryFeedback.topicMemoryId, topicMemoryFeedback.userId], set: values })
-	// clearing a takeaway requires an explicit downvote without a correction
+	// clearing a topic memory requires an explicit downvote without a correction
 	await transaction
 		.update(topicMemories)
 		.set({ updatedAt, status: feedback.rating === "down" && !note ? "rejected" : "active" })
@@ -322,14 +413,27 @@ async function writeTopicMemoryFeedback(
 }
 
 function toActiveTopicMemories(topicId: string): SQL | undefined {
-	return and(eq(topicMemories.topicId, topicId), eq(topicMemories.status, "active"), eq(topicMemories.isAtomic, true))
+	return and(
+		eq(topicMemories.topicId, topicId),
+		eq(topicMemories.status, "active"),
+		eq(topicMemories.isAtomic, true),
+		sql`${topicMemories.text} !~* ${TOPIC_MEMORY_INCOMPLETE_CONTEXT_PATTERN}`,
+		or(
+			sql`${topicMemories.text} !~* ${TOPIC_MEMORY_JOB_START_PATTERN}`,
+			sql`${topicMemories.text} ~ ${TOPIC_MEMORY_CALENDAR_DATE_PATTERN}`,
+		),
+		or(
+			sql`${topicMemories.person} is not null`,
+			sql`${topicMemories.text} !~* ${TOPIC_MEMORY_UNNAMED_SUBJECT_PATTERN}`,
+		),
+	)
 }
 
 // the caller owns the Topic lock, so a concurrent vote cannot claim this same slot
-async function hasReachedSavedTakeawayLimit(handle: DbHandle, topicId: string): Promise<boolean> {
+async function hasReachedSavedTopicMemoryLimit(handle: DbHandle, topicId: string): Promise<boolean> {
 	const [saved] = await handle
 		.select({ count: count() })
 		.from(topicMemories)
 		.where(and(toActiveTopicMemories(topicId), topicMemoryIsSaved))
-	return (saved?.count ?? 0) >= TOPIC_MEMORY_SAVED_TAKEAWAY_LIMIT
+	return (saved?.count ?? 0) >= TOPIC_MEMORY_SAVED_LIMIT
 }

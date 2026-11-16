@@ -348,6 +348,10 @@ shared Comments for its discussion and, for one reader, its chat. `store.ts` hol
 `loadUploadKeysInGrace` and `clearPendingObjectDeletions` for a post's body images. `quotas.ts` holds
 `loadTopicPostBodyImageLimits`.
 
-`schema/topicMemories.ts` stores Topic Memories, each rater's feedback, and one decision with its cosine for every
-merge or flag. `topicMemories.ts` reads active ranked takeaways, checks access in the page and count queries,
-and applies the pin limit under the Topic lock. The shared list shows stored claims, and each rater reads their own note.
+`schema/topicMemories.ts` stores Topic Memories, year or month or day event dates, each rater's feedback, and exact decision records.
+`topicMemoryGroups.ts` computes reversible groups within the same subject, claim type and value. `topicMemories.ts` applies access
+filtering before grouping, selects one ranked claim per group for prompts, and enforces the saved topic memory
+limit under the Topic lock. A page request past the grouped count returns the current last page in the same read.
+Each rater reads their own saved note.
+
+Topic memory subject aliases are private to a Topic. `schema/topicMemories.ts` stores canonical names and aliases with a linked public Finding.

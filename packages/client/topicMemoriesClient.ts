@@ -8,7 +8,7 @@ import {
 } from "@carlnotes/contracts/topicMemories"
 import { apiClient, readApiResponse } from "./apiClient"
 
-/** Reads one page of takeaways. */
+/** Reads one page of topic memories. */
 export async function fetchTopicMemories({
 	topicId,
 	page,

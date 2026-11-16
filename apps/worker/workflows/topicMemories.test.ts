@@ -43,7 +43,7 @@ test("a completed Scan starts its Journal child after the closing write", async 
 				taskQueue: TOPIC_MEMORY_TASK_QUEUE,
 				workflowsPath: new URL("./topicMemories.ts", import.meta.url).pathname,
 				activities: {
-					updateTopicTakeawaysActivity: async (journalScanId: string) => {
+					updateTopicMemoriesActivity: async (journalScanId: string) => {
 						events.push(`updated ${journalScanId}`)
 					},
 				},
@@ -59,7 +59,7 @@ test("backfill continues by Topic and skips a paused brew without retrying it", 
 	const seen: string[] = []
 	const result = await runTestWorkflow({
 		testEnvironment,
-		workflowName: "backfillTopicTakeawaysWorkflow",
+		workflowName: "backfillTopicMemoriesWorkflow",
 		workflowArgs: [],
 		taskQueue: TOPIC_MEMORY_TASK_QUEUE,
 		workers: [
@@ -71,7 +71,7 @@ test("backfill continues by Topic and skips a paused brew without retrying it", 
 						afterTopicId
 							? { scanIdsByTopic: [["third"]] }
 							: { scanIdsByTopic: [["first", "second"]], afterTopicId: "topic-1" },
-					updateTopicTakeawaysActivity: async (scanId: string) => {
+					updateTopicMemoriesActivity: async (scanId: string) => {
 						seen.push(scanId)
 						return scanId === "first" ? "paused" : "updated"
 					},

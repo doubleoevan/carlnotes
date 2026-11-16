@@ -49,12 +49,12 @@ const toClassification = (isViolation: boolean): ModerationClassification =>
 	({ outcome: "classified", verdict: { isViolation, category: isViolation ? "harassment" : null } }) as never
 
 // the recording row's read, the starter's key, a month with budget left, and a script the writer returns
-function stubScriptWrite(hasPublicTakeaways = false): {
+function stubScriptWrite(hasPublicTopicMemories = false): {
 	sentQueries: ReturnType<typeof stubConnectionPool>
 	writeSpy: ReturnType<typeof spyOn>
 } {
 	// make the saved discussion and its billing gate available to the script writer
-	const row = DISCUSSION_ROW.with(5, hasPublicTakeaways)
+	const row = DISCUSSION_ROW.with(5, hasPublicTopicMemories)
 	const sentQueries = stubConnectionPool(({ text }) => (text.startsWith("select") ? [row] : []))
 	spyOn(litellm, "loadOrProvisionUserLiteLLMKey").mockResolvedValue("member-2-key")
 	spyOn(monthlyBudgetCutoffs, "isMonthlyBudgetCutoffPassed").mockResolvedValue(false)
@@ -95,7 +95,7 @@ test("a flagged Comment is left out, a flagged author is not named, and the scri
 	expect(JSON.stringify(sentQueries)).not.toContain("the pancake part")
 })
 
-test("a public post embeds its own text and sends relevant takeaways to the discussion writer", async () => {
+test("a public post embeds its own text and sends relevant topic memories to the discussion writer", async () => {
 	const { writeSpy } = stubScriptWrite(true)
 	const embed = spyOn(models, "embedVector").mockResolvedValue([1, 0])
 	const load = spyOn(topicMemoryPrompt, "loadTopicMemoryPrompt").mockResolvedValue("fenced background")
