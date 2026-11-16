@@ -94,6 +94,7 @@ test.each([
 test.each([
 	["on September 25, 2026", "on September 26, 2026"],
 	["on 25 September 2026", "on 26 September 2026"],
+	["on 25 September, 2026", "on 25 September, 2027"],
 	["on 09/25/26", "on 09/26/26"],
 	["on Sep. 25", ""],
 ] as const)("near-identical text sends mismatched date mentions through review", (first, second) => {

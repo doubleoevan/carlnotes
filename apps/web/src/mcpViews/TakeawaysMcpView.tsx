@@ -27,7 +27,7 @@ export function TakeawaysMcpView({ takeaways }: { takeaways: McpViewTakeaways })
 			requestedPage && requestedPage.pageCount > 0 && page > requestedPage.pageCount
 				? await readTakeawayPage(shown.topicId, requestedPage.pageCount)
 				: requestedPage
-		if (next) {
+		if (next && (next.pageCount === 0 || next.pageNumber <= next.pageCount)) {
 			setShown(next)
 		} else {
 			setPageFailed(true)

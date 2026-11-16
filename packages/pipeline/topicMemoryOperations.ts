@@ -91,8 +91,9 @@ export function toTopicMemorySimilarityAction(
 const MONTH_NAME =
 	"(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember|t)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\\.?"
 const DAY_OF_MONTH = "\\d{1,2}(?:st|nd|rd|th)?"
+const OPTIONAL_YEAR = "(?:,?\\s+\\d{4})?"
 const DATE_MENTION = new RegExp(
-	`\\b(?:\\d{4}-\\d{2}-\\d{2}|\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4}|${MONTH_NAME}\\s+(?:\\d{4}|${DAY_OF_MONTH}(?:,?\\s+\\d{4})?)|${DAY_OF_MONTH}\\s+${MONTH_NAME}(?:\\s+\\d{4})?)\\b`,
+	`\\b(?:\\d{4}-\\d{2}-\\d{2}|\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4}|${MONTH_NAME}\\s+(?:\\d{4}|${DAY_OF_MONTH}${OPTIONAL_YEAR})|${DAY_OF_MONTH}\\s+${MONTH_NAME}${OPTIONAL_YEAR})\\b`,
 	"gi",
 )
 
