@@ -19,9 +19,13 @@ import chatTeamTemplate from "./chat-team.md" with { type: "text" }
 import chatTopicTemplate from "./chat-topic.md" with { type: "text" }
 import chatTopicPostTemplate from "./chat-topic-post.md" with { type: "text" }
 import checkAgreementTemplate from "./check-agreement.md" with { type: "text" }
+import confirmTopicMemoryPairsTemplate from "./confirm-topic-memory-pairs.md" with { type: "text" }
+import currentDayContextTemplate from "./current-day-context.md" with { type: "text" }
+import judgeTopicMemoryDuplicatesTemplate from "./judge-topic-memory-duplicates.md" with { type: "text" }
 import moderateUserTextTemplate from "./moderate-user-text.md" with { type: "text" }
 import outlinePodcastEpisodeTemplate from "./outline-podcast-episode.md" with { type: "text" }
 import podcastEpisodeHostsTemplate from "./podcast-episode-hosts.md" with { type: "text" }
+import proposeTopicTakeawaysTemplate from "./propose-topic-takeaways.md" with { type: "text" }
 import scorePersonalSourceResourceTemplate from "./score-personal-source-resource.md" with { type: "text" }
 import searchTopicTemplate from "./search-topic.md" with { type: "text" }
 import suggestSourcesTemplate from "./suggest-sources.md" with { type: "text" }
@@ -31,6 +35,7 @@ import summarizeTopicPostTemplate from "./summarize-topic-post.md" with { type: 
 import summarizeTopicScanTemplate from "./summarize-topic-scan.md" with { type: "text" }
 import topicImageSceneTemplate from "./topic-image-scene.md" with { type: "text" }
 import topicImageStyleTemplate from "./topic-image-style.md" with { type: "text" }
+import topicMemoryBackgroundTemplate from "./topic-memory-background.md" with { type: "text" }
 import topicVideoImageStyleTemplate from "./topic-video-image-style.md" with { type: "text" }
 import updatesRecapTemplate from "./updates-recap.md" with { type: "text" }
 import { stripFrontmatter } from "./write.ts"
@@ -40,6 +45,11 @@ import writeTopicPostDiscussionTemplate from "./write-topic-post-discussion.md" 
 
 // the prompts this app serves, and their fallback templates for when the registry can't serve them
 export const FALLBACK_PROMPT_TEMPLATES = {
+	"current-day-context": currentDayContextTemplate,
+	"topic-memory-background": topicMemoryBackgroundTemplate,
+	"propose-topic-takeaways": proposeTopicTakeawaysTemplate,
+	"confirm-topic-memory-pairs": confirmTopicMemoryPairsTemplate,
+	"judge-topic-memory-duplicates": judgeTopicMemoryDuplicatesTemplate,
 	"score-personal-source-resource": scorePersonalSourceResourceTemplate,
 	"summarize-personal-sources-context": summarizePersonalSourcesContextTemplate,
 	"summarize-resource": summarizeResourceTemplate,

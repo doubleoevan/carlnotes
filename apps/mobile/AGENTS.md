@@ -149,6 +149,9 @@ and the package boundary check fails anything else, a type-only import of `@carl
 
 - `bun run dev:mobile` — the Expo dev server under Doppler's dev config, with the expo-mcp server on, from the repo
   root. In a development build connected to it, `carlnotes:///storybook` opens the component browser.
+- `maestro test apps/mobile/.maestro` — open the Journal's Owner, ReadOnly, and Empty Nightshift stories in an iOS
+  development build already connected to Metro. The flows use `carlnotes://storybook?story=<owner|read-only|empty>` to open the
+  story through `.rnstorybook/topicMemoriesStorybook.ts`. The story client keeps reads and feedback submissions local.
 - `bun run mobile:build -- --profile development-simulator` — an EAS cloud build; profiles: development,
   development-simulator, preview, production.
 - `bun run mobile:update` — an EAS Update on the fingerprint runtime policy.
@@ -478,3 +481,6 @@ on one line, and `PrivateChatPanel` reads its placeholder from `toPrivateChatPla
 screen's report in its actions sheet, beside a Report image N in post option for each body image a reader may report.
 `src/components/chat/TopicPostTag.tsx` adapts the shared tag to a pressable
 link.
+
+`src/components/topic/TopicMemoriesDialog.tsx` adds Journal to the Brew diary. It renders the core Takeaways view
+in the focus-restoring `Sheet` with the Nightshift Takeaways list and a keyboard-aware feedback field.

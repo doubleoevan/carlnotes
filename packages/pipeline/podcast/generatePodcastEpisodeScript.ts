@@ -6,7 +6,9 @@ import { toSharedCommentLine } from "@carlnotes/contracts/socialText"
 import type { PodcastSharedComment } from "@carlnotes/db/sharedComments"
 import { premiumModelCost } from "@carlnotes/models/budget"
 import { LOW_REASONING_PROVIDER_OPTIONS, scoreModel } from "@carlnotes/models/models"
+import { loadCurrentDayContext } from "@carlnotes/models/prompts/currentDayContext"
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "@carlnotes/models/prompts/fetch"
+import { toTopicMemoryPromptTemplate } from "@carlnotes/models/prompts/topicMemoryBackground"
 import { writePrompt } from "@carlnotes/models/prompts/write"
 import { generateText, NoObjectGeneratedError, Output } from "ai"
 import { toPodcastEpisodeHostsBlock } from "./podcastEpisodeHosts"
@@ -48,6 +50,7 @@ export type ScriptCallResult<ScriptDraft> = { scriptDraft: ScriptDraft; costDoll
 export type GeneratePodcastEpisodeOutlineOptions = {
 	topicName: string
 	topicPrompt: string
+	topicMemoryPrompt?: string
 	podcastEpisodeFindings: PodcastEpisodeFinding[]
 	// the comments the topic's editors shared with the podcast that this Podcast Episode takes
 	sharedComments?: PodcastSharedComment[]
@@ -166,14 +169,18 @@ export async function writeCheckedScriptDraft<ScriptDraft>(
 export async function buildOutlinePrompt({
 	topicName,
 	topicPrompt,
+	topicMemoryPrompt,
 	podcastEpisodeFindings,
 	maxMinutes,
 	rejectionReason,
 }: GeneratePodcastEpisodeOutlineOptions): Promise<BuiltPrompt> {
 	// fetch the outline template, and fill it with the Topic, the Findings, the hosts, and the limits
-	const { template, name, registryPrompt } = await fetchPromptTemplate("outline-podcast-episode")
+	const [{ template, name, registryPrompt }, currentDayBlock] = await Promise.all([
+		fetchPromptTemplate("outline-podcast-episode"),
+		loadCurrentDayContext(),
+	])
 	const prompt = writePrompt(
-		template,
+		toTopicMemoryPromptTemplate(template, topicMemoryPrompt ?? ""),
 		{
 			topicName,
 			topicPrompt,
@@ -182,6 +189,8 @@ export async function buildOutlinePrompt({
 		},
 		{
 			hostsBlock: await toPodcastEpisodeHostsBlock(),
+			currentDayBlock,
+			topicMemoryBlock: topicMemoryPrompt ?? "",
 			maxMinutes: String(maxMinutes),
 			titleMaxChars: String(PODCAST_EPISODE_TITLE_MAX_CHARS),
 			descriptionMaxChars: String(PODCAST_EPISODE_DESCRIPTION_MAX_CHARS),
@@ -197,8 +206,17 @@ export async function buildSegmentPrompt(
 	generatePodcastEpisodeSegmentOptions: GeneratePodcastEpisodeSegmentOptions,
 ): Promise<BuiltPrompt> {
 	// fetch the segment template, and list the segment's own Findings
-	const { template, name, registryPrompt } = await fetchPromptTemplate("write-podcast-episode-segment")
-	const { outline, segmentIndex, podcastEpisodeFindings, sharedComments = [] } = generatePodcastEpisodeSegmentOptions
+	const [{ template, name, registryPrompt }, currentDayBlock] = await Promise.all([
+		fetchPromptTemplate("write-podcast-episode-segment"),
+		loadCurrentDayContext(),
+	])
+	const {
+		outline,
+		segmentIndex,
+		podcastEpisodeFindings,
+		topicMemoryPrompt,
+		sharedComments = [],
+	} = generatePodcastEpisodeSegmentOptions
 	const segmentFindings = toSegmentFindings(generatePodcastEpisodeSegmentOptions)
 	const { chapterSharedComments, closingSharedComments } = toSharedCommentPlacements({
 		sharedComments,
@@ -209,7 +227,7 @@ export async function buildSegmentPrompt(
 	// write the prompt. the template's cold open and sign-off rules read the segment's number, the segment count,
 	// and the goodbye's opening turns
 	const prompt = writePrompt(
-		template,
+		toTopicMemoryPromptTemplate(template, topicMemoryPrompt ?? ""),
 		{
 			topicName: generatePodcastEpisodeSegmentOptions.topicName,
 			topicPrompt: generatePodcastEpisodeSegmentOptions.topicPrompt,
@@ -222,6 +240,8 @@ export async function buildSegmentPrompt(
 		},
 		{
 			hostsBlock: await toPodcastEpisodeHostsBlock(),
+			currentDayBlock,
+			topicMemoryBlock: topicMemoryPrompt ?? "",
 			segmentNumber: String(segmentIndex + 1),
 			segmentCount: String(outline.segments.length),
 			goodbyeOpening: toGoodbyeOpeningSentence(),

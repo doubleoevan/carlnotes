@@ -1,7 +1,7 @@
 ---
 title: Add to AI
 description: >-
-  Connect CarlNotes to Claude, ChatGPT, and coding AI Agents. Set up OAuth sign-in, understand all forty-three MCP
+  Connect CarlNotes to Claude, ChatGPT, and coding AI Agents. Set up OAuth sign-in, understand the MCP
   tools, and manage access to your topics and findings.
 sidebar:
   order: 2
@@ -126,17 +126,18 @@ without one.
 
 ## Tool reference
 
-The server advertises the same forty-three tools to visitors and connected accounts. Sign-in changes permission, not the
-tool list. Public tools also read private or invite topics when your account has access.
+Visitors and connected accounts see the same tool catalog. Sign in to read private or invite Topics your account can access.
 
 | Tool | What it does | Account and effects |
 | --- | --- | --- |
 | `list_topics` | Lists readable topics with their source IDs, one section of the topics page (yours, followed, featured, or popular), or the similar topics a topic's page shows. | Public topics without sign-in; adds your owned, followed, and team topics when connected. A visitor reads the featured and popular sections. Read-only. |
 | `read_topic_feed` | Reads a topic's findings in relevance order, with full explanations. | Public reads work without sign-in. A connected account also receives its read and bookmark state. Read-only. |
+| `read_topic_memories` | Opens one page of a Topic's Journal in a read-only view. | Public Journals work without sign-in. Private Journals require Topic membership. |
 | `search_topic_findings` | Searches one readable topic's findings by meaning. | Uses the public search budget for a visitor, or the connected account's model budget. Read-only. |
 | `search` | Searches topics, podcast episodes, posts, findings, teams, and profiles with filters and numbered pages. | Results respect your access. Account-only filters use your own read and bookmark state. Read-only. |
 | `mark_finding_consumed` | Marks a readable finding read for you. | Requires an account. Saves your read state. Repeating it has the same effect. |
-| `rate_finding` | Rates a finding up or down, or clears your rating. | Requires an account with rating permission, such as the owner, a team member, or an eligible follower. Repeating a rating has the same effect. |
+| `rate_finding` | Rates a Finding up or down with an optional note, or clears your rating. | Requires an account with rating permission, such as the owner, a team member, or an eligible follower. Repeating a rating has the same effect. |
+| `read_finding_rating_note` | Restores the connected user's Finding rating note in the MCP view. | The view receives the note through private tool metadata. |
 | `send_finding_feedback` | Saves your own words about why a finding was good or bad. | Requires an account with rating permission. Your words are stored and never change scoring. Repeating it saves them again. |
 | `bookmark_finding` | Saves or removes a bookmark. | Requires the topic owner or a member of a team holding the topic. Repeating the same choice has the same effect. |
 | `follow_topic` | Follows or unfollows an accessible topic. | Requires an account. Owners cannot unfollow their own topics. Repeating a choice has the same effect. |

@@ -1,4 +1,5 @@
 import { type ChatLinkPreview, topicFindingLinkPreviewResponse } from "@carlnotes/contracts/chat"
+import { findingRatingNoteResponse } from "@carlnotes/contracts/payloads"
 import { apiClient, readApiResponse } from "./apiClient"
 import { showFailedWrite } from "./clientWrite"
 
@@ -35,7 +36,7 @@ export async function fetchTopicFindingLinkPreview(findingId: string): Promise<C
 
 // a finding write may reject after reporting its failure
 type FindingWriteOptions = { findingId: string; shouldThrowOnError?: boolean }
-export type SendTopicFindingRatingOptions = FindingWriteOptions & { rating: "up" | "down" | null }
+export type SendTopicFindingRatingOptions = FindingWriteOptions & { rating: "up" | "down" | null; note?: string }
 export type SendTopicFindingConsumedOptions = FindingWriteOptions & { isConsumed: boolean }
 export type SendTopicFindingBookmarkOptions = FindingWriteOptions & { isBookmarked: boolean }
 export type SendTopicFindingOpenedOptions = FindingWriteOptions
@@ -46,13 +47,26 @@ export type SendTopicFindingOpenedOptions = FindingWriteOptions
 export async function sendTopicFindingRating({
 	findingId,
 	rating,
+	note,
 	shouldThrowOnError,
 }: SendTopicFindingRatingOptions): Promise<void> {
 	await showFailedWrite({
-		request: apiClient().api["topic-findings"][":id"].rating.$post({ param: { id: findingId }, json: { rating } }),
+		request: apiClient().api["topic-findings"][":id"].rating.$post({
+			param: { id: findingId },
+			json: { rating, note },
+		}),
 		action: "rate topic finding",
 		shouldThrowOnError,
 	})
+}
+
+/** Reads the calling rater's saved note. */
+export async function fetchTopicFindingRatingNote(findingId: string, signal?: AbortSignal): Promise<string | null> {
+	const response = await apiClient().api["topic-findings"][":id"].rating.$get(
+		{ param: { id: findingId } },
+		{ init: { signal } },
+	)
+	return (await readApiResponse(findingRatingNoteResponse, response)).note
 }
 
 /**

@@ -60,28 +60,43 @@ export async function toTopicRole(
 	}
 
 	// the team role, read at most once per request for this user and topic
-	return memoizeInRequest(`topic-role:${userId}:${topic.id}:${topic.teamId ?? ""}`, async () => {
-		// membership in any team that has the topic grants the role: the owning team beside the shared-into ones
-		const sharedTeamIds = db
-			.select({ teamId: teamTopics.teamId })
-			.from(teamTopics)
-			.where(eq(teamTopics.topicId, topic.id))
-		const topicTeamMatches = [inArray(teamMembers.teamId, sharedTeamIds)]
-		if (topic.teamId) {
-			topicTeamMatches.push(eq(teamMembers.teamId, topic.teamId))
-		}
+	return memoizeInRequest(`topic-role:${userId}:${topic.id}:${topic.teamId ?? ""}`, () =>
+		loadTopicRole({ userId, topic, handle: db }),
+	)
+}
 
-		// one query covers every team that has it
-		const [membership] = await db
-			.select({ role: teamMembers.role })
-			.from(teamMembers)
-			.where(and(eq(teamMembers.userId, userId), eq(teamMembers.isActive, true), or(...topicTeamMatches)))
-			.orderBy(teamMembers.role)
-			.limit(1)
+/** Checks the current Topic role when a write cannot use a cached request result. */
+export async function loadTopicRole({
+	userId,
+	topic,
+	handle,
+}: {
+	userId: string
+	topic: Pick<TopicRow, "id" | "ownerId" | "teamId">
+	handle: DbHandle
+}): Promise<TopicRole> {
+	if (topic.ownerId === userId) {
+		return "owner"
+	}
 
-		// leader sorts before member, so a user who leads any of those teams is a leader here
-		return membership?.role ?? null
-	})
+	// both the owning team and teams with shares grant a role
+	const sharedTeamIds = handle
+		.select({ teamId: teamTopics.teamId })
+		.from(teamTopics)
+		.where(eq(teamTopics.topicId, topic.id))
+	const topicTeamMatches = [inArray(teamMembers.teamId, sharedTeamIds)]
+	if (topic.teamId) {
+		topicTeamMatches.push(eq(teamMembers.teamId, topic.teamId))
+	}
+
+	// leader sorts before member, so a user who leads any of those teams is a leader here
+	const [membership] = await handle
+		.select({ role: teamMembers.role })
+		.from(teamMembers)
+		.where(and(eq(teamMembers.userId, userId), eq(teamMembers.isActive, true), or(...topicTeamMatches)))
+		.orderBy(teamMembers.role)
+		.limit(1)
+	return membership?.role ?? null
 }
 
 /**

@@ -152,7 +152,7 @@ export function TopicPageContent({
 				{/* the topic's Topic Posts, right below its comment thread */}
 				{topic.topicPosts && <TopicPostsSection topicId={topic.id} {...topic.topicPosts} />}
 			</View>
-			<TopicPageCards topic={topic} onNoteCountChange={setNoteCount} />
+			<TopicPageCards topic={topic} onNoteCountChange={setNoteCount} onTakeawayRemoved={onRefresh} />
 			<TopicCountsLine topic={topic} />
 			<Footer />
 			{/* the image sheet that an editor's press on the header image opens */}

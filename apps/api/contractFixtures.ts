@@ -627,6 +627,11 @@ export const CONTRACT_FIXTURES: Record<string, ContractFixture> = {
 	),
 
 	// topic findings
+	"topicFindingClient.fetchTopicFindingRatingNote": toFixture(
+		findingsRoute,
+		{ params: FINDING_PARAMS },
+		FINDING_TABLES,
+	),
 	"topicFindingClient.sendFindingFeedback": toFixture(
 		findingsRoute,
 		{ params: FINDING_PARAMS, body: { feedback: "more like this" } },

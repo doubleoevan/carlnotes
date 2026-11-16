@@ -56,7 +56,7 @@ export type McpTestHostApi = {
 /**
  * How a test's host responds to a tool call.
  */
-export type ToolCallResponder = (toolCall: McpViewToolCall) => McpViewToolResult
+export type ToolCallResponder = (toolCall: McpViewToolCall) => McpViewToolResult | Promise<McpViewToolResult>
 
 // what a test opens an MCP view with: its name, the host's theme and display modes, how the host responds to a tool
 // call, a link, and a display mode, and the frame's width

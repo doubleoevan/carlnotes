@@ -2,7 +2,7 @@ import { type RemoveTopicSourceStatus, removeTopicSource } from "@carlnotes/clie
 import type { TopicFinding } from "@carlnotes/contracts/findings"
 import { KEEP_ONE_SOURCE_MESSAGE } from "@carlnotes/contracts/sources"
 import type { ScanNote, TopicScan } from "@carlnotes/contracts/topics"
-import { toScanTimestamp, toSectionCountLabel } from "@carlnotes/core/lib/labels"
+import { toScanTimestamp } from "@carlnotes/core/lib/labels"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useState } from "react"
 import { toast } from "sonner"
@@ -31,6 +31,7 @@ import {
 	SECTION_LABEL_CLASS,
 } from "@/lib/styleClasses"
 import { CollapsibleSection } from "./CollapsibleSection"
+import { TopicMemoriesDialog } from "./TopicMemoriesDialog"
 import { TopicScanFailure } from "./TopicScanFailure"
 import { type AllowedScanNoteUrls, TopicScanRecap, toNotesMarkdown } from "./TopicScanRecap"
 
@@ -46,6 +47,8 @@ type RemovableTopicSource = { sourceId: string; label: string }
  */
 export function TopicScanHistory({
 	scans,
+	takeawayCount,
+	canRateTakeaways,
 	allowedUrls,
 	findings,
 	topic,
@@ -54,6 +57,8 @@ export function TopicScanHistory({
 	onReloadTopicPage,
 }: {
 	scans: TopicScan[]
+	takeawayCount?: number
+	canRateTakeaways?: boolean
 	allowedUrls?: AllowedScanNoteUrls
 	findings?: TopicFinding[]
 	// names the topic in each diary's copied Markdown
@@ -93,8 +98,17 @@ export function TopicScanHistory({
 		<CollapsibleSection
 			value="history"
 			title="Brew diary"
-			countLabel={toSectionCountLabel(scans.length, "brew")}
+			titleAside={
+				<TopicMemoriesDialog
+					topicId={topic.id}
+					entryCount={scans.length}
+					takeawayCount={takeawayCount}
+					canRateTakeaways={canRateTakeaways}
+					onTakeawayRemoved={onReloadTopicPage}
+				/>
+			}
 			hasStackedClosedDivider
+			hasCompactHeader
 		>
 			<TopicScanHistoryCard
 				scans={scans}

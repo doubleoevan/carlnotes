@@ -116,3 +116,5 @@ poster.
 `topicPostClient.ts` also starts a regenerate of a post's discussion. `chatClient.ts` lets a topic's chat page name
 the Topic Post whose page it is open on, and sends the post's id with each question. `podcastEpisodeClient.ts` reads a
 player id that names a Topic Post's discussion from the post, and resolves its audio on the post's route.
+
+`topicMemoriesClient.ts` reads a Journal page and saves or clears feedback. Both apps call it through core.

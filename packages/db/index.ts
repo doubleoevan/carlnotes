@@ -31,6 +31,7 @@ import * as teams from "./schema/teams"
 import * as teamTopics from "./schema/teamTopics"
 import * as topicEmailSends from "./schema/topicEmailSends"
 import * as topicImages from "./schema/topicImages"
+import * as topicMemories from "./schema/topicMemories"
 import * as topicPosts from "./schema/topicPosts"
 import * as topics from "./schema/topics"
 import * as uncheckedImages from "./schema/uncheckedImages"
@@ -82,6 +83,7 @@ export const schema = {
 	...notificationsEmailSends,
 	...podcast,
 	...topicImages,
+	...topicMemories,
 	...topicPosts,
 	...pushDevices,
 	...releases,

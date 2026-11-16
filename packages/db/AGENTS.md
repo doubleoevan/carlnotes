@@ -347,3 +347,7 @@ post's image last changed, which a reporter's hidden image compares against. `sh
 shared Comments for its discussion and, for one reader, its chat. `store.ts` holds a discussion's audio key, and
 `loadUploadKeysInGrace` and `clearPendingObjectDeletions` for a post's body images. `quotas.ts` holds
 `loadTopicPostBodyImageLimits`.
+
+`schema/topicMemories.ts` stores Topic Memories, each rater's feedback, and one decision with its cosine for every
+merge or flag. `topicMemories.ts` reads active ranked takeaways, checks access in the page and count queries,
+and applies the pin limit under the Topic lock. The shared list shows stored claims, and each rater reads their own note.

@@ -75,8 +75,8 @@ test("a list's row calls its tools through the host and shows each change", asyn
 		// the read toggle saves through its tool, and the row keeps its place
 		await frame.getByRole("button", { name: "Mark read" }).click()
 		await frame.getByRole("button", { name: "Mark unread" }).and(frame.locator("button:disabled")).waitFor()
-		expect(toolCalls).toEqual([
-			{ name: "rate_finding", arguments: { finding_id: "finding-4", rating: "up" } },
+		expect(toolCalls.filter(({ name }) => name !== "read_finding_rating_note")).toEqual([
+			{ name: "rate_finding", arguments: { finding_id: "finding-4", rating: "up", note: "" } },
 			{ name: "mark_finding_consumed", arguments: { finding_id: "finding-4" } },
 		])
 	})

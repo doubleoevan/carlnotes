@@ -25,11 +25,10 @@ export function isBudgetRejection(error: unknown): boolean {
 	// error again
 	for (const errorCause of toErrorCauses(error)) {
 		const { statusCode, responseBody } = errorCause as { statusCode?: unknown; responseBody?: unknown }
-		if (statusCode !== 429) {
+		if (statusCode !== 429 && statusCode !== 422) {
 			continue
 		}
-		// only a budget rejection named in the body counts. LiteLLM sends one on every tier as a 429.
-		// any other 429 stays a plain rate limit
+		// LiteLLM uses both statuses for budget exhaustion. the body distinguishes other proxy errors
 		if (typeof responseBody === "string" && isBudgetExhaustedBody(responseBody)) {
 			return true
 		}
@@ -90,14 +89,17 @@ function embedModel(litellmApiKey?: string): EmbeddingModel {
 }
 
 // the key an embedding call bills, and how many times the AI SDK retries it
-type EmbedOptions = { litellmApiKey?: string; maxRetries?: number }
+type EmbedOptions = { litellmApiKey?: string; maxRetries?: number; abortSignal?: AbortSignal }
 
 /**
  * Embeds one text and returns its vector, cut to the schema's width and scaled to unit length.
  */
-export async function embedVector(text: string, { litellmApiKey, maxRetries }: EmbedOptions = {}): Promise<number[]> {
+export async function embedVector(
+	text: string,
+	{ litellmApiKey, maxRetries, abortSignal }: EmbedOptions = {},
+): Promise<number[]> {
 	// embed through the proxy, then reduce to the schema's width
-	const { embedding } = await embed({ model: embedModel(litellmApiKey), value: text, maxRetries })
+	const { embedding } = await embed({ model: embedModel(litellmApiKey), value: text, maxRetries, abortSignal })
 	return toSchemaVector(embedding)
 }
 
@@ -106,10 +108,10 @@ export async function embedVector(text: string, { litellmApiKey, maxRetries }: E
  */
 export async function embedVectors(
 	texts: string[],
-	{ litellmApiKey, maxRetries }: EmbedOptions = {},
+	{ litellmApiKey, maxRetries, abortSignal }: EmbedOptions = {},
 ): Promise<number[][]> {
 	// embed through the proxy, then reduce each vector to the schema's width
-	const { embeddings } = await embedMany({ model: embedModel(litellmApiKey), values: texts, maxRetries })
+	const { embeddings } = await embedMany({ model: embedModel(litellmApiKey), values: texts, maxRetries, abortSignal })
 	return embeddings.map(toSchemaVector)
 }
 
@@ -118,7 +120,7 @@ export async function embedVectors(
  */
 export async function embedPrivateVectors(
 	texts: string[],
-	{ litellmApiKey, maxRetries }: EmbedOptions & { litellmApiKey: string },
+	{ litellmApiKey, maxRetries, abortSignal }: EmbedOptions & { litellmApiKey: string },
 ): Promise<number[][]> {
 	if (!litellmApiKey) {
 		throw new Error("Private embeddings require the owner's key")
@@ -128,6 +130,7 @@ export async function embedPrivateVectors(
 		model: embedModel(litellmApiKey),
 		values: texts,
 		maxRetries,
+		abortSignal,
 		...PRIVATE_MODEL_OPTIONS,
 	})
 	return embeddings.map(toSchemaVector)

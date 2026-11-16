@@ -363,6 +363,7 @@ the browser bundle and renders pages through the server build, behind its own ro
   `FindingsTable.tsx` lay those components out as tables over `mcpViewElements.tsx` and `McpViewFindingCells.tsx`,
   `useMcpViewFindings.ts` keeps an MCP view's rows as its tool calls change them, `useFindingPages.ts` pages the
   findings through the tool's cursor, and `useScanStatus.ts` polls `read_scan_status` at its own 10 and 30 second rates.
+  `TakeawaysMcpView.tsx` uses the Journal's Nightshift list and calls `read_topic_memories` for each page.
   `McpViewReactionRow.tsx` renders the shared reaction row in a finding's details where the tool result came with its
   reactions, saving through `save_reaction`. `mcpViewHost.ts` holds the connected app, the MCP view data a tool result
   includes in `_meta`, and the tool calls the MCP views make, and `mcpViewFindingHandlers.ts` the finding note's
@@ -614,3 +615,6 @@ at first and opens with and without JavaScript. Its lines are the podcast episod
 `toPrivateChatPlaceholder`, and the row that names the open chat and the menu's private chat option read
 `toPrivateChatIdLabel`, each on one line with the whole label as its title. `components/chat/TopicPostTag.tsx` adapts
 the shared tag to a link, and `ChatTurnBlock` shows it under a question asked from a post's page.
+
+`src/components/topic/TopicMemoriesDialog.tsx` adds Journal to the Brew diary. It renders the core Takeaways view
+in the Nightshift dialog, with phone-width interaction stories for rating, read-only access, and the empty state.

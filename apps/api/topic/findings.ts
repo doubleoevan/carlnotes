@@ -1,7 +1,12 @@
 // the topic findings read for a page or a feed, the finding shape, and the per-finding routes
 
 import type { TopicFinding } from "@carlnotes/contracts/findings"
-import { bookmarkPayload, consumedPayload, findingFeedbackPayload, ratingPayload } from "@carlnotes/contracts/payloads"
+import {
+	bookmarkPayload,
+	consumedPayload,
+	findingFeedbackPayload,
+	findingRatingPayload,
+} from "@carlnotes/contracts/payloads"
 import { toUrlHost } from "@carlnotes/contracts/sources"
 import { db, isFindingShown } from "@carlnotes/db"
 import { bookmarks, consumptions, findings, resources, scans } from "@carlnotes/db/schema/scans"
@@ -22,6 +27,7 @@ import { linkPreviewRateLimiter } from "../rateLimit"
 import { isSameOriginRequest } from "../sameOrigin"
 import {
 	countVisitorFindingView,
+	loadFindingRatingNote,
 	recordView,
 	saveFindingFeedback,
 	setBookmarked,
@@ -222,15 +228,32 @@ export const findingsRoute = new Hono<AppEnv>()
 		}
 		return context.json({ linkPreview: await loadOrFetchLinkPreview(findingRow.url) })
 	})
-	.post("/topic-findings/:id/rating", zValidator("json", ratingPayload), async (context) => {
+	.get("/topic-findings/:id/rating", async (context) => {
+		const userId = currentUser(context)
+		context.header("Cache-Control", "private, no-store")
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+
+		// keep a private Finding's existence hidden from readers who cannot see it
+		const findingId = context.req.param("id")
+		const feedback = await loadFindingRatingNote(userId, findingId)
+		if (feedback) {
+			return context.json(feedback)
+		}
+		return (await isTopicFindingVisible(userId, findingId))
+			? context.json({ error: "forbidden" }, 403)
+			: context.json({ error: "not found" }, 404)
+	})
+	.post("/topic-findings/:id/rating", zValidator("json", findingRatingPayload), async (context) => {
 		// reject a signed-out visitor
 		const userId = currentUser(context)
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
 		// rate this topic finding up, down, or clear the rating
-		const rating = context.req.valid("json").rating
-		const isRated = await setRating(userId, context.req.param("id"), rating, toAnalyticsProperties(context))
+		const { rating, note } = context.req.valid("json")
+		const isRated = await setRating(userId, context.req.param("id"), rating, toAnalyticsProperties(context), note)
 		return isRated ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
 	})
 	.post("/topic-findings/:id/consume", zValidator("json", consumedPayload), async (context) => {

@@ -29,6 +29,7 @@ import { buildTopicPostSummaryPrompt } from "@carlnotes/pipeline/topicPosts/summ
 import { buildTopicPostDiscussionPrompt } from "@carlnotes/pipeline/topicPosts/topicPostDiscussionScript"
 import { TOPIC_VIDEO_IMAGE_FORMAT } from "@carlnotes/pipeline/topicVideo/topicVideoImage"
 import { buildUpdatesRecapPrompt } from "@carlnotes/pipeline/updatesRecap"
+import { buildTopicMemoryProposalPrompt } from "@carlnotes/pipeline/updateTopicTakeaways"
 import { and, eq, inArray, isNotNull } from "drizzle-orm"
 import { finishScan, ingestForScan, reviewForScan } from "./workflows/runTopicScanActivities"
 
@@ -247,6 +248,11 @@ async function scrapedEpisodeCount(episodeUrls: string[]): Promise<number> {
 async function writeSamplePrompts(): Promise<[string, boolean][]> {
 	// the single-purpose prompts
 	const scoreResult = await buildScorePrompt("sample content", "sample topic context", true)
+	const topicMemoryResult = await buildTopicMemoryProposalPrompt({
+		findings: [{ title: "Sample finding", snippet: "Sample evidence", description: "" }],
+		neighbors: [],
+		scanStartedAt: new Date(),
+	})
 	const searchResult = await buildSearchPrompt("sample topic context", "sample topic")
 	const contextResult = await buildContextPrompt("sample document text")
 	const personalSourcesContextResult = await buildPersonalSourcesContextPrompt({
@@ -339,6 +345,7 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 	// report whether the registry actually served this run's prompts, or the worker ran on the bundled Markdown alone
 	const servedFromRegistry = [
 		scoreResult,
+		topicMemoryResult,
 		searchResult,
 		contextResult,
 		agreementResult,
@@ -355,6 +362,7 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 	// each prompt renders to a non-empty string
 	const builtPrompts: [string, string][] = [
 		["score prompt", scoreResult.prompt],
+		["topic memory proposal prompt", topicMemoryResult.prompt],
 		["search prompt", searchResult.prompt],
 		["attachment context prompt", contextResult.prompt],
 		["Personal sources context prompt", personalSourcesContextResult.prompt],

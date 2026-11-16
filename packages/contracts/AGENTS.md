@@ -207,3 +207,6 @@ Temporal client and the workflow share. `placeTestFixtures.ts` holds the places 
 it. `arrays.ts` holds `toChunks`, which splits a list into batches of one size. `teams.ts` holds `toAlphabeticalTeams`,
 teams in alphabetical order by name, and `mcpViews.ts` holds the dashboard MCP view's data and `DASHBOARD_TOOL_KINDS`,
 the `read_dashboard` tool's `dashboardKind` value for each Dashboard kind.
+
+`topicMemories.ts` defines the paginated Journal and feedback contracts. `topicMemoryWork.ts` holds the worker queue
+and deterministic similarity, cleanup, pin, and recency policy.

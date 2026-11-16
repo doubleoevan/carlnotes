@@ -1286,3 +1286,12 @@ in its text that only the caller can see the new image until Carl finishes check
 - **WHEN** an editor calls `set_topic_image` with a url on a public Topic and the image moderation times out
 - **THEN** the result's status is saved, its image is the Topic's current image, and its text says only the editor
   can see the new image until Carl finishes checking it
+
+### Requirement: MCP can read a Topic's Journal
+
+The server SHALL advertise `read_topic_memories` as a paginated read. It SHALL apply Topic visibility before reading takeaways.
+
+#### Scenario: A visitor requests a private Topic's takeaways
+
+- **WHEN** the visitor calls the tool for that Topic
+- **THEN** the tool withholds its takeaways

@@ -1,5 +1,6 @@
 // what every tool registration shares: the topic id argument, the options the registrations take, and the shapes a
 // tool's result takes
+import { CONTROL_CHARACTER_PATTERN } from "@carlnotes/contracts/socialText"
 import type { CallToolResult, McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 import type { McpPage } from "./results"
@@ -8,6 +9,8 @@ import type { ToolCaller } from "./toolCaller"
 // the topic id argument every topic tool takes. on the bound route the topic id comes from the url
 export const topicIdArgument = z
 	.string()
+	.max(200)
+	.refine((id) => !CONTROL_CHARACTER_PATTERN.test(id), "Topic ids cannot contain control characters")
 	.optional()
 	.describe("The topic's id. Optional on a topic-bound server, which already knows its topic.")
 

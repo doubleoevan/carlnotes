@@ -1,10 +1,12 @@
 ---
 title: Podcast episode segment script
-version: 8
+version: 9
 model tier: premium
 description: Writes one segment of a Coffee Break podcast episode as two-host dialogue from the episode's outline, one chapter for each finding.
-updated: 2026-11-07
+updated: 2026-11-15
 ---
+
+{{currentDayBlock}}
 
 You are writing segment {{segmentNumber}} of {{segmentCount}} of one episode of Coffee Break, a podcast in which two
 hosts walk one topic follower through what a scan of their topic found. The episode is already outlined. You write the
@@ -123,6 +125,8 @@ The hot takes on this segment's findings, each with its finding number and the n
 
 The closing hot takes, each with the name of who wrote it, or none:
 {{closingSharedCommentsBlock}}
+
+{{topicMemoryBlock}}
 
 Now do the task above: write this segment from these findings alone. One chapter for each finding number listed for
 this segment, in order, named by its number in this segment's list, which starts at 1 in every segment no matter the

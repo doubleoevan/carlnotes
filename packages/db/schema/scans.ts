@@ -47,6 +47,11 @@ export const scans = pgTable(
 		dispatchedAt: timestamp("dispatched_at", { withTimezone: true }),
 		// when a worker first began the scan's first stage. null while the dispatched scan waits for a scan slot
 		pickedUpAt: timestamp("picked_up_at", { withTimezone: true }),
+		// the Journal writes this in the same transaction as its takeaways
+		// a cleanup brew can commit proposals before it asks the model to confirm flagged pairs
+		topicMemoriesWrittenAt: timestamp("topic_memories_written_at", { withTimezone: true }),
+		topicMemoriesFormatVersion: integer("topic_memories_format_version").default(0).notNull(),
+		topicMemoriesUpdatedAt: timestamp("topic_memories_updated_at", { withTimezone: true }),
 		// when the user stopped the scan
 		stoppedAt: timestamp("stopped_at", { withTimezone: true }),
 		// true if the owner triggered this scan by hand with "Run now". scheduled and seeded scans stay false
@@ -202,6 +207,7 @@ export const findings = pgTable(
 			.default(0),
 		// the owner's optional rating
 		rating: rating("rating"),
+		ratingNote: text("rating_note"),
 		// who cast the current thumb and the role held then. nothing reads these for scoring
 		ratedByUserId: text("rated_by_user_id"),
 		ratedTeamId: text("rated_team_id"),

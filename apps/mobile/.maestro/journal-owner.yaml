@@ -1,0 +1,30 @@
+appId: com.carlnotes.app
+name: Journal story - Owner
+---
+- openLink: "carlnotes://storybook?story=owner"
+- runFlow:
+    when:
+      visible: "Open"
+    commands:
+      - tapOn: "Open"
+- extendedWaitUntil:
+    visible: "3 entries · 6 takeaways"
+    timeout: 20000
+- tapOn: "^Journal$"
+- assertVisible: "Topic Takeaways 🧠"
+- assertVisible: "A coarser grind can reduce bitterness in a slow pour-over."
+- tapOn: "Feedback for Carl .*"
+- inputText: "For a slow pour-over only."
+- assertVisible: "For a slow pour-over only."
+- runFlow:
+    when:
+      visible: "Done"
+    commands:
+      - tapOn: "Done"
+- tapOn: "Thumbs down for takeaway:.*"
+- tapOn: "Close Topic Takeaways.*"
+- tapOn: "^Journal$"
+- assertVisible: "For a slow pour-over only."
+- tapOn: "Takeaways pages: next page"
+- assertVisible: "Cafés are using more low-caffeine blends."
+- tapOn: "Close Topic Takeaways.*"

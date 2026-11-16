@@ -41,7 +41,6 @@ function FindingDetails({ topic, resource, onClose, topicFeedHandlers }: TopicLi
 			topicFeedHandlers={topicFeedHandlers}
 			isSignedIn={false}
 			linkPreview={null}
-			onSendFeedback={async () => undefined}
 		/>
 	)
 }

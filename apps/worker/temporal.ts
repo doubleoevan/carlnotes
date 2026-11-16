@@ -4,6 +4,7 @@ import {
 	PERSONAL_SOURCES_EMAIL_TASK_QUEUE,
 	PERSONAL_SOURCES_TASK_QUEUE,
 } from "@carlnotes/contracts/personalSourcesWork"
+import { TOPIC_MEMORY_TASK_QUEUE } from "@carlnotes/contracts/topicMemoryWork"
 import { TOPIC_VIDEO_BACKFILL_TASK_QUEUE, TOPIC_VIDEO_TASK_QUEUE } from "@carlnotes/contracts/topicVideoWork"
 import { readPoolGauges, sizeConnectionPool } from "@carlnotes/db"
 import { readRedisExtraGauges } from "@carlnotes/db/redisGauges"
@@ -46,6 +47,7 @@ import { SCAN_EMAIL_TASK_QUEUE } from "./workflows/sendScanEmail"
 import * as scanEmailActivities from "./workflows/sendScanEmailActivities"
 import * as personalSourcesActivities from "./workflows/summarizePersonalSourcesContextActivities"
 import * as topicImageActivities from "./workflows/topicImageWorkflowActivities"
+import * as topicMemoryActivities from "./workflows/topicMemoriesActivities"
 
 // the SDK shuts a Worker down on its own on SIGINT/SIGTERM, but gives a running activity zero time to finish
 const SHUTDOWN_GRACE_MS = 2 * 60 * 1000
@@ -155,6 +157,15 @@ async function run(): Promise<void> {
 			taskQueue: SCAN_TASK_QUEUE,
 			shutdownGraceTime: SHUTDOWN_GRACE_MS,
 			maxConcurrentActivityTaskExecutions: SCAN_CONCURRENCY,
+		}),
+		// consolidate takeaways independently of the brew and podcast slots
+		Worker.create({
+			connection,
+			workflowsPath: new URL("./workflows/topicMemories.ts", import.meta.url).pathname,
+			activities: topicMemoryActivities,
+			taskQueue: TOPIC_MEMORY_TASK_QUEUE,
+			shutdownGraceTime: SHUTDOWN_GRACE_MS,
+			maxConcurrentActivityTaskExecutions: 2,
 		}),
 		// records a Scan's outcome: the closing writes on their own queue, with every scan activity registered
 		Worker.create({

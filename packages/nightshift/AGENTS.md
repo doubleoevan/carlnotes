@@ -34,7 +34,10 @@ read, and the component contracts both apps' implementations build on. `tokens.c
   source, and `contrast.test.ts` checks a value and a placeholder on the fill over a card and a popover.
 - `pagination.ts` — the card fill, border, muted label and current-page highlight used by both apps' numbered
   pagination and table footer controls. Both stylesheets scan it; native labels read its text classes separately.
-- `components/` — the component contracts, one module per component both apps share: `button.ts`, `badge.ts`, and
+- `components/` — the component contracts, one module per component both apps share. `takeaways-list.ts` supplies the
+  card, typography, insets, and skeleton metrics for the web, mobile, and MCP Journal. `rating-with-feedback.ts`
+  supplies the shared feedback field and thumbs layout used in Findings and Takeaways, including its skeleton.
+  Other contracts include `button.ts`, `badge.ts`, and
   `expandable-row.ts`. The expandable row contract supplies shared content props and item/section classes; the
   section variant uses the existing muted `sectionLabel` type role without outer vertical padding. Core owns disclosure
   state and composition, and each app supplies semantic controls at `primitives/expandable-row.tsx`. A

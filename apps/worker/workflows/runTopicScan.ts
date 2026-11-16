@@ -1,6 +1,7 @@
 // the durable Scan: it runs the pipeline's three stages as activities
 
 import { toWorkflowFailureReason } from "@carlnotes/contracts/scanFailure"
+import { TOPIC_MEMORY_TASK_QUEUE } from "@carlnotes/contracts/topicMemoryWork"
 import { PUSH_TASK_QUEUE } from "@carlnotes/pipeline/pushWorkflows"
 import type { ScanTrigger } from "@carlnotes/pipeline/scanWorkflowClient"
 // the attempt counts the retry policies that the temporal activities read
@@ -18,6 +19,7 @@ import {
 	CancellationScope,
 	getExternalWorkflowHandle,
 	isCancellation,
+	log,
 	ParentClosePolicy,
 	patched,
 	proxyActivities,
@@ -39,6 +41,8 @@ import {
 	type ScanEmailWorkflowInput,
 	sendScanEmailWorkflow,
 } from "./sendScanEmail"
+
+import { updateTopicTakeawaysWorkflow } from "./topicMemories"
 
 // the queue that a Scan's closing writes run on, apart from the scan slots
 export const SCAN_CLOSING_TASK_QUEUE = "scan-closing"
@@ -119,6 +123,9 @@ export async function runTopicScanWorkflow(
 			throw error
 		}
 	}
+
+	// start the Journal separately after success. older histories replay without its child
+	await startTopicMemories(scanId, finishedScanStatus)
 
 	// a succeeded Scan starts its podcast episode recording in its own workflow.
 	// a Scan replaying from before the patch started no podcast episode workflow
@@ -249,5 +256,27 @@ async function startPodcastEpisodeRecording(
 			toWorkflowFailureReason(error),
 		)
 		return false
+	}
+}
+
+// the Journal can outlive the Scan and never changes its outcome
+async function startTopicMemories(
+	scanId: string,
+	status: scanActivities.IngestStageResult["status"] | undefined,
+): Promise<void> {
+	if (status !== "succeeded" || !patched("topic-takeaway-update")) {
+		return
+	}
+	try {
+		await startChild(updateTopicTakeawaysWorkflow, {
+			workflowId: `topic-memories-${scanId}`,
+			taskQueue: TOPIC_MEMORY_TASK_QUEUE,
+			parentClosePolicy: ParentClosePolicy.ABANDON,
+			args: [scanId],
+		})
+	} catch (error) {
+		if (!(error instanceof Error && error.name === "WorkflowExecutionAlreadyStartedError")) {
+			log.warn("could not start the takeaway update", { scanId })
+		}
 	}
 }

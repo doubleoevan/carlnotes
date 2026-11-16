@@ -1,4 +1,3 @@
-import type { sendFindingFeedback } from "@carlnotes/client/topicFindingClient"
 import type { ChatLinkPreview } from "@carlnotes/contracts/chat"
 import type { TopicFinding } from "@carlnotes/contracts/findings"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
@@ -27,7 +26,6 @@ export type TopicResourceProps = {
 	isBookmarkOnLine?: boolean
 	topicFeedHandlers: TopicFeedHandlers
 	linkPreview?: ChatLinkPreview | null
-	onSendFeedback?: typeof sendFindingFeedback
 	topicFindingRank?: number | null
 	isLast?: boolean
 	isPending?: boolean

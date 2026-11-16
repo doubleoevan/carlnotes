@@ -4,7 +4,7 @@
 // selection go to their tools, and every other request fails
 import { dashboardParam, dashboardQuery } from "@carlnotes/contracts/dashboards"
 import { DASHBOARD_TOOL_KINDS, type McpViewData } from "@carlnotes/contracts/mcpViews"
-import { findingFeedbackPayload } from "@carlnotes/contracts/payloads"
+import { findingRatingNoteResponse } from "@carlnotes/contracts/payloads"
 import { commentThreadQuery, postCommentPayload, saveReactionPayload } from "@carlnotes/contracts/social"
 import {
 	addMcpViewPodcastEpisodes,
@@ -18,8 +18,8 @@ import {
 // a podcast episode's own read, which the podcast player sends to load a podcast episode it plays
 const PODCAST_EPISODE_PATH_PATTERN = /^\/api\/episodes\/([^/]+)$/
 
-// a finding's feedback, which the rating block posts
-const FINDING_FEEDBACK_PATH_PATTERN = /^\/api\/topic-findings\/([^/]+)\/feedback$/
+// a finding's rating field reloads the note that belongs to the connected account
+const FINDING_RATING_PATH_PATTERN = /^\/api\/topic-findings\/([^/]+)\/rating$/
 
 // a Topic Post's own read, which its info popup sends
 const TOPIC_POST_PATH_PATTERN = /^\/api\/topic-posts\/([^/]+)$/
@@ -55,12 +55,6 @@ async function mcpViewFetch(input: RequestInfo | URL, init?: RequestInit): Promi
 		return Response.json(podcastEpisode)
 	}
 
-	// a finding's feedback goes through its tool
-	const feedbackFindingId = FINDING_FEEDBACK_PATH_PATTERN.exec(requestUrl.pathname)?.[1]
-	if (feedbackFindingId) {
-		return sendFindingFeedback(feedbackFindingId, init?.body)
-	}
-
 	// a comment thread reads and posts through the hot take tools
 	const method = (init?.method ?? "GET").toUpperCase()
 	if (requestUrl.pathname === COMMENTS_PATH && method === "GET") {
@@ -82,6 +76,10 @@ async function mcpViewFetch(input: RequestInfo | URL, init?: RequestInit): Promi
 
 // a Topic Post's read or a Dashboard's chart selection through its tool, or null for any other read
 function readThroughTool(requestUrl: URL): Promise<Response> | null {
+	const findingId = FINDING_RATING_PATH_PATTERN.exec(requestUrl.pathname)?.[1]
+	if (findingId) {
+		return readFindingRatingNote(decodeURIComponent(findingId))
+	}
 	const topicPostId = TOPIC_POST_PATH_PATTERN.exec(requestUrl.pathname)?.[1]
 	if (topicPostId) {
 		return readTopicPost(decodeURIComponent(topicPostId))
@@ -90,11 +88,13 @@ function readThroughTool(requestUrl: URL): Promise<Response> | null {
 	return dashboardMatch ? readDashboard(dashboardMatch, requestUrl.searchParams) : null
 }
 
-// send a finding's feedback through its tool, returning the response the rating block's request expects
-async function sendFindingFeedback(findingId: string, requestBody: RequestInit["body"]): Promise<Response> {
-	const { feedback } = findingFeedbackPayload.parse(JSON.parse(String(requestBody)))
-	const toolResult = await callMcpViewTool("send_finding_feedback", { finding_id: findingId, feedback })
-	return toolResult.isError ? Response.json({ error: "forbidden" }, { status: 403 }) : Response.json({ ok: true })
+// read the note through metadata reserved for the view
+async function readFindingRatingNote(findingId: string): Promise<Response> {
+	const result = await callMcpViewTool("read_finding_rating_note", { finding_id: findingId })
+	const note = findingRatingNoteResponse.safeParse(result._meta?.findingRatingNote)
+	return !result.isError && note.success
+		? Response.json(note.data)
+		: Response.json({ error: "Rating note unavailable" }, { status: 403 })
 }
 
 // a tool result as the response a request expects: the part of the result's MCP view data the request reads, or the

@@ -2,9 +2,12 @@ import { toTopicImageUrlsOrNull } from "@carlnotes/contracts/topicImages"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { toAttachmentFailureMessage } from "@carlnotes/contracts/topics"
 import { db } from "@carlnotes/db"
+import { canRateTopicMemories } from "@carlnotes/db/findingPermissions"
 import { scans } from "@carlnotes/db/schema/scans"
 import { attachments, sources, type topics } from "@carlnotes/db/schema/topics"
 import { loadTopicImageForUser } from "@carlnotes/db/topicImages"
+import { toVisibleTopicMemoryCount } from "@carlnotes/db/topicMemories"
+import { toTopicRole } from "@carlnotes/db/topicPermissions"
 import { traceRequestStage } from "@carlnotes/server/monitoring"
 import { desc, eq } from "drizzle-orm"
 import { isAllowed, loadUserAccess } from "../authorization"
@@ -66,6 +69,7 @@ export async function loadTopicPage(
 		// topics
 		isDailyFrequencyPaused,
 		canRate,
+		topicRole,
 		canEdit,
 		canViewOwnerDetails,
 		{ podcast, latestPodcastEpisode, podcastEpisodeByScanId },
@@ -88,8 +92,8 @@ export async function loadTopicPage(
 			// every Source row, and the attachment rows and their context, each narrowed once the reads finish
 			db.select().from(sources).where(eq(sources.topicId, topic.id)),
 			loadTopicAttachmentRows(topic.id),
-			// every scan, newest first
-			loadTopicScanRows(topic.id),
+			// every scan, newest first, and the reader's takeaway count in the same query
+			loadTopicScanRows(topic, userId),
 			// this user's own subscription state. a signed-out visitor subscribes to nothing
 			userId ? loadDirectSubscription(userId, topic.id) : null,
 			// the owner-only extras: the invite list, the manual scan quota, and whether their spend is past the manual
@@ -102,6 +106,7 @@ export async function loadTopicPage(
 			// whether the owner's daily topics outgrew their plan, and what this user may do here
 			toDailyFrequencyPaused(topic, isTopicOwner),
 			isAllowed(userId, "topic:rate", topic),
+			toTopicRole(userId, topic),
 			isAllowed(userId, "topic:edit", topic),
 			isAllowed(userId, "topic:viewOwnerDetails", topic),
 			// the topic's podcast, and each scan's podcast episode for the scan history
@@ -182,6 +187,8 @@ export async function loadTopicPage(
 		attachments: attachmentRows,
 		sources: visibleTopicSourceRows.flatMap(toTopicSourceSummary),
 		scans: scanHistory,
+		takeawayCount: scanRows[0]?.takeawayCount ?? 0,
+		canRateTakeaways: canRateTopicMemories(topicRole),
 		podcast,
 		latestPodcastEpisode,
 		// the topic's image urls, null until its first render lands, and null for a user who reported this image
@@ -260,8 +267,11 @@ type TopicScanRow = Pick<
 	| "scanSummary"
 >
 
-// a topic's scans, newest first
-async function loadTopicScanRows(topicId: string): Promise<TopicScanRow[]> {
+// the scalar count runs once for the topic, which can only have takeaways if it has scans
+async function loadTopicScanRows(
+	{ id: topicId, visibility }: Pick<typeof topics.$inferSelect, "id" | "visibility">,
+	userId: string | null,
+): Promise<(TopicScanRow & { takeawayCount: number })[]> {
 	return db
 		.select({
 			id: scans.id,
@@ -275,6 +285,7 @@ async function loadTopicScanRows(topicId: string): Promise<TopicScanRow[]> {
 			cost: scans.cost,
 			error: scans.error,
 			scanSummary: scans.scanSummary,
+			takeawayCount: toVisibleTopicMemoryCount({ topicId, userId, visibility }),
 		})
 		.from(scans)
 		.where(eq(scans.topicId, topicId))

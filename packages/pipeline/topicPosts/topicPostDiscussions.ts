@@ -5,9 +5,12 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { TopicPostDiscussionKind } from "@carlnotes/contracts/enums"
+import { toHtmlText } from "@carlnotes/contracts/text"
 import { db } from "@carlnotes/db"
 import { isMonthlyBudgetCutoffPassed } from "@carlnotes/db/monthlyBudgetCutoffs"
+import { topicMemories } from "@carlnotes/db/schema/topicMemories"
 import { topicPostDiscussions, topicPosts } from "@carlnotes/db/schema/topicPosts"
+import { topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
 import { loadTopicPostSharedCommentTexts } from "@carlnotes/db/sharedComments"
 import {
@@ -16,14 +19,16 @@ import {
 	toTopicPostDiscussionAudioKey,
 	uploadPodcastEpisodeFile,
 } from "@carlnotes/db/store"
-import { speechCost } from "@carlnotes/models/budget"
+import { EMBED_COST_PER_MILLION_TOKENS, speechCost, toEstimatedTokens, tokenCost } from "@carlnotes/models/budget"
 import { loadOrProvisionUserLiteLLMKey } from "@carlnotes/models/litellm"
+import { embedVector } from "@carlnotes/models/models"
 import { recordSpeech, SPEECH_BYTES_PER_SECOND, WAV_HEADER_BYTES } from "@carlnotes/models/speech"
 import { podcastEpisodeSpeechModel } from "@carlnotes/server/podcastEpisodeSettings"
 import { and, eq, isNotNull, ne, sql } from "drizzle-orm"
 import { joinChapterFiles, SpeechFailedError } from "../podcast/podcastEpisodeAudio"
 import { isSharedCommentSpeakable, isUsernameSpeakable } from "../podcast/podcastEpisodeSharedComments"
 import { startTopicPostDiscussionWorkflow } from "../temporalClient"
+import { loadTopicMemoryPrompt } from "../topicMemoryPrompt"
 import { type DiscussionComment, MAX_DISCUSSION_COMMENTS, writeTopicPostDiscussion } from "./topicPostDiscussionScript"
 
 // a discussion is one speech call on the standard tier
@@ -115,6 +120,11 @@ export async function writeTopicPostDiscussionScript(discussionId: string, hint?
 			status: topicPostDiscussions.status,
 			script: topicPostDiscussions.script,
 			topicPostId: topicPosts.id,
+			topicId: topicPosts.topicId,
+			hasPublicTakeaways: sql<boolean>`exists (select 1 from ${topicMemories}
+				inner join ${topics} on ${topics.id} = ${topicMemories.topicId}
+				where ${topicMemories.topicId} = ${topicPosts.topicId}
+				and ${topicMemories.status} = 'active' and ${topics.visibility} = 'public')`,
 			title: topicPosts.title,
 			html: topicPosts.html,
 			publishedAt: topicPosts.publishedAt,
@@ -144,6 +154,25 @@ export async function writeTopicPostDiscussionScript(discussionId: string, hint?
 		isUsernameSpeakable(discussion.authorUsername),
 	])
 
+	// embed a bounded excerpt only when the public Topic has takeaways
+	const litellmApiKey = await loadOrProvisionUserLiteLLMKey(discussion.userId)
+	let topicMemoryPrompt = ""
+	if (discussion.hasPublicTakeaways) {
+		const text = `${discussion.title}\n${toHtmlText(discussion.html)}`.slice(0, 4000)
+		const embedding = await embedVector(text, { litellmApiKey, maxRetries: 0 })
+		const cost = tokenCost(toEstimatedTokens(text.length), EMBED_COST_PER_MILLION_TOKENS)
+		// charge the discussion for the relevance embedding before using it
+		await db
+			.update(topicPostDiscussions)
+			.set({ cost: sql`${topicPostDiscussions.cost} + ${cost}` })
+			.where(eq(topicPostDiscussions.id, discussionId))
+		topicMemoryPrompt = await loadTopicMemoryPrompt({
+			topicId: discussion.topicId,
+			embeddings: [embedding],
+			isPublicOnly: true,
+		})
+	}
+
 	// write the script on the user's key, and keep it with what it cost
 	const { turns, costDollars } = await writeTopicPostDiscussion({
 		title: discussion.title,
@@ -151,7 +180,8 @@ export async function writeTopicPostDiscussionScript(discussionId: string, hint?
 		authorUsername: isAuthorSpeakable ? discussion.authorUsername : null,
 		comments,
 		hint,
-		litellmApiKey: await loadOrProvisionUserLiteLLMKey(discussion.userId),
+		litellmApiKey,
+		topicMemoryPrompt,
 	})
 	await db
 		.update(topicPostDiscussions)

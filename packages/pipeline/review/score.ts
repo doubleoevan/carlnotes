@@ -27,7 +27,9 @@ import {
 	scoreModel,
 } from "@carlnotes/models/models"
 // the prompt loader fetches the registry version first, falling back to the bundled markdown
+import { loadCurrentDayContext } from "@carlnotes/models/prompts/currentDayContext"
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "@carlnotes/models/prompts/fetch"
+import { toTopicMemoryPromptTemplate } from "@carlnotes/models/prompts/topicMemoryBackground"
 import { filterPremiumPrompt, writePrompt } from "@carlnotes/models/prompts/write"
 import { runWithConcurrency } from "@carlnotes/server/concurrency"
 import { toPositiveInteger } from "@carlnotes/server/envSettings"
@@ -187,6 +189,7 @@ async function fetchAndScoreResource(
 			budget,
 			litellmApiKey,
 			topicContext.personalSources,
+			topicContext.topicMemoryPrompt,
 		)
 		if (!topicContext.personalSourcesVersions) {
 			await markResourceSafety(resource.id, scoredResource.isUnsafe)
@@ -262,12 +265,20 @@ export async function scoreResource(
 	budget: Budget,
 	litellmApiKey?: string,
 	personalSources?: PersonalSourcesReviewContext[],
+	topicMemoryPrompt?: string,
 ): Promise<ScoredResource> {
 	if (personalSources?.length) {
 		if (!litellmApiKey) {
 			throw new Error("Private review requires the Topic Scan billing key")
 		}
-		return scorePersonalSourceResource({ resourceContent, topicContext, budget, litellmApiKey, personalSources })
+		return scorePersonalSourceResource({
+			resourceContent,
+			topicContext,
+			budget,
+			litellmApiKey,
+			personalSources,
+			topicMemoryPrompt,
+		})
 	}
 	// the cheap model scores everything fetched first
 	const cheapTier: ScoreTier = {
@@ -275,7 +286,7 @@ export async function scoreResource(
 		stage: "scoringCheap",
 		shouldWriteRelevanceExplanation: false,
 	}
-	const cheapOutcome = await scoreResourceContent(cheapTier, resourceContent, topicContext, budget)
+	const cheapOutcome = await scoreResourceContent(cheapTier, resourceContent, topicContext, budget, topicMemoryPrompt)
 
 	// unsafe content ends here, and only Resources with a high enough cheap model score earn a premium model re-score
 	// and only while the Scan can spend
@@ -290,7 +301,7 @@ export async function scoreResource(
 		// the user-facing note comes only from this tier
 		shouldWriteRelevanceExplanation: true,
 	}
-	return scoreResourceContent(premiumTier, resourceContent, topicContext, budget)
+	return scoreResourceContent(premiumTier, resourceContent, topicContext, budget, topicMemoryPrompt)
 }
 
 // a scoring call through LiteLLM structured output, adding its estimated cost to the budget
@@ -299,9 +310,15 @@ async function scoreResourceContent(
 	resourceContent: string,
 	topicContext: string,
 	budget: Budget,
+	topicMemoryPrompt?: string,
 ): Promise<ScoredResource> {
 	// fetch and write the score prompt
-	const scorePrompt = await buildScorePrompt(resourceContent, topicContext, scoreTier.shouldWriteRelevanceExplanation)
+	const scorePrompt = await buildScorePrompt(
+		resourceContent,
+		topicContext,
+		scoreTier.shouldWriteRelevanceExplanation,
+		topicMemoryPrompt,
+	)
 
 	// structured output forces a numeric score. the relevance explanation is only asked for on the premium tier.
 	// a failed attempt that returned usage is charged, and a rate limit waits and tries again
@@ -353,16 +370,24 @@ export async function buildScorePrompt(
 	resourceContent: string,
 	topicContext: string,
 	shouldWriteRelevanceExplanation: boolean,
+	topicMemoryPrompt?: string,
 ): Promise<BuiltPrompt> {
 	// fetch the registry version first
-	const { template, name, registryPrompt } = await fetchPromptTemplate("summarize-resource")
+	const [{ template, name, registryPrompt }, currentDayBlock] = await Promise.all([
+		fetchPromptTemplate("summarize-resource"),
+		loadCurrentDayContext(),
+	])
 
 	// the cheap tier drops the premium-tier wording, then the content is limited to bound tokens and spend
 	const scoreTemplate = shouldWriteRelevanceExplanation ? template : filterPremiumPrompt(template)
-	const prompt = writePrompt(scoreTemplate, {
-		topicContext: topicContext.slice(0, MAX_SCORE_TOPIC_CONTEXT_CHARS),
-		resourceContent: resourceContent.slice(0, MAX_SCORE_CHARS),
-	})
+	const prompt = writePrompt(
+		toTopicMemoryPromptTemplate(scoreTemplate, topicMemoryPrompt ?? ""),
+		{
+			topicContext: topicContext.slice(0, MAX_SCORE_TOPIC_CONTEXT_CHARS),
+			resourceContent: resourceContent.slice(0, MAX_SCORE_CHARS),
+		},
+		{ currentDayBlock, topicMemoryBlock: topicMemoryPrompt ?? "" },
+	)
 	if (prompt.length > MAX_SCORE_PROMPT_CHARS) {
 		throw new Error("Scoring prompt exceeds its reserved input limit")
 	}

@@ -11,7 +11,7 @@ export type TopicFindingChange = { findingId: string } & (
 	| { kind: "opened" }
 	| { kind: "consumed"; isConsumed: boolean }
 	| { kind: "bookmark"; isBookmarked: boolean }
-	| { kind: "rating"; rating: "up" | "down" | null }
+	| { kind: "rating"; rating: "up" | "down" | null; note?: string }
 	| { kind: "reactions"; reactions: ReactionSummary }
 )
 

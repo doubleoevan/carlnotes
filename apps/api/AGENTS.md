@@ -724,3 +724,12 @@ chat turn may name the Topic Post whose page it was asked from: `chat/chatTurnAn
 `loadChatTurnSubject`, rejects a draft, a post that is gone, and another topic's post before any model call, and binds
 no topic tool, and `chat/chatTurns.ts` stores the turn with the kind `topic_post`, reports `social_topic_post_chat`,
 and replays it in the topic's private chat with the post's title and page.
+
+`topic/topicMemoriesRoute.ts` gates Journal reads and rate-limited feedback. `mcp/topicMemoriesTool.ts` registers
+`read_topic_memories` with the same Topic visibility gate. Its read-only `takeaways` view receives the authorized page's
+text and pagination metadata.
+
+`rate_finding` saves the optional note in the same write as the rating. The view-only
+`read_finding_rating_note` tool restores the connected rater's saved note through private view metadata.
+
+Run `bun test apps/api/topic/findingRating.smoke.ts` against disposable test Postgres to check private Finding rating notes.

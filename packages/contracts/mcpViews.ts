@@ -18,6 +18,7 @@ import type { FindingSearchTopic, SearchRequest, SearchResultsPage, SearchRow } 
 import type { Comment, CommentThreadResponse, ReactionSummary } from "./social"
 import type { TeamPageResponse } from "./teams"
 import type { TopicImageUrls } from "./topicImages"
+import type { TopicMemory } from "./topicMemories"
 import type { TopicDraft } from "./topicPayloads"
 import type { TopicPostCard, TopicPostResponse } from "./topicPosts"
 import type { RelatedTopicsResponse, TopicSectionKey } from "./topics"
@@ -41,6 +42,7 @@ export const MCP_VIEWS = [
 	"activity",
 	"account",
 	"topics",
+	"takeaways",
 ] as const
 
 export type McpView = (typeof MCP_VIEWS)[number]
@@ -128,6 +130,15 @@ export type McpViewData = {
 	activity?: McpViewActivity
 	account?: McpViewAccount
 	topics?: McpViewTopics
+	takeaways?: McpViewTakeaways
+}
+
+// the Journal view shows public-facing text and pages through the same read-only tool
+export type McpViewTakeaways = {
+	topicId: string
+	pageNumber: number
+	pageCount: number
+	items: Pick<TopicMemory, "id" | "text">[]
 }
 
 // what the note MCP view reads of a read_notes or save_note result: the page's notes, and the note it opened with its

@@ -11,9 +11,10 @@ const BUDGET_BODY = JSON.stringify({
 	},
 })
 
-// the proxy's own rejection, which arrives as a 429 naming the budget in its body
+// the proxy's own rejection names the budget in its body on either status it sends for spent keys
 test("a spent budget is read as a budget rejection", () => {
 	expect(isBudgetRejection({ statusCode: 429, responseBody: BUDGET_BODY })).toBe(true)
+	expect(isBudgetRejection({ statusCode: 422, responseBody: BUDGET_BODY })).toBe(true)
 })
 
 // the AI sdk retries a 429. the rejection reaches the caller wrapped in a retry error that includes each attempt
@@ -34,6 +35,7 @@ test("a rejection wrapped by the retry error is still found", () => {
 test("other failures are not budget rejections", () => {
 	// a rate limit is also a 429, and it says nothing about a budget
 	expect(isBudgetRejection({ statusCode: 429, responseBody: '{"error":{"type":"rate_limit_exceeded"}}' })).toBe(false)
+	expect(isBudgetRejection({ statusCode: 422, responseBody: '{"error":{"type":"validation_error"}}' })).toBe(false)
 	// the budget wording on any other status is not the proxy turning the call down for spend
 	expect(isBudgetRejection({ statusCode: 500, responseBody: BUDGET_BODY })).toBe(false)
 	// the shapes with no status at all

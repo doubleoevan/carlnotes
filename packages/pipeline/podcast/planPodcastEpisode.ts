@@ -11,6 +11,7 @@ import { runWithRequestMemo } from "@carlnotes/db/requestMemo"
 import { podcastEpisodeChapters, podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { findings, resources, scans } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
+import { loadRankedTopicMemories } from "@carlnotes/db/topicMemories"
 import { podcastEpisodeSpeechModel } from "@carlnotes/server/podcastEpisodeSettings"
 import { and, desc, eq, inArray, isNotNull } from "drizzle-orm"
 import { toCanonicalUrl } from "../ingest/normalize"
@@ -49,6 +50,7 @@ export type ToPlannedFindingsOptions = {
 	narratedResourceIds: Set<string>
 	scanId: string
 	maxFindings: number
+	continuityFindingIds?: ReadonlySet<string>
 }
 
 /**
@@ -233,6 +235,7 @@ export function toPlannedFindings({
 	narratedResourceIds,
 	scanId,
 	maxFindings,
+	continuityFindingIds,
 }: ToPlannedFindingsOptions): PlannedFinding[] {
 	// leave out each Finding that a user rated thumbs down
 	const narratableFindingRows = topicFindingRows.filter((topicFindingRow) => topicFindingRow.rating !== "down")
@@ -267,7 +270,10 @@ export function toPlannedFindings({
 	// rank the Scan's own and the bonus Findings by score with their bonuses, and keep the best.
 	// the sort is stable, so the Scan's own come first on a tie
 	const rankedFindingRows = [...scanFindingRows, ...scoreBonusFindingRows].sort(
-		(firstFindingRow, secondFindingRow) => toScoreWithBonuses(secondFindingRow) - toScoreWithBonuses(firstFindingRow),
+		(firstFindingRow, secondFindingRow) =>
+			toScoreWithBonuses(secondFindingRow) - toScoreWithBonuses(firstFindingRow) ||
+			Number(Boolean(continuityFindingIds?.has(secondFindingRow.findingId))) -
+				Number(Boolean(continuityFindingIds?.has(firstFindingRow.findingId))),
 	)
 	const pickedFindingRows = new Set(rankedFindingRows.slice(0, maxFindings))
 	const isFindingPicked = (topicFindingRow: TopicFindingRow): boolean => pickedFindingRows.has(topicFindingRow)
@@ -328,7 +334,7 @@ async function loadPlannedFindings({
 	// load the Resources that the Topic's Podcast Episodes narrated, the Findings that someone with access bookmarked,
 	// and the pages of the Topic's url Sources. a failed Podcast Episode and one that its owner removed have no
 	// chapters, and a replaced short Podcast Episode keeps its chapters
-	const [narratedChapterRows, bookmarkedFindingRows, urlSourcePageUrls] = await Promise.all([
+	const [narratedChapterRows, bookmarkedFindingRows, urlSourcePageUrls, topicMemories] = await Promise.all([
 		db
 			.select({ resourceId: podcastEpisodeChapters.resourceId })
 			.from(podcastEpisodeChapters)
@@ -336,6 +342,7 @@ async function loadPlannedFindings({
 			.where(eq(podcastEpisodes.topicId, topic.id)),
 		loadBookmarkedFindingRows(topic.id, topic),
 		loadUrlSourcePageUrls(topic.id),
+		loadRankedTopicMemories({ topicId: topic.id, isPublicOnly: true }),
 	])
 
 	// load the Topic's Findings, best first, each marked if it is bookmarked
@@ -364,5 +371,6 @@ async function loadPlannedFindings({
 
 	// order the Findings, with the narrated ones last
 	const narratedResourceIds = new Set(narratedChapterRows.map((narratedChapterRow) => narratedChapterRow.resourceId))
-	return toPlannedFindings({ topicFindingRows, narratedResourceIds, scanId, maxFindings })
+	const continuityFindingIds = new Set(topicMemories.flatMap(({ findingIds }) => findingIds))
+	return toPlannedFindings({ topicFindingRows, narratedResourceIds, scanId, maxFindings, continuityFindingIds })
 }

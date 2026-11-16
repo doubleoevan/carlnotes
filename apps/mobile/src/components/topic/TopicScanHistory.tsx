@@ -4,7 +4,7 @@ import { fetchScanNote, removeTopicSource } from "@carlnotes/client/topicClient"
 import { KEEP_ONE_SOURCE_MESSAGE } from "@carlnotes/contracts/sources"
 import type { TopicResponse, TopicScan } from "@carlnotes/contracts/topics"
 import { usePagination } from "@carlnotes/core/hooks/usePagination"
-import { toScanTimestamp, toSectionCountLabel } from "@carlnotes/core/lib/labels"
+import { toScanTimestamp } from "@carlnotes/core/lib/labels"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { type ComponentRef, useRef, useState } from "react"
@@ -18,18 +18,33 @@ import { PodcastEpisodeNumberPill } from "@/components/podcast/PodcastEpisodePil
 import { Button, toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Text } from "@/components/primitives/text"
 import { CollapsibleSection } from "./CollapsibleSection"
+import { TopicMemoriesDialog } from "./TopicMemoriesDialog"
 import { TopicScanRecap } from "./TopicScanRecap"
 
 /**
  * Shows the delivered scan history with native sheets for individual scan notes.
  */
-export function TopicScanHistory({ topic }: { topic: TopicResponse }) {
+export function TopicScanHistory({
+	topic,
+	onTakeawayRemoved,
+}: {
+	topic: TopicResponse
+	onTakeawayRemoved?: () => void
+}) {
 	// use the web's five-row pages while keeping each scan's note lazy
 	const { pageRows: scans, pagination } = usePagination(topic.scans)
 	return (
 		<CollapsibleSection
 			title="Brew diary"
-			countLabel={toSectionCountLabel(topic.scans.length, "brew")}
+			titleAside={
+				<TopicMemoriesDialog
+					topicId={topic.id}
+					entryCount={topic.scans.length}
+					takeawayCount={topic.takeawayCount}
+					canRateTakeaways={topic.canRateTakeaways}
+					onTakeawayRemoved={onTakeawayRemoved}
+				/>
+			}
 			hasClosedDivider
 		>
 			<View className="rounded-lg border border-separator bg-card p-1 shadow-raised">

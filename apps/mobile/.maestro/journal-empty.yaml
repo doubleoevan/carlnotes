@@ -1,0 +1,18 @@
+appId: com.carlnotes.app
+name: Journal story - Empty
+---
+- openLink: "carlnotes://storybook?story=empty"
+- runFlow:
+    when:
+      visible: "Open"
+    commands:
+      - tapOn: "Open"
+- extendedWaitUntil:
+    visible: "0 entries · 0 takeaways"
+    timeout: 20000
+- tapOn: "^Journal$"
+- assertVisible: "Topic Takeaways 🧠"
+- assertVisible: "Carl hasn’t written any takeaways yet.*"
+- assertNotVisible: "Takeaways pages: next page"
+- tapOn: "Close Topic Takeaways.*"
+- assertVisible: "^Journal$"

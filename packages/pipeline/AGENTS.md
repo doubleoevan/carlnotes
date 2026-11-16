@@ -359,3 +359,13 @@ purges a public topic's post page at the edge after an image change. `chat/retri
 turn reads of a Topic Post, its text and its shared Comments the reader may see, and
 `chat/topicPostQuestionPrompt.ts` builds the `chat-topic-post` fragment and the fenced post block the topic chat
 prompt splices on that turn alone.
+
+`updateTopicTakeaways.ts` clusters kept public Findings and bills a proposal for each cluster.
+`topicMemoryEvidence.ts` selects eligible Findings and neighbors. `topicMemoryWrites.ts` commits a completed Scan's
+proposals before any cleanup calls. `applyTopicMemoryWrite.ts` applies a proposal and can reactivate matching history.
+`topicMemoryCleanupPairs.ts` loads flagged pairs and their dated evidence. `topicMemoryCleanupReview.ts` sends them to the
+model. `topicMemoryCleanup.ts` checks the reviewed rows under the Topic lock, preserves feedback and evidence, and
+evicts unprotected rows by recency. `topicMemoryPrompt.ts` builds the shared untrusted prompt slice.
+That slice gives each takeaway's last-seen Scan date so the model can distinguish provenance from the event's date.
+Run `bun run smoke:topic-memories` against disposable Postgres with pgvector to exercise the write transaction and
+MCP membership gate. `evals/topic-memories/` replays dev Findings through the same production proposal and write paths.

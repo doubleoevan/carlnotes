@@ -8,7 +8,9 @@ import { toHtmlText, toOneLineText } from "@carlnotes/contracts/text"
 import { toWordCount } from "@carlnotes/contracts/topicPosts"
 import { premiumModelCost } from "@carlnotes/models/budget"
 import { LOW_REASONING_PROVIDER_OPTIONS, scoreModel } from "@carlnotes/models/models"
+import { loadCurrentDayContext } from "@carlnotes/models/prompts/currentDayContext"
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "@carlnotes/models/prompts/fetch"
+import { toTopicMemoryPromptTemplate } from "@carlnotes/models/prompts/topicMemoryBackground"
 import { writePrompt } from "@carlnotes/models/prompts/write"
 import { generateText, Output } from "ai"
 import { z } from "zod"
@@ -57,7 +59,9 @@ export type TopicPostDiscussionInput = {
 	html: string
 	authorUsername: string | null
 	comments: DiscussionComment[]
+	// prompt context is optional for private or empty Journals
 	hint?: string
+	topicMemoryPrompt?: string
 	litellmApiKey?: string
 }
 
@@ -66,15 +70,18 @@ export type TopicPostDiscussionInput = {
  * rejection each fenced as untrusted, and the post limited in length.
  */
 export async function buildTopicPostDiscussionPrompt(
-	{ title, html, authorUsername, comments, hint }: TopicPostDiscussionInput,
+	{ title, html, authorUsername, comments, hint, topicMemoryPrompt }: TopicPostDiscussionInput,
 	rejectionReason?: string,
 ): Promise<BuiltPrompt> {
 	// the length the prompt asks for, from the whole post and the Comments the hosts read
 	const postText = toHtmlText(html)
 	const { minWordCount, maxWordCount } = toDiscussionWordCounts({ html, comments })
-	const { template, registryPrompt } = await fetchPromptTemplate("write-topic-post-discussion")
+	const [{ template, registryPrompt }, currentDayBlock] = await Promise.all([
+		fetchPromptTemplate("write-topic-post-discussion"),
+		loadCurrentDayContext(),
+	])
 	const prompt = writePrompt(
-		template,
+		toTopicMemoryPromptTemplate(template, topicMemoryPrompt ?? ""),
 		{
 			title: toOneLineText(title),
 			author: authorUsername ?? UNNAMED_AUTHOR,
@@ -85,6 +92,8 @@ export async function buildTopicPostDiscussionPrompt(
 		},
 		{
 			hostsBlock: await toPodcastEpisodeHostsBlock(),
+			currentDayBlock,
+			topicMemoryBlock: topicMemoryPrompt ?? "",
 			minWords: String(minWordCount),
 			maxWords: String(maxWordCount),
 		},

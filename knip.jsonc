@@ -42,6 +42,7 @@
 				"evals/dashboard-paragraph/dashboardParagraphEval.ts",
 				"evals/topic-post-summary/topicPostSummaryEval.ts",
 				"evals/topic-post-discussion/topicPostDiscussionEval.ts",
+				"evals/topic-memories/topicMemoriesEval.ts",
 				"evals/topic-post-chat/topicPostChatEval.ts",
 				"evals/grader-calibration/graderCalibrationEval.ts",
 				"evals/new-topic-chat/newTopicChatEval.ts",
@@ -73,6 +74,7 @@
 				"runMonitoredJob.ts",
 				// temporal.ts passes each workflow file to Temporal as `new URL(...)`, not as an import
 				"workflows/processAttachment.ts",
+				"workflows/topicMemories.ts",
 				"workflows/runTopicScan.ts",
 				"workflows/sendScanEmail.ts",
 				"workflows/sendPushNotifications.ts",

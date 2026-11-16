@@ -225,8 +225,9 @@ export async function rateFinding(
 	toolCaller: ToolCaller & { kind: "user" },
 	findingId: string,
 	rating: "up" | "down" | null,
+	note?: string,
 ): Promise<boolean> {
-	return setRating(toolCaller.userId, findingId, rating, toMcpAnalyticsProperties(toolCaller))
+	return setRating(toolCaller.userId, findingId, rating, toMcpAnalyticsProperties(toolCaller), note)
 }
 
 /**

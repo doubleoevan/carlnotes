@@ -42,6 +42,17 @@ const chatAttachmentFields = {
 // the rating mutation body. up or down sets the topic finding's rating and null clears it
 export const ratingPayload = z.object({ rating: z.enum(ratings).nullable() })
 
+export const FINDING_RATING_NOTE_LIMIT = 2000
+export const findingRatingPayload = ratingPayload.extend({
+	note: z
+		.string()
+		.trim()
+		.max(FINDING_RATING_NOTE_LIMIT)
+		.refine((note) => !note.includes("\0"))
+		.optional(),
+})
+export const findingRatingNoteResponse = z.object({ note: z.string().nullable() })
+
 // the consumed mutation body. true marks the topic finding consumed for the current user and false unmarks it
 export const consumedPayload = z.object({ isConsumed: z.boolean() })
 
@@ -73,7 +84,7 @@ export const feedbackText = z
 	.string()
 	.trim()
 	.min(1)
-	.max(2000)
+	.max(FINDING_RATING_NOTE_LIMIT)
 	// a Postgres text column holds no NUL character
 	.refine((feedback) => !feedback.includes("\0"))
 export const findingFeedbackPayload = z.object({ feedback: feedbackText })

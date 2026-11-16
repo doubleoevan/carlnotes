@@ -57,6 +57,7 @@ sb.mock(import("@carlnotes/client/topicPostClient"))
 sb.mock(import("@carlnotes/client/termsClient"))
 sb.mock(import("@carlnotes/client/topicClient"))
 sb.mock(import("@carlnotes/client/topicFindingClient"))
+sb.mock(import("@carlnotes/client/topicMemoriesClient"))
 sb.mock(import("@carlnotes/client/viewerCountsClient"))
 sb.mock(import("@carlnotes/client/voiceClient"))
 

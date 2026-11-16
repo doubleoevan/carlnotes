@@ -218,3 +218,6 @@ call with its encode and store, closing the row as failed if either fails for go
 `recordPodcastEpisodeActivities.ts`, so they run on the `episode-recordings` queue. `notificationsEmailRows.ts`
 joins a reaction's and a comment's Topic Post, sends a post's activity to its author as well as to its topic's owner,
 once if they are one person, and `notificationsEmails.ts` names the post by its title with a link to its page.
+
+`workflows/topicMemories.ts` runs one succeeded Scan's Journal consolidation on its own queue. Its backfill reads the
+latest five succeeded Scans of a Topic oldest first. `bun run topic-memories:backfill` under Doppler starts or joins the operator run.

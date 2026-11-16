@@ -1,7 +1,7 @@
 // own topic page tests: a topic's page, its podcast episodes, and its Topic Posts match, and another topic's pages, the
 // docs, the release notes, other sites, and a url that does not parse do not
 import { expect, test } from "bun:test"
-import { isOwnTopicPageUrl } from "./ownTopicPages"
+import { isCarlNotesGeneratedContentUrl, isOwnTopicPageUrl } from "./ownTopicPages"
 
 const TOPIC_ID = "caaa8d85-621c-493c-bf43-434a55e84aac"
 
@@ -25,4 +25,13 @@ test("other pages are not the topic's own", () => {
 	expect(isOwnTopicPageUrl("https://carlnotes.com/releases", TOPIC_ID)).toBe(false)
 	expect(isOwnTopicPageUrl(`https://example.com/topics/${TOPIC_ID}`, TOPIC_ID)).toBe(false)
 	expect(isOwnTopicPageUrl("not a url", TOPIC_ID)).toBe(false)
+})
+
+test("another Topic's Coffee Break, film, and Topic Post are generated content", () => {
+	const topic = `https://carlnotes.com/topics/${TOPIC_ID}/keeping-up-with-the-chens`
+	for (const url of [`${topic}/episodes/2026/17`, `${topic}/films/17`, `${topic}/posts/family-roundup`]) {
+		expect(isCarlNotesGeneratedContentUrl(url)).toBe(true)
+	}
+	expect(isCarlNotesGeneratedContentUrl(topic)).toBe(false)
+	expect(isCarlNotesGeneratedContentUrl("https://carlnotes.com.example.test/episodes/17")).toBe(false)
 })

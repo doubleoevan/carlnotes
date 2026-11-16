@@ -109,6 +109,8 @@ scan summary, then the Source footnotes chart when the Scan has per-Source resul
 the platform admin role. The api SHALL withhold the cost value from everyone else instead of relying on the ui to hide
 it. The Activity page's scan recap popover SHALL show the same chart in the same place.
 
+The web and Expo Brew diary SHALL show the counts of entries and takeaways beside a 📙 Journal button.
+
 #### Scenario: History shows five Scans to a page
 
 - **WHEN** a Topic has twelve Scans
@@ -150,3 +152,8 @@ it. The Activity page's scan recap popover SHALL show the same chart in the same
 
 - **WHEN** a user opens the ⓘ of a Scan saved before per-Source results were recorded
 - **THEN** the popover shows the notes and the footer with no chart between them
+
+#### Scenario: Opening the Journal
+
+- **WHEN** a reader presses Journal
+- **THEN** the **Topic Takeaways 🧠** dialog opens without toggling the Brew diary

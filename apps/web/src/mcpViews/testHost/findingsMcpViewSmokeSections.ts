@@ -42,8 +42,8 @@ test("an open row's thumbs, bookmark, and read toggle call their tools and show 
 		// the read toggle saves through its tool, and an MCP view never marks a finding unread
 		await detailsRow.getByRole("button", { name: "Mark read" }).click()
 		await detailsRow.getByRole("button", { name: "Mark unread" }).and(frame.locator("button:disabled")).waitFor()
-		expect(toolCalls).toEqual([
-			{ name: "rate_finding", arguments: { finding_id: "finding-1", rating: "up" } },
+		expect(toolCalls.filter(({ name }) => name !== "read_finding_rating_note")).toEqual([
+			{ name: "rate_finding", arguments: { finding_id: "finding-1", rating: "up", note: "" } },
 			{ name: "bookmark_finding", arguments: { finding_id: "finding-1", is_bookmarked: true } },
 			{ name: "mark_finding_consumed", arguments: { finding_id: "finding-1" } },
 		])
@@ -51,7 +51,18 @@ test("an open row's thumbs, bookmark, and read toggle call their tools and show 
 })
 
 test("a finding's row expands to Carl's notes and the sender's note, and its feedback goes to its tool", async () => {
-	await withMcpView({ mcpView: "findings" }, async ({ frame, toolCalls, sendToolResult }) => {
+	// the host restores the note as private view metadata on each read
+	let savedNote: string | null = null
+	const respondToToolCall: ToolCallResponder = ({ name, arguments: args }) => {
+		if (name === "read_finding_rating_note") {
+			return { content: [], _meta: { findingRatingNote: { note: savedNote } } }
+		}
+		if (name === "rate_finding" && typeof args?.note === "string") {
+			savedNote = args.note
+		}
+		return { content: [] }
+	}
+	await withMcpView({ mcpView: "findings", respondToToolCall }, async ({ frame, toolCalls, sendToolResult }) => {
 		await sendToolResult(toMcpViewToolResult({ mcpViewData: FINDINGS_MCP_VIEW_DATA }))
 		const findingRow = frame.getByRole("row").filter({ hasText: "Agents that read the docs" })
 
@@ -61,19 +72,22 @@ test("a finding's row expands to Carl's notes and the sender's note, and its fee
 		await frame.getByText("Carl's take:").waitFor()
 		await frame.getByText(PERSONAL_ANNOTATION).waitFor()
 
-		// the thumb beside the box sends its words, and one line of thanks replaces the box
+		// the thumb beside the box saves the rating and note together
 		const detailsRow = frame.getByRole("row").filter({ hasText: "Carl's take:" })
-		await detailsRow.getByRole("textbox", { name: "Feedback for Carl" }).fill("Too basic for me")
+		const input = detailsRow.getByRole("textbox", { name: "Feedback for Carl" })
+		await input.fill("Too basic for me")
 		await detailsRow.getByRole("button", { name: "Thumbs down" }).click()
-		await detailsRow.getByText("Noted. Carl reads these later.").waitFor()
-		expect(toolCalls).toEqual([
-			{ name: "rate_finding", arguments: { finding_id: "finding-1", rating: "down" } },
-			{ name: "send_finding_feedback", arguments: { finding_id: "finding-1", feedback: "Too basic for me" } },
+		await detailsRow.locator('button[aria-label^="Thumbs down"][aria-pressed="true"]').waitFor()
+		expect(toolCalls.filter(({ name }) => name !== "read_finding_rating_note")).toEqual([
+			{ name: "rate_finding", arguments: { finding_id: "finding-1", rating: "down", note: "Too basic for me" } },
 		])
 
-		// a second click closes the row
+		// close and reopen the row to verify it reloads the saved note
 		await findingRow.getByRole("button", { name: "Hide Carl's notes" }).click()
 		await frame.getByText(PERSONAL_ANNOTATION).waitFor({ state: "detached" })
+		await findingRow.getByRole("button", { name: "Show Carl's notes" }).click()
+		await detailsRow.locator('input[value="Too basic for me"]').waitFor()
+		expect(await input.inputValue()).toBe("Too basic for me")
 	})
 })
 
@@ -118,7 +132,7 @@ test("an open row shows the finding's reactions, and a press on a type saves thr
 test("a failed feedback send keeps the words in the box to send again", async () => {
 	const respondToToolCall: ToolCallResponder = ({ name }) => ({
 		content: [],
-		isError: name === "send_finding_feedback",
+		isError: name === "rate_finding",
 	})
 	await withMcpView({ mcpView: "findings", respondToToolCall }, async ({ frame, toolCalls, sendToolResult }) => {
 		await sendToolResult(toMcpViewToolResult({ mcpViewData: FINDINGS_MCP_VIEW_DATA }))
@@ -130,7 +144,7 @@ test("a failed feedback send keeps the words in the box to send again", async ()
 		const feedbackBox = detailsRow.getByRole("textbox", { name: "Feedback for Carl" })
 		await feedbackBox.fill("Too basic for me")
 		await detailsRow.getByRole("button", { name: "Thumbs down" }).click()
-		await waitForRecord(toolCalls, 2)
+		await waitForRecord(toolCalls)
 
 		// the box keeps its words, and no thanks replaces it
 		await detailsRow.getByRole("button", { name: "Thumbs down" }).waitFor()
@@ -139,22 +153,29 @@ test("a failed feedback send keeps the words in the box to send again", async ()
 	})
 })
 
-test("sent feedback goes once, and a later thumb changes only the rating", async () => {
-	await withMcpView({ mcpView: "findings" }, async ({ frame, toolCalls, sendToolResult }) => {
+test("switching thumbs keeps the note with the new rating", async () => {
+	const respondToToolCall: ToolCallResponder = ({ name }) =>
+		name === "read_finding_rating_note"
+			? { content: [], _meta: { findingRatingNote: { note: "Too basic for me" } } }
+			: { content: [] }
+	await withMcpView({ mcpView: "findings", respondToToolCall }, async ({ frame, toolCalls, sendToolResult }) => {
 		await sendToolResult(toMcpViewToolResult({ mcpViewData: FINDINGS_MCP_VIEW_DATA }))
 		const findingRow = frame.getByRole("row").filter({ hasText: "Agents that read the docs" })
 		await findingRow.getByRole("button", { name: "Show Carl's notes" }).click()
 
-		// the first thumb sends the box's words and the thanks replaces the box
+		// the first thumb saves with the box's words
 		const detailsRow = frame.getByRole("row").filter({ hasText: "Carl's take:" })
 		await detailsRow.getByRole("textbox", { name: "Feedback for Carl" }).fill("Too basic for me")
 		await detailsRow.getByRole("button", { name: "Thumbs down" }).click()
-		await detailsRow.getByText("Noted. Carl reads these later.").waitFor()
+		await detailsRow.locator('button[aria-label^="Thumbs down"][aria-pressed="true"]').waitFor()
 
-		// the second thumb saves its rating and sends no words
+		// the second thumb retains the same note
 		await detailsRow.getByRole("button", { name: "Thumbs up" }).click()
-		await waitForRecord(toolCalls, 3)
-		expect(toolCalls.filter(({ name }) => name === "send_finding_feedback")).toHaveLength(1)
+		await detailsRow.locator('button[aria-label^="Thumbs up"][aria-pressed="true"]').waitFor()
+		expect(toolCalls.filter(({ name }) => name === "rate_finding")).toEqual([
+			{ name: "rate_finding", arguments: { finding_id: "finding-1", rating: "down", note: "Too basic for me" } },
+			{ name: "rate_finding", arguments: { finding_id: "finding-1", rating: "up", note: "Too basic for me" } },
+		])
 	})
 })
 

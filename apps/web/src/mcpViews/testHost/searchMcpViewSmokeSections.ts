@@ -73,7 +73,9 @@ test("a finding in the search table saves, expands, and names its Topic", async 
 		// the open row's thumbs save through their tool
 		await frame.getByRole("button", { name: "Thumbs down" }).click()
 		await waitForRecord(toolCalls)
-		expect(toolCalls).toEqual([{ name: "rate_finding", arguments: { finding_id: "finding-1", rating: "down" } }])
+		expect(toolCalls.filter(({ name }) => name === "rate_finding")).toEqual([
+			{ name: "rate_finding", arguments: { finding_id: "finding-1", rating: "down", note: "" } },
+		])
 	})
 })
 

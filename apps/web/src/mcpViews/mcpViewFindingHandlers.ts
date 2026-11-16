@@ -26,8 +26,8 @@ export function toMcpViewFindingHandlers(onFindingChange: (findingChange: Findin
 			void (isConsumed
 				? saveFindingChange(findingId, { toolName: "mark_finding_consumed", toolArguments: {} }, { isConsumed })
 				: undefined),
-		rateTopicFinding: (findingId, rating) =>
-			void saveFindingChange(findingId, { toolName: "rate_finding", toolArguments: { rating } }, { rating }),
+		rateTopicFinding: (findingId, rating, note) =>
+			void saveFindingChange(findingId, { toolName: "rate_finding", toolArguments: { rating, note } }, { rating }),
 		bookmarkTopicFinding: (findingId, isBookmarked) =>
 			void saveFindingChange(
 				findingId,

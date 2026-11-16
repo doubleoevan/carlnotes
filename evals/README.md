@@ -413,3 +413,23 @@ Every case is graded for reporting only what the post and its Comments say. The 
 from the post, an answer that draws on a Comment and credits its author by username, a post with no shared Comment,
 where the reply speaks for no reader, an instruction inside a Comment, and a request to change the topic, which changes
 nothing.
+
+## Topic memories eval
+
+`bun run eval:topic-memories snapshot /tmp/journal-eval.json` reads the five dev Topics with the most active
+takeaways among those with at least ten successful brews. It copies the public Findings from their latest ten brews.
+Use a migrated disposable Postgres database with pgvector named `journal_eval_*` for the replay. Set `DATABASE_URL`
+and `DATABASE_WS_PROXY` for that database, then run the command below. The dev public model key pays for the eval;
+the replay uses the production proposal and Journal write code against the isolated database.
+
+```sh
+doppler run --project carlnotes --config dev --preserve-env=DATABASE_URL,DATABASE_WS_PROXY -- bun evals/topic-memories/topicMemoriesEval.ts replay /tmp/journal-eval.json /tmp/journal-pair-audit.json
+```
+
+The report compares pre-write model proposals with final active takeaways. `score-model` labels every same-Topic
+pair above 0.80 without seeing its cosine. Each Topic reports the redundant-row rate, where a connected group of
+labelled duplicates contributes all but one row. The pipeline precision and recall compare the judge's labels against
+which proposals share a stored survivor, traced through their written row IDs and replacement links. The judge also labels any combined pair
+below 0.80. The scores cover valid text proposals, since a cluster that yielded no takeaway has no text pair to grade.
+The report includes the similarity-only cutoffs and up to five applied merges from public Topics. The optional final
+path writes both texts, the cosine, the combined state, and the judge's verdict in a private file.

@@ -40,6 +40,7 @@ const MCP_VIEW_DESCRIPTIONS: Record<McpView, string> = {
 	activity: "The topics the user follows and the topic invites they sent, with their switches and withdrawals.",
 	account: "The user's plan, this month's spend meter with its cutoffs, the day's brews, and regenerations left.",
 	topics: "One section of the topics page as topic cards, or a topic's similar topics, each opening its findings.",
+	takeaways: "A read-only page of numbered takeaways from a Topic's Journal.",
 }
 
 /**

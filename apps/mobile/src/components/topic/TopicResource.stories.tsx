@@ -21,7 +21,6 @@ const meta: Meta<typeof TopicResource> = {
 		topic: toTestTopicFeed(),
 		topicFeedHandlers: STORY_TOPIC_FEED_HANDLERS,
 		linkPreview: null,
-		onSendFeedback: async () => undefined,
 	},
 }
 export default meta

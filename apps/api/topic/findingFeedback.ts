@@ -4,7 +4,7 @@ import { type DbHandle, db } from "@carlnotes/db"
 import { bookmarks, consumptions, findingFeedback, findings, findingViews } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
 import { trackEvent } from "@carlnotes/server/analytics"
-import { and, eq, inArray, isNotNull, sql } from "drizzle-orm"
+import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm"
 import type { AnalyticsProperties } from "../currentUser"
 import { canBookmarkFinding, canRateFinding, isTopicFindingVisible } from "./findingPermissions"
 import { toTopicRole } from "./permissions"
@@ -19,6 +19,7 @@ export async function setRating(
 	findingId: string,
 	rating: "up" | "down" | null,
 	analyticsProperties: AnalyticsProperties,
+	note?: string,
 ): Promise<boolean> {
 	// only a rater may write, then the rating is written in one update
 	if (!(await canRateFinding(userId, findingId))) {
@@ -27,9 +28,15 @@ export async function setRating(
 
 	// the rating records who set it, the topic's team, and their role at that moment
 	const snapshot = rating === null ? emptySnapshot() : await toRatingSnapshot(userId, findingId)
+	const ratingNote =
+		rating === null
+			? ""
+			: (note ??
+				sql<string | null>`case when ${findings.ratedByUserId} = ${userId} then ${findings.ratingNote}
+				when ${findings.ratingNote} is not null then '' end`)
 	const [ratedFindingRow] = await db
 		.update(findings)
-		.set({ rating, ...snapshot })
+		.set({ rating, ratingNote, ...snapshot })
 		.where(eq(findings.id, findingId))
 		.returning({ topicId: findings.topicId })
 
@@ -44,6 +51,31 @@ export async function setRating(
 		trackEvent("finding_rated", userId, analyticsProperties)
 	}
 	return true
+}
+
+/** Reads the current rater's own note, including a note left by a legacy client. */
+export async function loadFindingRatingNote(
+	userId: string,
+	findingId: string,
+): Promise<{ note: string | null } | null> {
+	if (!(await canRateFinding(userId, findingId))) {
+		return null
+	}
+
+	// feedback belongs to the user who holds the current rating snapshot
+	const legacyNote = db
+		.select({ note: findingFeedback.feedback })
+		.from(findingFeedback)
+		.where(and(eq(findingFeedback.findingId, findings.id), eq(findingFeedback.userId, userId)))
+		.orderBy(desc(findingFeedback.createdAt), desc(findingFeedback.id))
+		.limit(1)
+		.as("legacy_note")
+	const [result] = await db
+		.select({ note: sql<string | null>`coalesce(${findings.ratingNote}, ${legacyNote.note})` })
+		.from(findings)
+		.leftJoinLateral(legacyNote, sql`${findings.ratingNote} is null`)
+		.where(and(eq(findings.id, findingId), eq(findings.ratedByUserId, userId), isNotNull(findings.rating)))
+	return { note: result?.note || null }
 }
 
 // the cleared snapshot a removed rating writes

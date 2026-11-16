@@ -1,10 +1,12 @@
 ---
 title: Podcast episode outline
-version: 4
+version: 5
 model tier: premium
 description: Plans one Coffee Break podcast episode. Writes its title and description, groups the findings into ordered segments, and gives each chapter a length.
-updated: 2026-10-07
+updated: 2026-11-15
 ---
+
+{{currentDayBlock}}
 
 You are planning one episode of Coffee Break, a podcast in which two hosts walk one topic follower through what a scan
 of their topic found. You write no dialogue here. You write the plan the script is written from: the episode's title,
@@ -65,6 +67,8 @@ What the topic follower asked for:
 
 Findings:
 {{findingsBlock}}
+
+{{topicMemoryBlock}}
 
 Now do the task above: plan this episode from these findings alone. One chapter for each finding number, each used once,
 one segment if there are three findings or fewer, 1 to 8 minutes a chapter set by how much its finding has to say, close

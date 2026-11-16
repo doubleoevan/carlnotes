@@ -4,7 +4,9 @@ import { type Budget, charge, chargeScoringFailure, premiumModelCost } from "@ca
 import { runModelCall } from "@carlnotes/models/modelCallRetry"
 import { LOW_REASONING_PROVIDER_OPTIONS, SCORE_OUTPUT_TOKENS, scoreModel } from "@carlnotes/models/models"
 import { PRIVATE_MODEL_OPTIONS } from "@carlnotes/models/privateModelOptions"
+import { loadCurrentDayContext } from "@carlnotes/models/prompts/currentDayContext"
 import { type BuiltPrompt, fetchPromptTemplate } from "@carlnotes/models/prompts/fetch"
+import { toTopicMemoryPromptTemplate } from "@carlnotes/models/prompts/topicMemoryBackground"
 import { toUntrustedPromptText, writePrompt } from "@carlnotes/models/prompts/write"
 import { generateText, Output } from "ai"
 import { z } from "zod"
@@ -30,6 +32,7 @@ export type PersonalSourceScore = {
 type ScorePersonalSourceResourceOptions = {
 	resourceContent: string
 	topicContext: string
+	topicMemoryPrompt?: string
 	personalSources: PersonalSourcesReviewContext[]
 	budget: Budget
 	litellmApiKey: string
@@ -49,6 +52,7 @@ export async function scorePersonalSourceResource(
 		const scorePrompt = await buildPersonalSourceScorePrompt({
 			resourceContent: content,
 			topicContext: options.topicContext,
+			topicMemoryPrompt: options.topicMemoryPrompt,
 			personalSource,
 		})
 
@@ -100,21 +104,30 @@ export async function scorePersonalSourceResource(
 export async function buildPersonalSourceScorePrompt({
 	resourceContent,
 	topicContext,
+	topicMemoryPrompt,
 	personalSource,
 }: {
 	resourceContent: string
 	topicContext: string
+	topicMemoryPrompt?: string
 	personalSource: PersonalSourcesReviewContext
 }): Promise<BuiltPrompt> {
 	// number the page passages and bound each input
-	const { template, name, registryPrompt } = await fetchPromptTemplate("score-personal-source-resource")
-	const prompt = writePrompt(template, {
-		resourceContent: toPagePassages(resourceContent)
-			.map((text, index) => `[${index + 1}] ${text}`)
-			.join("\n\n"),
-		topicContext: topicContext.slice(0, 8000),
-		personalSources: personalSource.text.slice(0, 8000),
-	})
+	const [{ template, name, registryPrompt }, currentDayBlock] = await Promise.all([
+		fetchPromptTemplate("score-personal-source-resource"),
+		loadCurrentDayContext(),
+	])
+	const prompt = writePrompt(
+		toTopicMemoryPromptTemplate(template, topicMemoryPrompt ?? ""),
+		{
+			resourceContent: toPagePassages(resourceContent)
+				.map((text, index) => `[${index + 1}] ${text}`)
+				.join("\n\n"),
+			topicContext: topicContext.slice(0, 8000),
+			personalSources: personalSource.text.slice(0, 8000),
+		},
+		{ currentDayBlock, topicMemoryBlock: topicMemoryPrompt ?? "" },
+	)
 	return { prompt, name, registryPrompt }
 }
 

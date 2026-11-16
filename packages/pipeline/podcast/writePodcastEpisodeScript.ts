@@ -3,7 +3,7 @@
 
 import { FULL_PODCAST_EPISODE_MINUTES, SHORT_PODCAST_EPISODE_MINUTES } from "@carlnotes/contracts/podcastEpisodes"
 import { toHostWithoutWww } from "@carlnotes/contracts/seo"
-import { db, isFindingShown } from "@carlnotes/db"
+import { db, isCurrentModelEmbedding, isFindingShown } from "@carlnotes/db"
 import { podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { findings, resources } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
@@ -11,6 +11,7 @@ import { loadOrProvisionUserLiteLLMKey } from "@carlnotes/models/litellm"
 import { reportError } from "@carlnotes/server/monitoring"
 import { and, eq, inArray, sql } from "drizzle-orm"
 import { readResourceText } from "../chat/retrieve"
+import { loadTopicMemoryPrompt } from "../topicMemoryPrompt"
 import {
 	type GeneratePodcastEpisodeOutlineOptions,
 	type GeneratePodcastEpisodeSegmentOptions,
@@ -57,12 +58,14 @@ export async function outlinePodcastEpisode(
 ): Promise<PodcastEpisodeOutline> {
 	// write the outline's drafts, and record each draft's cost before the draft is checked
 	const scriptInput = await loadScriptInput(scriptCallOptions)
+	const topicMemoryPrompt = await loadPodcastTopicMemoryPrompt(scriptCallOptions)
 	const { maxMinutes } = scriptInput
 	const findingIds = scriptInput.podcastEpisodeFindings.map((podcastEpisodeFinding) => podcastEpisodeFinding.findingId)
 	const outline = await writeCheckedScriptDraft(async ({ rejectionReason, isLastScriptDraft }) => {
 		await assertPodcastPersonalSourcesConverted({ topicId: scriptCallOptions.topicId })
 		const { scriptDraft: outlineDraft, costDollars } = await generatePodcastEpisodeOutline({
 			...scriptInput,
+			topicMemoryPrompt,
 			rejectionReason,
 		})
 		await addPodcastEpisodeCost(scriptCallOptions.podcastEpisodeId, costDollars)
@@ -89,10 +92,21 @@ export async function writePodcastEpisodeSegment({
 }: WritePodcastEpisodeSegmentOptions): Promise<PodcastEpisodeSegment> {
 	// write the segment's drafts, and record each draft's cost before the draft is checked
 	const scriptInput = await loadScriptInput(scriptCallOptions)
+	const chapterFindingIds = new Set(outline.segments[segmentIndex]?.chapters.map(({ findingId }) => findingId))
+	const topicMemoryPrompt = await loadPodcastTopicMemoryPrompt({
+		...scriptCallOptions,
+		plannedFindings: scriptCallOptions.plannedFindings.filter(({ findingId }) => chapterFindingIds.has(findingId)),
+	})
 	return writeCheckedScriptDraft(async ({ rejectionReason, isLastScriptDraft }) => {
 		// write one draft of the segment, with why the draft before it was rejected
 		await assertPodcastPersonalSourcesConverted({ topicId: scriptCallOptions.topicId })
-		const generatePodcastEpisodeSegmentOptions = { ...scriptInput, outline, segmentIndex, rejectionReason }
+		const generatePodcastEpisodeSegmentOptions = {
+			...scriptInput,
+			topicMemoryPrompt,
+			outline,
+			segmentIndex,
+			rejectionReason,
+		}
 		const { scriptDraft: segmentDraft, costDollars } = await generatePodcastEpisodeSegment(
 			generatePodcastEpisodeSegmentOptions,
 		)
@@ -249,4 +263,28 @@ export async function loadPodcastEpisodeFindings(findingIds: string[]): Promise<
 			content: await readResourceText(findingRow.contentKey, findingRow.snippet),
 		})),
 	)
+}
+
+// use the selected chapters' existing Resource vectors instead of paying to embed them again
+async function loadPodcastTopicMemoryPrompt({
+	topicId,
+	plannedFindings,
+}: Pick<PodcastEpisodeScriptCallOptions, "topicId" | "plannedFindings">): Promise<string> {
+	const chapterVectors = await db
+		.select({ embedding: resources.embedding })
+		.from(resources)
+		.where(
+			and(
+				inArray(
+					resources.id,
+					plannedFindings.map(({ resourceId }) => resourceId),
+				),
+				isCurrentModelEmbedding,
+			),
+		)
+	return loadTopicMemoryPrompt({
+		topicId,
+		embeddings: chapterVectors.flatMap(({ embedding }) => (embedding ? [embedding] : [])),
+		isPublicOnly: true,
+	})
 }

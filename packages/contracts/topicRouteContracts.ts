@@ -20,12 +20,13 @@ import {
 	bookmarkPayload,
 	consumedPayload,
 	findingFeedbackPayload,
+	findingRatingNoteResponse,
+	findingRatingPayload,
 	inviteCreatePayload,
 	noteBodyPayload,
 	noteCommentPayload,
 	noteCreatePayload,
 	noteUpdatePayload,
-	ratingPayload,
 	subscriptionEmailPayload,
 	subscriptionPayload,
 	userInvitePayload,
@@ -49,6 +50,12 @@ import {
 	uploadTopicImageResponse,
 } from "./topicImages"
 import {
+	topicMemoriesPage,
+	topicMemoriesQuery,
+	topicMemoryFeedbackPayload,
+	topicMemoryFeedbackResult,
+} from "./topicMemories"
+import {
 	attachmentContextPayload,
 	featuredOrderPayload,
 	suggestSourcesPayload,
@@ -69,6 +76,22 @@ import { podcastEpisodeCounts, topicCounts, viewerCounts } from "./viewerCounts"
 
 // the entries, in client module order
 export const topicRouteContracts: Record<string, ApiRouteContract> = {
+	// the Journal
+	"topicMemoriesClient.fetchTopicMemories": {
+		method: "GET",
+		path: "/api/topics/:id/journal",
+		params: idParam,
+		query: topicMemoriesQuery,
+		response: topicMemoriesPage,
+	},
+	"topicMemoriesClient.rateTopicMemory": {
+		method: "PUT",
+		path: "/api/topics/:id/journal/:memoryId/feedback",
+		params: idParam.extend({ memoryId: z.string() }),
+		body: { json: topicMemoryFeedbackPayload },
+		response: topicMemoryFeedbackResult,
+	},
+
 	// topics
 	"topicClient.fetchAddableTopics": {
 		method: "GET",
@@ -293,8 +316,14 @@ export const topicRouteContracts: Record<string, ApiRouteContract> = {
 		method: "POST",
 		path: "/api/topic-findings/:id/rating",
 		params: idParam,
-		body: { json: ratingPayload },
+		body: { json: findingRatingPayload },
 		response: okResponse,
+	},
+	"topicFindingClient.fetchTopicFindingRatingNote": {
+		method: "GET",
+		path: "/api/topic-findings/:id/rating",
+		params: idParam,
+		response: findingRatingNoteResponse,
 	},
 
 	// viewer counts

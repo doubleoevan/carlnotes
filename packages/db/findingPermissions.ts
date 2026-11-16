@@ -15,6 +15,7 @@ import {
 	isVisibleAfterActivation,
 	loadSubscribedTopicIds,
 	subscriptionActivatedAt,
+	type TopicRole,
 	toTopicRole,
 } from "./topicPermissions"
 
@@ -37,6 +38,11 @@ export async function canRateTopic(
 
 	// anyone else may rate only as a subscriber
 	return isSubscriberRatable(topic.visibility) && hasSubscription(userId, topic.id)
+}
+
+/** Whether this Topic role may steer the Journal. */
+export function canRateTopicMemories(role: TopicRole): boolean {
+	return role === "owner" || role === "leader"
 }
 
 /**

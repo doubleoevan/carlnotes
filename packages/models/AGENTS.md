@@ -91,3 +91,9 @@ The `summarize-personal-sources-context.md` prompt is evaluated through `evals/p
 
 `prompts/write-dashboard-paragraph.md` writes Carl's paragraph above a Dashboard page's charts from counts and place
 names alone, built by `packages/pipeline/dashboardParagraph.ts` and evaluated through `evals/dashboard-paragraph/`.
+
+`prompts/propose-topic-takeaways.md` proposes up to eight facts or corrections for a cluster of public Findings.
+`prompts/confirm-topic-memory-pairs.md` checks whether flagged pairs assert the same claim.
+`prompts/judge-topic-memory-duplicates.md` independently labels pairs for the eval in `evals/topic-memories/`.
+The shared `topic-memory-background.md` fragment fences ranked takeaways and corrections. `current-day-context.md`
+distinguishes event dates from Scan dates and compares them against the current UTC day.

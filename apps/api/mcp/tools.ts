@@ -1,11 +1,11 @@
 // the tools the mcp server registers: their names, schemas, annotations, and what each returns. the tools that edit and
 // create a topic are in topicEditTools.ts
 
-import { ratings } from "@carlnotes/contracts/enums"
-import { feedbackText } from "@carlnotes/contracts/payloads"
+import { feedbackText, findingRatingPayload } from "@carlnotes/contracts/payloads"
 import { searchRequestPayload } from "@carlnotes/contracts/search"
 import type { CallToolResult } from "@modelcontextprotocol/server"
 import { z } from "zod"
+import { loadFindingRatingNote } from "../topic/findingFeedback"
 import { setTopicSubscription } from "../topic/subscriptions"
 import { registerAccountTool } from "./accountTool"
 import { registerActivityTool } from "./activityTool"
@@ -40,6 +40,7 @@ import { registerTopicAttachmentTool } from "./topicAttachmentTool"
 import { registerTopicContextTool } from "./topicContextTool"
 import { registerTopicEditTools } from "./topicEditTools"
 import { registerTopicImageTool } from "./topicImageTool"
+import { registerTopicMemoriesTool } from "./topicMemoriesTool"
 import { registerTopicPostTools } from "./topicPostTools"
 import {
 	listSimilarTopics,
@@ -79,6 +80,7 @@ export function registerTools(registerToolsOptions: RegisterToolsOptions): void 
 	registerUpdatesTool(registerToolsOptions)
 	registerScanTools(registerToolsOptions)
 	registerTopicContextTool(registerToolsOptions)
+	registerTopicMemoriesTool(registerToolsOptions)
 	registerFindingFeedbackTool(registerToolsOptions)
 	registerSocialTools(registerToolsOptions)
 	// register the news, the Topic Post reads, and the Dashboard read
@@ -243,15 +245,35 @@ function registerFeedbackTools({ mcpServer, toolCaller, routeTopicId }: Register
 			title: "Rate a finding",
 			description:
 				"Thumb a CarlNotes finding up or down for the connected account, or clear the rating with null. Ratings tell Carl what to keep. Use it when the user rates a finding, with phrases like thumbs up, thumbs down, or more like this.",
-			inputSchema: z.object({ finding_id: z.string(), rating: z.enum(ratings).nullable() }),
+			inputSchema: findingRatingPayload.extend({ finding_id: z.string() }),
 			annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
 		},
-		async ({ finding_id, rating }) => {
+		async ({ finding_id, rating, note }) => {
 			if (toolCaller.kind !== "user") {
 				return toTextResult(CONNECT_ACCOUNT_TEXT)
 			}
-			const isRated = await rateFinding(toolCaller, finding_id, rating)
+			const isRated = await rateFinding(toolCaller, finding_id, rating, note)
 			return toTextResult(isRated ? "Rated." : "This account may not rate that finding.", !isRated)
+		},
+	)
+	mcpServer.registerTool(
+		"read_finding_rating_note",
+		{
+			title: "Read rating note",
+			description: "Restore the connected account's own note to Carl in the CarlNotes finding rating field.",
+			inputSchema: z.object({ finding_id: z.string() }),
+			annotations: { readOnlyHint: true },
+			_meta: { ui: { visibility: ["app"] } },
+		},
+		async ({ finding_id }) => {
+			if (toolCaller.kind !== "user") {
+				return toTextResult(CONNECT_ACCOUNT_TEXT, true)
+			}
+			// deliver the private words only to the view and only to the account that saved them
+			const result = await loadFindingRatingNote(toolCaller.userId, finding_id)
+			return result
+				? { ...toTextResult("Rating note loaded."), _meta: { findingRatingNote: result } }
+				: toTextResult("This account may not read that rating.", true)
 		},
 	)
 	mcpServer.registerTool(

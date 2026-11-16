@@ -28,6 +28,7 @@ import { NoteMcpView } from "./NoteMcpView"
 import { ProfileMcpView } from "./ProfileMcpView"
 import { ScanMcpView } from "./ScanMcpView"
 import { SearchMcpView } from "./SearchMcpView"
+import { TakeawaysMcpView } from "./TakeawaysMcpView"
 import { TeamMcpView } from "./TeamMcpView"
 import { TopicMcpView } from "./TopicMcpView"
 import { TopicPostMcpView } from "./TopicPostMcpView"
@@ -67,6 +68,7 @@ const routeTree = rootRoute.addChildren([
 	createRoute({ getParentRoute: () => rootRoute, path: "/activity", component: ActivityRoute }),
 	createRoute({ getParentRoute: () => rootRoute, path: "/account", component: AccountRoute }),
 	createRoute({ getParentRoute: () => rootRoute, path: "/topics", component: TopicsRoute }),
+	createRoute({ getParentRoute: () => rootRoute, path: "/takeaways", component: TakeawaysRoute }),
 ])
 
 /**
@@ -97,6 +99,7 @@ export function toMcpViewOpeningPath(mcpView: McpView, { toolResult }: McpViewTo
 		activity: "/activity",
 		account: "/account",
 		topics: "/topics",
+		takeaways: "/takeaways",
 	}
 	return openingPaths[mcpView]
 }
@@ -104,6 +107,12 @@ export function toMcpViewOpeningPath(mcpView: McpView, { toolResult }: McpViewTo
 // the tool call a route shows
 function useMcpViewToolCall(): McpViewToolCall | null {
 	return toMcpViewToolCall(useLocation().state)
+}
+
+// the Journal the read-only tool opened
+function TakeawaysRoute(): ReactNode {
+	const { takeaways } = toMcpViewData(useMcpViewToolCall()?.toolResult._meta)
+	return takeaways ? <TakeawaysMcpView key={JSON.stringify(takeaways)} takeaways={takeaways} /> : null
 }
 
 // an updates list, which the tool built before the MCP view opened

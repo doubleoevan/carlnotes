@@ -21,7 +21,6 @@ const meta = {
 		topic: toTestTopicFeed(),
 		topicFindingRank: 1,
 		topicFeedHandlers: STORY_TOPIC_FEED_HANDLERS,
-		onSendFeedback: async () => undefined,
 		commentThread: EMPTY_COMMENT_THREAD,
 		linkPreview: {
 			url: "https://example.com/coffee",

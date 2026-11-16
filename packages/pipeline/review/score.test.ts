@@ -99,6 +99,7 @@ test("four parallel Resources against a nearly spent Scan budget start only whil
 test("buildScorePrompt includes content and context and gates the relevance explanation", async () => {
 	// the cheap model only asks for a score
 	const cheapModelResult = await buildScorePrompt("article body", "topic context", false)
+	expect(cheapModelResult.prompt).toMatch(/Today is \d{4}-\d{2}-\d{2} \(UTC\)\./)
 	expect(cheapModelResult.prompt).toContain("article body")
 	expect(cheapModelResult.prompt).toContain("topic context")
 	expect(cheapModelResult.prompt).not.toContain("relevanceExplanation")

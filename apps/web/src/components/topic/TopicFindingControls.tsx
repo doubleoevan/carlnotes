@@ -33,7 +33,7 @@ export function TopicFindingControls({
 				<TopicFindingRating
 					findingId={resource.findingId}
 					rating={resource.rating}
-					onRateTopicFinding={(rating) => topicFeedHandlers.rateTopicFinding(resource.findingId, rating)}
+					onRateTopicFinding={(rating, note) => topicFeedHandlers.rateTopicFinding(resource.findingId, rating, note)}
 				/>
 			)}
 			{/* the bookmark and read toggles share one row, and an existing bookmark stays removable */}

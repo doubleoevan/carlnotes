@@ -10,9 +10,10 @@ import { eq, inArray, isNotNull, sql } from "drizzle-orm"
 import { buildTopicScanContext } from "../attach"
 import type { DiscoveredResource } from "../ingest/ingester"
 import { considerReviewLink, loadPersonalSourcesReviewLinks } from "../personalSources/linkQueue"
+import { loadTopicMemoryPrompt } from "../topicMemoryPrompt"
 import { dedupeResources } from "./dedupe"
 import { gateResources, loadResourcesToReview, loadUrlSourcePageUrls, rankBySimilarity } from "./filter"
-import { isOwnTopicPageUrl } from "./ownTopicPages"
+import { isCarlNotesGeneratedContentUrl, isOwnTopicPageUrl } from "./ownTopicPages"
 import { loadFindingIdsWithComments } from "./reactionSignals"
 import { fetchAndScoreResources } from "./score"
 import { loadBookmarkedFindingRows, loadScoreExamplePages } from "./scoreExamplePages"
@@ -52,7 +53,9 @@ export async function reviewScan(
 	}
 
 	// drop the topic's own pages on CarlNotes
-	discoveredResources = discoveredResources.filter(({ url }) => !isOwnTopicPageUrl(url, topicId))
+	discoveredResources = discoveredResources.filter(
+		({ url }) => !isOwnTopicPageUrl(url, topicId) && !isCarlNotesGeneratedContentUrl(url),
+	)
 
 	// read the topic's context once. its hash decides which Findings this Scan reviews again
 	const personalSourcesReview = await loadPersonalSourcesReviewLinks({ topicId, scanId: scan.id, discoveredResources })
@@ -70,7 +73,7 @@ export async function reviewScan(
 			personalSourceScoreBonuses: personalSourcesReview.personalSourceScoreBonuses,
 		})
 	)
-		.filter(({ url }) => !isOwnTopicPageUrl(url, topicId))
+		.filter(({ url }) => !isOwnTopicPageUrl(url, topicId) && !isCarlNotesGeneratedContentUrl(url))
 		.map((resource) => ({
 			...resource,
 			personalSourceScoreBonus: personalSourcesReview.personalSourceScoreBonuses.get(resource.url) ?? 0,
@@ -125,14 +128,16 @@ export async function reviewScan(
 	if (stopSignal?.aborted) {
 		return emptyReviewSummary()
 	}
-	const [scoreExamplePages, sharedCommentTexts] = await Promise.all([
+	const [scoreExamplePages, sharedCommentTexts, topicMemoryPrompt] = await Promise.all([
 		loadScoreExamplePages(topicId),
 		loadSharedCommentTexts(topicId),
+		loadTopicMemoryPrompt({ topicId }),
 	])
 	const topicContext = await loadTopicContext({
 		topicScanContext,
 		scoreExamplePages,
 		sharedCommentTexts,
+		topicMemoryPrompt,
 		budget,
 		litellmApiKey,
 		shouldEmbed: resourcesToReview.some((resource) => !resource.personalSourceScoreBonus),

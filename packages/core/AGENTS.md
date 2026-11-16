@@ -593,3 +593,6 @@ post, else its Topic, else its team. `components/TopicPostTag` is the tag under 
 while it exists. `lib/topicPosts.ts` also holds `isTopicPostUrlStale`, the rule that moves a post page's url to the
 post's titled path, `toTopicPostImageReport`, what a report of a post's image names, and `isTopicPostFeaturable`, the
 rule that a published post of a public topic can be featured, which both apps' post pages read for their rank options.
+
+`components/TopicMemoriesDialog.tsx` composes the Journal rows and controls. `hooks/useTopicMemories.ts` loads one
+viewer-specific page at a time and keeps correction drafts through failed saves.

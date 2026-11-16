@@ -366,6 +366,8 @@ function TopicViews({
 					<PodcastEpisodesCard topic={topic} onPodcastEpisodeRemoved={onReloadTopicPage} />
 					<TopicScanHistory
 						scans={topic.scans}
+						takeawayCount={topic.takeawayCount}
+						canRateTakeaways={topic.canRateTakeaways}
 						allowedUrls={new Set(topic.findings.map((finding) => finding.url))}
 						findings={topic.findings}
 						topic={{ id: topic.id, name: topic.name, prompt: topic.prompt }}

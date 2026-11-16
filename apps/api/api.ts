@@ -80,6 +80,7 @@ import { scansRoute } from "./topic/scans"
 import { subscriptionsRoute } from "./topic/subscriptions"
 import { loadTopicFeedResponse } from "./topic/topicFeedResponse"
 import { topicImagesRoute } from "./topic/topicImagesRoute"
+import { topicMemoriesRoute } from "./topic/topicMemoriesRoute"
 import { topicsRoute } from "./topic/topicsRoute"
 import { updatesRoute } from "./topic/updatesRoute"
 import { topicPostDiscussionsRoute } from "./topicPost/topicPostDiscussionsRoute"
@@ -254,8 +255,10 @@ export const apiRoute = new Hono<AppEnv>()
 	// the site search, then the topic routes
 	.route("/", searchRoute)
 	.route("/", topicsRoute)
+	.route("/", topicMemoriesRoute)
 	.route("/", topicImagesRoute)
 	.route("/", podcastEpisodeImagesRoute)
+	// the home catalog and its ordering share the API origin
 	.route("/", homeRoute)
 	.route("/", podcastEpisodeHomeOrderRoute)
 	.route("/", topicVideoHomeOrderRoute)

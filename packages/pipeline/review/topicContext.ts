@@ -36,6 +36,7 @@ export type TopicContext = {
 	embedding: number[]
 	contextHash: string
 	scoreText: string
+	topicMemoryPrompt?: string
 	// the private context of each sender, and the versions a private review checks are still current
 	personalSourcesVersions?: PersonalSourcesContextVersion[]
 	personalSources?: PersonalSourcesReviewContext[]
@@ -98,6 +99,8 @@ type LoadTopicContextOptions = {
 	topicScanContext: TopicScanContext
 	scoreExamplePages: ScoreExamplePages
 	sharedCommentTexts?: SharedCommentText[]
+	// callers supply Journal context independently of the score context
+	topicMemoryPrompt?: string
 	budget: Budget
 	litellmApiKey?: string
 }
@@ -110,6 +113,7 @@ export async function loadTopicContext({
 	topicScanContext,
 	scoreExamplePages,
 	sharedCommentTexts,
+	topicMemoryPrompt,
 	budget,
 	litellmApiKey,
 	shouldEmbed = true,
@@ -135,6 +139,7 @@ export async function loadTopicContext({
 		text,
 		embedding,
 		contextHash: toReviewContextHash(topicScanContext),
+		topicMemoryPrompt,
 		scoreText: toScoreContextText(text, scoreExamplePages, sharedCommentTexts),
 		personalSources: topicScanContext.personalSources,
 		personalSourcesVersions: topicScanContext.personalSourcesVersions,

@@ -189,13 +189,22 @@ export function toActivatedAfterFilter(userId: string | null, timeColumn: SQLWra
 				eq(subscriptions.isActive, true),
 			),
 		)
-	const isAdmin = exists(
+	return or(
+		isNotInviteTopic,
+		toPlatformAdminFilter(userId),
+		toTopicRoleFilter(userId),
+		sql`${timeColumn} > (${activatedAtQuery})`,
+	) as SQL
+}
+
+/** Checks the user's platform role in the same statement as the protected read. */
+export function toPlatformAdminFilter(userId: string): SQL {
+	return exists(
 		db
 			.select({ id: users.id })
 			.from(users)
 			.where(and(eq(users.id, userId), eq(users.role, "admin"))),
 	)
-	return or(isNotInviteTopic, isAdmin, toTopicRoleFilter(userId), sql`${timeColumn} > (${activatedAtQuery})`) as SQL
 }
 
 /**

@@ -5,9 +5,11 @@ import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connect
 import * as monthlyBudgetCutoffs from "@carlnotes/db/monthlyBudgetCutoffs"
 import * as sharedComments from "@carlnotes/db/sharedComments"
 import * as litellm from "@carlnotes/models/litellm"
+import * as models from "@carlnotes/models/models"
 import type { ModerationClassification } from "@carlnotes/models/moderation"
 import * as moderation from "@carlnotes/models/moderation"
 import * as temporalClient from "../temporalClient"
+import * as topicMemoryPrompt from "../topicMemoryPrompt"
 import * as discussionScript from "./topicPostDiscussionScript"
 import {
 	startTopicPostDiscussion,
@@ -28,6 +30,8 @@ const DISCUSSION_ROW = [
 	"recording",
 	null,
 	"post-1",
+	"topic-1",
+	false,
 	"Light Roasts",
 	"<p>Start light.</p>",
 	new Date(),
@@ -45,8 +49,13 @@ const toClassification = (isViolation: boolean): ModerationClassification =>
 	({ outcome: "classified", verdict: { isViolation, category: isViolation ? "harassment" : null } }) as never
 
 // the recording row's read, the starter's key, a month with budget left, and a script the writer returns
-function stubScriptWrite(): { sentQueries: ReturnType<typeof stubConnectionPool>; writeSpy: ReturnType<typeof spyOn> } {
-	const sentQueries = stubConnectionPool(({ text }) => (text.startsWith("select") ? [DISCUSSION_ROW] : []))
+function stubScriptWrite(hasPublicTakeaways = false): {
+	sentQueries: ReturnType<typeof stubConnectionPool>
+	writeSpy: ReturnType<typeof spyOn>
+} {
+	// make the saved discussion and its billing gate available to the script writer
+	const row = DISCUSSION_ROW.with(5, hasPublicTakeaways)
+	const sentQueries = stubConnectionPool(({ text }) => (text.startsWith("select") ? [row] : []))
 	spyOn(litellm, "loadOrProvisionUserLiteLLMKey").mockResolvedValue("member-2-key")
 	spyOn(monthlyBudgetCutoffs, "isMonthlyBudgetCutoffPassed").mockResolvedValue(false)
 	const writeSpy = spyOn(discussionScript, "writeTopicPostDiscussion").mockResolvedValue({
@@ -77,12 +86,26 @@ test("a flagged Comment is left out, a flagged author is not named, and the scri
 		comments: [{ username: "Clover-Field", body: "A full meter lost half my foragers." }],
 		hint: "the pancake part",
 		litellmApiKey: "member-2-key",
+		topicMemoryPrompt: "",
 	})
 
 	// the script is kept on the row, and the note is in no query
 	const updateQuery = sentQueries.find((sentQuery) => sentQuery.text.startsWith('update "topic_post_discussions"'))
 	expect(JSON.stringify(updateQuery?.values)).toContain("Start light, she says.")
 	expect(JSON.stringify(sentQueries)).not.toContain("the pancake part")
+})
+
+test("a public post embeds its own text and sends relevant takeaways to the discussion writer", async () => {
+	const { writeSpy } = stubScriptWrite(true)
+	const embed = spyOn(models, "embedVector").mockResolvedValue([1, 0])
+	const load = spyOn(topicMemoryPrompt, "loadTopicMemoryPrompt").mockResolvedValue("fenced background")
+	spyOn(sharedComments, "loadTopicPostSharedCommentTexts").mockResolvedValue([])
+	spyOn(moderation, "classifyUserText").mockResolvedValue(toClassification(false))
+	await writeTopicPostDiscussionScript("discussion-1")
+
+	expect(embed).toHaveBeenCalledWith("Light Roasts\nStart light.", { litellmApiKey: "member-2-key", maxRetries: 0 })
+	expect(load).toHaveBeenCalledWith({ topicId: "topic-1", embeddings: [[1, 0]], isPublicOnly: true })
+	expect(writeSpy).toHaveBeenCalledWith(expect.objectContaining({ topicMemoryPrompt: "fenced background" }))
 })
 
 test("a spent budget fails the discussion alone, before any model call", async () => {

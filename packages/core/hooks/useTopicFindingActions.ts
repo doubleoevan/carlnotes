@@ -32,7 +32,7 @@ import {
 export type TopicFeedHandlers = {
 	openTopicFinding: (findingId: string) => void
 	consumeTopicFinding: (findingId: string, isConsumed: boolean) => void
-	rateTopicFinding: (findingId: string, rating: "up" | "down" | null) => void
+	rateTopicFinding: (findingId: string, rating: "up" | "down" | null, note?: string) => void
 	bookmarkTopicFinding: (findingId: string, isBookmarked: boolean) => void
 	// keeps the summary a finding's reaction save returned wherever the finding's data lives
 	keepTopicFindingReactions: (findingId: string, reactions: ReactionSummary) => void
@@ -67,6 +67,9 @@ export function useTopicFindingActions({
 		mutationFn: (change: TopicFindingWrite) =>
 			sendFindingChange({ change, shouldThrowOnError: shouldUpdateOptimistically }),
 		onSuccess: (_response, change) => {
+			if (change.kind === "rating") {
+				void queryClient.invalidateQueries({ queryKey: ["finding-rating-note", userId, change.findingId] })
+			}
 			if (shouldUpdateOptimistically) {
 				commitFindingChange({ queryClient, userId, change })
 			} else {
@@ -116,6 +119,7 @@ export function usePageTopicFeedHandlers(
 	reloadPage: () => void | Promise<void>,
 	onFindingChange: (change: TopicFindingChange) => void,
 ): TopicFeedHandlers {
+	const queryClient = useQueryClient()
 	return useMemo(
 		() =>
 			toFindingHandlers((change) => {
@@ -126,10 +130,15 @@ export function usePageTopicFeedHandlers(
 
 				// send the write, then read the page again
 				void sendFindingChange({ change, shouldThrowOnError: false })
+					.then(() => {
+						if (change.kind === "rating") {
+							void queryClient.invalidateQueries({ queryKey: ["finding-rating-note"] })
+						}
+					})
 					.then(reloadPage)
 					.catch((error) => console.error("topic finding action failed", error))
 			}),
-		[reloadPage, onFindingChange],
+		[reloadPage, onFindingChange, queryClient],
 	)
 }
 
@@ -143,7 +152,8 @@ function toFindingHandlers(onChange: (change: TopicFindingChange) => void): Topi
 	return {
 		openTopicFinding: (findingId) => onChange({ kind: "opened", findingId }),
 		consumeTopicFinding: (findingId, isConsumed) => onChange({ kind: "consumed", findingId, isConsumed }),
-		rateTopicFinding: (findingId, rating) => onChange({ kind: "rating", findingId, rating }),
+		rateTopicFinding: (findingId, rating, note) =>
+			onChange({ kind: "rating", findingId, rating, ...(note === undefined ? {} : { note }) }),
 		bookmarkTopicFinding: (findingId, isBookmarked) => onChange({ kind: "bookmark", findingId, isBookmarked }),
 		keepTopicFindingReactions: (findingId, reactions) => onChange({ kind: "reactions", findingId, reactions }),
 	}
