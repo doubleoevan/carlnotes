@@ -259,9 +259,11 @@ export function toChatRoomAttachmentKey(topicId: string, roomAttachmentId: strin
 	return `topics/${topicId}/room-attachments/${roomAttachmentId}/${toSafeFilename(filename)}`
 }
 
-// the object key for a public Dashboard's share image, named by its public summary's hash
-export function toDashboardShareImageKey({ dashboardKind, subjectId }: DashboardSubject, contentHash: string): string {
-	return `dashboards/${dashboardKind}/${subjectId}/${contentHash}.png`
+/**
+ * Returns the object key for a version of a public Dashboard's share image.
+ */
+export function toDashboardShareImageKey({ dashboardKind, subjectId }: DashboardSubject, imageVersion: string): string {
+	return `dashboards/${dashboardKind}/${subjectId}/${imageVersion}.png`
 }
 
 // the object key for a link preview's proxied image, namespaced by link preview id

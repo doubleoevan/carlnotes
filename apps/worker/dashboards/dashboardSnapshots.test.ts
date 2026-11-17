@@ -7,11 +7,13 @@ import { DAILY_COUNT_RETENTION_DAYS } from "@carlnotes/contracts/dashboards"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import { restoreRedisClient, stubRedisClient, stubUnreachableRedisClient } from "@carlnotes/db/redisClientStub"
 import * as store from "@carlnotes/db/store"
+import * as dashboardParagraph from "@carlnotes/pipeline/dashboardParagraph"
 import * as monitoring from "@carlnotes/server/monitoring"
 import {
 	buildDashboardSnapshotsActivity,
 	deleteExpiredDailyCountsActivity,
 	drawDashboardShareImagesActivity,
+	writeDashboardParagraphsActivity,
 } from "../workflows/buildDashboardSnapshotsActivities"
 import { toRangeFirstDay } from "./dashboardSeries"
 import { buildDashboardSnapshots } from "./dashboardSnapshots"
@@ -110,21 +112,21 @@ test("a build whose snapshots are deleted while its daily counts load writes not
 	expect(toWrittenSnapshots(sentQueries)).toEqual([])
 })
 
-test("an unchanged build writes no snapshot, moves an earlier day's, and deletes one no longer built", async () => {
+test("an unchanged build moves the day and retries only the summary missing a paragraph", async () => {
 	stubRedisClient()
 	const firstQueries = stubConnectionPool((sentQuery) => toBuildRows(sentQuery))
 	await buildDashboardSnapshots(SUBJECT, LAST_DAY)
 
-	// the second build reads the first build's hashes, the public summary's saved a day earlier, plus a full findings
-	// snapshot it no longer builds
+	// the public summary has a paragraph from the prior day, and the full summary is still missing one
 	const savedRows = toWrittenSnapshots(firstQueries).map(({ key, contentHash }) => {
 		const [selection, accessLevel] = key.split(":")
-		return [`id-${key}`, selection, accessLevel, contentHash, key === "summary:public" ? "2026-11-09" : LAST_DAY]
+		const hasParagraph = key === "summary:public"
+		return [`id-${key}`, selection, accessLevel, contentHash, hasParagraph ? "2026-11-09" : LAST_DAY, hasParagraph]
 	})
 	const sentQueries = stubConnectionPool((sentQuery) =>
-		toBuildRows(sentQuery, [...savedRows, ["id-stale", "finding", "full", "hash", LAST_DAY]]),
+		toBuildRows(sentQuery, [...savedRows, ["id-stale", "finding", "full", "hash", LAST_DAY, false]]),
 	)
-	expect(await buildDashboardSnapshots(SUBJECT, LAST_DAY)).toEqual([])
+	expect(await buildDashboardSnapshots(SUBJECT, LAST_DAY)).toEqual(["full"])
 
 	// nothing is written again, the earlier summary moves to the last day, and the stale snapshot is deleted
 	expect(toWrittenSnapshots(sentQueries)).toEqual([])
@@ -164,6 +166,31 @@ test("a rebuild writes each changed snapshot over its saved row, and leaves its 
 	expect(sentQueries.filter(({ text }) => text.startsWith('delete from "dashboard_snapshots"'))).toEqual([])
 })
 
+test.each([true, false])("a paragraph is saved only to the snapshot used as input", async (isCurrentSnapshot) => {
+	// return the original snapshot to the writer, then let the guarded update find it or miss it
+	stubRedisClient()
+	spyOn(dashboardParagraph, "writeDashboardParagraph").mockResolvedValue("The topic had two viewers.")
+	const sentQueries = stubConnectionPool(({ text }) => {
+		if (text.startsWith('select "id", "content_hash", "selection"')) {
+			return [["id-summary", "hash-summary", "summary", "public", { viewerCount: 2 }]]
+		}
+		return isCurrentSnapshot && text.startsWith('update "dashboard_snapshots"') ? [["id-summary"]] : []
+	})
+
+	// a generation that lost its row during the call does not count as a written paragraph
+	expect(
+		await writeDashboardParagraphsActivity({
+			changedSummaries: [{ ...SUBJECT, accessLevel: "public" }],
+			lastDay: LAST_DAY,
+		}),
+	).toBe(isCurrentSnapshot ? 1 : 0)
+	const paragraphWrite = sentQueries.find(({ text }) => text.startsWith('update "dashboard_snapshots"'))
+	expect(paragraphWrite?.text).toContain('"dashboard_snapshots"."id" = ')
+	expect(paragraphWrite?.text).toContain('"dashboard_snapshots"."content_hash" = ')
+	expect(paragraphWrite?.values).toContain("id-summary")
+	expect(paragraphWrite?.values).toContain("hash-summary")
+})
+
 test("a build that fails with Redis unreachable is reported and leaves the saved snapshots as they are", async () => {
 	// Redis down, so no sketch can be counted, with the failed connection's log quiet
 	stubUnreachableRedisClient()
@@ -196,32 +223,37 @@ test("the retention delete keeps the last 400 days of daily view and play counts
 	])
 })
 
-test("a public summary's share image is drawn under its hash, and a full summary's is never drawn", async () => {
-	// the public summary with an older image, and the public topic series with one bar
-	const bars = [{ itemId: "topic-public", title: "Espresso grinders", path: "/topics/topic-public", count: 2 }]
-	const sentQueries = stubConnectionPool(({ text }) =>
-		text.startsWith('select "selection"')
-			? [
-					["summary", {}, "hash-new", "dashboards/topicDashboard/user-1/hash-old.png"],
-					["topic", { bars }, "hash-topic", null],
+test.each([true, false])(
+	"a public share image attaches only to the snapshot that supplied its bars",
+	async (isCurrentSnapshot) => {
+		// the public summary with an older image, and the public topic series with one bar
+		const bars = [{ itemId: "topic-public", title: "Espresso grinders", path: "/topics/topic-public", count: 2 }]
+		const previousImageKey = "dashboards/topicDashboard/user-1/hash-old.png"
+		const sentQueries = stubConnectionPool(({ text }) => {
+			if (text.startsWith('select "id", "selection"')) {
+				return [
+					["summary-1", "summary", {}, "hash-new", previousImageKey],
+					["topic-1", "topic", { bars }, "hash-topic", null],
 				]
-			: [],
-	)
-	const uploadSpy = spyOn(store, "uploadAttachment").mockResolvedValue()
-	await drawDashboardShareImagesActivity([
-		{ ...SUBJECT, accessLevel: "full" },
-		{ ...SUBJECT, accessLevel: "public" },
-	])
+			}
+			return isCurrentSnapshot && text.startsWith('update "dashboard_snapshots"') ? [["summary-1"]] : []
+		})
+		const uploadSpy = spyOn(store, "uploadAttachment").mockResolvedValue()
+		await drawDashboardShareImagesActivity([
+			{ ...SUBJECT, accessLevel: "full" },
+			{ ...SUBJECT, accessLevel: "public" },
+		])
 
-	// one png uploaded for the public summary alone, saved on it, with the old image recorded for deletion
-	const newImageKey = "dashboards/topicDashboard/user-1/hash-new.png"
-	expect(uploadSpy.mock.calls.map(([key, , contentType]) => [key, contentType])).toEqual([[newImageKey, "image/png"]])
-	const imageUpdate = sentQueries.find(({ text }) => text.startsWith('update "dashboard_snapshots" set "image_key"'))
-	expect(imageUpdate?.values).toContain(newImageKey)
-	expect(imageUpdate?.values).toContain("public")
-	const pendingInserts = sentQueries.filter(({ text }) => text.startsWith('insert into "pending_object_deletions"'))
-	expect(pendingInserts.map(({ values }) => values[0])).toEqual([
-		newImageKey,
-		"dashboards/topicDashboard/user-1/hash-old.png",
-	])
-})
+		// upload one PNG for the public summary, and keep a stale upload queued for cleanup
+		const imageKey = "dashboards/topicDashboard/user-1/summary-1-hash-new.png"
+		expect(uploadSpy.mock.calls.map(([key, , contentType]) => [key, contentType])).toEqual([[imageKey, "image/png"]])
+		const imageUpdate = sentQueries.find(({ text }) => text.startsWith('update "dashboard_snapshots" set "image_key"'))
+		expect(imageUpdate?.values).toEqual(expect.arrayContaining([imageKey, "hash-new", "summary-1"]))
+		const pendingInserts = sentQueries.filter(({ text }) => text.startsWith('insert into "pending_object_deletions"'))
+		const pendingDeletes = sentQueries.filter(({ text }) => text.startsWith('delete from "pending_object_deletions"'))
+		expect(pendingInserts.map(({ values }) => values[0])).toEqual(
+			isCurrentSnapshot ? [imageKey, previousImageKey] : [imageKey],
+		)
+		expect(pendingDeletes.map(({ values }) => values[0])).toEqual(isCurrentSnapshot ? [imageKey] : [])
+	},
+)

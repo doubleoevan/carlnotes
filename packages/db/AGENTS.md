@@ -317,7 +317,7 @@ replies, durable mail confirmations, and summarization spend. Composite referenc
 sender consistent.
 
 `store.ts` exports the podcast audio URL lifetime beside its signer so the API reports the same expiry it signs.
-`toDashboardShareImageKey` names a Dashboard page's share image by its summary hash.
+`toDashboardShareImageKey` names a Dashboard page's share image by the public snapshot ID and summary hash.
 
 `topicSourceCapacity.ts` enforces the ten fetched Sources under the Topic lock. Personal sources do not count toward
 that limit.

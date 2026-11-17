@@ -72,9 +72,10 @@ result, and a failed release job, `migrate`, `docs-sync`, or `edge-purge`, is re
   `countRowGroups` or sums its plays, `dashboardSummaries.ts` counts the summary strip, `dashboardSeries.ts` builds
   every chart's series for one selection with a map pin per place from `shownPlaces.ts`, at its postal code or city, and
   `dashboardSnapshots.ts` writes the public snapshots and any full ones that differ. An unchanged snapshot is not
-  written again and keeps its paragraph and share image. A batch purges its Dashboards' edge cache tags, the changed
-  summaries' paragraphs and share images follow in batches of 25, and the run then deletes daily count rows past 400
-  days. A one-Dashboard rebuild runs the same workflow with a subject under one workflow id per Dashboard, and a change
+  written again and keeps its paragraph and share image. A batch purges its Dashboards' edge cache tags. Changed
+  summaries and summaries missing a paragraph go to the next stage in batches of 25. Public paragraph writes also
+  purge the cache tags once saved. The run then deletes daily count rows past 400 days. A one-Dashboard rebuild runs
+  the same workflow with a subject under one workflow id per Dashboard, and a change
   during a rebuild signals it to build again.
 - `reportReminders.ts` reads the content reports still open and never reminded twelve hours after they were made,
   mails each one to `SUPPORT_EMAIL` through the report email template with its admin console link, and writes the

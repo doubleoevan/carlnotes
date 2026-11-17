@@ -12,11 +12,7 @@ import {
 	toDefaultDashboardSelection,
 } from "@carlnotes/contracts/dashboards"
 import { db } from "@carlnotes/db"
-import {
-	pickDashboardSnapshotRow,
-	toDashboardReadFilter,
-	toDashboardSummaryRowFilter,
-} from "@carlnotes/db/dashboardSnapshotRows"
+import { pickDashboardSnapshotRow, toDashboardReadFilter } from "@carlnotes/db/dashboardSnapshotRows"
 import { dailyPlayCounts, dailyViewCounts } from "@carlnotes/db/schema/dailyCounts"
 import { dashboardSnapshots } from "@carlnotes/db/schema/dashboards"
 import {
@@ -35,7 +31,7 @@ import {
 import { toDashboardShareImagePng } from "@carlnotes/pipeline/dashboardShareImage"
 import { purgeEdgeCacheTags, toDashboardCacheTag } from "@carlnotes/server/edgePurge"
 import { reportError } from "@carlnotes/server/monitoring"
-import { lt } from "drizzle-orm"
+import { and, eq, lt, type SQL } from "drizzle-orm"
 import { toRangeFirstDay } from "../dashboards/dashboardSeries"
 import { buildDashboardSnapshots } from "../dashboards/dashboardSnapshots"
 import { listDashboardSubjects } from "../dashboards/dashboardSubjects"
@@ -43,8 +39,11 @@ import { listDashboardSubjects } from "../dashboards/dashboardSubjects"
 // the most tags one Cloudflare purge request takes
 const PURGE_TAG_LIMIT = 30
 
-// one Dashboard whose summary changed at an access level
+// one Dashboard whose summary changed or needs a paragraph at an access level
 export type ChangedDashboardSummary = DashboardSubject & { accessLevel: DashboardAccessLevel }
+
+// identify the snapshot whose data was read before starting a paragraph or image
+type DashboardSnapshotVersion = Pick<typeof dashboardSnapshots.$inferSelect, "id" | "contentHash">
 
 /**
  * Lists the Dashboards with a daily count row in the window ending on the last completed day.
@@ -58,7 +57,7 @@ export function listDashboardSubjectsActivity(lastDay: string): Promise<Dashboar
 type BuildDashboardSnapshotsActivityInput = { subjects: DashboardSubject[]; lastDay: string }
 
 /**
- * Builds a batch of Dashboards' snapshots, purges their edge cache tags, and returns the summaries that changed. A
+ * Builds a batch of Dashboards' snapshots, purges their edge cache tags, and returns the summaries to refresh. A
  * Dashboard whose build fails is reported and skipped. A batch where every build fails throws an error.
  */
 export async function buildDashboardSnapshotsActivity({
@@ -93,7 +92,7 @@ export async function buildDashboardSnapshotsActivity({
 type WriteDashboardParagraphsActivityInput = { changedSummaries: ChangedDashboardSummary[]; lastDay: string }
 
 /**
- * Writes Carl's paragraph for each changed summary within its Dashboard's allowance for the day, until the platform's
+ * Writes Carl's paragraph for each eligible summary within its Dashboard's allowance for the day, until the platform's
  * allowance is spent. A summary past either allowance, or whose paragraph fails, keeps its last paragraph. Returns how
  * many were written.
  */
@@ -102,6 +101,7 @@ export async function writeDashboardParagraphsActivity({
 	lastDay,
 }: WriteDashboardParagraphsActivityInput): Promise<number> {
 	let writtenCount = 0
+	const writtenPublicSummaries: DashboardSubject[] = []
 	for (const changedSummary of changedSummaries) {
 		// skip a Dashboard past its own allowance, and stop once the platform's is spent
 		const paragraphAllowance = await takeDashboardParagraphAllowance(lastDay, changedSummary)
@@ -119,18 +119,25 @@ export async function writeDashboardParagraphsActivity({
 				continue
 			}
 
-			// save the paragraph on the summary at its access level
+			// keep an in-flight paragraph from reaching a replacement snapshot
 			const paragraph = await writeDashboardParagraph(paragraphInput)
-			await db
+			const writtenSummaries = await db
 				.update(dashboardSnapshots)
 				.set({ paragraph })
-				.where(toDashboardSummaryRowFilter(changedSummary, changedSummary.accessLevel))
-			writtenCount += 1
+				.where(toDashboardSnapshotVersionFilter(paragraphInput.snapshotVersion))
+				.returning({ id: dashboardSnapshots.id })
+			writtenCount += writtenSummaries.length
+			if (writtenSummaries.length > 0 && changedSummary.accessLevel === "public") {
+				writtenPublicSummaries.push(changedSummary)
+			}
 		} catch (error) {
 			// report the failed paragraph
 			reportError(error, "dashboard", changedSummary)
 		}
 	}
+
+	// the edge can cache a read between the snapshot build and the paragraph write
+	await purgeDashboardCacheTags(writtenPublicSummaries)
 	return writtenCount
 }
 
@@ -175,13 +182,14 @@ async function purgeDashboardCacheTags(subjects: DashboardSubject[]): Promise<vo
 	}
 }
 
-// draw one public summary's share image, upload it under its summary's hash, and swap it onto the summary
+// draw a public summary's share image and attach it to that snapshot version
 async function drawDashboardShareImage(subject: DashboardSubject): Promise<void> {
 	const { dashboardKind } = subject
 
-	// the public summary's hash and image, and the default selection's public bars
+	// the public summary and the default selection's public bars
 	const publicSnapshotRows = await db
 		.select({
+			id: dashboardSnapshots.id,
 			selection: dashboardSnapshots.selection,
 			body: dashboardSnapshots.body,
 			contentHash: dashboardSnapshots.contentHash,
@@ -195,10 +203,10 @@ async function drawDashboardShareImage(subject: DashboardSubject): Promise<void>
 		return
 	}
 
-	// the image under the summary's hash, or none for a Dashboard with no public bars.
-	// ponytail: named by the summary's hash, so bars that move under an unchanged summary keep the last image
+	// include the snapshot id so an upload from before an access change cannot overwrite its replacement's image
 	const bars = (seriesRow?.body as DashboardSeries | undefined)?.bars ?? []
-	const imageKey = bars.length > 0 ? toDashboardShareImageKey(subject, summaryRow.contentHash) : null
+	const imageVersion = `${summaryRow.id}-${summaryRow.contentHash}`
+	const imageKey = bars.length > 0 ? toDashboardShareImageKey(subject, imageVersion) : null
 	if (imageKey === summaryRow.imageKey) {
 		return
 	}
@@ -210,9 +218,18 @@ async function drawDashboardShareImage(subject: DashboardSubject): Promise<void>
 		await uploadAttachment(imageKey, imagePng, "image/png")
 	}
 
-	// save the new key and record the old one, in one transaction
+	// attach only to the snapshot that supplied the image and let a stale upload expire
 	await db.transaction(async (transaction) => {
-		await transaction.update(dashboardSnapshots).set({ imageKey }).where(toDashboardSummaryRowFilter(subject, "public"))
+		const updatedSnapshots = await transaction
+			.update(dashboardSnapshots)
+			.set({ imageKey })
+			.where(toDashboardSnapshotVersionFilter(summaryRow))
+			.returning({ id: dashboardSnapshots.id })
+		if (updatedSnapshots.length === 0) {
+			return
+		}
+
+		// retain the attached image and queue the previous one for deletion
 		if (imageKey) {
 			await clearPendingObjectDeletion(imageKey, transaction)
 		}
@@ -227,12 +244,14 @@ async function drawDashboardShareImage(subject: DashboardSubject): Promise<void>
 // one is the same and was not written. null if the summary is gone
 async function loadDashboardParagraphInput(
 	changedSummary: ChangedDashboardSummary,
-): Promise<DashboardParagraphInput | null> {
+): Promise<(DashboardParagraphInput & { snapshotVersion: DashboardSnapshotVersion }) | null> {
 	// the summary and the default selection's snapshots at the summary's level and the public one
 	const { accessLevel } = changedSummary
 	const defaultSelection = toDefaultDashboardSelection(changedSummary.dashboardKind)
 	const snapshotRows = await db
 		.select({
+			id: dashboardSnapshots.id,
+			contentHash: dashboardSnapshots.contentHash,
 			selection: dashboardSnapshots.selection,
 			accessLevel: dashboardSnapshots.accessLevel,
 			body: dashboardSnapshots.body,
@@ -251,7 +270,13 @@ async function loadDashboardParagraphInput(
 	// the series at the summary's level, or the public one if the full one matched it and was not written
 	const seriesRow = pickDashboardSnapshotRow(snapshotRows, defaultSelection, accessLevel)
 	return {
+		snapshotVersion: { id: summaryRow.id, contentHash: summaryRow.contentHash },
 		summary: summaryRow.body as DashboardSummary,
 		series: (seriesRow?.body as DashboardSeries | undefined) ?? null,
 	}
+}
+
+// match the row and its content as read before starting the paragraph or image
+function toDashboardSnapshotVersionFilter({ id, contentHash }: DashboardSnapshotVersion): SQL {
+	return and(eq(dashboardSnapshots.id, id), eq(dashboardSnapshots.contentHash, contentHash)) as SQL
 }

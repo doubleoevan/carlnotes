@@ -12,7 +12,7 @@ import { podcastEpisodeFormats } from "@carlnotes/contracts/podcast"
 import { db } from "@carlnotes/db"
 import { readDashboardSnapshotGeneration, toDashboardSnapshotFilter } from "@carlnotes/db/dashboardSnapshotRows"
 import { dashboardSnapshots } from "@carlnotes/db/schema/dashboards"
-import { inArray } from "drizzle-orm"
+import { inArray, sql } from "drizzle-orm"
 import { type DashboardDailyCountRow, loadDailyPlayCountRows, loadDailyViewCountRows } from "./dashboardDailyCountRows"
 import { type CountedItem, toCountedItems } from "./dashboardItemCounts"
 import { toDashboardSeries, toRangeFirstDay } from "./dashboardSeries"
@@ -23,8 +23,8 @@ type BuiltSnapshot = { selection: DashboardSelection; accessLevel: DashboardAcce
 
 /**
  * Builds and writes one Dashboard's snapshots for the window ending on the last completed day, deletes any snapshot
- * it no longer builds, and returns the access levels whose summary changed. A build whose snapshots were deleted while
- * it loaded writes nothing and returns none.
+ * it no longer builds, and returns the access levels whose summary changed or is missing a paragraph. A build whose
+ * snapshots were deleted while it loaded writes nothing and returns none.
  */
 export async function buildDashboardSnapshots(
 	subject: DashboardSubject,
@@ -139,10 +139,11 @@ async function writeDashboardSnapshots({
 				accessLevel: dashboardSnapshots.accessLevel,
 				contentHash: dashboardSnapshots.contentHash,
 				day: dashboardSnapshots.day,
+				hasParagraph: sql<boolean>`${dashboardSnapshots.paragraph} is not null`,
 			})
 			.from(dashboardSnapshots)
 			.where(toDashboardSnapshotFilter(subject))
-		const { changedSnapshots, movedSnapshotIds, staleSnapshotIds } = toSnapshotChanges({
+		const { changedSnapshots, movedSnapshotIds, staleSnapshotIds, summaryLevelsToRefresh } = toSnapshotChanges({
 			builtSnapshots,
 			savedSnapshots,
 			lastDay,
@@ -177,26 +178,27 @@ async function writeDashboardSnapshots({
 			await transaction.delete(dashboardSnapshots).where(inArray(dashboardSnapshots.id, staleSnapshotIds))
 		}
 
-		// return the access levels whose summary changed
-		return changedSnapshots.filter(({ selection }) => selection === "summary").map(({ accessLevel }) => accessLevel)
+		return summaryLevelsToRefresh
 	})
 }
 
-// a saved snapshot's id, selection, access level, hash, and day
+// a saved snapshot and whether it already has a paragraph
 type SavedSnapshot = Pick<
 	typeof dashboardSnapshots.$inferSelect,
 	"id" | "selection" | "accessLevel" | "contentHash" | "day"
->
+> & {
+	hasParagraph: boolean
+}
 
 // the built snapshots, the subject's saved snapshots, and the last completed day
 type ToSnapshotChangesOptions = { builtSnapshots: BuiltSnapshot[]; savedSnapshots: SavedSnapshot[]; lastDay: string }
 
-// the built snapshots whose body changed with their new hash, the unchanged snapshots that count an earlier day, and
-// the saved snapshots the build left out
+// the snapshot writes, day moves and deletes, plus the summary levels that need a paragraph
 type SnapshotChanges = {
 	changedSnapshots: (BuiltSnapshot & { contentHash: string })[]
 	movedSnapshotIds: string[]
 	staleSnapshotIds: string[]
+	summaryLevelsToRefresh: DashboardAccessLevel[]
 }
 
 // sort the built snapshots by whether their hash matches the saved snapshot of the same selection and access level
@@ -204,7 +206,12 @@ function toSnapshotChanges({ builtSnapshots, savedSnapshots, lastDay }: ToSnapsh
 	const savedSnapshotByKey = new Map(
 		savedSnapshots.map((savedSnapshot) => [toSnapshotKey(savedSnapshot), savedSnapshot]),
 	)
-	const snapshotChanges: SnapshotChanges = { changedSnapshots: [], movedSnapshotIds: [], staleSnapshotIds: [] }
+	const snapshotChanges: SnapshotChanges = {
+		changedSnapshots: [],
+		movedSnapshotIds: [],
+		staleSnapshotIds: [],
+		summaryLevelsToRefresh: [],
+	}
 	for (const builtSnapshot of builtSnapshots) {
 		// the built snapshot's hash, and the saved snapshot of its selection and access level
 		const contentHash = new Bun.CryptoHasher("sha256").update(JSON.stringify(builtSnapshot.body)).digest("hex")
@@ -213,10 +220,16 @@ function toSnapshotChanges({ builtSnapshots, savedSnapshots, lastDay }: ToSnapsh
 		savedSnapshotByKey.delete(snapshotKey)
 
 		// a changed snapshot is written, and an unchanged one moves to the last day if it counts an earlier one
-		if (savedSnapshot?.contentHash !== contentHash) {
+		const hasSameContent = savedSnapshot?.contentHash === contentHash
+		if (!hasSameContent) {
 			snapshotChanges.changedSnapshots.push({ ...builtSnapshot, contentHash })
 		} else if (savedSnapshot.day !== lastDay) {
 			snapshotChanges.movedSnapshotIds.push(savedSnapshot.id)
+		}
+
+		// an unchanged summary can still need the paragraph a previous run could not write
+		if (builtSnapshot.selection === "summary" && (!hasSameContent || !savedSnapshot?.hasParagraph)) {
+			snapshotChanges.summaryLevelsToRefresh.push(builtSnapshot.accessLevel)
 		}
 	}
 
