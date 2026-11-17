@@ -122,7 +122,7 @@ export const TopicVideo: Story = {
 			"a lighthouse in a storm, oil painting",
 		)
 		await expect(await canvas.findByText("4 of 15 used this month")).toBeVisible()
-		await expect(canvas.getByText("Dreaming, takes about a minute...")).toBeVisible()
+		await expect(canvas.getByText("Carl is dreaming…")).toBeVisible()
 	},
 }
 

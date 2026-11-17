@@ -37,7 +37,7 @@ export function toTopicImageEditorKey(topic: {
 export const TOPIC_IMAGE_PROMPT_LABEL = "Image prompt"
 
 // the lines the block shows while a render runs, and after a render or a save fails
-export const TOPIC_IMAGE_RENDERING_TEXT = "Dreaming, takes about a minute..."
+export const TOPIC_IMAGE_RENDERING_TEXT = "Carl is dreaming…"
 export const TOPIC_IMAGE_RENDER_FAILED_TEXT = "The image didn't render. Try again."
 export const TOPIC_IMAGE_SAVE_FAILED_TEXT = "The image didn't save."
 
