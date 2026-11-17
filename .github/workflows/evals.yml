@@ -27,6 +27,8 @@ on:
       - "packages/contracts/enums.ts"
       - "packages/contracts/sources.ts"
       - "litellm-config.yaml"
+      - "docker-compose.yml"
+      - "infra/litellm/docker-compose.ci.yml"
       - "evals/**"
       - ".github/workflows/evals.yml"
 
@@ -44,6 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 150
     env:
+      COMPOSE_FILE: docker-compose.yml:infra/litellm/docker-compose.ci.yml
       # a push runs each case once, and a weekly or manual run runs each case three times for a pass rate per case
       REPEAT_COUNT: ${{ github.event_name == 'push' && '1' || '3' }}
     steps:

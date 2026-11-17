@@ -76,7 +76,11 @@ doppler run -- bun scripts/backfill-vectors.ts            # save every topic's a
 
 ## Moderation and monitoring
 
-Image moderation is optional. Set `OPENAI_API_KEY` to turn it on. Error monitoring and product analytics are optional
+The Smoke and Evals workflows give their LiteLLM container a fresh Postgres database for virtual keys and spend.
+Both import the dev provider credentials from Doppler. Smoke still runs the app against the dev app database.
+
+Image moderation is optional. Set `OPENAI_API_KEY` for the app and LiteLLM to turn it on. Docker Compose passes the
+same key to the local proxy. Error monitoring and product analytics are optional
 the same way. If `SENTRY_DSN` or `POSTHOG_API_KEY` is not set, that service is off, and the app behaves the same. A
 visitor's search on the MCP server is optional too. `bun run carl-up` creates a budgeted `LITELLM_PUBLIC_KEY` for it.
 Without one, the search returns a message that it needs an account, and every other tool still works.

@@ -1,0 +1,19 @@
+# give each CI job its own proxy keys and spend tables
+services:
+  litellm:
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@litellm-postgres:5432/litellm
+    depends_on:
+      litellm-postgres:
+        condition: service_healthy
+
+  litellm-postgres:
+    image: pgvector/pgvector@sha256:ac08538c6f8b9904c33c8224c5e5706dbe760aca29db1d096972b4052c22a75d
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: litellm
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "postgres", "-d", "litellm"]
+      interval: 2s
+      timeout: 5s
+      retries: 30

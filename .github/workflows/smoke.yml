@@ -23,6 +23,8 @@ jobs:
     runs-on: ubuntu-latest
     # a hung step ends the run, so the next smoke run waiting on the concurrency group can start
     timeout-minutes: 45
+    env:
+      COMPOSE_FILE: docker-compose.yml:infra/litellm/docker-compose.ci.yml
     steps:
       # persist-credentials false keeps the checkout token out of .git/config
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -38,13 +40,19 @@ jobs:
         timeout-minutes: 10
       # the doppler cli injects the same dev secrets a local smoke run uses
       - uses: dopplerhq/cli-action@4819d808ab99e5cde19a0637a16536a4038fad73 # v4.0.1
+      # build before the remote checks so the browser can run even when a service check fails
+      - name: Build the ui
+        id: build-ui
+        run: doppler run -- bun run build:ui
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
       # apply the commit's migrations to the dev database, so the suites run against the schema that the commit expects
       - run: bun run db:migrate
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
       # start the services the suites need: litellm for every model and embedding call, temporal for the
       # attachment workflow, and Redis for the sessions, the rate limits, and the fan-out.
-      # they read the same doppler secrets that a developer's compose run reads
+      # use the dev provider credentials and a Postgres container for this run's LiteLLM keys
       - run: doppler run -- docker compose up -d litellm temporal redis
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
@@ -87,11 +95,6 @@ jobs:
           exit 1
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
-      # the seo and mcp smokes read the built ui and its MCP view bundle, and the signup check opens it in a browser
-      - name: Build the ui
-        run: doppler run -- bun run build:ui
-        env:
-          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
       # env after doppler run, since doppler injects its own value over anything the step sets
       - run: doppler run -- bash scripts/smoke-coverage.sh
         env:
@@ -99,7 +102,7 @@ jobs:
       # the signup page in a browser, which the coverage runner leaves out: it needs the runner's Chrome. it runs even
       # after a failed suite, so a blocked challenge is never hidden by another failure
       - name: Check the signup challenge in a browser
-        if: always()
+        if: ${{ !cancelled() && steps.build-ui.outcome == 'success' }}
         run: doppler run -- bun apps/api/signup.smoke.ts
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
