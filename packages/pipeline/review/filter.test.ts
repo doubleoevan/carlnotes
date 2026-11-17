@@ -103,11 +103,11 @@ test("toScoreContextText lists the example pages after the context text", () => 
 	expect(scoreContextLines.slice(0, 5)).toEqual([
 		"context",
 		"",
-		"[pages the reader liked or bookmarked]",
+		"[examples of a strong fit]",
 		"- Page 0 (example.com)",
 		"- https://www.example.com/1 (example.com)",
 	])
-	expect(scoreContextLines.slice(13)).toEqual(["", "[pages the reader rated down]", "- Junk (junk.example)"])
+	expect(scoreContextLines.slice(13)).toEqual(["", "[examples of a weak fit]", "- Junk (junk.example)"])
 })
 
 // the score prompt reads a long attachment past the embedding limit, and the hash covers what the score prompt reads

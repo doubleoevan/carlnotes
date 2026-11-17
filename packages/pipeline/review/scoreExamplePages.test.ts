@@ -103,7 +103,7 @@ test("the score text lists the example pages, then the shared comments on one li
 		),
 	})
 	expect(toScoreContextText("the context", scoreExamplePages)).toBe(
-		"the context\n\n[pages the reader liked or bookmarked]\n- Page finding-1 (example.org)",
+		"the context\n\n[examples of a strong fit]\n- Page finding-1 (example.org)",
 	)
 	expect(
 		toScoreContextText("the context", scoreExamplePages, [
@@ -113,7 +113,7 @@ test("the score text lists the example pages, then the shared comments on one li
 	).toBe(
 		[
 			"the context",
-			"[pages the reader liked or bookmarked]\n- Page finding-1 (example.org)",
+			"[examples of a strong fit]\n- Page finding-1 (example.org)",
 			"[what people said about this topic, shared by its editors]\n- roastfan: worth reading\n- Carl: three of you bookmarked this",
 		].join("\n\n"),
 	)

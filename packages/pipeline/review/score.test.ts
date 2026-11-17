@@ -107,6 +107,9 @@ test("buildScorePrompt includes content and context and gates the relevance expl
 	// the premium model also asks for the relevance explanation, with no markers or placeholders leaking through
 	const premiumModelResult = await buildScorePrompt("body", "ctx", true)
 	expect(premiumModelResult.prompt).toContain("relevanceExplanation")
+	expect(premiumModelResult.prompt).toContain("Never describe the reader's activity in the app")
+	expect(cheapModelResult.prompt).toContain("Content close to the strong examples")
+	expect(cheapModelResult.prompt).toContain("Content close to the weak examples scores lower")
 	expect(premiumModelResult.prompt).not.toContain("premium-tier")
 	expect(premiumModelResult.prompt).not.toContain("{{")
 

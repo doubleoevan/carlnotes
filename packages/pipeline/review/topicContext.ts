@@ -76,8 +76,8 @@ export function toScoreContextText(
 	}
 	return [
 		contextText,
-		...toExampleSections("pages the reader liked or bookmarked", scoreExamplePages.likedOrBookmarkedPages),
-		...toExampleSections("pages the reader rated down", scoreExamplePages.ratedDownPages),
+		...toExampleSections("examples of a strong fit", scoreExamplePages.likedOrBookmarkedPages),
+		...toExampleSections("examples of a weak fit", scoreExamplePages.ratedDownPages),
 		...toSharedCommentSections(sharedCommentTexts),
 	].join("\n\n")
 }
