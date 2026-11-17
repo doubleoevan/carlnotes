@@ -112,29 +112,61 @@ test("a build whose snapshots are deleted while its daily counts load writes not
 	expect(toWrittenSnapshots(sentQueries)).toEqual([])
 })
 
-test("an unchanged build moves the day and retries only the summary missing a paragraph", async () => {
+test("a late build leaves a newer daily snapshot in place", async () => {
+	// a newer day finished while this build was loading its counts
 	stubRedisClient()
-	const firstQueries = stubConnectionPool((sentQuery) => toBuildRows(sentQuery))
-	await buildDashboardSnapshots(SUBJECT, LAST_DAY)
+	const savedRows = [["id-summary:public", "summary", "public", "newer-hash", "2026-11-11", true]]
+	const sentQueries = stubConnectionPool((sentQuery) => toBuildRows(sentQuery, savedRows))
+	expect(await buildDashboardSnapshots(SUBJECT, LAST_DAY)).toEqual([])
 
-	// the public summary has a paragraph from the prior day, and the full summary is still missing one
-	const savedRows = toWrittenSnapshots(firstQueries).map(({ key, contentHash }) => {
-		const [selection, accessLevel] = key.split(":")
-		const hasParagraph = key === "summary:public"
-		return [`id-${key}`, selection, accessLevel, contentHash, hasParagraph ? "2026-11-09" : LAST_DAY, hasParagraph]
-	})
-	const sentQueries = stubConnectionPool((sentQuery) =>
-		toBuildRows(sentQuery, [...savedRows, ["id-stale", "finding", "full", "hash", LAST_DAY, false]]),
-	)
-	expect(await buildDashboardSnapshots(SUBJECT, LAST_DAY)).toEqual(["full"])
-
-	// nothing is written again, the earlier summary moves to the last day, and the stale snapshot is deleted
-	expect(toWrittenSnapshots(sentQueries)).toEqual([])
-	const dayMoves = sentQueries.filter(({ text }) => text.startsWith('update "dashboard_snapshots" set "day"'))
-	expect(dayMoves.map(({ values }) => [values[0], values.at(-1)])).toEqual([[LAST_DAY, "id-summary:public"]])
-	const snapshotDeletes = sentQueries.filter(({ text }) => text.startsWith('delete from "dashboard_snapshots"'))
-	expect(snapshotDeletes.map(({ values }) => values)).toEqual([["id-stale"]])
+	// the writer locks the Dashboard before reading its stored day and leaves all rows intact
+	const lockIndex = sentQueries.findIndex(({ text }) => text.includes("pg_advisory_xact_lock"))
+	const readIndex = sentQueries.findIndex(({ text }) => text.includes('from "dashboard_snapshots"'))
+	expect(lockIndex).toBeGreaterThanOrEqual(0)
+	expect(lockIndex).toBeLessThan(readIndex)
+	expect(
+		sentQueries.filter(({ text }) => /^(insert into|update|delete from) "dashboard_snapshots"/.test(text)),
+	).toEqual([])
 })
+
+for (const publicSummaryDay of ["2026-11-09", LAST_DAY]) {
+	const isNewDay = publicSummaryDay < LAST_DAY
+	const testName = isNewDay
+		? "a new day refreshes summaries even when the counts are unchanged"
+		: "a same-day rebuild with unchanged counts retries only a missing paragraph"
+	test(testName, async () => {
+		stubRedisClient()
+		const firstQueries = stubConnectionPool((sentQuery) => toBuildRows(sentQuery))
+		await buildDashboardSnapshots(SUBJECT, LAST_DAY)
+
+		// the public summary has a paragraph, and the full summary is still missing one
+		const savedRows = toWrittenSnapshots(firstQueries).map(({ key, contentHash }) => {
+			const [selection, accessLevel] = key.split(":")
+			const hasParagraph = key === "summary:public"
+			return [
+				`id-${key}`,
+				selection,
+				accessLevel,
+				contentHash,
+				hasParagraph ? publicSummaryDay : LAST_DAY,
+				hasParagraph,
+			]
+		})
+		const sentQueries = stubConnectionPool((sentQuery) =>
+			toBuildRows(sentQuery, [...savedRows, ["id-stale", "finding", "full", "hash", LAST_DAY, false]]),
+		)
+		expect(await buildDashboardSnapshots(SUBJECT, LAST_DAY)).toEqual(isNewDay ? ["public", "full"] : ["full"])
+
+		// the rebuild keeps the same data and paragraph, advances the day when needed, and deletes the stale snapshot
+		expect(toWrittenSnapshots(sentQueries)).toEqual([])
+		const dayMoves = sentQueries.filter(({ text }) => text.startsWith('update "dashboard_snapshots" set "day"'))
+		expect(dayMoves.map(({ values }) => [values[0], values.at(-1)])).toEqual(
+			isNewDay ? [[LAST_DAY, "id-summary:public"]] : [],
+		)
+		const snapshotDeletes = sentQueries.filter(({ text }) => text.startsWith('delete from "dashboard_snapshots"'))
+		expect(snapshotDeletes.map(({ values }) => values)).toEqual([["id-stale"]])
+	})
+}
 
 test("a rebuild writes each changed snapshot over its saved row, and leaves its paragraph and share image", async () => {
 	// every snapshot of an earlier build, each saved under an older hash
@@ -187,8 +219,26 @@ test.each([true, false])("a paragraph is saved only to the snapshot used as inpu
 	const paragraphWrite = sentQueries.find(({ text }) => text.startsWith('update "dashboard_snapshots"'))
 	expect(paragraphWrite?.text).toContain('"dashboard_snapshots"."id" = ')
 	expect(paragraphWrite?.text).toContain('"dashboard_snapshots"."content_hash" = ')
+	expect(paragraphWrite?.text).toContain('"dashboard_snapshots"."day" = ')
 	expect(paragraphWrite?.values).toContain("id-summary")
 	expect(paragraphWrite?.values).toContain("hash-summary")
+	expect(paragraphWrite?.values).toContain(LAST_DAY)
+})
+
+test("a queued paragraph for a superseded day leaves the daily allowance intact", async () => {
+	// the requested day no longer has a snapshot, so a stale task skips before it charges the allowance
+	stubRedisClient()
+	const takeAllowance = spyOn(dashboardParagraph, "takeDashboardParagraphAllowance").mockResolvedValue("taken")
+	const sentQueries = stubConnectionPool()
+	expect(
+		await writeDashboardParagraphsActivity({
+			changedSummaries: [{ ...SUBJECT, accessLevel: "public" }],
+			lastDay: LAST_DAY,
+		}),
+	).toBe(0)
+	expect(sentQueries[0]?.text).toContain('"dashboard_snapshots"."day" = ')
+	expect(sentQueries[0]?.values).toContain(LAST_DAY)
+	expect(takeAllowance).not.toHaveBeenCalled()
 })
 
 test("a build that fails with Redis unreachable is reported and leaves the saved snapshots as they are", async () => {

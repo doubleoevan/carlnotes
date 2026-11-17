@@ -6,8 +6,8 @@ import {
 	type DashboardSubject,
 	PERSONAL_DASHBOARD_KINDS,
 } from "@carlnotes/contracts/dashboards"
-import { and, eq, inArray, or, type SQL } from "drizzle-orm"
-import type { DbHandle } from "./index"
+import { and, eq, inArray, or, type SQL, sql } from "drizzle-orm"
+import type { DbTransaction } from "./index"
 import { runWithRedis } from "./redis"
 import { dashboardSnapshots } from "./schema/dashboards"
 import { recordPendingObjectDeletions, toStoredObjectKeys } from "./store"
@@ -68,16 +68,34 @@ export function pickDashboardSnapshotRow<Row extends DashboardSnapshotRowKey>(
 }
 
 /**
+ * Serializes a Dashboard's snapshot writes and deletes within their transactions.
+ */
+export async function lockDashboardSnapshots(handle: DbTransaction, subject: DashboardSubject): Promise<void> {
+	await handle.execute(sql`select pg_advisory_xact_lock(hashtext(${toSnapshotGenerationKey(subject)}))`)
+}
+
+/**
  * Starts a new snapshot generation for each Dashboard, deletes every snapshot of the Dashboards, records their share
  * images' object keys as pending on the handle, and returns the keys.
  */
-export async function deleteDashboardSnapshotRows(handle: DbHandle, subjects: DashboardSubject[]): Promise<string[]> {
+export async function deleteDashboardSnapshotRows(
+	handle: DbTransaction,
+	subjects: DashboardSubject[],
+): Promise<string[]> {
 	if (subjects.length === 0) {
 		return []
 	}
 
-	// the new generations first, so a build that loaded its daily counts before the delete skips its write
-	await Promise.all(subjects.map(startDashboardSnapshotGeneration))
+	// lock in a consistent order when a change affects more than one Dashboard
+	const subjectsToLock = toUniqueDashboardSubjects(subjects).sort((first, second) =>
+		toSnapshotGenerationKey(first).localeCompare(toSnapshotGenerationKey(second)),
+	)
+	for (const subject of subjectsToLock) {
+		await lockDashboardSnapshots(handle, subject)
+	}
+
+	// a build that loaded its daily counts before the delete skips its write after taking the lock
+	await Promise.all(subjectsToLock.map(startDashboardSnapshotGeneration))
 
 	// delete each Dashboard's snapshots, returning their share images' keys
 	const deletedRows = await handle

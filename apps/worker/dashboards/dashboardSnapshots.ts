@@ -10,7 +10,11 @@ import {
 } from "@carlnotes/contracts/dashboards"
 import { podcastEpisodeFormats } from "@carlnotes/contracts/podcast"
 import { db } from "@carlnotes/db"
-import { readDashboardSnapshotGeneration, toDashboardSnapshotFilter } from "@carlnotes/db/dashboardSnapshotRows"
+import {
+	lockDashboardSnapshots,
+	readDashboardSnapshotGeneration,
+	toDashboardSnapshotFilter,
+} from "@carlnotes/db/dashboardSnapshotRows"
 import { dashboardSnapshots } from "@carlnotes/db/schema/dashboards"
 import { inArray, sql } from "drizzle-orm"
 import { type DashboardDailyCountRow, loadDailyPlayCountRows, loadDailyViewCountRows } from "./dashboardDailyCountRows"
@@ -23,7 +27,7 @@ type BuiltSnapshot = { selection: DashboardSelection; accessLevel: DashboardAcce
 
 /**
  * Builds and writes one Dashboard's snapshots for the window ending on the last completed day, deletes any snapshot
- * it no longer builds, and returns the access levels whose summary changed or is missing a paragraph. A build whose
+ * it no longer builds, and returns the access levels that need a fresh paragraph. A build whose
  * snapshots were deleted while it loaded writes nothing and returns none.
  */
 export async function buildDashboardSnapshots(
@@ -124,14 +128,14 @@ async function writeDashboardSnapshots({
 	snapshotGeneration,
 }: WriteDashboardSnapshotsOptions): Promise<DashboardAccessLevel[]> {
 	return db.transaction(async (transaction) => {
-		// write nothing if a delete started a new generation after the daily counts loaded. a generation Redis could not read
-		// leaves the write unchecked
+		// serialize with deletes and other builds, even before a Dashboard has its first snapshot
+		await lockDashboardSnapshots(transaction, subject)
 		const currentGeneration = await readDashboardSnapshotGeneration(subject)
 		if (snapshotGeneration !== null && currentGeneration !== null && currentGeneration !== snapshotGeneration) {
 			return []
 		}
 
-		// sort the built snapshots against the subject's saved snapshots
+		// reject an old rebuild before it can move snapshots back to a day that has already rolled over
 		const savedSnapshots = await transaction
 			.select({
 				id: dashboardSnapshots.id,
@@ -143,6 +147,11 @@ async function writeDashboardSnapshots({
 			})
 			.from(dashboardSnapshots)
 			.where(toDashboardSnapshotFilter(subject))
+		if (savedSnapshots.some(({ day }) => day > lastDay)) {
+			return []
+		}
+
+		// sort the built snapshots against the saved ones
 		const { changedSnapshots, movedSnapshotIds, staleSnapshotIds, summaryLevelsToRefresh } = toSnapshotChanges({
 			builtSnapshots,
 			savedSnapshots,
@@ -227,8 +236,11 @@ function toSnapshotChanges({ builtSnapshots, savedSnapshots, lastDay }: ToSnapsh
 			snapshotChanges.movedSnapshotIds.push(savedSnapshot.id)
 		}
 
-		// an unchanged summary can still need the paragraph a previous run could not write
-		if (builtSnapshot.selection === "summary" && (!hasSameContent || !savedSnapshot?.hasParagraph)) {
+		// the daily window and same-day changes can each call for a new paragraph
+		if (
+			builtSnapshot.selection === "summary" &&
+			(!hasSameContent || !savedSnapshot.hasParagraph || savedSnapshot.day < lastDay)
+		) {
 			snapshotChanges.summaryLevelsToRefresh.push(builtSnapshot.accessLevel)
 		}
 	}

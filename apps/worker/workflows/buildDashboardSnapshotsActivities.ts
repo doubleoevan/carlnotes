@@ -39,7 +39,7 @@ import { listDashboardSubjects } from "../dashboards/dashboardSubjects"
 // the most tags one Cloudflare purge request takes
 const PURGE_TAG_LIMIT = 30
 
-// one Dashboard whose summary changed or needs a paragraph at an access level
+// one Dashboard with a paragraph to write at an access level
 export type ChangedDashboardSummary = DashboardSubject & { accessLevel: DashboardAccessLevel }
 
 // identify the snapshot whose data was read before starting a paragraph or image
@@ -103,28 +103,30 @@ export async function writeDashboardParagraphsActivity({
 	let writtenCount = 0
 	const writtenPublicSummaries: DashboardSubject[] = []
 	for (const changedSummary of changedSummaries) {
-		// skip a Dashboard past its own allowance, and stop once the platform's is spent
-		const paragraphAllowance = await takeDashboardParagraphAllowance(lastDay, changedSummary)
-		if (paragraphAllowance === "platformLimitReached") {
-			break
-		}
-		if (paragraphAllowance === "dashboardLimitReached") {
-			continue
-		}
-
-		// write the paragraph from the summary and its page's default selection, and keep the last one on a failure
 		try {
-			const paragraphInput = await loadDashboardParagraphInput(changedSummary)
+			// verify the requested day still exists before taking either allowance
+			const paragraphInput = await loadDashboardParagraphInput(changedSummary, lastDay)
 			if (!paragraphInput) {
 				continue
 			}
 
-			// keep an in-flight paragraph from reaching a replacement snapshot
+			// skip a Dashboard past its own allowance, and stop once the platform's is spent
+			const paragraphAllowance = await takeDashboardParagraphAllowance(lastDay, changedSummary)
+			if (paragraphAllowance === "platformLimitReached") {
+				break
+			}
+			if (paragraphAllowance === "dashboardLimitReached") {
+				continue
+			}
+
+			// keep an in-flight paragraph from overwriting a replacement snapshot or a newer day
 			const paragraph = await writeDashboardParagraph(paragraphInput)
 			const writtenSummaries = await db
 				.update(dashboardSnapshots)
 				.set({ paragraph })
-				.where(toDashboardSnapshotVersionFilter(paragraphInput.snapshotVersion))
+				.where(
+					and(toDashboardSnapshotVersionFilter(paragraphInput.snapshotVersion), eq(dashboardSnapshots.day, lastDay)),
+				)
 				.returning({ id: dashboardSnapshots.id })
 			writtenCount += writtenSummaries.length
 			if (writtenSummaries.length > 0 && changedSummary.accessLevel === "public") {
@@ -244,6 +246,7 @@ async function drawDashboardShareImage(subject: DashboardSubject): Promise<void>
 // one is the same and was not written. null if the summary is gone
 async function loadDashboardParagraphInput(
 	changedSummary: ChangedDashboardSummary,
+	lastDay: string,
 ): Promise<(DashboardParagraphInput & { snapshotVersion: DashboardSnapshotVersion }) | null> {
 	// the summary and the default selection's snapshots at the summary's level and the public one
 	const { accessLevel } = changedSummary
@@ -257,7 +260,12 @@ async function loadDashboardParagraphInput(
 			body: dashboardSnapshots.body,
 		})
 		.from(dashboardSnapshots)
-		.where(toDashboardReadFilter(changedSummary, ["summary", defaultSelection], accessLevel))
+		.where(
+			and(
+				toDashboardReadFilter(changedSummary, ["summary", defaultSelection], accessLevel),
+				eq(dashboardSnapshots.day, lastDay),
+			),
+		)
 
 	// the summary at its access level, or nothing to write about if the build left it out
 	const summaryRow = snapshotRows.find(
