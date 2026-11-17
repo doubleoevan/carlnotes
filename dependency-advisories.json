@@ -12,6 +12,12 @@
 		"reviewedAt": "2026-11-13"
 	},
 	{
+		"advisoryId": "GHSA-fc5q-39xc-vjpf",
+		"packageName": "picomatch",
+		"reason": "The flaw requires an attacker-controlled glob pattern. The build and file-watching tools use repository-owned patterns. The API rate limiter uses Redis, so requests never reach unstorage's filesystem matcher. No fixed release was available on the review date.",
+		"reviewedAt": "2026-11-17"
+	},
+	{
 		"advisoryId": "GHSA-mrhx-c7xc-m3w5",
 		"packageName": "zod",
 		"reason": "The advisory covers the zod 3.25.76 that expo-mcp installs through @expo/mcp-tunnel, a development tool of the mobile app. Every other installed zod is 4.6.7, past the fix in 4.6.6. The check fails if a zod installed anywhere but under expo-mcp or @expo/mcp-tunnel falls among the versions the advisory covers.",
