@@ -27,10 +27,11 @@ type SentTranscriptionRequest = { url: string; apiKey: string | undefined; reque
 // stub fetch with one that records each call into the list and returns the response
 function stubTranscriptionFetch(sentRequests: SentTranscriptionRequest[], response: Response): void {
 	globalThis.fetch = (async (url: RequestInfo | URL, init?: RequestInit) => {
-		const requestHeaders = (init?.headers ?? {}) as Record<string, string>
+		const requestHeaders = new Headers(init?.headers)
+		expect(requestHeaders.get("x-litellm-enable-message-redaction")).toBe("true")
 		sentRequests.push({
 			url: String(url),
-			apiKey: requestHeaders["x-goog-api-key"],
+			apiKey: requestHeaders.get("x-goog-api-key") ?? undefined,
 			requestBody: JSON.parse(String(init?.body)),
 		})
 		return response

@@ -9,6 +9,7 @@ import { podcastEpisodeSpeechModel } from "@carlnotes/server/podcastEpisodeSetti
 import { type SpeechTier, speechCost, toEstimatedTokens } from "./budget"
 import { runFfmpeg } from "./ffmpeg"
 import { type ModelCallFailure, toModelCallFailure, toRetryableModelCallFailure } from "./modelCallFailure"
+import { fetchLiteLLMModel } from "./models"
 
 // one chapter's speech call. its turns, its tier, and the virtual key that it bills, or the master key if no key is
 // given
@@ -243,7 +244,7 @@ async function postSpeechRequest({
 
 	// post the call to the pass-through route, which forwards the body to Gemini and charges the key
 	try {
-		const response = await fetch(`${baseUrl}/gemini/v1beta/models/${speechModel}:generateContent`, {
+		const response = await fetchLiteLLMModel(`${baseUrl}/gemini/v1beta/models/${speechModel}:generateContent`, {
 			method: "POST",
 			headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
 			body: JSON.stringify(requestBody),

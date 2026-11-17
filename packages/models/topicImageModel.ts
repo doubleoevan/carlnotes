@@ -3,6 +3,7 @@
 
 import { TOPIC_IMAGE_2K_COST_DOLLARS, TOPIC_IMAGE_COST_DOLLARS } from "./budget"
 import { type ModelCallFailure, toModelCallFailure, toRetryableModelCallFailure } from "./modelCallFailure"
+import { fetchLiteLLMModel } from "./models"
 
 // the model that draws a topic's image on creation, on the backfill, and on an admin's regenerate, and the better one
 // that draws an owner's regenerate. TOPIC_IMAGE_MODEL and TOPIC_IMAGE_REGENERATE_MODEL name others
@@ -83,7 +84,7 @@ export async function renderTopicImage({
 
 	// post the call to the pass-through route, which forwards the body to Gemini and charges the key
 	try {
-		const response = await fetch(`${baseUrl}/gemini/v1beta/models/${model}:generateContent`, {
+		const response = await fetchLiteLLMModel(`${baseUrl}/gemini/v1beta/models/${model}:generateContent`, {
 			method: "POST",
 			headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
 			body: JSON.stringify({

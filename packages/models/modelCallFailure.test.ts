@@ -11,11 +11,17 @@ test("a failed call is sorted into retryable, budget-spent, or rejected", () => 
 	expect(toModelCallFailure(400, "invalid voice").outcome).toBe("rejected")
 })
 
-// a thrown fetch error is always worth another attempt, with its message as the reason
-test("a thrown fetch error is sorted as retryable", () => {
-	expect(toRetryableModelCallFailure(new Error("socket closed"))).toEqual({
+test("proxy and fetch errors report only a safe reason", () => {
+	// neither the response body nor an exception may disclose echoed user text
+	const privateText = "private request content"
+	expect(toModelCallFailure(400, privateText)).toEqual({
+		outcome: "rejected",
+		httpStatus: 400,
+		reason: "the model proxy returned HTTP 400",
+	})
+	expect(toRetryableModelCallFailure(new Error(privateText))).toEqual({
 		outcome: "retryable",
 		httpStatus: null,
-		reason: "socket closed",
+		reason: "the model request failed",
 	})
 })

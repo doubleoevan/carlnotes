@@ -3,15 +3,18 @@
 `prompts/summarize-personal-sources-context.md` defines the bounded private rewrite. Its pipeline builder fences all received text.
 `spendReservations.ts` includes Personal sources context calls, whose costs live in DB spend rows instead of later Scan costs.
 
-`privateModelOptions.ts` disables SDK content telemetry and asks LiteLLM to redact message content while keeping
-billing metadata. `embedPrivateVectors` in `models.ts` requires the owner's key and uses these options for transient
-Personal sources routing. Provider errors from private calls must be replaced by content-free outcomes before reporting.
+`privateModelOptions.ts` disables the app's SDK telemetry for private calls. `embedPrivateVectors` in `models.ts`
+requires the owner's key and uses these options for transient Personal sources routing. Report provider errors from
+private calls as content-free outcomes.
 
 `@carlnotes/models`, every model call, user key, budget, prompt, and moderation check: where the api, the pipeline, the
 worker, and the evals all start. It imports `@carlnotes/db`, `@carlnotes/server`, and `@carlnotes/contracts`, with `ai`,
 `@ai-sdk/openai`, and the Langfuse and OpenTelemetry packages.
 
-- `models.ts` — every model call, through LiteLLM; `litellm.ts` — the user keys that those calls bill to, over
+- `models.ts` — the AI SDK model factories and `fetchLiteLLMModel`, the HTTP transport that sends the message redaction
+  header on every inference request. Use the same transport for direct HTTP calls. The request tests cover the SDK and
+  its direct HTTP callers, and `scripts/litellmModelRequests.test.ts` checks for transport bypasses.
+  `litellm.ts` manages the user keys that those calls bill to, over
   `litellmProxy.ts`, the proxy's key api that creates, deletes, and reads a key. A key is created at signup, or by
   `loadOrProvisionUserLiteLLMKey` before a user's first model call if that user has no key. A key is also replaced,
   read, and reset on the first of the month by the reset job (`apps/worker/resetMonthlyBudgets.ts`), and
@@ -71,10 +74,10 @@ worker, and the evals all start. It imports `@carlnotes/db`, `@carlnotes/server`
   master key, through `prompts/moderate-user-text.md` with the text fenced as data, that returns the shared
   `moderationVerdict`. It records no input or output in its trace, returns skipped with `LITELLM_BASE_URL` unset, and
   returns failed instead of throwing on a timeout, an error, or a verdict outside the schema, so every caller fails
-  open. `classifyImage` checks an image others see through OpenAI's free `omni-moderation-latest` endpoint, keyed by
-  `OPENAI_API_KEY`, and maps its flags onto the same categories through `toImageModerationCategory` in
-  `@carlnotes/contracts/moderation`. It returns the same union, skipped with no key set, and unreadable if the endpoint
-  rejects the image itself (HTTP 400, 413, 415, or 422).
+  open. `classifyImage` checks an image others see on the operator's key through LiteLLM's `image-moderation` alias
+  for OpenAI's `omni-moderation-latest`. The proxy uses `OPENAI_API_KEY`. The function maps flags onto the same
+  categories through `toImageModerationCategory` in `@carlnotes/contracts/moderation`. It returns skipped with no key,
+  unreadable for invalid image input, or failed for an unavailable provider.
 - `prompts/` — the model-facing Markdown templates, each with YAML frontmatter and a `{{variable}}` body, loaded by
   thin builders: `write.ts` fills a template, `fetch.ts` loads a prompt from the Langfuse registry first and falls back
   to the bundled Markdown, with `promptTelemetry` naming the version that served it, and `sync.ts` (`bun run

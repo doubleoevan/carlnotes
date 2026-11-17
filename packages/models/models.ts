@@ -141,6 +141,17 @@ export async function embedPrivateVectors(
 	return embeddings.map(toSchemaVector)
 }
 
+/**
+ * Sends a LiteLLM inference request with message redaction enabled.
+ */
+export function fetchLiteLLMModel(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+	// enforce redaction after the SDK and the caller have set their request headers
+	const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined))
+	headers.delete("litellm-disable-message-redaction")
+	headers.set("x-litellm-enable-message-redaction", "true")
+	return fetch(input, { ...init, headers })
+}
+
 // reduce one raw proxy vector to the schema's width
 function toSchemaVector(embedding: number[]): number[] {
 	// a vector shorter than the schema's width means a model or config change. fail loud instead of silently padding
@@ -176,5 +187,5 @@ function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit): Promise
 	// honor the caller's own abort signal too, so whichever fires first wins
 	const timeoutSignal = AbortSignal.timeout(MODEL_TIMEOUT_MS)
 	const signal = init?.signal ? AbortSignal.any([init.signal, timeoutSignal]) : timeoutSignal
-	return fetch(input, { ...init, signal })
+	return fetchLiteLLMModel(input, { ...init, signal })
 }

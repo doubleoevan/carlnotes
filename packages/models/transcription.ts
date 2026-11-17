@@ -6,6 +6,7 @@ import { chatTranscriptionModel } from "@carlnotes/server/voiceChat"
 import { toEstimatedTokens, transcriptionCost } from "./budget"
 import { runFfmpeg } from "./ffmpeg"
 import { type ModelCallFailure, toModelCallFailure, toRetryableModelCallFailure } from "./modelCallFailure"
+import { fetchLiteLLMModel } from "./models"
 import { WAV_HEADER_BYTES } from "./speech"
 
 // one transcription call. the WAV to transcribe and the virtual key that it bills
@@ -132,7 +133,7 @@ export async function transcribeRecording({
 
 	// post the WAV inline to the Interactions API, with store set to false so Google keeps no recording
 	try {
-		const response = await fetch(`${baseUrl}/gemini/v1beta/interactions`, {
+		const response = await fetchLiteLLMModel(`${baseUrl}/gemini/v1beta/interactions`, {
 			method: "POST",
 			headers: { "x-goog-api-key": litellmApiKey, "Content-Type": "application/json" },
 			body: JSON.stringify({

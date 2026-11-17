@@ -15,13 +15,13 @@ export type ModelCallFailure =
  * Sorts a failed model call into a spent key budget, a failure that another attempt can fix, or a rejection.
  */
 export function toModelCallFailure(httpStatus: number, errorBody: string): ModelCallFailure {
-	// LiteLLM names a spent key budget in the body, on a 429 or a 400. mask a key that the body echoes
-	const reason = errorBody.replace(/sk-[A-Za-z0-9_-]+/g, "sk-…").slice(0, 500)
+	// use the body only to classify budget failures. a provider can echo request content
 	if (isBudgetExhaustedBody(errorBody)) {
-		return { outcome: "budget-spent", reason }
+		return { outcome: "budget-spent", reason: "the model key's budget has been spent" }
 	}
 
 	// a rate limit and an overloaded or failing server are worth another attempt
+	const reason = `the model proxy returned HTTP ${httpStatus}`
 	if (isRetryableHttpStatus(httpStatus)) {
 		return { outcome: "retryable", httpStatus, reason }
 	}
@@ -39,5 +39,7 @@ export function isBudgetExhaustedBody(errorBody: string): boolean {
  * Sorts a thrown fetch error, a timeout or a network failure, into a failure that another attempt can fix.
  */
 export function toRetryableModelCallFailure(error: unknown): ModelCallFailure {
-	return { outcome: "retryable", httpStatus: null, reason: error instanceof Error ? error.message : String(error) }
+	const reason =
+		error instanceof Error && error.name === "TimeoutError" ? "the model request timed out" : "the model request failed"
+	return { outcome: "retryable", httpStatus: null, reason }
 }

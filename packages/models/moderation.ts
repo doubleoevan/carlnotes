@@ -1,6 +1,6 @@
 // the classification of what a user shares with other users. text takes one cheap call that returns a schema-locked
-// verdict, on the operator's key, with no text in its trace. an image takes OpenAI's free moderation endpoint. an unset
-// proxy or key skips the check, and a failed call returns failed without the text or the image
+// verdict on the operator's key, with no text in its trace. images use OpenAI moderation through the same proxy.
+// failed checks publish a status without the submitted content
 
 import {
 	imageModerationResponse,
@@ -8,8 +8,8 @@ import {
 	moderationVerdict,
 	toImageModerationCategory,
 } from "@carlnotes/contracts/moderation"
-import { generateText, Output } from "ai"
-import { cheapModel } from "./models"
+import { APICallError, generateText, Output } from "ai"
+import { cheapModel, fetchLiteLLMModel } from "./models"
 import { type BuiltPrompt, fetchPromptTemplate } from "./prompts/fetch"
 import { writePrompt } from "./prompts/write"
 
@@ -46,9 +46,8 @@ export type ModerationClassification =
 	| { outcome: "failed"; error: unknown }
 	| { outcome: "unreadable" }
 
-// OpenAI's moderation endpoint and the model that reads images
-const OPENAI_MODERATION_URL = "https://api.openai.com/v1/moderations"
-const IMAGE_MODERATION_MODEL = "omni-moderation-latest"
+// the LiteLLM alias for OpenAI's free image moderation model
+const IMAGE_MODERATION_MODEL = "image-moderation"
 
 // the text under review and what it is
 export type ClassifyUserTextOptions = { text: string; textKind: ModeratedTextKind }
@@ -84,11 +83,13 @@ export async function classifyUserText({ text, textKind }: ClassifyUserTextOptio
 	}
 }
 
-// the error's name and message alone. the sdk's error holds the request, and the request holds the user's text
+// keep the status code only. the SDK error can include both the request and echoed text
 function toReportableError(error: unknown): Error {
-	const name = error instanceof Error ? error.name : "Error"
-	const message = error instanceof Error ? error.message : String(error)
-	return new Error(`${name}: ${message}`)
+	return new Error(
+		APICallError.isInstance(error) && error.statusCode
+			? `the moderation endpoint returned HTTP ${error.statusCode}`
+			: "the text moderation request failed",
+	)
 }
 
 /**
@@ -100,40 +101,46 @@ export async function buildModerationPrompt({ text, textKind }: ClassifyUserText
 	return { prompt, name, registryPrompt }
 }
 
-// the statuses that reject the image itself. any other failure, a bad key included, is the endpoint's trouble
-const UNREADABLE_IMAGE_STATUSES = new Set([400, 413, 415, 422])
+// a 400 or 422 can also report a proxy configuration problem
+const UNREADABLE_IMAGE_CODE_PATTERN =
+	/^(?:invalid_(?:base64_)?image(?:_|$)|image_.*(?:error|large|small)$|unsupported_image_)/
 
 // the image under review, as a data url that names its media type
 export type ClassifyImageOptions = { dataUrl: string }
 
 /**
- * Classifies one image a user shares with other users through OpenAI's free moderation endpoint. Returns skipped with
+ * Classifies one image a user shares with other users through LiteLLM's OpenAI moderation route. Returns skipped with
  * no key set, unreadable if the endpoint rejects the image itself, as it does a format it does not take, and failed on
  * a call that errors, times out, is rate limited, or returns a response outside the schema.
  */
 export async function classifyImage({ dataUrl }: ClassifyImageOptions): Promise<ModerationClassification> {
-	// a stack with no key runs without the check, and reports nothing per image
-	const openaiApiKey = Bun.env.OPENAI_API_KEY
-	if (!openaiApiKey) {
+	// the OpenAI key opts the stack into moderation
+	if (!Bun.env.OPENAI_API_KEY) {
 		return { outcome: "skipped" }
+	}
+
+	// report a missing proxy when image moderation is enabled
+	const baseUrl = Bun.env.LITELLM_BASE_URL
+	const litellmApiKey = Bun.env.LITELLM_MASTER_KEY
+	if (!baseUrl || !litellmApiKey) {
+		return { outcome: "failed", error: new Error("the image moderation proxy is not configured") }
 	}
 
 	// one call with the image as a data url, bounded like the text check
 	try {
-		const response = await fetch(OPENAI_MODERATION_URL, {
+		const response = await fetchLiteLLMModel(`${baseUrl.replace(/\/$/, "")}/moderations`, {
 			method: "POST",
-			headers: { Authorization: `Bearer ${openaiApiKey}`, "Content-Type": "application/json" },
+			headers: { Authorization: `Bearer ${litellmApiKey}`, "Content-Type": "application/json" },
 			body: JSON.stringify({
 				model: IMAGE_MODERATION_MODEL,
 				input: [{ type: "image_url", image_url: { url: dataUrl } }],
 			}),
 			signal: AbortSignal.timeout(MODERATION_TIMEOUT_MS),
 		})
-		if (UNREADABLE_IMAGE_STATUSES.has(response.status)) {
-			return { outcome: "unreadable" }
-		}
 		if (!response.ok) {
-			throw new Error(`the moderation endpoint returned ${response.status}`)
+			return (await isUnreadableImageResponse(response))
+				? { outcome: "unreadable" }
+				: { outcome: "failed", error: new Error(`the moderation endpoint returned ${response.status}`) }
 		}
 
 		// the first category that counts and is flagged names the violation
@@ -142,8 +149,25 @@ export async function classifyImage({ dataUrl }: ClassifyImageOptions): Promise<
 			? { isViolation: true, category }
 			: { isViolation: false, category: null }
 		return { outcome: "classified", verdict }
-	} catch (error) {
-		// an error, a timeout, or a response outside the schema fails, without the image
-		return { outcome: "failed", error: toReportableError(error) }
+	} catch {
+		return { outcome: "failed", error: new Error("the image moderation response could not be read") }
 	}
+}
+
+// use the provider's input field or image error code without copying error text into reports
+async function isUnreadableImageResponse(response: Response): Promise<boolean> {
+	if (response.status === 413 || response.status === 415) {
+		return true
+	}
+	if (response.status !== 400 && response.status !== 422) {
+		return false
+	}
+
+	// LiteLLM forwards the parameter of a rejected request to the caller
+	const payload = (await response.json().catch(() => null)) as { error?: { param?: unknown; code?: unknown } } | null
+	const { param, code } = payload?.error ?? {}
+	return (
+		(typeof param === "string" && /^input(?:$|[.[])/.test(param)) ||
+		(typeof code === "string" && UNREADABLE_IMAGE_CODE_PATTERN.test(code))
+	)
 }

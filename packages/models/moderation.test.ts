@@ -34,10 +34,11 @@ afterEach(() => {
 	sentRequestBodies.length = 0
 })
 
-// without a proxy url the check is skipped and no call is made
-test("no proxy url skips the check", async () => {
+test("no proxy url skips text moderation and fails configured image moderation", async () => {
 	delete Bun.env.LITELLM_BASE_URL
+	Bun.env.OPENAI_API_KEY = "sk-test"
 	expect(await classifyUserText({ text: "hello", textKind: "a chat room message" })).toEqual({ outcome: "skipped" })
+	expect(await classifyImage(PNG_IMAGE)).toMatchObject({ outcome: "failed" })
 	expect(sentRequestBodies).toHaveLength(0)
 })
 
@@ -62,6 +63,19 @@ test("an off-schema verdict and a thrown call both fail", async () => {
 	expect((await classifyUserText({ text: "x", textKind: "a note's body" })).outcome).toBe("failed")
 })
 
+test("text moderation reports the status without the provider's echoed input", async () => {
+	// give the real SDK an error response with the content in its error message
+	const text = "private request content"
+	Bun.env.LITELLM_BASE_URL = "http://litellm.test"
+	Bun.env.LITELLM_MASTER_KEY = "master"
+	globalThis.fetch = (async () =>
+		Response.json({ error: { message: text } }, { status: 400 })) as unknown as typeof fetch
+	expect(await classifyUserText({ text, textKind: "a note's body" })).toEqual({
+		outcome: "failed",
+		error: new Error("the moderation endpoint returned HTTP 400"),
+	})
+})
+
 // the prompt cuts a long text to its limit and leaves no placeholder behind
 test("the prompt cuts the text and fills every placeholder", async () => {
 	const { prompt } = await buildModerationPrompt({ text: "x".repeat(10_000), textKind: "a note's body" })
@@ -76,7 +90,14 @@ const PNG_IMAGE = { dataUrl: "data:image/png;base64,iVBORw==" }
 // stub the moderation endpoint with the given category flags, or a thrown error, recording each request body
 function stubImageModeration(categories: Record<string, boolean> | Error): void {
 	Bun.env.OPENAI_API_KEY = "sk-test"
-	globalThis.fetch = (async (_url: string, init: RequestInit) => {
+	Bun.env.LITELLM_BASE_URL = "http://litellm.test/v1/"
+	Bun.env.LITELLM_MASTER_KEY = "master"
+	globalThis.fetch = (async (url: string, init: RequestInit) => {
+		// the proxy receives the image with redaction and authenticates with the proxy key
+		const headers = new Headers(init.headers)
+		expect(url).toBe("http://litellm.test/v1/moderations")
+		expect(headers.get("x-litellm-enable-message-redaction")).toBe("true")
+		expect(headers.get("authorization")).toBe("Bearer master")
 		sentRequestBodies.push(JSON.parse(String(init.body)))
 		if (categories instanceof Error) {
 			throw categories
@@ -101,6 +122,7 @@ test("a flagged image comes back with Carl's category", async () => {
 		outcome: "classified",
 		verdict: { isViolation: true, category: "violence" },
 	})
+	expect(sentRequestBodies[0]).toMatchObject({ model: "image-moderation" })
 	expect(JSON.stringify(sentRequestBodies[0])).toContain("data:image/png;base64,")
 })
 
@@ -115,7 +137,7 @@ test("an image flagged only for plain violence is clean", async () => {
 
 // a response outside the schema and a call that throws, a timeout included, both fail without throwing
 test("an off-schema response and a thrown image call both fail", async () => {
-	Bun.env.OPENAI_API_KEY = "sk-test"
+	stubImageModeration({})
 	globalThis.fetch = (async () => Response.json({ results: [] })) as unknown as typeof fetch
 	expect((await classifyImage(PNG_IMAGE)).outcome).toBe("failed")
 	stubImageModeration(new DOMException("timed out", "TimeoutError") as unknown as Error)
@@ -125,8 +147,12 @@ test("an off-schema response and a thrown image call both fail", async () => {
 // a rejection of the image itself reads as unreadable, while a rate limit or a bad key stays a failure that lets the
 // image through
 test("an image the endpoint rejects is unreadable, and a rate limit or a bad key fails", async () => {
-	Bun.env.OPENAI_API_KEY = "sk-test"
-	globalThis.fetch = (async () => new Response("unsupported image", { status: 400 })) as unknown as typeof fetch
+	stubImageModeration({})
+	globalThis.fetch = (async () =>
+		Response.json(
+			{ error: { param: "input[0].image_url", code: "invalid_image_format" } },
+			{ status: 400 },
+		)) as unknown as typeof fetch
 	expect(await classifyImage(PNG_IMAGE)).toEqual({ outcome: "unreadable" })
 
 	// a rate limit and a bad key both fail open
@@ -134,4 +160,16 @@ test("an image the endpoint rejects is unreadable, and a rate limit or a bad key
 	expect((await classifyImage(PNG_IMAGE)).outcome).toBe("failed")
 	globalThis.fetch = (async () => new Response("bad key", { status: 401 })) as unknown as typeof fetch
 	expect((await classifyImage(PNG_IMAGE)).outcome).toBe("failed")
+})
+
+test("a missing proxy alias fails image moderation without reporting the provider's message", async () => {
+	// the new app can reach an older proxy while the two services deploy
+	stubImageModeration({})
+	globalThis.fetch = (async () =>
+		Response.json(
+			{ error: { param: "model", code: "400", message: PNG_IMAGE.dataUrl } },
+			{ status: 400 },
+		)) as unknown as typeof fetch
+	const classification = await classifyImage(PNG_IMAGE)
+	expect(classification).toEqual({ outcome: "failed", error: new Error("the moderation endpoint returned 400") })
 })

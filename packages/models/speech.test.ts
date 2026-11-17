@@ -36,9 +36,10 @@ function stubSpeechFetch(sentRequests: SentSpeechRequest[], audioBytes: Uint8Arr
 	const wavBase64 = Buffer.from(audioBytes).toString("base64")
 	globalThis.fetch = (async (url: RequestInfo | URL, init?: RequestInit) => {
 		// record the call
-		const requestHeaders = (init?.headers ?? {}) as Record<string, string>
+		const requestHeaders = new Headers(init?.headers)
+		expect(requestHeaders.get("x-litellm-enable-message-redaction")).toBe("true")
 		const requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>
-		sentRequests.push({ url: String(url), apiKey: requestHeaders["x-goog-api-key"], requestBody })
+		sentRequests.push({ url: String(url), apiKey: requestHeaders.get("x-goog-api-key") ?? undefined, requestBody })
 
 		// one audio part and the usage that prices it
 		const speechResponseBody = {

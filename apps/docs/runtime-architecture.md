@@ -176,8 +176,8 @@ inside the fence, as data.
 -  **Text others read.** A room message, a note and its comments, a username, a team's name and description, and an
   invite or public Topic's name, prompt, and tags are classified by one cheap model call before they post. A violation
   is rejected in Carl's words with the draft kept.
--  **Images others see.** An uploaded avatar and an image shared to a team room go through OpenAI's free
-  `omni-moderation-latest` endpoint, set by `OPENAI_API_KEY`. A flagged image gets the same rejection.
+-  **Images others see.** An uploaded avatar and an image shared to a team room go through LiteLLM's
+  `image-moderation` route to OpenAI's `omni-moderation-latest`. A flagged image gets the same rejection.
 
 The text and image checks fail open. An unset key, a timeout, or an outage lets the post through, and a timeout or
 an outage is reported without the text or the image. An image the endpoint cannot read is rejected like any unreadable

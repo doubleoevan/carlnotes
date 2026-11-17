@@ -24,9 +24,10 @@ type SentRenderRequest = { url: string; apiKey: string | undefined; requestBody:
 // stub fetch with one that records each call and returns the given response
 function stubRenderFetch(sentRequests: SentRenderRequest[], toResponse: () => Response): void {
 	globalThis.fetch = (async (url: RequestInfo | URL, init?: RequestInit) => {
-		const requestHeaders = (init?.headers ?? {}) as Record<string, string>
+		const requestHeaders = new Headers(init?.headers)
+		expect(requestHeaders.get("x-litellm-enable-message-redaction")).toBe("true")
 		const requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>
-		sentRequests.push({ url: String(url), apiKey: requestHeaders["x-goog-api-key"], requestBody })
+		sentRequests.push({ url: String(url), apiKey: requestHeaders.get("x-goog-api-key") ?? undefined, requestBody })
 		return toResponse()
 	}) as typeof fetch
 }

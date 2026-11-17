@@ -170,6 +170,9 @@ and redeploys the service on push. A model swap is the config edit and nothing e
 `docker-compose.yml` names the same image and digest as that Dockerfile, so a change of the proxy's version moves
 both, and the smoke suite runs on the new version before production does.
 
+Set `OPENAI_API_KEY` on the Northflank `litellm` service before deploying the app that calls the
+`image-moderation` alias. The app also uses `OPENAI_API_KEY` to enable image moderation.
+
 ## Spend control settings
 
 Six Doppler settings set the defaults of the daily spend controls. Each one is optional, and an unset, empty, or
