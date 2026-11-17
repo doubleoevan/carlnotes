@@ -19,17 +19,20 @@ import {
 import { groupTopicMemories } from "@carlnotes/db/topicMemoryGroups"
 import { and, cosineDistance, desc, eq, inArray, isNotNull, isNull, or, type SQL, sql } from "drizzle-orm"
 import { toExternalTopicMemorySourceFilter } from "./review/ownTopicPages"
+import { isPromoted } from "./review/scorePolicy"
 
 type TopicMemoryScan = Pick<
 	typeof scans.$inferSelect,
 	"id" | "topicId" | "ownerId" | "startedAt" | "topicMemoriesUpdatedAt" | "topicMemoriesWrittenAt"
 >
 // only public evidence and its Resource vector feed the topic memory update
-type TopicMemoryFinding = {
+export type TopicMemoryFinding = {
 	id: string
 	title: string | null
 	snippet: string | null
 	description: string
+	relevanceScore: number
+	rating: "up" | null
 	embedding: number[] | null
 	embeddingModel: string | null
 	articleContext?: string | null
@@ -37,6 +40,13 @@ type TopicMemoryFinding = {
 }
 
 type TopicMemoryRow = typeof topicMemories.$inferSelect
+
+// both extraction and claim checking read the same bounded public review explanation
+const TOPIC_MEMORY_REVIEW_EXPLANATION_CHARS = 800
+
+// identify reviews that explicitly distinguish the Finding's subject from the Topic's namesake
+const DIFFERENT_PERSON_WARNING_PATTERN =
+	/\b(?:reads|looks|seems|appears) like (?:a )?different person with the same name\b|\bno corroborating detail to confirm this is the same\b[^.!?]*\bcoincidental name match\b/i
 
 // a dated article path supplies a hint. dates are never inferred from a Scan
 const topicMemoryPublicationDateHint = sql<string | null>`substring(
@@ -79,7 +89,9 @@ export async function loadTopicMemoryFindings(
 			id: findings.id,
 			title: sql<string | null>`left(${resources.title}, 180)`,
 			snippet: sql<string | null>`left(${resources.snippet}, 320)`,
-			description: sql<string>`left(${findings.relevanceExplanation}, 300)`,
+			description: sql<string>`left(${findings.relevanceExplanation}, ${TOPIC_MEMORY_REVIEW_EXPLANATION_CHARS})`,
+			relevanceScore: findings.relevanceScore,
+			rating: sql<"up" | null>`case when ${findings.rating} = 'up' then 'up' end`,
 			embedding: resources.embedding,
 			embeddingModel: resources.embeddingModel,
 			articleContext: sql<string | null>`left(${resources.content}, 640)`,
@@ -90,6 +102,17 @@ export async function loadTopicMemoryFindings(
 		.where(toTopicMemoryScanFindingFilter(scanId, topicId))
 		.orderBy(desc(findings.relevanceScore), findings.id)
 		.limit(30)
+}
+
+/**
+ * Excludes weak Findings with a namesake warning and no positive rating.
+ */
+export function isTopicMemoryFindingEligible({
+	description,
+	relevanceScore,
+	rating,
+}: Pick<TopicMemoryFinding, "description" | "relevanceScore" | "rating">): boolean {
+	return rating === "up" || isPromoted(relevanceScore) || !DIFFERENT_PERSON_WARNING_PATTERN.test(description)
 }
 
 /**
@@ -231,7 +254,7 @@ export async function loadTopicMemoryFindingEvidence(
 			startedAt: scans.startedAt,
 			title: sql<string | null>`left(${resources.title}, 180)`,
 			snippet: sql<string | null>`left(${resources.snippet}, ${claimText ? 6000 : 240})`,
-			description: sql<string>`left(${findings.relevanceExplanation}, 800)`,
+			description: sql<string>`left(${findings.relevanceExplanation}, ${TOPIC_MEMORY_REVIEW_EXPLANATION_CHARS})`,
 			article: claimText ? sql<string | null>`left(${resources.content}, 6000)` : sql<null>`null`,
 			contentKey: resources.contentKey,
 			publicationDateHint: topicMemoryPublicationDateHint,

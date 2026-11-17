@@ -1,6 +1,6 @@
 ---
 title: Propose Topic Memories
-version: 15
+version: 16
 model tier: cheap
 description: Propose one atomic dated fact per topic memory from indexed external public Findings.
 updated: 2026-11-16
@@ -14,9 +14,13 @@ Each topic memory has one claim. If a story mentions a new job and a robotics gr
 
 Ask whether two parts of the sentence could be verified or corrected separately. A designer growing up in San Francisco, studying in Florence, and working in London gives separate facts. An MCP registry's count and its sorting by transport give separate facts. A basketball league's Tuesday session and a Sunday session are separate events, even at the same gym. A SaaS marketplace's discount for buyers and its listing benefits for sellers are separate claims. A company publishing a write-up and building the evaluation framework it describes are separate actions. A venue, amount, or role that identifies the single event or person can stay with that claim.
 
-Use the Topic scope to decide what is relevant. Keep account activity, bookmarks, ratings, scan summaries, source listings, and comments about missing evidence out of topic memories. A bookmark can help identify a relevant Finding. Extract the external fact from that Finding and leave the act of bookmarking out. Skip an incidental person or a namesake unless the evidence supports their relevance to this Topic. The Topic scope sets relevance and never serves as evidence for a claim.
+Use the Topic scope and read the supplied review explanation before deciding what is relevant. A scope may refer to an attachment that is not visible here. When a kept Finding's review connects its subject to that scope, use that connection as a relevance signal. A positive Finding rating also signals relevance. The Topic scope and rating never establish what happened. Cite the external Finding for the claim.
 
-Use kind fact, or correction when a new supported claim corrects a previous one. Write only the claim in text. Store the event date in factDate at the precision the evidence supports. Use YYYY-MM-DD for a day, YYYY-MM for a month, YYYY for a year, or null if the event date is unknown. Never fill in a missing month or day. Do not use the Scan's date, paste trace language such as “no date in evidence,” or attribute the claim to a Finding inside the sentence.
+For a Topic about a roster of people, skip all facts about an individual whose review says they are a different person with the same name. When the review says identity is only a name match and the relevance score is low, require an independent detail that connects them to the Topic. A bookmark on someone else's profile is no corroboration.
+
+Keep relevant project history as well as the latest update. If someone announces a job search in a post that also says they built an app, extract both facts separately. Write “Sam Rivera built Dockyard.” An external profile can support facts about who built CarlNotes. Use “built” for authorship. A release or feature is a separate claim. Keep account activity, bookmarks, ratings, scan summaries, source listings, and comments about missing evidence out of topic memories.
+
+Use kind fact, or correction when a new supported claim corrects a previous one. Write only the claim in text. Store the event date in factDate at the precision the evidence supports. Use YYYY-MM-DD for a day, YYYY-MM for a month, YYYY for a year, or null if the event date is unknown. Use a date for a project only when the evidence dates that project, including when one date explicitly applies to multiple events. Never fill in a missing month or day. Do not use the Scan's date, paste trace language such as “no date in evidence,” or attribute the claim to a Finding inside the sentence.
 
 When an individual person is the subject of the claim, include person.name and person.identifyingDetail. Use a brief evidence-backed role, organization, or place that identifies which person this is. Reuse a shown identifying detail when the evidence identifies the same person. People with a matching name and different contexts stay separate. Use null when the subject is a company, organization, or other non-person.
 

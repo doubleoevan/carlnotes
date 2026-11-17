@@ -26,7 +26,7 @@ const TOPIC_MEMORY_EXACT_CANDIDATE_LIMIT = 128
 export type EmbeddedTopicMemoryWrite = TopicMemoryWrite & {
 	embedding: number[]
 	findingIds: string[]
-	reconciliation?: { operation: "add" } | Extract<TopicMemoryReconciliation, { operation: "update" }>
+	reconciliation?: Exclude<TopicMemoryReconciliation, { operation: "noOp" }>
 }
 export type TopicMemoryMergedPair = { candidate: string; matched: string; cosine: number | null; source: string }
 
@@ -72,6 +72,7 @@ export async function applyTopicMemoryWrite(
 	// an explicit add stays separate when the model saw distinct claims sharing structured fields
 	const canCombine =
 		write.reconciliation?.operation !== "add" ||
+		write.reconciliation.combineWithExactMatch ||
 		(existing && normalizeTopicMemoryValue(existing.text) === normalizeTopicMemoryValue(write.text))
 	if (existing && canCombine) {
 		return combineTopicMemoryEvidence(transaction, options, existing, isNewerTopicMemoryObservation(options, existing))

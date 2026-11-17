@@ -796,6 +796,43 @@ test("a Journal add preserves a distinct claim that shares an exact key", async 
 	})
 })
 
+test("a surplus Journal candidate survives when the selected wording was rejected", async () => {
+	await withTopic(async ({ topicId }) => {
+		const original = await insertBrew(topicId, 1)
+		const next = await insertBrew(topicId, 2)
+		const rejectedText = "The Acorn Cafe opened."
+		const keptText = "The Acorn Cafe opened to customers."
+		const key = { subject: "Acorn Cafe", claimType: "launch", value: "opening", factDate: "2026-11" } as const
+		await writeTopicMemory(original, rejectedText, vector(1), key)
+		await db.update(topicMemories).set({ status: "rejected" }).where(eq(topicMemories.topicId, topicId))
+
+		// give the writer the model's preferred wording and its checked paraphrase
+		const preferred: EmbeddedTopicMemoryWrite = {
+			...key,
+			operation: "add",
+			kind: "fact",
+			person: null,
+			text: rejectedText,
+			importance: 0.85,
+			embedding: vector(1),
+			findingIds: [next.findingId],
+			reconciliation: { operation: "add" },
+		}
+		const surplus: EmbeddedTopicMemoryWrite = {
+			...preferred,
+			text: keptText,
+			reconciliation: { operation: "add", combineWithExactMatch: true },
+		}
+		await saveTopicMemoryUpdates({ topicId, scanId: next.scanId, writes: [preferred, surplus], signal })
+		expect(await loadMemories(topicId)).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ text: rejectedText, status: "rejected" }),
+				expect.objectContaining({ text: keptText, status: "active", findingIds: [next.findingId] }),
+			]),
+		)
+	})
+})
+
 test("a Journal update keeps the original ID, archives the prior wording, and rejects a foreign target", async () => {
 	await withTopic(async ({ topicId }) => {
 		const originalBrew = await insertBrew(topicId, 1)

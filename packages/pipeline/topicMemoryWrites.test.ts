@@ -7,12 +7,44 @@ import { restoreConnectionPool, stubConnectionPool, toTableRow } from "@carlnote
 import { TOPIC_MEMORY_EMBEDDING_MODEL } from "@carlnotes/db/schema/topicMemories"
 import { topics } from "@carlnotes/db/schema/topics"
 import type { EmbeddedTopicMemoryWrite } from "./applyTopicMemoryWrite"
-import { loadTopicMemoryNeighbors } from "./topicMemoryEvidence"
+import { isTopicMemoryFindingEligible, loadTopicMemoryFindings, loadTopicMemoryNeighbors } from "./topicMemoryEvidence"
 import { saveTopicMemoryUpdates } from "./topicMemoryWrites"
 
 afterEach(restoreConnectionPool)
 
-test("each cluster retrieves five Topic-scoped neighbors and can see evicted history", async () => {
+test("Journal evidence keeps the public review's relevance and positive rating", async () => {
+	// the scope match can follow a long factual description
+	const description = `${"External profile and work history. ".repeat(12)}This person matches the attached roster.`
+	const queries = stubConnectionPool(() => [
+		["finding-1", "A named person's profile", null, description, 0.85, "up", null, null, null, null],
+	])
+	expect(await loadTopicMemoryFindings("brew-1", "topic-1")).toMatchObject([
+		{ id: "finding-1", description, relevanceScore: 0.85, rating: "up" },
+	])
+	expect(queries[0]?.text).toMatch(/left\("findings"\."relevance_explanation", \$\d+\)/)
+	expect(queries[0]?.values).toContain(800)
+	expect(queries[0]?.values).toContain("public")
+})
+
+test("weak unrated Findings with explicit namesake warnings stay out of extraction", () => {
+	// weak review scores alone leave a Finding eligible
+	const weakFinding = { relevanceScore: 0.35, rating: null }
+	const description = "This reads like a different person with the same name rather than a career change."
+	expect(isTopicMemoryFindingEligible({ ...weakFinding, description })).toBe(false)
+	expect(
+		isTopicMemoryFindingEligible({
+			...weakFinding,
+			description:
+				"There is no corroborating detail to confirm this is the same person rather than a coincidental name match.",
+		}),
+	).toBe(false)
+	expect(isTopicMemoryFindingEligible({ ...weakFinding, description: "The article describes a film screening." })).toBe(
+		true,
+	)
+	expect(isTopicMemoryFindingEligible({ ...weakFinding, description, rating: "up" })).toBe(true)
+})
+
+test("a Finding group reads five Topic-scoped neighbors, including evicted history", async () => {
 	const queries = stubConnectionPool()
 	await loadTopicMemoryNeighbors("topic-1", [1, 0])
 	expect(queries[0]?.values).toEqual(

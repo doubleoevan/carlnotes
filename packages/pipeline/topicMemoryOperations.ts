@@ -1,4 +1,4 @@
-// the model proposes facts for a cluster. code owns identity and lifecycle
+// group similar Findings and validate the model's topic memory drafts
 import { CONTROL_CHARACTER_PATTERN } from "@carlnotes/contracts/socialText"
 import {
 	TOPIC_MEMORY_TEXT_LIMIT,
@@ -10,7 +10,7 @@ import {
 	topicMemoryPerson,
 	toTopicMemoryFactDate,
 } from "@carlnotes/contracts/topicMemories"
-import { TOPIC_MEMORY_CLUSTER_SIMILARITY } from "@carlnotes/contracts/topicMemoryWork"
+import { TOPIC_MEMORY_FINDING_GROUP_SIMILARITY } from "@carlnotes/contracts/topicMemoryWork"
 import { toTopicMemorySimilarity } from "@carlnotes/db/topicMemoryGroups"
 import { z } from "zod"
 import type { TopicMemoryAliasEvidence } from "./topicMemorySubjects"
@@ -41,7 +41,7 @@ const factFields = structuredTopicMemoryClaim.extend({
 	kind: z.enum(topicMemoryKinds),
 })
 
-export const topicMemoryProposal = z.object({
+export const topicMemoryDraftResponse = z.object({
 	facts: z
 		.array(
 			factFields.extend({
@@ -65,7 +65,7 @@ export const topicMemoryProposal = z.object({
 		.max(8),
 })
 
-type TopicMemoryProposal = z.infer<typeof topicMemoryProposal>["facts"][number]
+type ModelTopicMemoryDraft = z.infer<typeof topicMemoryDraftResponse>["facts"][number]
 export type TopicMemoryWrite = Omit<z.infer<typeof factFields>, "sourceFindingIndexes"> & {
 	operation: "add"
 	subjectAlias?: TopicMemoryAliasEvidence
@@ -75,16 +75,17 @@ export type TopicMemoryWrite = Omit<z.infer<typeof factFields>, "sourceFindingIn
 const READER_ACTIVITY_PATTERN =
 	/\b(?:the (?:reader|user|owner|topic owner) (?:has )?(?:bookmarked|rated|thumbed|marked as read|saved this finding)|(?:was|were) bookmarked (?:by the (?:reader|user|owner)|under the title))\b/i
 
-// the clustering input always has vectors in the current Resource embedding space
+// the Finding grouping input always has vectors in the current Resource embedding space
 type Embedded = { embedding: number[] }
 
 /**
  * Groups linked findings by similarity, using a stable input order.
  */
-export function toTopicMemoryClusters<Finding extends Embedded>(findings: Finding[]): Finding[][] {
+export function groupSimilarFindings<Finding extends Embedded>(findings: Finding[]): Finding[][] {
 	return toLinkedTopicMemoryGroups(
 		findings,
-		(first, second) => toTopicMemorySimilarity(first.embedding, second.embedding) >= TOPIC_MEMORY_CLUSTER_SIMILARITY,
+		(first, second) =>
+			toTopicMemorySimilarity(first.embedding, second.embedding) >= TOPIC_MEMORY_FINDING_GROUP_SIMILARITY,
 	)
 }
 
@@ -159,7 +160,7 @@ export function toTopicMemoryPersonMatchKey(person: TopicMemoryPerson | null): s
 }
 
 /** Converts a model candidate to a draft for the evidence and claim checks. */
-export function toTopicMemoryDraft(proposal: TopicMemoryProposal): TopicMemoryWrite | null {
+export function toTopicMemoryDraft(proposal: ModelTopicMemoryDraft): TopicMemoryWrite | null {
 	if (proposal.operation === "skip") {
 		return null
 	}
@@ -180,7 +181,7 @@ export function toTopicMemoryDraft(proposal: TopicMemoryProposal): TopicMemoryWr
 }
 
 /** Accepts a brief standalone statement after validation or a source-grounded rewrite. */
-export function toTopicMemoryWrite(proposal: TopicMemoryProposal): TopicMemoryWrite | null {
+export function toTopicMemoryWrite(proposal: ModelTopicMemoryDraft): TopicMemoryWrite | null {
 	const draft = toTopicMemoryDraft(proposal)
 	return draft ? toStandaloneTopicMemory(draft) : null
 }

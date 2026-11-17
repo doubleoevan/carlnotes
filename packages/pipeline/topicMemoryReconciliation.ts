@@ -16,7 +16,7 @@ import { generateText, NoObjectGeneratedError, NoOutputGeneratedError, Output } 
 import { and, asc, eq, sql } from "drizzle-orm"
 import { z } from "zod"
 import { loadTopicMemoryNeighbors } from "./topicMemoryEvidence"
-import { toTopicMemoryPersonMatchKey } from "./topicMemoryOperations"
+import { normalizeTopicMemoryValue, toTopicMemoryPersonMatchKey } from "./topicMemoryOperations"
 import { recordTopicMemorySpend } from "./topicMemorySpend"
 import { readTopicMemorySubjectName, type TopicMemorySubject } from "./topicMemorySubjects"
 
@@ -44,9 +44,11 @@ type JournalClaim = {
 	value?: string | null
 }
 export type TopicMemoryReconciliationTarget = JournalClaim & { updatedAt: Date }
-type ReconciliationCandidate = Omit<JournalClaim, "id"> & { id?: string; embedding: number[] }
+type CheckedCandidate = Omit<JournalClaim, "id"> & { id?: string }
+type ReconciliationCandidate = CheckedCandidate & { embedding: number[] }
 export type TopicMemoryReconciliation =
-	| { operation: "add" | "noOp" }
+	| { operation: "add"; combineWithExactMatch?: true }
+	| { operation: "noOp" }
 	| { operation: "update"; target: TopicMemoryReconciliationTarget; useCandidateText: boolean }
 type ReconciliationInput = {
 	scanId?: string
@@ -146,7 +148,7 @@ async function matchTopicMemoryClaims({
 	signal,
 	subjects = [],
 }: ReconciliationInput & {
-	candidates: Omit<ReconciliationCandidate, "embedding">[]
+	candidates: CheckedCandidate[]
 	journal: TopicMemoryReconciliationTarget[]
 }): Promise<TopicMemoryReconciliation[]> {
 	// preserve short inputs and avoid paying for an empty request
@@ -222,13 +224,13 @@ async function matchTopicMemoryClaims({
 
 // reject repeated indexes and compare each requested target with the exact snapshot sent to the model
 function validateReconciliation(
-	candidates: Omit<ReconciliationCandidate, "embedding">[],
+	candidates: CheckedCandidate[],
 	journal: TopicMemoryReconciliationTarget[],
 	actions: z.infer<typeof matchResponse>["operations"],
 ): TopicMemoryReconciliation[] {
 	const indexes = Map.groupBy(actions, ({ index }) => index)
 	const journalOrder = new Map(journal.map(({ id }, index) => [id, index]))
-	return candidates.map((candidate, index) => {
+	const validated = candidates.map<TopicMemoryReconciliation>((candidate, index) => {
 		const [action, duplicate] = indexes.get(index) ?? []
 		if (!action || duplicate) {
 			return { operation: "noOp" }
@@ -242,11 +244,40 @@ function validateReconciliation(
 			? { operation: "update", target, useCandidateText: action.useCandidateText }
 			: { operation: "noOp" }
 	})
+
+	// let the writer combine an exact duplicate only once that fact is in storage
+	return candidates.map((candidate, index) => {
+		const [reply, duplicate] = indexes.get(index) ?? []
+		if (reply?.operation !== "noOp" || reply.memoryId !== null || duplicate) {
+			return validated[index] ?? { operation: "noOp" }
+		}
+		const hasMatchingDraft = candidates.some(
+			(peer, peerIndex) =>
+				(validated[peerIndex]?.operation === "add" || validated[peerIndex]?.operation === "update") &&
+				haveMatchingTopicMemoryKeys(candidate, peer),
+		)
+		return hasMatchingDraft ? { operation: "add", combineWithExactMatch: true } : { operation: "add" }
+	})
+}
+
+// require a retained claim with the same key and a compatible occurrence date
+function haveMatchingTopicMemoryKeys(first: CheckedCandidate, second: CheckedCandidate): boolean {
+	return Boolean(
+		first.subject &&
+			first.subject === second.subject &&
+			first.claimType &&
+			first.claimType === second.claimType &&
+			first.value &&
+			second.value &&
+			normalizeTopicMemoryValue(first.value) === normalizeTopicMemoryValue(second.value) &&
+			areTopicMemoryDatesCompatible(first.factDate, second.factDate) &&
+			haveCompatibleTopicMemoryPeople(first.person, second.person),
+	)
 }
 
 // enforce the ordering rule and reject a conflict in either occurrence date or name
 function canReconcileTopicMemoryTarget(
-	candidate: Omit<ReconciliationCandidate, "embedding">,
+	candidate: CheckedCandidate,
 	target: TopicMemoryReconciliationTarget,
 	order: ReadonlyMap<string, number>,
 ): boolean {

@@ -3,7 +3,7 @@ import { TOPIC_MEMORY_TEXT_LIMIT, toTopicMemoryDisplayText } from "@carlnotes/co
 import { canModelCombineTopicMemories } from "@carlnotes/contracts/topicMemoryWork"
 import {
 	normalizeTopicMemoryValue,
-	topicMemoryProposal,
+	topicMemoryDraftResponse,
 	toTopicMemoryEmbeddingText,
 	toTopicMemoryPersonMatchKey,
 	toTopicMemoryWrite,
@@ -29,13 +29,13 @@ const fact = {
 }
 
 test("structured proposals keep their fields and cannot nominate a merge", () => {
-	const [parsed] = topicMemoryProposal.parse({ facts: [fact] }).facts
+	const [parsed] = topicMemoryDraftResponse.parse({ facts: [fact] }).facts
 	expect(parsed && toTopicMemoryWrite(parsed)).toMatchObject({
 		subject: fact.subject,
 		claimType: fact.claimType,
 		value: fact.value,
 	})
-	expect(topicMemoryProposal.safeParse({ facts: [{ ...fact, operation: "merge" }] }).success).toBe(false)
+	expect(topicMemoryDraftResponse.safeParse({ facts: [{ ...fact, operation: "merge" }] }).success).toBe(false)
 	expect(toTopicMemoryWrite({ ...fact, operation: "skip", text: null })).toBeNull()
 	expect(toTopicMemoryWrite({ ...fact, claimType: null })?.claimType).toBe("other")
 })

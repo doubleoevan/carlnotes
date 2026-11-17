@@ -29,12 +29,12 @@ import {
 	buildTopicMemoryClaimCheckPrompt,
 	buildTopicMemorySplitPrompt,
 } from "@carlnotes/pipeline/topicMemoryClaimReview"
+import { buildTopicMemoryDraftPrompt } from "@carlnotes/pipeline/topicMemoryDrafts"
 import { buildTopicMemoryReplacementPrompt } from "@carlnotes/pipeline/topicMemoryReplacements"
 import { buildTopicPostSummaryPrompt } from "@carlnotes/pipeline/topicPosts/summarizeTopicPost"
 import { buildTopicPostDiscussionPrompt } from "@carlnotes/pipeline/topicPosts/topicPostDiscussionScript"
 import { TOPIC_VIDEO_IMAGE_FORMAT } from "@carlnotes/pipeline/topicVideo/topicVideoImage"
 import { buildUpdatesRecapPrompt } from "@carlnotes/pipeline/updatesRecap"
-import { buildTopicMemoryProposalPrompt } from "@carlnotes/pipeline/updateTopicMemories"
 import { and, eq, inArray, isNotNull } from "drizzle-orm"
 import { finishScan, ingestForScan, reviewForScan } from "./workflows/runTopicScanActivities"
 
@@ -253,8 +253,10 @@ async function scrapedEpisodeCount(episodeUrls: string[]): Promise<number> {
 async function writeSamplePrompts(): Promise<[string, boolean][]> {
 	// the single-purpose prompts
 	const scoreResult = await buildScorePrompt("sample content", "sample topic context", true)
-	const topicMemoryResult = await buildTopicMemoryProposalPrompt({
-		findings: [{ title: "Sample finding", snippet: "Sample evidence", description: "" }],
+	const topicMemoryResult = await buildTopicMemoryDraftPrompt({
+		findings: [
+			{ title: "Sample finding", snippet: "Sample evidence", description: "", relevanceScore: 0.9, rating: null },
+		],
 		neighbors: [],
 		scanStartedAt: new Date(),
 	})

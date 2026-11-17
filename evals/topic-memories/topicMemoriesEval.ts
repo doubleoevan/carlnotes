@@ -10,7 +10,7 @@ import { repairTopicMemoryClaims } from "@carlnotes/pipeline/repairTopicMemoryCl
 import { checkTopicMemoryClaims, type TopicMemoryClaimCounts } from "@carlnotes/pipeline/topicMemoryClaimReview"
 import { loadTopicMemoryFindings } from "@carlnotes/pipeline/topicMemoryEvidence"
 import { saveTopicMemoryUpdates } from "@carlnotes/pipeline/topicMemoryWrites"
-import { proposeTopicMemoryWrites } from "@carlnotes/pipeline/updateTopicMemories"
+import { prepareTopicMemoryWrites } from "@carlnotes/pipeline/updateTopicMemories"
 import { runWithConcurrency } from "@carlnotes/server/concurrency"
 import { and, eq, sql } from "drizzle-orm"
 import { loadTopicMemorySnapshot, type TopicMemorySnapshot } from "./topicMemoriesSnapshot"
@@ -215,7 +215,7 @@ async function replayTopic(topic: TopicMemorySnapshot, apiKey: string): Promise<
 			}
 			const input = { scanId, topicId, scanStartedAt, signal }
 			const evidence = await loadTopicMemoryFindings(scanId, topicId)
-			const { writes, counts } = await proposeTopicMemoryWrites({ ...input, findings: evidence, litellmApiKey: apiKey })
+			const { writes, counts } = await prepareTopicMemoryWrites({ ...input, findings: evidence, litellmApiKey: apiKey })
 			claimChecks.checked += counts.checked
 			claimChecks.split += counts.split
 			claimChecks.rejected += counts.rejected
@@ -308,7 +308,7 @@ async function insertReplayEvidence({
 		return
 	}
 
-	// preserve the original order because it controls clustering and proposal order
+	// preserve the original order to keep Finding groups and draft order stable
 	const rows = evidence.map(({ title, snippet, description, embedding, embeddingModel }, index) => ({
 		resource: {
 			id: crypto.randomUUID(),

@@ -90,7 +90,11 @@ async function applyEligibleTopicMemoryWrites(
 		return
 	}
 	const eligibleIds = new Set(await loadEligibleTopicMemoryFindingIds(options.scanId, options.topicId, transaction))
-	for (const write of writes) {
+	// save selected peers before a surplus paraphrase checks whether its fact is already present
+	const orderedWrites = writes.toSorted(
+		(left, right) => Number(shouldCombineWithExactMatch(left)) - Number(shouldCombineWithExactMatch(right)),
+	)
+	for (const write of orderedWrites) {
 		signal.throwIfAborted()
 		if (write.findingIds.length === 0 || write.findingIds.some((id) => !eligibleIds.has(id))) {
 			continue
@@ -113,4 +117,8 @@ async function applyEligibleTopicMemoryWrites(
 			}
 		}
 	}
+}
+
+function shouldCombineWithExactMatch({ reconciliation }: EmbeddedTopicMemoryWrite): boolean {
+	return reconciliation?.operation === "add" && reconciliation.combineWithExactMatch === true
 }

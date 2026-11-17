@@ -1,48 +1,39 @@
-// builds and pays for one topic memory proposal per public Finding cluster
+// drafts and writes topic memories from eligible public Findings
 import { toChunks } from "@carlnotes/contracts/arrays"
-import { toUtcDay } from "@carlnotes/contracts/time"
-import { toNamedTopicMemoryText, topicMemoryClaimTypes } from "@carlnotes/contracts/topicMemories"
 import { db } from "@carlnotes/db"
 import { isUserPastDailySpendCutoff } from "@carlnotes/db/dailySpendCutoffs"
 import { runWithJobLease } from "@carlnotes/db/jobLease"
 import { hasUnconvertedPersonalSources } from "@carlnotes/db/personalSourcesAuthority"
 import { EMBED_MODEL_NAME } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
-import { CHEAP_COST_PER_MILLION_TOKENS, tokenCost } from "@carlnotes/models/budget"
 import { loadOrProvisionUserLiteLLMKey } from "@carlnotes/models/litellm"
-import { cheapModel, isBudgetRejection, isModelAuthenticationRejection } from "@carlnotes/models/models"
-import { PRIVATE_MODEL_OPTIONS } from "@carlnotes/models/privateModelOptions"
-import { loadCurrentDayContext } from "@carlnotes/models/prompts/currentDayContext"
-import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "@carlnotes/models/prompts/fetch"
-import { writePrompt } from "@carlnotes/models/prompts/write"
+import { isBudgetRejection, isModelAuthenticationRejection } from "@carlnotes/models/models"
 import { reserveUserSpend, type SpendReservation } from "@carlnotes/models/spendReservations"
-import { generateText, NoObjectGeneratedError, Output } from "ai"
 import { eq, sql } from "drizzle-orm"
 import type { EmbeddedTopicMemoryWrite } from "./applyTopicMemoryWrite"
 import { type TopicMemoryClaimCounts, validateTopicMemoryClaims } from "./topicMemoryClaimReview"
+import {
+	draftTopicMemoriesFromFindings,
+	type EmbeddedTopicMemoryFinding,
+	type TopicMemoryDraft,
+} from "./topicMemoryDrafts"
 import { embedTopicMemoryClaims, embedTopicMemoryTexts } from "./topicMemoryEmbeddings"
-import { loadTopicMemoryFindings, loadTopicMemoryNeighbors, loadTopicMemoryScan } from "./topicMemoryEvidence"
 import {
-	type TopicMemoryWrite,
-	topicMemoryProposal,
-	toTopicMemoryClusters,
-	toTopicMemoryDraft,
-} from "./topicMemoryOperations"
+	isTopicMemoryFindingEligible,
+	loadTopicMemoryFindings,
+	loadTopicMemoryScan,
+	type TopicMemoryFinding,
+} from "./topicMemoryEvidence"
+import { groupSimilarFindings } from "./topicMemoryOperations"
 import { loadTopicMemoryReconciliationJournal, reconcileTopicMemoryClaims } from "./topicMemoryReconciliation"
-import { recordTopicMemorySpend } from "./topicMemorySpend"
-import {
-	loadTopicMemorySubjects,
-	resolveTopicMemorySubject,
-	supportsTopicMemoryAlias,
-	type TopicMemorySubject,
-} from "./topicMemorySubjects"
+import { loadTopicMemorySubjects, resolveTopicMemorySubject } from "./topicMemorySubjects"
 import { saveTopicMemoryUpdates } from "./topicMemoryWrites"
 
 // cover proposals, claim checks, and repairs under one Scan reservation
 const MAX_TOPIC_MEMORY_UPDATE_DOLLARS = 0.12
-const MAX_OUTPUT_TOKENS = 1900
-const CONCURRENT_CLUSTERS = 4
-const MAX_TOPIC_MEMORY_PROPOSALS_PER_SCAN = 60
+const CONCURRENT_FINDING_GROUPS = 4
+const MAX_PREMIUM_EXTRACTION_ATTEMPTS = 3
+const MAX_TOPIC_MEMORY_DRAFTS_PER_SCAN = 60
 const MAX_TOPIC_MEMORY_WRITES_PER_SCAN = 120
 const SPEND_PAUSED = Symbol("Topic memory spend paused")
 
@@ -55,10 +46,6 @@ export class TopicMemoryAuthenticationError extends Error {
 }
 
 type TopicMemoryUpdateOutcome = "skipped" | "paused" | "updated"
-type Finding = Awaited<ReturnType<typeof loadTopicMemoryFindings>>[number]
-type EmbeddedFinding = Omit<Finding, "embedding" | "embeddingModel"> & { embedding: number[] }
-type ClusterProposal = TopicMemoryWrite & { findingIds: string[] }
-type TopicScope = { name: string; prompt: string }
 type TopicMemoryUpdateInput = { scanId: string; topicId: string; scanStartedAt: Date; signal: AbortSignal }
 type TopicMemoryModelInput = Pick<TopicMemoryUpdateInput, "scanId" | "signal"> & { litellmApiKey: string }
 
@@ -94,7 +81,9 @@ async function updateTopicMemoriesFromScan(scanId: string, signal: AbortSignal):
 
 	// prior staged Scans finish without reapplying their writes
 	const input = { scanId, topicId: scan.topicId, scanStartedAt: scan.startedAt, signal }
-	const findings = scan.topicMemoriesWrittenAt ? [] : await loadTopicMemoryFindings(scanId, scan.topicId)
+	const findings = scan.topicMemoriesWrittenAt
+		? []
+		: (await loadTopicMemoryFindings(scanId, scan.topicId)).filter(isTopicMemoryFindingEligible)
 	return proposeAndSaveTopicMemories({ ...input, ownerId: scan.ownerId, findings })
 }
 
@@ -104,7 +93,7 @@ async function proposeAndSaveTopicMemories({
 	...input
 }: TopicMemoryUpdateInput & {
 	ownerId: string
-	findings: Finding[]
+	findings: TopicMemoryFinding[]
 }): Promise<TopicMemoryUpdateOutcome> {
 	// hold spend until all paid calls settle and each one's cost is recorded
 	let reservation: SpendReservation | undefined
@@ -128,7 +117,7 @@ async function proposeAndSaveTopicMemories({
 	try {
 		// reserve and provision only if the Scan has Findings for extraction
 		const proposed = findings.length
-			? await proposeTopicMemoryWrites({ ...input, findings, litellmApiKey: await loadModelKey() })
+			? await prepareTopicMemoryWrites({ ...input, findings, litellmApiKey: await loadModelKey() })
 			: undefined
 		const writes = proposed?.writes ?? []
 		await saveTopicMemoryUpdates({
@@ -152,16 +141,18 @@ async function proposeAndSaveTopicMemories({
 	}
 }
 
-/** Builds the real model proposals separately from the guarded write. */
-export async function proposeTopicMemoryWrites({
+/** Builds and checks model drafts separately from the guarded write. */
+export async function prepareTopicMemoryWrites({
 	findings,
 	litellmApiKey,
 	...input
 }: TopicMemoryUpdateInput & {
-	findings: Finding[]
+	findings: TopicMemoryFinding[]
 	litellmApiKey: string
 }): Promise<{ writes: EmbeddedTopicMemoryWrite[]; counts: TopicMemoryClaimCounts }> {
-	if (findings.length === 0) {
+	// keep public evidence that still matches the Topic after review
+	const eligibleFindings = findings.filter(isTopicMemoryFindingEligible)
+	if (eligibleFindings.length === 0) {
 		return { writes: [], counts: { checked: 0, split: 0, rejected: 0 } }
 	}
 	// reuse Resource vectors and embed only the public Finding text for missing or older vectors
@@ -171,36 +162,53 @@ export async function proposeTopicMemoryWrites({
 			.select({ name: topics.name, prompt: sql<string>`left(${topics.prompt}, 2400)` })
 			.from(topics)
 			.where(eq(topics.id, input.topicId)),
-		toEmbeddedFindings(findings, modelInput),
+		toEmbeddedFindings(eligibleFindings, modelInput),
 		loadTopicMemorySubjects(input.topicId),
 		loadTopicMemoryReconciliationJournal(input.topicId),
 	])
-	const clusters = toTopicMemoryClusters(vectors)
-	const proposals: ClusterProposal[] = []
+	const findingGroups = groupSimilarFindings(vectors)
+	const draftedClaims: TopicMemoryDraft[] = []
 	const ratedMemories = journal?.filter(({ feedback }) => feedback.length > 0).slice(0, 5)
-	for (const batch of toChunks(clusters, CONCURRENT_CLUSTERS)) {
+	// cap optional premium calls across the parallel Finding groups in this Scan
+	let premiumAttempts = 0
+	const reservePremiumRetry = (): boolean => {
+		if (premiumAttempts >= MAX_PREMIUM_EXTRACTION_ATTEMPTS) {
+			return false
+		}
+		premiumAttempts++
+		return true
+	}
+	for (const batch of toChunks(findingGroups, CONCURRENT_FINDING_GROUPS)) {
 		input.signal.throwIfAborted()
 		const results = await Promise.allSettled(
-			batch.map((cluster) =>
-				proposeClusterChange({ ...input, cluster, litellmApiKey, scope, subjects, ratedMemories }),
+			batch.map((relatedFindings) =>
+				draftTopicMemoriesFromFindings({
+					...input,
+					relatedFindings,
+					litellmApiKey,
+					scope,
+					subjects,
+					ratedMemories,
+					reservePremiumRetry,
+				}),
 			),
 		)
 		for (const result of results) {
 			if (result.status === "rejected") {
 				throw result.reason
 			}
-			// an invalid model proposal leaves the other proposals in this batch intact
-			proposals.push(...result.value)
+			// an invalid model draft leaves the other drafts in this batch intact
+			draftedClaims.push(...result.value)
 		}
 	}
 
 	// validate and repair claim boundaries before embedding or matching them
-	const drafts = limitTopicMemoryClaims(proposals, MAX_TOPIC_MEMORY_PROPOSALS_PER_SCAN)
+	const drafts = limitTopicMemoryClaims(draftedClaims, MAX_TOPIC_MEMORY_DRAFTS_PER_SCAN)
 	const { writes, counts } = await validateTopicMemoryClaims({
 		...modelInput,
 		topicId: input.topicId,
 		proposals: drafts,
-		findings,
+		findings: eligibleFindings,
 	})
 	const checked = limitTopicMemoryClaims(writes, MAX_TOPIC_MEMORY_WRITES_PER_SCAN)
 	const embeddings = await embedTopicMemoryClaims(checked, modelInput)
@@ -221,19 +229,22 @@ export async function proposeTopicMemoryWrites({
 			if (action?.operation === "update") {
 				return [{ ...candidate, reconciliation: action }]
 			}
-			return action?.operation === "add" ? [{ ...candidate, reconciliation: { operation: "add" as const } }] : []
+			return action?.operation === "add" ? [{ ...candidate, reconciliation: action }] : []
 		}),
 		counts,
 	}
 }
 
-function limitTopicMemoryClaims(claims: ClusterProposal[], limit: number): ClusterProposal[] {
+function limitTopicMemoryClaims(claims: TopicMemoryDraft[], limit: number): TopicMemoryDraft[] {
 	return claims.length <= limit
 		? claims
 		: claims.toSorted((left, right) => right.importance - left.importance).slice(0, limit)
 }
 
-async function toEmbeddedFindings(findings: Finding[], modelInput: TopicMemoryModelInput): Promise<EmbeddedFinding[]> {
+async function toEmbeddedFindings(
+	findings: TopicMemoryFinding[],
+	modelInput: TopicMemoryModelInput,
+): Promise<EmbeddedTopicMemoryFinding[]> {
 	const missing = findings.filter(({ embedding, embeddingModel }) => !embedding || embeddingModel !== EMBED_MODEL_NAME)
 	const embeddings = await embedTopicMemoryTexts(
 		missing.map(
@@ -251,168 +262,9 @@ async function toEmbeddedFindings(findings: Finding[], modelInput: TopicMemoryMo
 	}))
 }
 
-async function proposeClusterChange({
-	cluster,
-	topicId,
-	scanId,
-	scanStartedAt,
-	litellmApiKey,
-	signal,
-	scope,
-	subjects,
-	ratedMemories,
-}: TopicMemoryUpdateInput & {
-	cluster: EmbeddedFinding[]
-	litellmApiKey: string
-	scope?: TopicScope
-	subjects: TopicMemorySubject[]
-	ratedMemories?: Awaited<ReturnType<typeof loadTopicMemoryReconciliationJournal>>
-}): Promise<ClusterProposal[]> {
-	// fetch neighbors only when the Journal exceeds the reconciliation budget
-	const embedding = cluster[0]?.embedding.map(
-		(_, index) => cluster.reduce((sum, finding) => sum + (finding.embedding[index] ?? 0), 0) / cluster.length,
-	)
-	const neighbors = ratedMemories ?? (await loadTopicMemoryNeighbors(topicId, requireEmbedding(embedding)))
-	const builtPrompt = await buildTopicMemoryProposalPrompt({
-		findings: cluster.map(({ title, snippet, description, articleContext, publicationDateHint }) => ({
-			title,
-			snippet,
-			description,
-			articleContext,
-			publicationDateHint,
-		})),
-		neighbors,
-		scanStartedAt,
-		scope,
-		subjects,
-	})
-
-	// failed structured output can still have usage. provenance comes from the cluster, never the model
-	try {
-		const result = await generateText({
-			model: cheapModel(litellmApiKey),
-			prompt: builtPrompt.prompt,
-			output: Output.object({ schema: topicMemoryProposal }),
-			abortSignal: signal,
-			maxRetries: 0,
-			maxOutputTokens: MAX_OUTPUT_TOKENS,
-			...promptTelemetry(builtPrompt),
-			...PRIVATE_MODEL_OPTIONS,
-		})
-		await recordTopicMemorySpend(scanId, tokenCost(result.usage.totalTokens ?? 0, CHEAP_COST_PER_MILLION_TOKENS))
-		return result.output.facts.flatMap((proposal) => {
-			const findingIds = [...new Set(proposal.sourceFindingIndexes.map((index) => cluster[index]?.id))]
-			if (findingIds.some((id) => id === undefined)) {
-				return []
-			}
-			const write = toTopicMemoryDraft(proposal)
-			if (!write) {
-				return []
-			}
-			const subjectAlias = validateProposedSubjectAlias({
-				write,
-				alias: proposal.subjectAlias,
-				cluster,
-				subjects,
-				findingIds,
-			})
-			return [{ ...write, subjectAlias, findingIds: findingIds.filter((id): id is string => Boolean(id)) }]
-		})
-	} catch (error) {
-		// discard only this cluster when the model returns an invalid proposal
-		if (!isModelAuthenticationRejection(error) && NoObjectGeneratedError.isInstance(error)) {
-			await recordTopicMemorySpend(scanId, tokenCost(error.usage?.totalTokens ?? 0, CHEAP_COST_PER_MILLION_TOKENS))
-			return []
-		}
-		throw error
-	}
-}
-
-// require the canonical subject and an exact quote from a linked Finding before recording an alias
-function validateProposedSubjectAlias({
-	write,
-	alias,
-	cluster,
-	subjects,
-	findingIds,
-}: {
-	write: TopicMemoryWrite
-	alias: { observedName: string; quote: string; sourceFindingIndex: number } | null | undefined
-	cluster: EmbeddedFinding[]
-	subjects: TopicMemorySubject[]
-	findingIds: (string | undefined)[]
-}): TopicMemoryWrite["subjectAlias"] {
-	const canonical = resolveTopicMemorySubject(write, subjects)
-	const source = alias && cluster[alias.sourceFindingIndex]
-	if (
-		!alias ||
-		!source ||
-		!findingIds.includes(source.id) ||
-		!subjects.some((entry) => entry.subject === canonical.subject && entry.person === canonical.person)
-	) {
-		return
-	}
-	const excerpt = [source.title, source.snippet, source.articleContext].filter(Boolean).join(" ")
-	return supportsTopicMemoryAlias({
-		canonical: canonical.subject,
-		alias: alias.observedName,
-		quote: alias.quote,
-		source: excerpt,
-	})
-		? { aliasName: alias.observedName, findingId: source.id }
-		: undefined
-}
-
 function requireEmbedding(embedding: number[] | undefined): number[] {
 	if (!embedding) {
 		throw new Error("A Journal embedding is missing")
 	}
 	return embedding
-}
-
-/** Builds a proposal prompt for one cluster and its bounded neighbors. */
-export async function buildTopicMemoryProposalPrompt({
-	findings,
-	neighbors,
-	scanStartedAt,
-	now,
-	scope,
-	subjects = [],
-}: {
-	findings: Pick<Finding, "title" | "snippet" | "description" | "articleContext" | "publicationDateHint">[]
-	neighbors: (Pick<
-		Awaited<ReturnType<typeof loadTopicMemoryNeighbors>>[number],
-		"id" | "kind" | "text" | "status" | "lastSeenAt"
-	> &
-		Partial<
-			Pick<
-				Awaited<ReturnType<typeof loadTopicMemoryNeighbors>>[number],
-				"factDate" | "person" | "feedback" | "isAtomic"
-			>
-		>)[]
-	scanStartedAt: Date
-	now?: Date
-	scope?: TopicScope
-	subjects?: TopicMemorySubject[]
-}): Promise<BuiltPrompt> {
-	// keep the current day separate from the observation dates when a historical Scan runs through backfill
-	const [{ template, name, registryPrompt }, currentDayBlock] = await Promise.all([
-		fetchPromptTemplate("propose-topic-memories"),
-		loadCurrentDayContext(now),
-	])
-	const datedNeighbors = neighbors.flatMap(({ lastSeenAt, ...neighbor }) => {
-		const text = toNamedTopicMemoryText(neighbor.text, neighbor.person)
-		return text ? [{ ...neighbor, text, lastSeenDay: toUtcDay(lastSeenAt) }] : []
-	})
-	const prompt = writePrompt(
-		template,
-		{
-			keptFindings: JSON.stringify(findings.map((finding, index) => ({ index, ...finding }))),
-			matchingMemories: JSON.stringify(datedNeighbors),
-			topicScope: JSON.stringify(scope ?? null),
-			existingSubjects: JSON.stringify(subjects),
-		},
-		{ currentDayBlock, scanDay: toUtcDay(scanStartedAt), claimTypes: topicMemoryClaimTypes.join(", ") },
-	)
-	return { prompt, name, registryPrompt }
 }

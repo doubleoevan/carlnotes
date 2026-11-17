@@ -1,4 +1,4 @@
-// embeds checked claims and separately fills missing vectors for clustering Findings
+// embeds checked claims and fills missing vectors for grouping similar Findings
 import { EMBED_COST_PER_MILLION_TOKENS, toEstimatedTokens, tokenCost } from "@carlnotes/models/budget"
 import { embedVectors } from "@carlnotes/models/models"
 import { toTopicMemoryEmbeddingText } from "./topicMemoryOperations"

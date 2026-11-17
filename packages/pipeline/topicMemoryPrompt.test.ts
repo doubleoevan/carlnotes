@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test"
 import { newBudget } from "@carlnotes/models/budget"
 import { loadTopicContext } from "./review/topicContext"
+import { buildTopicMemoryDraftPrompt } from "./topicMemoryDrafts"
 import { toTopicMemoryPromptText } from "./topicMemoryPrompt"
-import { buildTopicMemoryProposalPrompt } from "./updateTopicMemories"
 
 const lastSeenAt = new Date("2026-11-12T23:00:00Z")
 
@@ -45,12 +45,20 @@ test("corrected claims, including delimiter-shaped text, stay inside the untrust
 
 test("updating topic memories for an earlier Scan distinguishes the current UTC day, Scan date, and event dates", async () => {
 	// cross both a time zone and a year boundary while keeping a historical Scan's own date
-	const { prompt } = await buildTopicMemoryProposalPrompt({
+	const { prompt } = await buildTopicMemoryDraftPrompt({
 		now: new Date("2026-12-31T18:00:00-08:00"),
 		scanStartedAt: new Date("2026-12-05T12:00:00Z"),
 		scope: { name: "Clinical trials", prompt: "Only include results for the current trial cohort." },
 		subjects: [{ subject: "Northstar trial", person: null }],
-		findings: [{ title: "Launch dates", snippet: "Trials on 2026-12-31, 2027-01-01 and 2027-01-02.", description: "" }],
+		findings: [
+			{
+				title: "Launch dates",
+				snippet: "Trials on 2026-12-31, 2027-01-01 and 2027-01-02.",
+				description: "This trial matches the cohort named in the attached roster.",
+				relevanceScore: 0.85,
+				rating: "up",
+			},
+		],
 		neighbors: [
 			{
 				id: "earlier",
@@ -78,6 +86,8 @@ test("updating topic memories for an earlier Scan distinguishes the current UTC 
 	const fences = [...prompt.matchAll(/<untrusted-data-([\w-]+)>\n(.*?)\n<\/untrusted-data-\1>/gs)]
 	expect(fences[0]?.[2]).toContain("Only include results for the current trial cohort.")
 	expect(fences[1]?.[2]).toContain('"subject":"Northstar trial"')
+	expect(fences[2]?.[2]).toContain("This trial matches the cohort named in the attached roster.")
+	expect(fences[2]?.[2]).toContain('"relevanceScore":0.85,"rating":"up"')
 	const feedbackFence = fences.find(([, , content]) => content?.includes('"lastSeenDay":"2026-11-12"'))?.[2]
 	expect(feedbackFence).toContain('"note":"Watch this trial."')
 	expect(feedbackFence).toContain('"note":"Check the date."')

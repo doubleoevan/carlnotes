@@ -10,7 +10,7 @@ export type TopicMemoryBackfillSummary = { updated: number; skipped: number; pau
 export const TOPIC_MEMORY_ACTIVITY_TIMEOUT_MS = 5 * 60 * 1000
 export const TOPIC_MEMORY_ATTEMPT_DEADLINE_MS = 4 * 60 * 1000
 
-export const TOPIC_MEMORY_CLUSTER_SIMILARITY = 0.92
+export const TOPIC_MEMORY_FINDING_GROUP_SIMILARITY = 0.92
 export const TOPIC_MEMORY_GROUP_SIMILARITY = 0.8
 export const TOPIC_MEMORY_GROUP_CANDIDATE_LIMIT = 100
 export const TOPIC_MEMORY_SAVED_LIMIT = 30

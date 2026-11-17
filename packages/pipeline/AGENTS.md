@@ -360,18 +360,23 @@ turn reads of a Topic Post, its text and its shared Comments the reader may see,
 `chat/topicPostQuestionPrompt.ts` builds the `chat-topic-post` fragment and the fenced post block the topic chat
 prompt splices on that turn alone.
 
-`updateTopicMemories.ts` clusters kept public Findings and bills a proposal for each cluster.
+`updateTopicMemories.ts` groups similar public Findings and sends them through claim checks and reconciliation.
+`topicMemoryDrafts.ts` builds the extraction prompt and bills each attempt with reported usage. An empty
+result for a positively rated or promoted Finding can use one 20-second premium attempt, up to three per Scan.
 `topicMemoryClaimReview.ts` checks one claim per topic memory and verifies split claims against their public Findings.
 `topicMemorySubjects.ts` loads each Topic’s canonical names and evidence-backed aliases for extraction. People match on the resolved name and identifying detail.
 `topicMemoryReconciliation.ts` matches checked claims and split pieces against the active Journal, with a token-budget fallback to neighbors.
+It allows the writer to combine a surplus candidate after checking for the same structured fact in storage.
 `applyTopicMemoryJournalUpdate.ts` checks the approved ID under the Topic lock and keeps replaced wording and evidence in history.
 `topicMemoryEmbeddings.ts` embeds checked claim text. `repairTopicMemoryClaims.ts` powers `topic-memories:repair-dev`.
 Pass `--compound-ids <json-file>` to repair the topic memories marked compound by a dev audit. The file contains an array of row IDs.
 Pass `--audit <json-file>` with a map of row IDs to compound, incomplete, or nonclaim to repair a reviewed batch. Incomplete
 claims use their linked Findings for a rewrite. Nonclaims move to history with their feedback.
-`topicMemoryEvidence.ts` selects eligible Findings and neighbors. `topicMemoryWrites.ts` commits a completed Scan's
-proposals, eviction, and completion marker in one transaction. `topicMemorySpend.ts` records model charges when each
-call finishes. `applyTopicMemoryWrite.ts` applies a proposal and can reactivate matching history.
+`topicMemoryEvidence.ts` selects eligible Findings with their public review explanations, relevance scores, and positive ratings.
+It excludes weak namesake matches without a positive rating and reads neighboring topic memories.
+`topicMemoryWrites.ts` commits a completed Scan's
+drafts, eviction, and completion marker in one transaction. `topicMemorySpend.ts` records model charges when each
+call finishes. `applyTopicMemoryWrite.ts` applies a checked claim and can reactivate matching history.
 `topicMemoryReplacements.ts` asks the model whether a newer runtime or air date corrects the same event and edition.
 `topicMemoryCleanup.ts` limits ready active rows and copies feedback for splits. The 100-row target applies through
 eviction of unprotected rows. Saved topic memories and corrections stay active even if they alone exceed the target.
