@@ -113,15 +113,7 @@ export function AdminPage() {
 					onToggleAdminBlockedUsers={() => setIsShowingAdminBlockedUsers((isShowing) => !isShowing)}
 				/>
 				{/* the sections as accordions */}
-				<Accordion type="multiple" defaultValue={["limits", "reports", "users", "teams", "mobile"]} className="mt-4">
-					{/* the daily spend cutoffs and the other limits */}
-					<AccordionSection
-						value="limits"
-						title="Limits"
-						countLabel={toLimitsSectionCountLabel(adminConsole.dailySpendCutoffs.cutoffs.length)}
-					>
-						<DailySpendCutoffsCard dailySpendCutoffs={adminConsole.dailySpendCutoffs} onSaved={loadConsole} />
-					</AccordionSection>
+				<Accordion type="multiple" defaultValue={["reports", "users", "teams", "limits", "mobile"]} className="mt-4">
 					{/* the open reports, resolved from here */}
 					<AccordionSection value="reports" title="Reports" countLabel={toSectionCountLabel(reports.length, "report")}>
 						<AdminReportsTable reports={reports} focusedReportId={focusedReportId} onResolved={loadConsole} />
@@ -136,8 +128,16 @@ export function AdminPage() {
 					>
 						<AdminTeamsTable teams={adminConsole.teams} />
 					</AccordionSection>
+					{/* the daily spend cutoffs and the other limits */}
+					<AccordionSection
+						value="limits"
+						title="Limits"
+						countLabel={toLimitsSectionCountLabel(adminConsole.dailySpendCutoffs.cutoffs.length)}
+					>
+						<DailySpendCutoffsCard dailySpendCutoffs={adminConsole.dailySpendCutoffs} onSaved={loadConsole} />
+					</AccordionSection>
 					{/* mobile app minimum versions */}
-					<AccordionSection value="mobile" title="Mobile app">
+					<AccordionSection value="mobile" title="Mobile apps">
 						<MobileMinimumVersionsCard minimumVersions={adminConsole.mobileMinimumVersions} onSaved={loadConsole} />
 					</AccordionSection>
 				</Accordion>
