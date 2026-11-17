@@ -1,8 +1,7 @@
 // the admin console's spend control section: the day's free-plan spend on a meter with a circle at each daily spend
 // cutoff under a ring of the time left until the cutoffs reset and over the estimated monthly spend, a ring of the
 // waiting first scans against the first scan dispatch limit, a ring of the past hour's signups against the signup
-// alert, the generated image limit, and the switches. a divider sits between each. the cutoffs save together from
-// their Save button, and every other setting saves on its own. a save sends only the settings this tab changed
+// alert, the generated image limit, and the permission switches. each save sends only the settings this tab changed
 
 import { sendSpendControlSettings } from "@carlnotes/client/billingClient"
 import type { AdminDailySpendCutoffs, DailySpendCutoffKind } from "@carlnotes/contracts/admin"
@@ -22,7 +21,7 @@ import {
 import { MeterRing } from "@/components/common/MeterRing"
 import { Label } from "@/components/primitives/label"
 import { Switch } from "@/components/primitives/switch"
-import { ADMIN_NUMBER_INPUT_CLASS, CARD_CLASS } from "@/lib/styleClasses"
+import { ADMIN_LIMITS_SECTION_DIVIDER_CLASS, ADMIN_NUMBER_INPUT_CLASS, CARD_CLASS } from "@/lib/styleClasses"
 
 // the label of each daily spend cutoff, its column in the cutoff times table, its slider's label, and what passing it
 // stops
@@ -56,9 +55,7 @@ type DailySpendCutoffsCardProps = {
 }
 
 /**
- * Renders the day's free-plan spend against the daily spend cutoffs, the waiting first scans, and the past hour's
- * signups, each meter over its settings. The cutoffs save from their Save button, every other setting saves when its
- * input loses focus, and an empty input clears it.
+ * Renders the spend controls. Cutoffs save together, numeric fields save on blur, and permission switches save on change.
  */
 export function DailySpendCutoffsCard({ dailySpendCutoffs, onSaved }: DailySpendCutoffsCardProps) {
 	// the typed overrides, and the last saved spend control draft, which a save compares against and builds on
@@ -181,7 +178,7 @@ export function DailySpendCutoffsCard({ dailySpendCutoffs, onSaved }: DailySpend
 				/>
 			</section>
 			{/* the waiting first scans against the first scan dispatch limit */}
-			<section className={DIVIDED_SECTION_CLASS}>
+			<section className={ADMIN_LIMITS_SECTION_DIVIDER_CLASS}>
 				<CountMeter
 					title="First scan limit"
 					count={dailySpendCutoffs.waitingScanCount}
@@ -205,7 +202,7 @@ export function DailySpendCutoffsCard({ dailySpendCutoffs, onSaved }: DailySpend
 				</CountMeter>
 			</section>
 			{/* the past hour's signups against the signup alert */}
-			<section className={DIVIDED_SECTION_CLASS}>
+			<section className={ADMIN_LIMITS_SECTION_DIVIDER_CLASS}>
 				<CountMeter
 					title="Hourly signup alert"
 					count={dailySpendCutoffs.hourlySignupCount}
@@ -229,7 +226,7 @@ export function DailySpendCutoffsCard({ dailySpendCutoffs, onSaved }: DailySpend
 				</CountMeter>
 			</section>
 			{/* the most generated images one film may draw */}
-			<section className={cn(DIVIDED_SECTION_CLASS, "flex flex-col items-start gap-3")}>
+			<section className={cn(ADMIN_LIMITS_SECTION_DIVIDER_CLASS, "flex flex-col items-start gap-3")}>
 				<h3 className="font-semibold">Generated image limit</h3>
 				<SpendControlField
 					ariaLabel="Generated image limit"
@@ -248,40 +245,36 @@ export function DailySpendCutoffsCard({ dailySpendCutoffs, onSaved }: DailySpend
 					}
 				/>
 			</section>
-			{/* the switches. the unverified signups switch is on while their scans and chat skip the limit, and each
-			    other switch is off until an admin turns it on */}
-			<div className={cn(DIVIDED_SECTION_CLASS, "flex flex-col gap-4")}>
+			{/* each permission switch reverses the restriction the API stores */}
+			<div className={cn(ADMIN_LIMITS_SECTION_DIVIDER_CLASS, "flex flex-col gap-4")}>
 				<SpendControlSwitch
-					id="unverified-signup-scans"
+					id="allow-unverified-signups-to-scan-and-chat"
 					label="Allow unverified email sign-ups to scan and chat"
 					isChecked={!spendControlDraft.isUnverifiedFirstScanLimitOn}
 					onCheckedChange={(isAllowed) => handleSwitchChange({ isUnverifiedFirstScanLimitOn: !isAllowed })}
 				/>
 				<SpendControlSwitch
-					id="pause-podcast-episodes"
-					label="Pause new podcast episodes"
-					isChecked={spendControlDraft.isPodcastEpisodeRecordingPaused}
-					onCheckedChange={(isPaused) => handleSwitchChange({ isPodcastEpisodeRecordingPaused: isPaused })}
+					id="allow-new-podcast-episodes"
+					label="Allow new podcast episodes"
+					isChecked={!spendControlDraft.isPodcastEpisodeRecordingPaused}
+					onCheckedChange={(isAllowed) => handleSwitchChange({ isPodcastEpisodeRecordingPaused: !isAllowed })}
 				/>
 				<SpendControlSwitch
-					id="pause-films"
-					label="Pause new films"
-					isChecked={spendControlDraft.isTopicVideoRenderingPaused}
-					onCheckedChange={(isPaused) => handleSwitchChange({ isTopicVideoRenderingPaused: isPaused })}
+					id="allow-new-films"
+					label="Allow new films"
+					isChecked={!spendControlDraft.isTopicVideoRenderingPaused}
+					onCheckedChange={(isAllowed) => handleSwitchChange({ isTopicVideoRenderingPaused: !isAllowed })}
 				/>
 				<SpendControlSwitch
-					id="home-featured-only"
-					label="Show only featured items on the home"
-					isChecked={spendControlDraft.isHomeFeaturedOnly}
-					onCheckedChange={(isFeaturedOnly) => handleSwitchChange({ isHomeFeaturedOnly: isFeaturedOnly })}
+					id="allow-unfeatured-home-items"
+					label="Allow unfeatured items on the home page"
+					isChecked={!spendControlDraft.isHomeFeaturedOnly}
+					onCheckedChange={(isAllowed) => handleSwitchChange({ isHomeFeaturedOnly: !isAllowed })}
 				/>
 			</div>
 		</div>
 	)
 }
-
-// a section after the first, with a divider above it
-const DIVIDED_SECTION_CLASS = "border-t pt-6"
 
 type CountMeterProps = {
 	title: string

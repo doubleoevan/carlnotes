@@ -190,17 +190,17 @@ override returns to the Doppler value.
 | `HOURLY_SIGNUP_ALERT_COUNT` | 50 | the accounts created in an hour at which the sweep crosses the `hourly-signups` threshold |
 | `TOPIC_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT` | 40 | how many generated images one film draws at most. The console takes 0 to 1,000 |
 
-Four switches have no Doppler setting, and each is off until an admin turns it on in the console:
+Four permissions have no Doppler setting. Each is on by default in the console. Turning one off has these effects.
 
-- **The unverified accounts switch.** The first and manual scans of a free account that signed up with a password
+- **Allow unverified email sign-ups to scan and chat.** The first and manual scans of a free account that signed up with a password
   and has not verified its email wait for the first scan dispatch limit, whatever the day's spend, and Carl does not
   answer that account in chat or voice.
-- **Pause new podcast episodes.** No scan records a new podcast episode.
-- **Pause new films.** A podcast episode that publishes gets no film.
-- **Show only featured items on the home.** The home's sections list their featured items alone.
+- **Allow new podcast episodes.** No scan records a new podcast episode.
+- **Allow new films.** A podcast episode that publishes gets no film.
+- **Allow unfeatured items on the home page.** The home's sections list their featured items alone.
 
-The overrides and the switches live in the `spend_control_settings` row, and every reader sees a save within its
-next read. The [Launch runbook](#launch-runbook) lists what each one stops and what keeps working.
+The `spend_control_settings` row stores the numeric overrides and the restrictions behind the permission switches.
+The [Launch runbook](#launch-runbook) lists what each restriction stops and when it takes effect.
 
 ## Deploy alerts
 
@@ -408,13 +408,12 @@ work, and a review one of its two attempts. Two restarts inside one review fail 
 
 ### Switches, as a last resort
 
-Every switch is off until someone sets it, which `apps/api/emergencySwitches.test.ts` checks. A switch in the admin
-console's **Limits** section is one row that every process reads through a 60-second cache, and a save clears the
-cache, so it takes effect within a minute with no restart. A Doppler setting reaches a process only at its start:
-`app` and `temporal-worker` need a restart, and the sweep reads it at its next run. If the settings row cannot be
-read, the failure is reported and every switch reads as off.
+The **Limits** permissions are on by default. Each process caches the shared settings row for up to 60 seconds.
+Changes from the admin console take effect within a minute without a restart. If reading the row fails, the process
+reports the failure and uses the default permissions. For Doppler changes, restart `app` and `temporal-worker`.
+The sweep reads Doppler settings on its next run.
 
-To stop new podcast episodes, use the pause. The empty speech model is the last row for a reason.
+To stop new podcast episodes, turn off **Allow new podcast episodes**.
 
 | Switch | Set in | Restart | What it stops | What keeps working | What a person sees | Undo | Test |
 |---|---|---|---|---|---|---|---|
@@ -423,14 +422,14 @@ To stop new podcast episodes, use the pause. The empty speech model is the last 
 | Chat daily cutoff, `CHAT_DAILY_SPEND_CUTOFF_USD`, $150 | Limits, with the Doppler default | none | a free user's chat turn, voice request, and message to Carl | paid users, and every page | "Carl is taking a break until midnight UTC. Ask him again then." | raise or clear the override | `apps/api/chat/chatTurnAuthorization.test.ts` |
 | First scan limit, `FIRST_SCAN_DISPATCH_LIMIT`, 5 | Limits, with the Doppler default | none | nothing by itself: it paces the waiting Scans, and 0 starts none | every Scan that is not waiting | a Scan under way for as long as it waits | raise or clear the override | `apps/worker/scanQueue.test.ts` |
 | Unverified accounts, the unchecked "Allow unverified email sign-ups to scan and chat" | Limits only | none | for a free account that signed up with a password and has not verified its email: its first and manual Scans wait for the first scan limit whatever the day's spend, and chat and voice do not answer | verified accounts, provider sign-ins, and paid accounts | a Scan under way for as long as it waits, and in chat "Carl will answer once your email is verified. Check your inbox." | check the box again; a Scan that was waiting starts on the next sweep | `packages/db/dailySpendCutoffs.test.ts`, `apps/api/chat/chatTurnAuthorization.test.ts`, `apps/api/chat/voiceAuthorization.test.ts` |
-| Pause new podcast episodes | Limits only | none | every new podcast episode and recording, whoever it bills | the Scan, its Findings, and its email; a recording under way; every published podcast episode, the feeds, and voice | a Scan with no new podcast episode | turn it off; a skipped podcast episode is not recorded later | `packages/pipeline/podcast/planPodcastEpisode.test.ts` |
-| Pause new films | Limits only | none | the film of a podcast episode that publishes while it is on | the podcast episode as audio; a render under way; ready films; a film's rebuild; the backfill | a podcast episode with no film | turn it off; only the backfill renders a skipped film, for each Topic's latest podcast episode | `apps/worker/workflows/recordPodcastEpisodeActivities.test.ts` |
+| Allow new podcast episodes, turned off | Limits only | none | every new podcast episode and recording, whoever it bills | the Scan, its Findings, and its email; a recording under way; every published podcast episode, the feeds, and voice | a Scan with no new podcast episode | turn it back on; a skipped podcast episode is not recorded later | `packages/pipeline/podcast/planPodcastEpisode.test.ts` |
+| Allow new films, turned off | Limits only | none | the film of a podcast episode that publishes while the permission is off | the podcast episode as audio; a render under way; ready films; a film's rebuild; the backfill | a podcast episode with no film | turn it back on; only the backfill renders a skipped film, for each Topic's latest podcast episode | `apps/worker/workflows/recordPodcastEpisodeActivities.test.ts` |
 | Generated image limit, over `TOPIC_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT`, 40 | Limits, with the Doppler default | none for Limits, the worker for Doppler | at 0, every generated chapter image in the films rendered meanwhile | the film renders with its Resource Images, the podcast card, and its own image | a film with fewer generated images, for good | clear the override | `packages/pipeline/topicVideo/videoChapterImages.test.ts` |
-| Show only featured items on the home | Limits only | none | every unfeatured card in the home's seven sections, within a minute for a signed-in user and about three for a visitor | featured items, Your topics, the news, every item at its own url, and the Topics directory | a home with fewer cards, and no copy | turn it off | `apps/api/home/homeCardIds.test.ts` |
+| Allow unfeatured items on the home page, turned off | Limits only | none | every unfeatured card in the home's seven sections, within a minute for a signed-in user and about three for a visitor | featured items, Your topics, the news, every item at its own url, and the Topics directory | fewer cards on the home page | turn it back on | `apps/api/home/homeCardIds.test.ts` |
 | `SCAN_DISPATCH_LIMIT`, 100 | Doppler | none: the sweep's next run | at 0, every scheduled Scan and every Scan that was opened and never started | waiting Scans within the first scan limit; Scans the api starts; every Topic stays scheduled | a scheduled Scan that comes later | remove the value | `apps/worker/scanQueue.test.ts`, `packages/server/scanSettings.test.ts` |
 | `TOPIC_VIDEO_BACKFILL_CONCURRENCY`, 1 | Doppler | the worker | at 0, the film backfill's start and its Worker; a backfill under way waits at its next step | a new podcast episode's film, and rebuilds | nothing | remove the value and restart the worker | `packages/server/podcastEpisodeSettings.test.ts` |
 | `TOPIC_VIDEO_CONCURRENCY`, 1 | Doppler | the worker | at 0, both film Workers, the backfill, and a new podcast episode's film. The api still queues a rebuild, which waits until films are on again | recording, and ready films play | a new podcast episode with no film | remove the value and restart the worker | `packages/server/podcastEpisodeSettings.test.ts`, `apps/worker/workflows/recordPodcastEpisodeActivities.test.ts` |
-| Mobile minimum version | the admin console's **Mobile app** section | none, within 60 seconds | every api request from an older build, with a 426 | the web, and newer builds | "Carl needs a newer app" with the store link | lower the minimum | `apps/api/appVersionGate.test.ts` |
+| Mobile minimum version | the admin console's **Mobile apps** section | none, within 60 seconds | every api request from an older build, with a 426 | the web, and newer builds | "Carl needs a newer app" with the store link | lower the minimum | `apps/api/appVersionGate.test.ts` |
 | Edge purge | `bun run edge:purge`, and every release | none | nothing. It empties the edge, so every visitor page reaches the origin until the edge fills again | everything | nothing | none needed | `apps/api/edgeCache.purge.test.ts` |
 | `PODCAST_SPEECH_MODEL` set empty | Doppler | `app` and the worker | far more than recording: it hides every published podcast episode from its Topic's page and its own page, the public and listener feeds respond 404, podcast episodes leave the sitemap, voice chat and spoken replies turn off, and a podcast episode being recorded fails at its next chapter. A Topic Post Discussion still starts and pays for its script, then fails at the speech call | Scans, chat in text, and Topic Posts | no podcast section, a missing page, and a feed that is gone | set the model again and restart both | `packages/pipeline/podcast/planPodcastEpisode.test.ts` |
 

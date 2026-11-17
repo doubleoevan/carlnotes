@@ -223,9 +223,9 @@ function TotalSummaries({
 	)
 }
 
-// the Limits section's count of its settings: the cutoffs, the first scan limit, the signup alert, and the permission
+// summarize the cutoffs, limit, alert, and permissions in the Limits header
 function toLimitsSectionCountLabel(cutoffCount: number): string {
-	return [toSectionCountLabel(cutoffCount, "cutoff"), "1 limit", "1 alert", "1 permission"].join(" · ")
+	return [toSectionCountLabel(cutoffCount, "cutoff"), "1 limit", "1 alert", "4 permissions"].join(" · ")
 }
 
 // a card counting something per plan, one row per plan in order

@@ -19,6 +19,7 @@ import { cn } from "@carlnotes/nightshift/classNames"
 import { useState } from "react"
 import { Button } from "@/components/primitives/button"
 import { Slider } from "@/components/primitives/slider"
+import { ADMIN_LIMITS_SECTION_DIVIDER_CLASS } from "@/lib/styleClasses"
 import { TABLE_HEAD_CLASS } from "@/lib/tableClasses"
 
 // the daily signup rate whose spend per day sets the cutoff sliders' end
@@ -120,7 +121,7 @@ export function EstimatedMonthlySpend({
 	return (
 		<div className="mt-6 space-y-6">
 			{/* the monthly spend table with the past days slider under it at its width */}
-			<div className="space-y-3">
+			<div className={cn(ADMIN_LIMITS_SECTION_DIVIDER_CLASS, "space-y-3")}>
 				<h4 className="text-sm font-semibold">
 					Estimated monthly spend{" "}
 					<span className="text-muted-foreground font-normal">if free users use their whole budget</span>
@@ -180,7 +181,7 @@ export function EstimatedMonthlySpend({
 				</div>
 			</div>
 			{/* the cutoff times table with the cutoff sliders and buttons under it at its width */}
-			<div className="space-y-3">
+			<div className={cn(ADMIN_LIMITS_SECTION_DIVIDER_CLASS, "space-y-3")}>
 				<h4 className="text-sm font-semibold">
 					Time from midnight UTC to each cutoff{" "}
 					<span className="text-muted-foreground font-normal">if spend comes in at an even pace through the day</span>

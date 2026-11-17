@@ -37,6 +37,11 @@ export const STANDALONE_LINE_LINK_CLASS = `${STANDALONE_LINK_CLASS} inline-block
 export const ADMIN_NUMBER_INPUT_CLASS = "w-16 rounded-md border px-1 py-0.5"
 
 /**
+ * The divider and spacing above a section in Admin Limits.
+ */
+export const ADMIN_LIMITS_SECTION_DIVIDER_CLASS = "border-t pt-6"
+
+/**
  * The metadata line under a row's title.
  */
 export const METADATA_LINE_CLASS = "text-muted-foreground mt-0.5 flex flex-wrap items-center gap-1.5 text-xs"

@@ -1,8 +1,3 @@
-// the admin console's spend control section: below every cutoff with every default, past two with overrides and a busy
-// hour of signups, the cutoffs saved and reset from their buttons, a setting saved on blur without the typed cutoffs,
-// unverified signups limited, every switch on, each pause and the featured-only home saved as it is flipped, a saved
-// pause left out of the next save and sent once it is turned back off, the generated image limit saved on blur, a
-// save that failed, and a rejected value
 import { sendSpendControlSettings } from "@carlnotes/client/billingClient"
 import type { AdminDailySpendCutoffs } from "@carlnotes/contracts/admin"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
@@ -61,8 +56,8 @@ const PAST_CUTOFFS: AdminDailySpendCutoffs = {
 	updatedByUsername: STORY_PEOPLE[0].username,
 }
 
-// both pauses and the featured-only home on, unverified signups limited, and a generated image limit of 10
-const EVERY_SWITCH_ON: AdminDailySpendCutoffs = {
+// all four permissions off, with an overridden generated image limit
+const ALL_PERMISSIONS_OFF: AdminDailySpendCutoffs = {
 	...BELOW_CUTOFFS,
 	generatedChapterImageLimit: { value: 10, defaultValue: 40, isOverridden: true },
 	isUnverifiedFirstScanLimitOn: true,
@@ -88,8 +83,16 @@ const meta = {
 export default meta
 type Story = StoryObj<typeof meta>
 
-// below every cutoff, with every setting at its default
-export const Default: Story = {}
+// every restriction defaults to off, leaving all four permission switches on
+export const Default: Story = {
+	play: async ({ canvas }) => {
+		// check the default state of all four permission switches
+		await expect(canvas.getByRole("switch", { name: "Allow unverified email sign-ups to scan and chat" })).toBeChecked()
+		await expect(canvas.getByRole("switch", { name: "Allow new podcast episodes" })).toBeChecked()
+		await expect(canvas.getByRole("switch", { name: "Allow new films" })).toBeChecked()
+		await expect(canvas.getByRole("switch", { name: "Allow unfeatured items on the home page" })).toBeChecked()
+	},
+}
 
 // past two cutoffs, with overrides, scans waiting, and signups past the alert
 export const PastCutoffs: Story = { args: { dailySpendCutoffs: PAST_CUTOFFS } }
@@ -166,13 +169,13 @@ export const UnverifiedSignupsLimited: Story = {
 	},
 }
 
-// every switch on: both pauses, the featured-only home, unverified signups limited, and an overridden image limit
-export const EverySwitchOn: Story = {
-	args: { dailySpendCutoffs: EVERY_SWITCH_ON },
+export const AllPermissionsOff: Story = {
+	args: { dailySpendCutoffs: ALL_PERMISSIONS_OFF },
 	play: async ({ canvas }) => {
-		await expect(canvas.getByRole("switch", { name: "Pause new podcast episodes" })).toBeChecked()
-		await expect(canvas.getByRole("switch", { name: "Pause new films" })).toBeChecked()
-		await expect(canvas.getByRole("switch", { name: "Show only featured items on the home" })).toBeChecked()
+		// check that saved restrictions switch off each permission
+		await expect(canvas.getByRole("switch", { name: "Allow new podcast episodes" })).not.toBeChecked()
+		await expect(canvas.getByRole("switch", { name: "Allow new films" })).not.toBeChecked()
+		await expect(canvas.getByRole("switch", { name: "Allow unfeatured items on the home page" })).not.toBeChecked()
 		await expect(
 			canvas.getByRole("switch", { name: "Allow unverified email sign-ups to scan and chat" }),
 		).not.toBeChecked()
@@ -180,49 +183,47 @@ export const EverySwitchOn: Story = {
 	},
 }
 
-// flipping the pause on new podcast episodes saves it as on, and sends no other setting
+// turning off new podcast episodes saves the pause alone
 export const PodcastEpisodesPaused: Story = {
 	play: async ({ canvas, userEvent }) => {
-		const pauseSwitch = canvas.getByRole("switch", { name: "Pause new podcast episodes" })
-		await expect(pauseSwitch).not.toBeChecked()
-		await userEvent.click(pauseSwitch)
+		const permissionSwitch = canvas.getByRole("switch", { name: "Allow new podcast episodes" })
+		await expect(permissionSwitch).toBeChecked()
+		await userEvent.click(permissionSwitch)
 		await waitFor(() =>
 			expect(mocked(sendSpendControlSettings)).toHaveBeenCalledWith({ isPodcastEpisodeRecordingPaused: true }),
 		)
 	},
 }
 
-// each save becomes what the tab holds as saved. a saved pause is left out of the save after it, and turning the
-// pause back off sends the pause alone
-export const SavedPauseTurnedOff: Story = {
+// save the podcast episode permission off and back on, with a separate alert save in between
+export const AllowedPodcastEpisodesAgain: Story = {
 	play: async ({ canvas, userEvent }) => {
-		// pause new podcast episodes, and wait for its save
-		const pauseSwitch = canvas.getByRole("switch", { name: "Pause new podcast episodes" })
-		await userEvent.click(pauseSwitch)
+		// turn off new podcast episodes and wait for the save
+		const permissionSwitch = canvas.getByRole("switch", { name: "Allow new podcast episodes" })
+		await userEvent.click(permissionSwitch)
 		await waitFor(() => expect(mocked(sendSpendControlSettings)).toHaveBeenCalledTimes(1))
 
-		// a signup alert saved next sends no pause
+		// save the signup alert on its own
 		await userEvent.type(canvas.getByLabelText("Hourly signup alert"), "80")
 		await userEvent.tab()
 		await waitFor(() =>
 			expect(mocked(sendSpendControlSettings)).toHaveBeenLastCalledWith({ hourlySignupAlertCount: 80 }),
 		)
 
-		// turning the pause back off sends it, without the signup alert the tab already saved
-		await userEvent.click(pauseSwitch)
+		// allow new podcast episodes again and save that change on its own
+		await userEvent.click(permissionSwitch)
 		await waitFor(() =>
 			expect(mocked(sendSpendControlSettings)).toHaveBeenLastCalledWith({ isPodcastEpisodeRecordingPaused: false }),
 		)
 
-		// the image limit field that lost focus unchanged sent nothing
 		expect(mocked(sendSpendControlSettings)).toHaveBeenCalledTimes(3)
 	},
 }
 
-// flipping the pause on new films saves it as on
+// turning off new films saves the pause
 export const TopicVideosPaused: Story = {
 	play: async ({ canvas, userEvent }) => {
-		await userEvent.click(canvas.getByRole("switch", { name: "Pause new films" }))
+		await userEvent.click(canvas.getByRole("switch", { name: "Allow new films" }))
 		await waitFor(() =>
 			expect(mocked(sendSpendControlSettings)).toHaveBeenCalledWith({
 				isTopicVideoRenderingPaused: true,
@@ -231,10 +232,10 @@ export const TopicVideosPaused: Story = {
 	},
 }
 
-// flipping the featured-only home saves it as on
+// turning off unfeatured items saves featured-only mode
 export const HomeFeaturedOnly: Story = {
 	play: async ({ canvas, userEvent }) => {
-		await userEvent.click(canvas.getByRole("switch", { name: "Show only featured items on the home" }))
+		await userEvent.click(canvas.getByRole("switch", { name: "Allow unfeatured items on the home page" }))
 		await waitFor(() => expect(mocked(sendSpendControlSettings)).toHaveBeenCalledWith({ isHomeFeaturedOnly: true }))
 	},
 }
