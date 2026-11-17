@@ -5,9 +5,10 @@ import {
 	toTopicMemoryStoryPage,
 } from "@carlnotes/core/lib/topicMemoryStories"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
-import { expect, mocked, screen, waitFor } from "storybook/test"
+import { expect, fn, mocked, screen, waitFor } from "storybook/test"
 import { PHONE_VIEWPORT_GLOBALS } from "../../../.storybook/viewports"
 import { TopicMemoriesDialog } from "./TopicMemoriesDialog"
+import { TopicScanHistory } from "./TopicScanHistory"
 
 const meta = {
 	title: "Topic/TopicMemoriesDialog",
@@ -73,12 +74,21 @@ export const ReadOnly: Story = {
 }
 
 export const Empty: Story = {
-	args: { entryCount: 0, topicMemoryCount: 0 },
+	globals: PHONE_VIEWPORT_GLOBALS,
+	render: ({ topicId }) => (
+		<TopicScanHistory
+			scans={[]}
+			topic={{ id: topicId, name: "Coffee Journal", prompt: "Coffee" }}
+			canEdit={false}
+			topicSources={[]}
+			onReloadTopicPage={fn()}
+		/>
+	),
 	beforeEach: () => {
 		mocked(fetchTopicMemories).mockResolvedValue(toTopicMemoryStoryPage({ isEmpty: true }))
 	},
 	play: async ({ canvas, userEvent }) => {
-		// keep the empty counts visible before opening the Journal
+		// show the Journal in the Brew diary even if the API omits the count
 		const journal = canvas.getByRole("button", { name: "Journal" })
 		await expect(canvas.getByText("0 entries · 0 takeaways")).toBeVisible()
 		await userEvent.click(journal)

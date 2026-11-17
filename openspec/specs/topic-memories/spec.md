@@ -76,11 +76,6 @@ Exact combines SHALL match the normalized subject, claim type, and value, and re
 - **THEN** the write SHALL retain the combined original as outdated with `replacedById` pointing to the active row
 - **AND** a partial or unknown date SHALL preserve separate rows when it could match conflicting dated occurrences
 
-#### Scenario: The Journal button is disabled
-
-- **WHEN** `TOPIC_JOURNAL_ENABLED` is off or production uses the default
-- **THEN** the Topic page SHALL omit the Journal count and the web and Expo Brew diary SHALL hide its button
-
 #### Scenario: A backfill discovers an older value
 
 - **WHEN** an earlier completed Scan proposes a different value for an exact key
@@ -135,8 +130,9 @@ The Journal SHALL read one page of active topic memories at a time. It SHALL sho
 
 #### Scenario: A Topic has no topic memories
 
-- **WHEN** a reader opens an empty Journal
-- **THEN** they see an empty state in Carl's voice
+- **WHEN** a reader opens a Topic with no visible topic memories, including a Topic with no Scans
+- **THEN** the Brew diary SHALL show the Journal button and a count of zero on web and Expo
+- **AND** opening the Journal SHALL show an empty state in Carl's voice
 
 #### Scenario: The owner provides feedback
 

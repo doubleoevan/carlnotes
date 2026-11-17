@@ -28,23 +28,17 @@ export type TopicMemoriesDialogElements = {
 }
 
 /** Formats the visible total for the Journal heading on web and mobile. */
-export function toTopicMemoriesTitle(topicMemoryCount?: number): string {
-	if (topicMemoryCount === undefined) {
-		return TOPIC_MEMORIES_TITLE
-	}
-
+export function toTopicMemoriesTitle(topicMemoryCount = 0): string {
 	// name a single item in the singular
 	const title = topicMemoryCount === 1 ? "Topic Takeaway 🧠" : TOPIC_MEMORIES_TITLE
 	return `${topicMemoryCount} ${title}`
 }
 
 /** Displays both Brew diary counts beside the Journal on either platform. */
-export function toScanHistoryCounts(entryCount: number, topicMemoryCount?: number): string {
-	// older servers supply the entry count alone
+export function toScanHistoryCounts(entryCount: number, topicMemoryCount = 0): string {
+	// format each count in the singular when it is one
 	const entries = `${entryCount} ${entryCount === 1 ? "entry" : "entries"}`
-	return topicMemoryCount === undefined
-		? entries
-		: `${entries} · ${topicMemoryCount} ${topicMemoryCount === 1 ? "takeaway" : "takeaways"}`
+	return `${entries} · ${topicMemoryCount} ${topicMemoryCount === 1 ? "takeaway" : "takeaways"}`
 }
 
 /** Reads and renders the Journal content inside the web dialog or native sheet. */

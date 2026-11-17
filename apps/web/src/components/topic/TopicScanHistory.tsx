@@ -2,7 +2,6 @@ import { type RemoveTopicSourceStatus, removeTopicSource } from "@carlnotes/clie
 import type { TopicFinding } from "@carlnotes/contracts/findings"
 import { KEEP_ONE_SOURCE_MESSAGE } from "@carlnotes/contracts/sources"
 import type { ScanNote, TopicScan } from "@carlnotes/contracts/topics"
-import { toScanHistoryCounts } from "@carlnotes/core/components/TopicMemoriesDialog"
 import { toScanTimestamp } from "@carlnotes/core/lib/labels"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useState } from "react"
@@ -101,17 +100,13 @@ export function TopicScanHistory({
 			title="Brew diary"
 			canWrapHeader
 			titleAside={
-				topicMemoryCount === undefined ? (
-					<span className="text-muted-foreground text-sm">{toScanHistoryCounts(scans.length)}</span>
-				) : (
-					<TopicMemoriesDialog
-						topicId={topic.id}
-						entryCount={scans.length}
-						topicMemoryCount={topicMemoryCount}
-						canRateTopicMemories={canRateTopicMemories}
-						onTopicMemoryRemoved={onReloadTopicPage}
-					/>
-				)
+				<TopicMemoriesDialog
+					topicId={topic.id}
+					entryCount={scans.length}
+					topicMemoryCount={topicMemoryCount}
+					canRateTopicMemories={canRateTopicMemories}
+					onTopicMemoryRemoved={onReloadTopicPage}
+				/>
 			}
 			hasStackedClosedDivider
 			hasCompactHeader

@@ -3,7 +3,6 @@ import { authClient } from "@carlnotes/client/authClient"
 import { fetchScanNote, removeTopicSource } from "@carlnotes/client/topicClient"
 import { KEEP_ONE_SOURCE_MESSAGE } from "@carlnotes/contracts/sources"
 import type { TopicResponse, TopicScan } from "@carlnotes/contracts/topics"
-import { toScanHistoryCounts } from "@carlnotes/core/components/TopicMemoriesDialog"
 import { usePagination } from "@carlnotes/core/hooks/usePagination"
 import { toScanTimestamp } from "@carlnotes/core/lib/labels"
 import { cn } from "@carlnotes/nightshift/classNames"
@@ -38,17 +37,13 @@ export function TopicScanHistory({
 		<CollapsibleSection
 			title="Brew diary"
 			titleAside={
-				topic.topicMemoryCount === undefined ? (
-					<Text className="text-muted-foreground text-sm">{toScanHistoryCounts(topic.scans.length)}</Text>
-				) : (
-					<TopicMemoriesDialog
-						topicId={topic.id}
-						entryCount={topic.scans.length}
-						topicMemoryCount={topic.topicMemoryCount}
-						canRateTopicMemories={topic.canRateTopicMemories}
-						onTopicMemoryRemoved={onTopicMemoryRemoved}
-					/>
-				)
+				<TopicMemoriesDialog
+					topicId={topic.id}
+					entryCount={topic.scans.length}
+					topicMemoryCount={topic.topicMemoryCount}
+					canRateTopicMemories={topic.canRateTopicMemories}
+					onTopicMemoryRemoved={onTopicMemoryRemoved}
+				/>
 			}
 			hasClosedDivider
 		>

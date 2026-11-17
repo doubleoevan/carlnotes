@@ -162,6 +162,7 @@ test("the topic page reads the user's access and topic role once", async () => {
 	// one signed-in page load inside its maximum
 	const { response, queryCount } = await requestAsUser("/api/topics/topic-1", "user-1")
 	expect(response.status).toBe(200)
+	expect(await response.json()).toMatchObject({ scans: [], topicMemoryCount: 0 })
 	expect(queryCount).toBeLessThanOrEqual(MAX_TOPIC_PAGE_QUERIES)
 
 	// one access read of this user and one role read among its queries. the owner's access is a separate row

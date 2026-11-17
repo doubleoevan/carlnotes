@@ -188,9 +188,7 @@ export async function loadTopicPage(
 		attachments: attachmentRows,
 		sources: visibleTopicSourceRows.flatMap(toTopicSourceSummary),
 		scans: scanHistory,
-		topicMemoryCount: isTopicJournalEnabled()
-			? groupTopicMemories(scanRows[0]?.topicMemoryGroupRows ?? []).length
-			: undefined,
+		topicMemoryCount: groupTopicMemories(scanRows[0]?.topicMemoryGroupRows ?? []).length,
 		canRateTopicMemories: canRateTopicMemories(topicRole),
 		podcast,
 		latestPodcastEpisode,
@@ -275,12 +273,10 @@ async function loadTopicScanRows(
 	{ id: topicId, visibility }: Pick<typeof topics.$inferSelect, "id" | "visibility">,
 	userId: string | null,
 ): Promise<(TopicScanRow & { topicMemoryGroupRows: VisibleTopicMemoryGroupRow[] | null })[]> {
-	// keep the grouped count out of the page query while the button is disabled
-	const groupRows = isTopicJournalEnabled()
-		? sql<VisibleTopicMemoryGroupRow[] | null>`case when
-			row_number() over (order by ${scans.startedAt} desc, ${scans.id}) = 1
-			then ${toVisibleTopicMemoryGroupRows({ topicId, userId, visibility })} end`
-		: sql<null>`null`
+	// read the visible group inputs once with the newest scan
+	const groupRows = sql<VisibleTopicMemoryGroupRow[] | null>`case when
+		row_number() over (order by ${scans.startedAt} desc, ${scans.id}) = 1
+		then ${toVisibleTopicMemoryGroupRows({ topicId, userId, visibility })} end`
 	return db
 		.select({
 			id: scans.id,
@@ -299,15 +295,6 @@ async function loadTopicScanRows(
 		.from(scans)
 		.where(eq(scans.topicId, topicId))
 		.orderBy(desc(scans.startedAt), scans.id)
-}
-
-function isTopicJournalEnabled(): boolean {
-	// production requires an explicit rollout. dev keeps the button available for review
-	const flag = Bun.env.TOPIC_JOURNAL_ENABLED
-	if (flag !== undefined) {
-		return flag === "true"
-	}
-	return Bun.env.DOPPLER_ENVIRONMENT ? Bun.env.DOPPLER_ENVIRONMENT === "dev" : Bun.env.NODE_ENV !== "production"
 }
 
 // this month's total scan spend, summed from the raw scans since the first of the utc month

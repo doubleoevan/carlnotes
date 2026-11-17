@@ -5,7 +5,7 @@ sidebar:
   order: 8
 ---
 
-The Journal is in preview. The 📙 Journal button appears in the Brew diary when the preview is enabled.
+Open 📙 Journal in your topic’s Brew diary. If Carl hasn’t written a takeaway yet, the Journal says to check back after a brew.
 
 Carl gets smarter with every brew. The Journal shows the takeaways Carl has learned about your topic. He uses them in everything he writes, from finding descriptions to Coffee Break podcasts, films and discussions.
 
