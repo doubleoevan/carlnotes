@@ -2,6 +2,7 @@ import { authClient } from "@carlnotes/client/authClient"
 import { fetchChatRooms } from "@carlnotes/client/chatRoomClient"
 import type { ChatRoom } from "@carlnotes/contracts/chat"
 import { isAdminRole } from "@carlnotes/contracts/enums"
+import { toTeamPath, toTopicPath } from "@carlnotes/contracts/seo"
 import { useCommentMentionsLoad } from "@carlnotes/core/hooks/useCommentMentionsLoad"
 import { useUpdateBadges } from "@carlnotes/core/hooks/useUpdateBadges"
 import {
@@ -56,6 +57,9 @@ function toChatRoomOptions(
 	const chatRoomChoices: ChatRoomOption[] = chatRoomOptions.map((chatRoomOption) => ({
 		key: `${chatRoomOption.topicId ?? "team"}:${chatRoomOption.teamId}`,
 		name: chatRoomOption.name,
+		pageHref: chatRoomOption.topicId
+			? toTopicPath({ id: chatRoomOption.topicId, name: chatRoomOption.name })
+			: toTeamPath(chatRoomOption.teamId),
 		team: {
 			teamId: chatRoomOption.teamId,
 			name: chatRoomOption.teamName,
@@ -95,6 +99,7 @@ function toChatRoomOptions(
 	chatRoomChoices.push({
 		key: `join:${joinTeam.teamId}`,
 		name: joinTeam.name,
+		pageHref: toTeamPath(joinTeam.teamId),
 		team: { teamId: joinTeam.teamId, name: joinTeam.name, avatarVersion: joinTeam.avatarVersion },
 		isActive: isSameChat(chatId, joinChatId),
 		onSelect: () => setChatId(joinChatId),

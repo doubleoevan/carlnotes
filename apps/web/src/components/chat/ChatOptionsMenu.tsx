@@ -2,21 +2,20 @@
 import type { ChatMention } from "@carlnotes/contracts/chat"
 import { NEW_TOPIC_CHAT_COPY, toPrivateChatLabel } from "@carlnotes/core/lib/chatCopy"
 import { useAllChatMentions } from "@carlnotes/core/stores/chatRoomStore"
-import { cn } from "@carlnotes/nightshift/classNames"
-import { Check, ChevronDown, Plus, Trash2, Users } from "lucide-react"
+import { ChevronDown, Plus, Trash2 } from "lucide-react"
 import { useState } from "react"
 import { HostAvatar } from "@/components/branding/HostAvatar"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"
-import { UserAvatar } from "@/components/branding/UserAvatar"
 import { CountBadge } from "@/components/common/CountBadge"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS } from "@/lib/styleClasses"
+import { MENU_OPTION_CLASS } from "@/lib/styleClasses"
+import { ChatRoomMenuRow } from "./ChatRoomMenuRow"
 
 /** A chat room the panel can switch to: a team's own conversation, or one about a topic it holds. */
 export type ChatRoomOption = {
 	key: string
 	name: string
+	pageHref: string
 	isActive: boolean
 	// the team the chat room belongs to, shown as its avatar
 	team: { teamId: string; name: string; avatarVersion: string | null }
@@ -26,7 +25,7 @@ export type ChatRoomOption = {
 	isTeamRoom?: boolean
 	// the chat mentions for the badge and tooltip
 	chatMentions?: ChatMention[]
-	// the chat room members that the chat room option's hover tooltip lists
+	// the chat room members shown in the tooltip
 	chatRoomMembers?: { userId: string; username: string; avatarVersion: string | null }[]
 	onSelect: () => void
 }
@@ -146,59 +145,13 @@ export function ChatOptionsMenu({
 						{NEW_TOPIC_CHAT_COPY.name}
 					</button>
 				)}
-				{/* then the selected chat room, then the rest alphabetically */}
+				{/* chat rooms in alphabetical order */}
 				{chatRoomOptions?.map((chatRoomOption) => (
-					<Tooltip key={chatRoomOption.key}>
-						<TooltipTrigger asChild>
-							<button
-								type="button"
-								onClick={() => handleSelectChatOption(chatRoomOption.onSelect)}
-								// the open chat room gets the same highlight background as its trigger row
-								className={cn(MENU_OPTION_CLASS, chatRoomOption.isActive && MENU_OPTION_SELECTED_CLASS)}
-							>
-								{/* the team's avatar shows the chat room's team */}
-								<span className="flex shrink-0 items-center">
-									<TeamAvatar team={chatRoomOption.team} className="size-5" />
-								</span>
-								<span
-									className={cn("min-w-0 flex-1 truncate", chatRoomOption.isHighlighted && "text-link font-medium")}
-								>
-									{chatRoomOption.name}
-								</span>
-								{/* a team and one of its topics can share a name. the team option shows an icon */}
-								{chatRoomOption.isTeamRoom && <Users className="text-muted-foreground size-3.5 shrink-0" />}
-								{chatRoomOption.chatMentions && chatRoomOption.chatMentions.length > 0 && (
-									<CountBadge count={chatRoomOption.chatMentions.length} className="h-5 min-w-5 shrink-0 text-xs" />
-								)}
-								{chatRoomOption.isActive && <Check className="text-primary size-4 shrink-0" />}
-							</button>
-						</TooltipTrigger>
-						{/* who is in the chat room, shown off to the side */}
-						<TooltipContent side="left" sideOffset={8}>
-							<p className="font-semibold">{chatRoomOption.name}</p>
-							{/* the team name is muted in the tooltip's own palette */}
-							{chatRoomOption.team.name !== chatRoomOption.name && (
-								<p className="text-primary-foreground/80 text-xs">{chatRoomOption.team.name}</p>
-							)}
-							{(chatRoomOption.chatRoomMembers ?? []).length > 0 && (
-								<ul className="mt-1.5 space-y-1">
-									{(chatRoomOption.chatRoomMembers ?? []).map((chatRoomMember) => (
-										<li key={chatRoomMember.userId}>
-											<span className="inline-flex items-center gap-1.5">
-												<UserAvatar
-													userId={chatRoomMember.userId}
-													username={chatRoomMember.username}
-													avatarVersion={chatRoomMember.avatarVersion}
-													className="size-4"
-												/>
-												{chatRoomMember.username}
-											</span>
-										</li>
-									))}
-								</ul>
-							)}
-						</TooltipContent>
-					</Tooltip>
+					<ChatRoomMenuRow
+						key={chatRoomOption.key}
+						room={chatRoomOption}
+						onSelect={() => handleSelectChatOption(chatRoomOption.onSelect)}
+					/>
 				))}
 				{onClear && (
 					<button type="button" onClick={() => handleSelectChatOption(onClear)} className={MENU_OPTION_CLASS}>
