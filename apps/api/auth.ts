@@ -193,7 +193,8 @@ export const auth = betterAuth({
 	// table
 	plugins: [
 		expo(),
-		jwt({ schema: { jwks: { modelName: "jwk" } } }),
+		// reserve JWT signing for token issuance. session reads use the session cookie
+		jwt({ disableSettingJwtHeader: true, schema: { jwks: { modelName: "jwk" } } }),
 		mcpPlugin,
 		cimd({ fetchClientMetadataResource, metadataProfile: "mcp-2026-07-28" }),
 	],

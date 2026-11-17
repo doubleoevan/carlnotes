@@ -2,7 +2,7 @@
 
 import { oauthProviderAuthServerMetadata } from "@better-auth/oauth-provider"
 import { auth, MCP_RESOURCE_URL } from "../auth"
-import { apiRequest, check, ownerEmail, ownerPassword } from "./mcpSmokeFixtures"
+import { apiRequest, check, ownerEmail, ownerId, ownerPassword } from "./mcpSmokeFixtures"
 import { resolveToolCaller } from "./toolCaller"
 
 // the oauth redirect uri, and the app's own origin
@@ -28,6 +28,16 @@ export async function checkOAuth(): Promise<string> {
 		.map((cookieLine) => cookieLine.split(";")[0])
 		.join("; ")
 	check("the owner signs in", signIn.ok && cookie.length > 0, signIn.status)
+
+	// recheck the cookie using the same session options as the chat room stream
+	const session = await auth.api.getSession({
+		headers: new Headers({ cookie }),
+		query: { disableCookieCache: true, disableRefresh: true },
+		asResponse: true,
+	})
+	const sessionBody = (await session.json()) as { user?: { id: string } } | null
+	check("the session cookie identifies the owner", session.ok && sessionBody?.user?.id === ownerId, session.status)
+	check("the session read omits the signed JWT header", !session.headers.has("set-auth-jwt"))
 
 	// register a client
 	const registrationResponse = await apiRequest("/api/auth/oauth2/register", {
