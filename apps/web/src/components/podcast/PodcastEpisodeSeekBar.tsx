@@ -1,17 +1,19 @@
-import type { PodcastEpisode, PodcastEpisodeChapter } from "@carlnotes/contracts/podcast"
+import type { PodcastEpisodeChapter } from "@carlnotes/contracts/podcast"
 import {
 	type PodcastEpisodeSeekBarElements,
+	type PodcastEpisodeSeekBarProps,
 	PodcastEpisodeSeekBar as SharedPodcastEpisodeSeekBar,
-	type PodcastEpisodeSeekBarProps as SharedPodcastEpisodeSeekBarProps,
 } from "@carlnotes/core/components/PodcastEpisodeSeekBar"
-import { type PointerEvent, type ReactNode, useEffect, useRef, useState } from "react"
-import { type ChapterSegmentBox, TopicVideoChapterTooltip } from "./TopicVideoChapterTooltip"
+import { toChapterIndexAt } from "@carlnotes/core/lib/podcastEpisodePlayback"
+import { type PointerEvent, type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState } from "react"
+import { PodcastEpisodeChapterPreview } from "./PodcastEpisodeChapterPreview"
 
 // the chapter segments of a seek bar, in the chapters' order
 const CHAPTER_SEGMENT_SELECTOR = "[data-chapter-segment]"
 
-// how long the pointer rests on the bar before a chapter's tooltip shows, which is the tooltip primitive's hover delay
-const CHAPTER_TOOLTIP_DELAY_MS = 200
+// delay opening until hover settles and leave time to cross from the bar to the preview
+const CHAPTER_PREVIEW_OPEN_DELAY_MS = 200
+const CHAPTER_PREVIEW_CLOSE_DELAY_MS = 300
 
 const elements: PodcastEpisodeSeekBarElements = {
 	Group: ({ children, className }) => <div className={className}>{children}</div>,
@@ -27,11 +29,13 @@ const elements: PodcastEpisodeSeekBarElements = {
 		</div>
 	),
 	Track: ({ children, positionSeconds, durationSeconds, onSeek }) => (
-		<div className="relative flex flex-1 gap-1">
+		<div className="relative flex flex-1 gap-1 rounded-full has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-4 has-[:focus-visible]:outline-ring">
 			{children}
 			<input
 				type="range"
 				aria-label="Seek"
+				aria-keyshortcuts="Enter"
+				aria-description="Press Enter to show the current chapter source."
 				min={0}
 				max={durationSeconds}
 				value={positionSeconds}
@@ -42,51 +46,76 @@ const elements: PodcastEpisodeSeekBarElements = {
 	),
 }
 
-// the shared bar's props, and whether hovering a chapter's segment shows the chapter's tooltip, as the film's bar does
-type PodcastEpisodeSeekBarProps = SharedPodcastEpisodeSeekBarProps & { hasChapterTooltips?: boolean }
+// a chapter and its live seek bar segment, which anchors the preview through layout changes
+type ChapterSegment = { chapter: PodcastEpisodeChapter; chapterSegmentRef: { current: Element } }
+type ShownChapterSegment = ChapterSegment & { seekInput?: HTMLInputElement }
 
 /**
- * Adapts the shared segmented bar to a keyboard-accessible browser range input, with a tooltip of the hovered chapter
- * on the film's bar.
+ * Adapts the segmented seek bar to a browser range input with chapter previews for pointer and keyboard navigation.
  */
-export function PodcastEpisodeSeekBar({ hasChapterTooltips = false, ...props }: PodcastEpisodeSeekBarProps) {
-	const podcastEpisodeSeekBar = <SharedPodcastEpisodeSeekBar {...props} elements={elements} />
-	if (!hasChapterTooltips) {
-		return podcastEpisodeSeekBar
-	}
-	return <ChapterTooltipFrame podcastEpisode={props.podcastEpisode}>{podcastEpisodeSeekBar}</ChapterTooltipFrame>
+export function PodcastEpisodeSeekBar(props: PodcastEpisodeSeekBarProps) {
+	// reset pending and visible previews when a player switches to another episode
+	return <PodcastEpisodeSeekBarFrame key={props.podcastEpisode.id} {...props} />
 }
 
-// a chapter with the box of its segment inside the frame
-type ChapterSegment = { chapter: PodcastEpisodeChapter; chapterSegmentBox: ChapterSegmentBox }
-
-// the frame around a seek bar that shows the tooltip of the chapter under the pointer. the seek control covers the
-// segments and takes every pointer event, so the frame reads the chapter from where the pointer is on the control
-function ChapterTooltipFrame({ podcastEpisode, children }: { podcastEpisode: PodcastEpisode; children: ReactNode }) {
-	// the chapter whose tooltip shows, the chapter the pointer rests on before it shows, and the delay's timer
-	const [shownChapterSegment, setShownChapterSegment] = useState<ChapterSegment | null>(null)
+function PodcastEpisodeSeekBarFrame(props: PodcastEpisodeSeekBarProps) {
+	// the range input covers the segments, so the frame matches the pointer's position to a chapter
+	const { podcastEpisode, format } = props
+	const [shownChapterSegment, setShownChapterSegment] = useState<ShownChapterSegment | null>(null)
 	const restingChapterSegmentRef = useRef<ChapterSegment | null>(null)
-	const showTimeoutRef = useRef<number | null>(null)
+	const openTimeoutRef = useRef<number | undefined>(undefined)
+	const closeTimeoutRef = useRef<number | undefined>(undefined)
 
-	// stop the delay's timer once the frame is gone
-	useEffect(() => () => window.clearTimeout(showTimeoutRef.current ?? undefined), [])
+	// stop both timers when the player goes away
+	useEffect(
+		() => () => {
+			window.clearTimeout(openTimeoutRef.current)
+			window.clearTimeout(closeTimeoutRef.current)
+		},
+		[],
+	)
 
-	// hide the tooltip, and stop one that has not shown yet, once the pointer leaves the seek control
-	const hideChapterTooltip = (): void => {
-		window.clearTimeout(showTimeoutRef.current ?? undefined)
-		showTimeoutRef.current = null
+	// cancel dismissal when the pointer enters the preview or returns to the seek bar
+	function keepChapterPreviewOpen(): void {
+		window.clearTimeout(closeTimeoutRef.current)
+		closeTimeoutRef.current = undefined
+	}
+
+	// dismiss the preview and cancel either pending transition
+	function dismissChapterPreview(): void {
+		keepChapterPreviewOpen()
+		window.clearTimeout(openTimeoutRef.current)
+		openTimeoutRef.current = undefined
 		setShownChapterSegment(null)
 	}
 
-	// follow the pointer along the seek control. touch has no hover
-	const handlePointerMove = (event: PointerEvent<HTMLDivElement>): void => {
-		const chapterSegment = event.pointerType === "touch" ? null : toChapterSegmentAt(event, podcastEpisode.chapters)
+	// a brief delay keeps the preview open while the pointer crosses the gap above the bar
+	function scheduleChapterPreviewDismissal(): void {
+		window.clearTimeout(openTimeoutRef.current)
+		openTimeoutRef.current = undefined
+		if (shownChapterSegment && !shownChapterSegment.seekInput) {
+			closeTimeoutRef.current ??= window.setTimeout(dismissChapterPreview, CHAPTER_PREVIEW_CLOSE_DELAY_MS)
+		}
+	}
+
+	// follow the pointer along the range input. the portalled preview also bubbles through this frame
+	function handlePointerMove(event: PointerEvent<HTMLFieldSetElement>): void {
+		if (
+			event.pointerType === "touch" ||
+			shownChapterSegment?.seekInput ||
+			!(event.target instanceof Node) ||
+			!event.currentTarget.contains(event.target)
+		) {
+			return
+		}
+		const chapterSegment = toChapterSegmentAt(event, podcastEpisode.chapters)
 		if (!chapterSegment) {
-			hideChapterTooltip()
+			scheduleChapterPreviewDismissal()
 			return
 		}
 
-		// a showing tooltip moves to the pointer's chapter at once
+		// switch an open preview to the new chapter immediately
+		keepChapterPreviewOpen()
 		if (shownChapterSegment) {
 			if (shownChapterSegment.chapter.position !== chapterSegment.chapter.position) {
 				setShownChapterSegment(chapterSegment)
@@ -94,31 +123,76 @@ function ChapterTooltipFrame({ podcastEpisode, children }: { podcastEpisode: Pod
 			return
 		}
 
-		// otherwise the tooltip shows after the delay, on the chapter the pointer rests on by then
+		// show the chapter the pointer rests on after the hover delay
 		restingChapterSegmentRef.current = chapterSegment
-		showTimeoutRef.current ??= window.setTimeout(() => {
-			showTimeoutRef.current = null
+		openTimeoutRef.current ??= window.setTimeout(() => {
+			openTimeoutRef.current = undefined
 			setShownChapterSegment(restingChapterSegmentRef.current)
-		}, CHAPTER_TOOLTIP_DELAY_MS)
+		}, CHAPTER_PREVIEW_OPEN_DELAY_MS)
 	}
+
+	// open the source for the seek position without changing playback
+	function handleSeekKeyDown(event: ReactKeyboardEvent<HTMLFieldSetElement>): void {
+		const seekInput = event.target
+		if (event.key !== "Enter" || !(seekInput instanceof HTMLInputElement) || seekInput.type !== "range") {
+			return
+		}
+
+		// use the same chapter selection as playback and position the preview by its segment
+		const chapterIndex = toChapterIndexAt(podcastEpisode.chapters, Number(seekInput.value))
+		const chapter = podcastEpisode.chapters[chapterIndex]
+		const segment = event.currentTarget.querySelectorAll(CHAPTER_SEGMENT_SELECTOR)[chapterIndex]
+		if (!chapter || !segment) {
+			return
+		}
+
+		// cancel pending pointer work and move focus to the source link in the preview
+		event.preventDefault()
+		dismissChapterPreview()
+		setShownChapterSegment({ chapter, chapterSegmentRef: { current: segment }, seekInput })
+	}
+
+	// return to the seek input when Escape dismisses a keyboard-opened preview
+	function handlePreviewEscape(event: KeyboardEvent): void {
+		const seekInput = shownChapterSegment?.seekInput
+		if (seekInput) {
+			event.preventDefault()
+			dismissChapterPreview()
+			seekInput.focus()
+		}
+	}
+
 	return (
-		<div className="relative" onPointerMove={handlePointerMove} onPointerLeave={hideChapterTooltip}>
-			{children}
-			{/* the hovered chapter's tooltip, over its segment */}
+		<fieldset
+			className="relative min-w-0"
+			aria-label="Chapter playback"
+			onPointerMove={handlePointerMove}
+			onPointerLeave={scheduleChapterPreviewDismissal}
+			onKeyDown={handleSeekKeyDown}
+		>
+			<SharedPodcastEpisodeSeekBar {...props} elements={elements} />
+			{/* remount an open preview when switching from hover to keyboard focus */}
 			{shownChapterSegment && (
-				<TopicVideoChapterTooltip
+				<PodcastEpisodeChapterPreview
+					key={shownChapterSegment.seekInput ? "keyboard" : "pointer"}
 					podcastEpisodeId={podcastEpisode.id}
 					chapter={shownChapterSegment.chapter}
-					chapterSegmentBox={shownChapterSegment.chapterSegmentBox}
+					chapterSegmentRef={shownChapterSegment.chapterSegmentRef}
+					hasVideo={format === "video" || podcastEpisode.hasVideo === true || Boolean(podcastEpisode.video)}
+					shouldFocusSource={Boolean(shownChapterSegment.seekInput)}
+					onPointerEnter={keepChapterPreviewOpen}
+					onPointerLeave={scheduleChapterPreviewDismissal}
+					onDismiss={dismissChapterPreview}
+					onEscapeKeyDown={handlePreviewEscape}
 				/>
 			)}
-		</div>
+		</fieldset>
 	)
 }
 
-// the chapter whose segment the pointer is over, with the segment's box inside the frame, or null off the seek control
+// the chapter and live segment under the pointer, or null off the seek control
 function toChapterSegmentAt(
-	event: PointerEvent<HTMLDivElement>,
+	event: PointerEvent<HTMLFieldSetElement>,
 	chapters: PodcastEpisodeChapter[],
 ): ChapterSegment | null {
 	// the time labels beside the seek control have no chapter
@@ -127,24 +201,12 @@ function toChapterSegmentAt(
 	}
 
 	// the first segment that ends at or after the pointer, so the gap before a segment is the segment's own
-	const segmentElements = [...event.currentTarget.querySelectorAll(CHAPTER_SEGMENT_SELECTOR)]
-	const segmentRects = segmentElements.map((segmentElement) => segmentElement.getBoundingClientRect())
-	const segmentIndex = segmentRects.findIndex((segmentRect) => event.clientX <= segmentRect.right)
-	const chapter = chapters[segmentIndex]
-	const segmentRect = segmentRects[segmentIndex]
-	if (!chapter || !segmentRect) {
-		return null
+	const segments = event.currentTarget.querySelectorAll(CHAPTER_SEGMENT_SELECTOR)
+	for (const [index, segment] of segments.entries()) {
+		const chapter = chapters[index]
+		if (chapter && event.clientX <= segment.getBoundingClientRect().right) {
+			return { chapter, chapterSegmentRef: { current: segment } }
+		}
 	}
-
-	// the segment's box inside the frame
-	const frameRect = event.currentTarget.getBoundingClientRect()
-	return {
-		chapter,
-		chapterSegmentBox: {
-			left: segmentRect.left - frameRect.left,
-			top: segmentRect.top - frameRect.top,
-			width: segmentRect.width,
-			height: segmentRect.height,
-		},
-	}
+	return null
 }

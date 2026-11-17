@@ -27,12 +27,13 @@ const COLLISION_PADDING = 8
 function PopoverContent({
 	className,
 	bodyClassName,
+	arrowClassName,
 	align = "center",
 	sideOffset = 4,
 	collisionPadding = COLLISION_PADDING,
 	children,
 	...props
-}: React.ComponentProps<typeof PopoverPrimitive.Content> & { bodyClassName?: string }) {
+}: React.ComponentProps<typeof PopoverPrimitive.Content> & { bodyClassName?: string; arrowClassName?: string }) {
 	// the portal lifts the panel out of any overflow clipping. the classes animate it in and out
 	return (
 		<PopoverPrimitive.Portal>
@@ -51,6 +52,7 @@ function PopoverContent({
 				{...props}
 			>
 				<PopoverViewport className={bodyClassName}>{children}</PopoverViewport>
+				{arrowClassName && <PopoverPrimitive.Arrow className={arrowClassName} />}
 			</PopoverPrimitive.Content>
 		</PopoverPrimitive.Portal>
 	)

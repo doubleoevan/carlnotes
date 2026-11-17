@@ -87,7 +87,7 @@ export const TOPIC_VIDEO_PLAYER_ELEMENTS: TopicVideoPlayerElements = {
 			<PlaybackSpeedButton playbackRate={playbackRate} onPress={onSpeedPress} />
 		</>
 	),
-	SeekBar: (props) => <PodcastEpisodeSeekBar {...props} hasChapterTooltips />,
+	SeekBar: PodcastEpisodeSeekBar,
 	ControlButton: ({ control, label, isPressed, onPress }) => {
 		// hidden captions show the struck-through icon, and a muted film the crossed speaker
 		const isCaptionsHidden = control === "captions" && !isPressed

@@ -295,11 +295,12 @@ the browser bundle and renders pages through the server build, behind its own ro
   reads the page again until the film is ready. `pages/PodcastEpisodePage.tsx` shows the same card in its Coffee Break
   Cinema section for a podcast episode whose film is rendering, and its poll replaces the page once the film is no
   longer rendering. A failed poll read of the topic page keeps the page shown.
-  The film player's `PodcastEpisodeSeekBar` has `hasChapterTooltips`: hovering a chapter's
-  segment shows `TopicVideoChapterTooltip.tsx`, the chapter's title over the first image of
-  `topicVideoChapterImages.ts` that loads, the Finding's link preview image, then the chapter's generated
-  image, then the podcast card. The image's frame shows the loading note until the image loads, and an image that
-  failed to load is not requested again until the page reloads. The audio player card's bar has no tooltip.
+  Both players use `PodcastEpisodeSeekBar`. Hovering a chapter shows `PodcastEpisodeChapterPreview.tsx`, a popover
+  anchored to the segment. The popover stays open while hovered. On the seek bar, Enter focuses the current chapter's
+  source link and Escape returns focus to the seek bar. The title opens the source in a new tab and shows the host's
+  favicon. `podcastEpisodeChapterImages.ts` tries the Finding's link preview image, the generated
+  chapter image for an episode with a film, and the podcast card, in that order. Failed chapter images are skipped
+  on the next hover.
   `pages/PodcastEpisodePage.tsx` holds the film in its Coffee Break Cinema section and the
   player card in its Coffee Break podcast section. Core `useShownPodcastEpisode` owns selection and recording polling; the web
   supplies its search parameter.

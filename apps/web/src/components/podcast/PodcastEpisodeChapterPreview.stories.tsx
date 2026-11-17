@@ -1,32 +1,35 @@
 import { fetchTopicFindingLinkPreview } from "@carlnotes/client/topicFindingClient"
 import { PODCAST_STORY_FILM_EPISODE, PODCAST_STORY_LONG_TITLE_EPISODE } from "@carlnotes/core/lib/podcastEpisodeStories"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
-import { expect, mocked, waitFor } from "storybook/test"
-import { TopicVideoChapterTooltip } from "./TopicVideoChapterTooltip"
+import { useRef } from "react"
+import { expect, mocked, waitFor, within } from "storybook/test"
+import { PodcastEpisodeChapterPreview } from "./PodcastEpisodeChapterPreview"
 
 // the first chapter of the stories' film, and one with a title long enough to wrap past two lines
 const [chapter] = PODCAST_STORY_FILM_EPISODE.chapters
 const [longTitleChapter] = PODCAST_STORY_LONG_TITLE_EPISODE.chapters
 
-// the tooltip's frame in the open tooltip, which holds the chapter's image
-const IMAGE_FRAME_SELECTOR = '[data-slot="tooltip-content"] .aspect-video'
+// the frame that holds the chapter image
+const IMAGE_FRAME_SELECTOR = '[aria-label="Chapter source"] .aspect-video'
 
-const meta: Meta<typeof TopicVideoChapterTooltip> = {
-	title: "Podcast/TopicVideoChapterTooltip",
-	component: TopicVideoChapterTooltip,
+const meta: Meta<typeof PodcastEpisodeChapterPreview> = {
+	title: "Podcast/PodcastEpisodeChapterPreview",
+	component: PodcastEpisodeChapterPreview,
 	args: {
 		podcastEpisodeId: PODCAST_STORY_FILM_EPISODE.id,
 		chapter,
-		chapterSegmentBox: { left: 0, top: 0, width: 160, height: 6 },
+		hasVideo: true,
 	},
-	decorators: [
-		(Story) => (
-			// one segment of a seek bar, with room above it for the tooltip
-			<div className="relative mx-auto mt-64 h-1.5 w-40 rounded-full bg-muted">
-				<Story />
+	render: function RenderPreview(args) {
+		const chapterSegmentRef = useRef<HTMLDivElement>(null)
+		return (
+			<div style={{ paddingTop: 250 }}>
+				{/* one seek bar segment with space above for the preview */}
+				<div ref={chapterSegmentRef} className="bg-muted mx-auto h-1.5 w-40 rounded-full" />
+				<PodcastEpisodeChapterPreview {...args} chapterSegmentRef={chapterSegmentRef} />
 			</div>
-		),
-	],
+		)
+	},
 }
 export default meta
 type Story = StoryObj<typeof meta>
@@ -39,9 +42,17 @@ export const LinkPreviewImage: Story = {
 			title: chapter?.title ?? null,
 			description: null,
 			imagePath: "/topic-tutorial-video-thumbnail.webp",
-			faviconPath: null,
+			faviconPath: "/favicon-96x96.png",
 			youtubeVideoId: null,
 		})
+	},
+	play: async () => {
+		// verify the title opens its own source in a new tab and renders the Finding's favicon
+		const preview = within(document.body).getByRole("dialog", { name: "Chapter source" })
+		const sourceLink = within(preview).getByRole("link", { name: /opens in a new tab/ })
+		await expect(sourceLink).toHaveAttribute("href", chapter?.sourceUrl)
+		await expect(sourceLink).toHaveAttribute("target", "_blank")
+		await waitFor(() => expect(sourceLink.querySelector("img")).toHaveAttribute("src", "/favicon-96x96.png"))
 	},
 }
 
@@ -63,7 +74,7 @@ export const LongTitle: Story = { args: { chapter: longTitleChapter } }
 export const NoImage: Story = {
 	play: async () => {
 		await waitFor(async () => {
-			// fail the image the tooltip tries now, until no image is left and the frame goes away
+			// fail the images in order until the frame goes away
 			document.querySelector(`${IMAGE_FRAME_SELECTOR} img`)?.dispatchEvent(new Event("error"))
 			await expect(document.querySelector(IMAGE_FRAME_SELECTOR)).toBeNull()
 		})
