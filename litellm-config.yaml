@@ -113,6 +113,14 @@ model_list:
       max_input_tokens: 1048576
       max_output_tokens: 32768
 
+  # image-moderation: OpenAI's free multimodal moderation on the app's master key
+  - model_name: image-moderation
+    litellm_params:
+      model: openai/omni-moderation-latest
+      api_key: os.environ/OPENAI_API_KEY
+    model_info:
+      mode: moderation
+
 # speech and transcription have no entry in the model list. both call Google's model by name on the user's virtual key
 # through LiteLLM's Gemini pass-through route, which checks the key's budget and reads GEMINI_API_KEY for the call.
 # podcast speech and a spoken chat reply call gemini-3.8-flash-tts at /gemini/v1beta/models/<model>:generateContent,

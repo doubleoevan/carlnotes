@@ -15,6 +15,7 @@ services:
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
       - FIREWORKS_API_KEY=${FIREWORKS_API_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
   # the Redis behind the api's sessions, response caches, shared limiters, and the chat and note fan-out.
   # bun's client needs Redis 7.2 or later
   redis:
