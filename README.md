@@ -321,7 +321,7 @@ bun run smoke:scan         # the topic-scan smoke test (ingestion + review, end-
 bun run smoke:store        # the resource-content object-storage round-trip (put → read → delete)
 bun run smoke:attach       # the URL-attachment smoke test (Firecrawl → store → Temporal workflow → ready)
 bun run smoke:search       # the web search smoke test (context → LLM queries → Exa → Resources)
-bun run smoke:reddit       # the reddit access smoke test: a subreddit and a search Source through each mode, reporting which one answered
+bun run smoke:reddit       # live Reddit listing and search. CI skips this suite when both Reddit OAuth credentials are absent.
 bun run smoke:x            # the X smoke test: one account's tweets and what they cost, plus the lookup that vets a suggested account
 bun run smoke:speech       # the podcast speech smoke test: a two-speaker clip on each Gemini tier
 bun run smoke:podcast-episode  # the podcast episode smoke test: one episode from its plan to its removal. needs ffmpeg

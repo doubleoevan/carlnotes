@@ -58,6 +58,13 @@ for smoke_file in "${SMOKE_FILES[@]}"; do
 		skipped=$((skipped + 1))
 		continue
 	fi
+	# the live reddit check requires OAuth because reddit retired its public RSS feeds
+	if [ "$smoke_file" = "packages/pipeline/reddit.smoke.ts" ] \
+		&& [ -z "${REDDIT_CLIENT_ID:-}" ] && [ -z "${REDDIT_CLIENT_SECRET:-}" ]; then
+		echo "=== smoke coverage: $smoke_file skipped, Reddit OAuth credentials are absent ==="
+		skipped=$((skipped + 1))
+		continue
+	fi
 	echo "=== smoke coverage: $smoke_file ==="
 	if ! bun test --coverage --coverage-reporter=lcov "./$smoke_file"; then
 		failures=$((failures + 1))
