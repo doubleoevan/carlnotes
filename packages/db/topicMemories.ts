@@ -1,4 +1,4 @@
-// reads active topic memories in shared rank order and stores authorized feedback
+// reads Journal pages and prompt context, and stores authorized topic memory feedback
 import {
 	TOPIC_MEMORY_CALENDAR_DATE_PATTERN,
 	TOPIC_MEMORY_INCOMPLETE_CONTEXT_PATTERN,
@@ -142,7 +142,7 @@ export async function loadMemberTopicMemoriesPage({
 function selectTopicMemoryRows(options: VisibleTopicMemoriesOptions) {
 	const { userId } = options
 	const latestScan = alias(scans, "journal_latest_scan")
-	const rank = sql`${feedbackPriority}, ${topicMemories.importance} desc, ${topicMemories.updatedAt} desc, ${topicMemories.id}`
+	const addedOrder = sql`${topicMemories.createdAt}, ${topicMemories.id}`
 	return db
 		.select({
 			id: topicMemories.id,
@@ -158,7 +158,7 @@ function selectTopicMemoryRows(options: VisibleTopicMemoriesOptions) {
 			rating: topicMemoryFeedback.rating,
 			note: topicMemoryFeedback.note,
 			...topicMemoryGroupingColumns(),
-			rank: sql<number>`row_number() over (order by ${rank})`.as("journal_rank"),
+			rank: sql<number>`row_number() over (order by ${addedOrder})`.as("journal_rank"),
 			lastSeenAt: sql<Date>`${latestScan.startedAt}`.mapWith(latestScan.startedAt).as("last_seen_at"),
 		})
 		.from(topicMemories)
@@ -173,7 +173,7 @@ function selectTopicMemoryRows(options: VisibleTopicMemoriesOptions) {
 				: sql`false`,
 		)
 		.where(toVisibleTopicMemories(options))
-		.orderBy(rank)
+		.orderBy(addedOrder)
 }
 
 /** Fetches vectors only for comparable rows in the bounded grouping buckets. */
@@ -194,8 +194,9 @@ export function topicMemoryGroupingColumns() {
 }
 
 function toTopicMemoryPage(rows: JournalRow[], page: number): JournalPage {
+	// rank groups by their first saved row and show the most recently added groups first
+	const groups = groupTopicMemories(rows, preferTopicMemoryRepresentative).reverse()
 	// clamp to the last page of the same grouped snapshot used to choose the representatives
-	const groups = groupTopicMemories(rows, preferTopicMemoryRepresentative)
 	const pageCount = Math.ceil(groups.length / TOPIC_MEMORY_PAGE_SIZE)
 	const start = (toTopicMemoryPageNumber(page, pageCount) - 1) * TOPIC_MEMORY_PAGE_SIZE
 	return {

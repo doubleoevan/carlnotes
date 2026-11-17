@@ -448,6 +448,59 @@ test("equal undated claims preserve the combined row in history", async () => {
 	})
 })
 
+test("the Journal shows newly added facts before older groups with newer wording or feedback", async () => {
+	await withTopic(async ({ topicId, ownerId }) => {
+		// backfilled evidence can be older than the first evidence for a previously saved fact
+		const olderEvidence = await insertBrew(topicId, 1)
+		const firstObservation = await insertBrew(topicId, 2)
+		const repeat = await insertBrew(topicId, 3)
+		const newFact = "The cafe sells tea."
+		const newWording = "The cafe opened for customers."
+		const facts = [
+			[firstObservation, "The cafe opened.", "opened", "2026-11-01"],
+			[olderEvidence, newFact, "sells tea", "2026-11-02"],
+			[repeat, newWording, "opened", "2026-11-03"],
+		] as const
+		const [firstRow] = await db
+			.insert(topicMemories)
+			.values(
+				facts.map(([brew, text, value, addedAt]) => ({
+					topicId,
+					text,
+					value,
+					kind: "fact" as const,
+					subject: "Cafe",
+					claimType: "other" as const,
+					isAtomic: true,
+					importance: 0.8,
+					findingIds: [brew.findingId],
+					firstScanId: brew.scanId,
+					lastSeenScanId: brew.scanId,
+					embedding: vector(1),
+					embeddingModel: TOPIC_MEMORY_EMBEDDING_MODEL,
+					createdAt: new Date(addedAt),
+				})),
+			)
+			.returning({ id: topicMemories.id })
+		if (!firstRow) {
+			throw new Error("Missing first Journal row")
+		}
+		await saveTopicMemoryFeedback({
+			topicId,
+			userId: ownerId,
+			topicMemoryId: firstRow.id,
+			feedback: { rating: "up", note: "Keep the opening date." },
+		})
+
+		// both Journal readers use the first saved date for the group and display the latest evidence
+		const options = { topicId, userId: ownerId, page: 1 }
+		const journal = await loadTopicMemoriesPage(options)
+		expect(journal.items.map(({ text }) => text)).toEqual([newFact, newWording])
+		expect((await loadMemberTopicMemoriesPage(options))?.page).toEqual(journal)
+		expect((await loadRankedTopicMemories({ topicId }))[0]?.text).toBe(newWording)
+	})
+})
+
 test("both prompt loaders keep Skywork AI editing and Spotify publishing as separate groups", async () => {
 	await withTopic(async ({ topicId, ownerId }) => {
 		// two distinct values share a subject and type. repeated editing evidence shares one group

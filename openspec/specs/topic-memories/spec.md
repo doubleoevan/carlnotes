@@ -126,7 +126,13 @@ Exact combines SHALL match the normalized subject, claim type, and value, and re
 
 ### Requirement: Readers and authorized raters use the Journal
 
-The Journal SHALL read one page of active topic memories at a time. It SHALL show the numbered claims and rank positive feedback first, corrections second, and the remainder by importance and recency.
+The Journal SHALL read one page of active topic memories at a time. It SHALL show numbered claims with the most recently added claims first across pages. A displayed duplicate group SHALL use its earliest saved date among eligible rows.
+
+#### Scenario: A newly added claim appears first
+
+- **WHEN** a reader opens the Journal after Carl adds a claim
+- **THEN** the claim appears ahead of older entries, including those from more recent brews or with positive feedback
+- **AND** later evidence for an existing group does not advance its position ahead of a newly added claim
 
 #### Scenario: A Topic has no topic memories
 

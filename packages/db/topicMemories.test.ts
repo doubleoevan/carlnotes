@@ -28,7 +28,7 @@ test("the Journal indexes active reads and permits one feedback row per rater", 
 	expect(memories.foreignKeys.map((key) => key.reference().foreignTable)).toContain(topicMemories)
 })
 
-test("Journal and prompt reads share feedback priority and keep inactive topic memories out", async () => {
+test("the Journal groups from creation order while prompts keep feedback priority", async () => {
 	// exercise both readers, including the second page and a chapter-specific public slice
 	const queries = stubConnectionPool(() => [])
 	expect(await loadTopicMemoriesPage({ topicId: "topic-1", userId: null, page: 2 })).toEqual({
@@ -36,19 +36,17 @@ test("Journal and prompt reads share feedback priority and keep inactive topic m
 		pageCount: 0,
 	})
 	await loadRankedTopicMemories({ topicId: "topic-1", embeddings: [[1, 0]], isPublicOnly: true })
-	// both readers rank feedback before importance
-	const ranked = queries.filter(({ text }) => text.includes("order by case when exists"))
-	expect(ranked).toHaveLength(2)
-	for (const query of ranked) {
-		expect(query.values).toContain("active")
-		expect(query.text).toContain("then 0 when")
-		expect(query.text).toContain("then 1 else 2 end")
-		expect(query.text).toContain('"importance" desc')
-	}
-	// paging and public relevance each add their own query bounds
-	expect(ranked[1]?.text).toContain("<=>")
-	expect(ranked[1]?.text).toContain('"scans"."id" = "topic_memories"."last_seen_scan_id"')
-	expect(ranked[1]?.text).toContain('"topics"."visibility" = \'public\'')
+	// keep the Journal's date order independent of prompt relevance and ratings
+	const [journal, prompt] = queries
+	expect(journal?.text).toContain('order by "topic_memories"."created_at", "topic_memories"."id"')
+	expect(journal?.values).toContain("active")
+	expect(prompt?.values).toContain("active")
+	expect(prompt?.text).toContain("then 0 when")
+	expect(prompt?.text).toContain("then 1 else 2 end")
+	expect(prompt?.text).toContain('"importance" desc')
+	expect(prompt?.text).toContain("<=>")
+	expect(prompt?.text).toContain('"scans"."id" = "topic_memories"."last_seen_scan_id"')
+	expect(prompt?.text).toContain('"topics"."visibility" = \'public\'')
 })
 
 test("invite Journal rows and Brew diary counts share the first-Scan activation gate", async () => {
