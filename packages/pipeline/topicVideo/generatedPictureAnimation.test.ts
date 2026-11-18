@@ -10,9 +10,9 @@ import { prepareSilentPictureAnimation, selectGeneratedAnimation } from "./gener
 import * as filmLock from "./topicVideoLock"
 import { planVideoScenes, sha256Hash } from "./videoScenePlan"
 
-test("only a shown generated illustration with selected animation can use Omni", () => {
+test("only a shown generated illustration with selected animation can use the video model", () => {
 	const origins = ["resource", "house", "generated", "generated"] as const
-	const sceneImages = origins.map((origin, index) => ({
+	const videoSceneImages = origins.map((origin, index) => ({
 		sourceImageHash: sha256Hash(String(index)),
 		width: 1280,
 		height: 720,
@@ -26,10 +26,10 @@ test("only a shown generated illustration with selected animation can use Omni",
 		startSeconds: 0,
 		title: "",
 		captions: [],
-		sourceImageHashes: sceneImages.map((i) => i.sourceImageHash),
-		sceneImages,
+		sourceImageHashes: videoSceneImages.map((i) => i.sourceImageHash),
+		videoSceneImages,
 	})
-	const regions = sceneImages.map((i) => ({
+	const regions = videoSceneImages.map((i) => ({
 		sourceImageHash: i.sourceImageHash,
 		effect: "foliage" as const,
 		left: 100,
@@ -43,7 +43,7 @@ test("only a shown generated illustration with selected animation can use Omni",
 	expect(
 		selectGeneratedAnimation({
 			...plan,
-			beats: plan.beats.filter((b) => b.sourceImageHash !== sceneImages[3]?.sourceImageHash),
+			beats: plan.beats.filter((b) => b.sourceImageHash !== videoSceneImages[3]?.sourceImageHash),
 			pictureAnimations: regions,
 		}),
 	).toBeUndefined()

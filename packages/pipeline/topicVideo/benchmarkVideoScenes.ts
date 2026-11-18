@@ -9,7 +9,7 @@ import type { VideoCaptionCue } from "./videoCaptions"
 import { loadPodcastCardStillPng, PODCAST_CARD_ZOOM_LIMIT, toVideoStillPng } from "./videoFrames"
 import { renderVideoChaptersPart, type VideoSegmentImage } from "./videoParts"
 import { checkVideoSceneOutput } from "./videoSceneOutput"
-import { sha256Hash } from "./videoScenePlan"
+import { sha256Hash, toStoredVideoScenePlan } from "./videoScenePlan"
 import { toShotZoomLimit } from "./videoShots"
 import { VIDEO_FRAMES_PER_SECOND as FPS } from "./videoTimeline"
 
@@ -112,7 +112,7 @@ for (const version of [3, 4]) {
 								captions,
 								isRetry: false,
 								resolvePlan: async (plan) => {
-									await Bun.write(join(target, "plan.json"), JSON.stringify(plan))
+									await Bun.write(join(target, "plan.json"), JSON.stringify(toStoredVideoScenePlan(plan)))
 									return plan
 								},
 							})

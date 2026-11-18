@@ -134,7 +134,7 @@ window.startVideoScene = async ({ plan, imageFiles, lowerThird, espresso }) => {
 		),
 	)
 	const animations = new Map<string, HTMLVideoElement>()
-	for (const image of plan.sceneImages) {
+	for (const image of plan.videoSceneImages) {
 		if (image.animationFileHash && !animations.has(image.animationFileHash)) {
 			animations.set(image.animationFileHash, await loadAnimation(image.animationFileHash))
 		}
@@ -154,7 +154,9 @@ window.startVideoScene = async ({ plan, imageFiles, lowerThird, espresso }) => {
 		if (!beat) {
 			throw Error("Unknown film shot")
 		}
-		const track = plan.sceneImages.find((image) => image.sourceImageHash === beat.sourceImageHash)?.animationFileHash
+		const track = plan.videoSceneImages.find(
+			(image) => image.sourceImageHash === beat.sourceImageHash,
+		)?.animationFileHash
 		const motion = track ? animations.get(track) : undefined
 		if (motion) {
 			return drawAnimation(ctx, motion, frame - beat.start)

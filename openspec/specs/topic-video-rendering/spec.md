@@ -963,9 +963,9 @@ The worker SHALL limit concurrent capture and encoding, memory, temporary disk, 
 - **THEN** it defers admission of the upgrade and gives new films the available render capacity
 - **AND** after a complete replacement passes validation, a single guarded publication swaps all ready file references
 
-### Requirement: A new film can animate one generated illustration with Gemini Omni
+### Requirement: A new film can animate one generated illustration with the video model
 
-A new animated film SHALL send at most one displayed generated illustration selected for a public Finding to Gemini Omni. The platform SHALL fund one distinct shot per Free account per UTC calendar month. Non-admin Plus and Premium owners SHALL fund up to three and seven respectively per month. Admin owners MAY fund extra shots from their model budget. Each film MAY also use up to eight distinct local picture effects and the reusable host steam.
+A new animated film SHALL send at most one displayed generated illustration selected for a public Finding to the video model. The platform SHALL fund one distinct shot per Free account per UTC calendar month. Non-admin Plus and Premium owners SHALL fund up to three and seven respectively per month. Admin owners MAY fund extra shots from their model budget. Each film MAY also use up to eight distinct local picture effects and the reusable host steam.
 
 #### Scenario: A paid generation succeeds
 
@@ -987,7 +987,7 @@ A new animated film SHALL send at most one displayed generated illustration sele
 
 - **WHEN** eight distinct local pictures have been assigned animation
 - **THEN** later chapters SHALL make no new picture planning requests
-- **AND** the host steam and the Omni animation SHALL use none of these eight slots
+- **AND** the host steam and the generated video SHALL use none of these eight slots
 
 #### Scenario: An admin owner has used the plan allowance
 

@@ -5,7 +5,7 @@ import { toVideoStillFit, VIDEO_HEIGHT, VIDEO_WIDTH } from "./videoFrames"
 // the maximum pictures one chapter sends for animation planning and saves in its scene plan
 export const CHAPTER_ANIMATION_CANDIDATE_LIMIT = 10
 
-// the most distinct Kimi-selected local effects in one film
+// the most distinct local effects selected by the animation model in one film
 export const FILM_LOCAL_ANIMATION_LIMIT = 8
 
 const coordinate = z.int().min(0).max(1000)

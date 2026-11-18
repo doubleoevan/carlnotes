@@ -33,7 +33,7 @@ export async function openVideoScenePage(
 	for (const { sourceImageHash } of document.imageFiles) {
 		files.set(`/${sourceImageHash}.jpg`, { path: join(directory, `${sourceImageHash}.jpg`), contentType: "image/jpeg" })
 	}
-	for (const image of document.plan.sceneImages) {
+	for (const image of document.plan.videoSceneImages) {
 		if (image.animationFileHash) {
 			files.set(`/${image.animationFileHash}.webm`, {
 				path: join(directory, `${image.animationFileHash}.webm`),

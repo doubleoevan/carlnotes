@@ -1,7 +1,7 @@
 // One bounded vision call selects animation for the public pictures a chapter actually shows.
 import { CHAT_COST_PER_MILLION_TOKENS, tokenCost } from "@carlnotes/models/budget"
 import { loadOrProvisionUserLiteLLMKey } from "@carlnotes/models/litellm"
-import { chatModel, LOW_REASONING_PROVIDER_OPTIONS } from "@carlnotes/models/models"
+import { chatModel as animationModel, LOW_REASONING_PROVIDER_OPTIONS } from "@carlnotes/models/models"
 import { PRIVATE_MODEL_OPTIONS } from "@carlnotes/models/privateModelOptions"
 import { fetchPromptTemplate, promptTelemetry } from "@carlnotes/models/prompts/fetch"
 import { writePrompt } from "@carlnotes/models/prompts/write"
@@ -64,7 +64,7 @@ export async function planPictureAnimation(
 	const timeout = AbortSignal.timeout(75000)
 	content.push({ type: "text", text: prompt })
 	const { output, usage } = await generateText({
-		model: chatModel(key),
+		model: animationModel(key),
 		providerOptions: LOW_REASONING_PROVIDER_OPTIONS,
 		messages: [{ role: "user", content }],
 		output: Output.object({ schema: response }),

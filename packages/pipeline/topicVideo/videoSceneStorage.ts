@@ -10,6 +10,7 @@ import {
 	checkRetainedScenePictures,
 	resolveSavedVideoScenePlan,
 	sha256Hash,
+	toStoredVideoScenePlan,
 	toVideoScenePlansHash,
 	type VideoScenePlan,
 	verifyVideoScenePlan,
@@ -49,7 +50,7 @@ export async function saveVideoScenePlan(
 		}
 
 		// Save even an empty selection. An abandoned reservation settles on its original montage.
-		const reservation = JSON.stringify(decision.reservation)
+		const reservation = serializeScenePlan(decision.reservation)
 		try {
 			signal?.throwIfAborted()
 			const regions = (await selectAnimation?.()) ?? []
@@ -108,7 +109,7 @@ export function reserveChapterAnimation(
 	) {
 		return { result: { status: "wait" } }
 	}
-	const alreadySaved = bytes === JSON.stringify(plan)
+	const alreadySaved = bytes === serializeScenePlan(plan)
 	// Resolution returns the requested plan itself only when the stored selection needs replacing.
 	if (alreadySaved || plan !== expected || (isRetry && bytes)) {
 		return { result: { status: "ready", plan }, ...(reservation || !alreadySaved ? { save: plan } : {}) }
@@ -122,6 +123,13 @@ export function reserveChapterAnimation(
 	return { result: { status: "select", reservation: pending }, save: pending }
 }
 
+// Both workers compare the reservation bytes before the selected animation can be saved.
+function serializeScenePlan(value: VideoScenePlan | Reservation): string {
+	return JSON.stringify(
+		"plan" in value ? { ...value, plan: toStoredVideoScenePlan(value.plan) } : toStoredVideoScenePlan(value),
+	)
+}
+
 // Serialize only the private object read and write with competing renders and episode removal.
 async function updatePlan<T>(expected: VideoScenePlan, update: PlanUpdate<T>): Promise<T> {
 	const key = toTopicVideoScenePlanKey(expected.episode, expected.position)
@@ -129,7 +137,7 @@ async function updatePlan<T>(expected: VideoScenePlan, update: PlanUpdate<T>): P
 		const bytes = (await attachmentExists(key)) ? await getAttachmentBytes(key) : null
 		const { result, save } = update(bytes && new TextDecoder().decode(bytes))
 		if (save) {
-			await uploadAttachment(key, new TextEncoder().encode(JSON.stringify(save)), "application/json")
+			await uploadAttachment(key, new TextEncoder().encode(serializeScenePlan(save)), "application/json")
 		}
 		return result
 	})

@@ -17,7 +17,7 @@ import type { VideoScenePlan } from "./videoScenePlan"
 export function selectGeneratedAnimation(plan: VideoScenePlan) {
 	return plan.pictureAnimations?.find(
 		(region) =>
-			plan.sceneImages.some(
+			plan.videoSceneImages.some(
 				(image) =>
 					image.sourceImageHash === region.sourceImageHash && image.origin === "generated" && !image.animationFileHash,
 			) && plan.beats.some((beat) => beat.sourceImageHash === region.sourceImageHash),
@@ -40,7 +40,7 @@ export async function applyGeneratedPictureAnimation(options: {
 	}
 
 	// Generate from the approved public picture alone. Use the saved bytes for every matching shot.
-	const index = plan.sceneImages.findIndex((image) => image.sourceImageHash === region.sourceImageHash)
+	const index = plan.videoSceneImages.findIndex((image) => image.sourceImageHash === region.sourceImageHash)
 	const image = images[index]
 	if (!image) {
 		return
@@ -107,7 +107,7 @@ export async function applyGeneratedPictureAnimation(options: {
 		// Bind the selected source and reuse the existing montage's camera, cuts and narration.
 		const path = join(directory, "generated-picture.mkv")
 		await Bun.write(path, bytes)
-		for (const [i, entry] of plan.sceneImages.entries()) {
+		for (const [i, entry] of plan.videoSceneImages.entries()) {
 			if (entry.sourceImageHash === region.sourceImageHash && images[i]) {
 				images[i].reviewedAnimationPath = path
 			}

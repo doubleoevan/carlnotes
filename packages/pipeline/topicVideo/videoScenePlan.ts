@@ -14,7 +14,7 @@ import { toCaptionBreakFrames, toVideoShots } from "./videoShots"
 import { VIDEO_FRAMES_PER_SECOND as FPS, type VideoSegment } from "./videoTimeline"
 
 const sha256Hex = z.string().regex(/^[a-f0-9]{64}$/)
-const sceneImage = z.strictObject({
+const videoSceneImage = z.strictObject({
 	sourceImageHash: sha256Hex,
 	animationFileHash: sha256Hex.optional(),
 	width: z.int().positive().max(65535),
@@ -27,7 +27,8 @@ const beat = z.strictObject({
 	move: z.enum(["zoom-in", "zoom-out", "pan-left", "pan-right"]),
 	sourceImageHash: sha256Hex,
 })
-const schema = z.strictObject({
+// Published chapter hashes depend on the field names and their order in this stored format.
+const storedPlan = z.strictObject({
 	version: z.literal(2),
 	templateVersion: z.literal(2),
 	timingVersion: z.literal(1),
@@ -35,7 +36,7 @@ const schema = z.strictObject({
 	episode: z.string().min(1),
 	position: z.int().nonnegative(),
 	inputHash: sha256Hex,
-	sceneImages: z.array(sceneImage).max(64),
+	sceneImages: z.array(videoSceneImage).max(64),
 	pictureAnimations: z
 		.array(pictureAnimationRegion.extend({ sourceImageHash: sha256Hex }))
 		.max(CHAPTER_ANIMATION_CANDIDATE_LIMIT)
@@ -43,14 +44,15 @@ const schema = z.strictObject({
 	frameCount: z.int().positive(),
 	beats: z.array(beat),
 })
+const schema = storedPlan.omit({ sceneImages: true }).extend({ videoSceneImages: storedPlan.shape.sceneImages })
 export type VideoScenePlan = z.infer<typeof schema>
 
 // Read the first on-disk format so an existing film can reuse its saved picture selection.
-const firstSceneImage = sceneImage.omit({ sourceImageHash: true, animationFileHash: true }).extend({
+const firstSceneImage = videoSceneImage.omit({ sourceImageHash: true, animationFileHash: true }).extend({
 	id: sha256Hex,
 	motion: sha256Hex.optional(),
 })
-const firstPlan = schema.omit({ sceneImages: true, pictureAnimations: true }).extend({
+const firstPlan = schema.omit({ videoSceneImages: true, pictureAnimations: true }).extend({
 	version: z.literal(1),
 	inventory: z.array(firstSceneImage).max(64),
 	beats: z.array(beat.omit({ sourceImageHash: true }).extend({ asset: sha256Hex })),
@@ -59,13 +61,19 @@ const firstPlan = schema.omit({ sceneImages: true, pictureAnimations: true }).ex
 		.max(CHAPTER_ANIMATION_CANDIDATE_LIMIT)
 		.optional(),
 })
+/** Keeps stored plans and their chapter hashes readable across worker versions. */
+export function toStoredVideoScenePlan({ videoSceneImages, ...plan }: VideoScenePlan): z.infer<typeof storedPlan> {
+	return storedPlan.parse({ ...plan, sceneImages: videoSceneImages })
+}
+
 const storedScenePlan = z.union([
 	schema,
+	storedPlan.transform(({ sceneImages, ...plan }) => schema.parse({ ...plan, videoSceneImages: sceneImages })),
 	firstPlan.transform(({ inventory, pictureMotions, beats, ...plan }) =>
 		schema.parse({
 			...plan,
 			version: 2,
-			sceneImages: inventory.map(({ id, motion, ...image }) => ({
+			videoSceneImages: inventory.map(({ id, motion, ...image }) => ({
 				...image,
 				sourceImageHash: id,
 				animationFileHash: motion,
@@ -83,7 +91,7 @@ export type VideoSceneInput = {
 	frameCount: number
 	title: string
 	sourceImageHashes: string[]
-	sceneImages?: z.infer<typeof sceneImage>[]
+	videoSceneImages?: z.infer<typeof videoSceneImage>[]
 	renderBuild?: string
 	captions: VideoCaptionCue[]
 }
@@ -178,7 +186,7 @@ export function planVideoScenes(input: VideoSceneInput): VideoScenePlan {
 			sourceImageHashes,
 			title,
 			input.captions,
-			input.sceneImages,
+			input.videoSceneImages,
 			input.renderBuild,
 		]),
 	)
@@ -193,7 +201,7 @@ export function planVideoScenes(input: VideoSceneInput): VideoScenePlan {
 		templateVersion: 2,
 		timingVersion: 1,
 		rendererVersion: 4,
-		sceneImages: input.sceneImages ?? [],
+		videoSceneImages: input.videoSceneImages ?? [],
 		episode,
 		position,
 		inputHash,
@@ -213,7 +221,7 @@ export function verifyVideoScenePlan(value: unknown, expected: VideoScenePlan): 
 	const seen = new Set<string>()
 	const isValid = pictureAnimations?.every(({ sourceImageHash, ...region }) => {
 		// Verify the saved region against the current approved picture and the shots that show it.
-		const image = expected.sceneImages.find((entry) => entry.sourceImageHash === sourceImageHash)
+		const image = expected.videoSceneImages.find((entry) => entry.sourceImageHash === sourceImageHash)
 		if (
 			!image ||
 			image.animationFileHash ||
@@ -251,9 +259,9 @@ export function resolveSavedVideoScenePlan(bytes: string, expected: VideoScenePl
 		isRetry &&
 		previous.episode === expected.episode &&
 		previous.position === expected.position &&
-		previous.sceneImages.some(
+		previous.videoSceneImages.some(
 			(image) =>
-				!expected.sceneImages.some(
+				!expected.videoSceneImages.some(
 					(current) =>
 						current.sourceImageHash === image.sourceImageHash && current.animationFileHash === image.animationFileHash,
 				),
@@ -286,11 +294,11 @@ export function checkRetainedScenePictures(
 	if (
 		plan.episode !== episode ||
 		plan.position !== position ||
-		plan.sceneImages.some(
+		plan.videoSceneImages.some(
 			(image) => (image.origin !== "house" || shown.has(image.sourceImageHash)) && !approved.has(image.sourceImageHash),
 		)
 	) {
 		throw Error("The stored film chapter contains a picture that is no longer approved")
 	}
-	return sha256Hash(JSON.stringify(plan))
+	return sha256Hash(JSON.stringify(toStoredVideoScenePlan(plan)))
 }

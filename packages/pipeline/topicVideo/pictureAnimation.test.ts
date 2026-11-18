@@ -15,16 +15,23 @@ import {
 	pictureAnimationFilters,
 } from "./pictureAnimation"
 import { pictureAnimationChoices } from "./pictureAnimationChoices"
+import { toVideoSceneBuildHash } from "./renderVideoScene"
 import * as filmLock from "./topicVideoLock"
 import { encodeVideoShot } from "./videoEncode"
 import { toLowerThirdPng, toVideoStillPng } from "./videoFrames"
 import { checkVideoSceneOutput } from "./videoSceneOutput"
-import { planVideoScenes, resolveSavedVideoScenePlan, sha256Hash, verifyVideoScenePlan } from "./videoScenePlan"
+import {
+	planVideoScenes,
+	resolveSavedVideoScenePlan,
+	sha256Hash,
+	toStoredVideoScenePlan,
+	verifyVideoScenePlan,
+} from "./videoScenePlan"
 import { reserveChapterAnimation, saveVideoScenePlan } from "./videoSceneStorage"
 
 const sourceImageHash = sha256Hash("waterfront")
 const region = { sourceImageHash, effect: "water" as const, top: 610, bottom: 860, left: 470, right: 830 }
-const sceneImages = [{ sourceImageHash: sourceImageHash, width: 1280, height: 720, origin: "resource" as const }]
+const videoSceneImages = [{ sourceImageHash: sourceImageHash, width: 1280, height: 720, origin: "resource" as const }]
 const input = {
 	episode: "episode",
 	position: 0,
@@ -33,17 +40,36 @@ const input = {
 	title: "Waterfront",
 	captions: [],
 	sourceImageHashes: [sourceImageHash],
-	sceneImages,
+	videoSceneImages,
 }
 const expected = planVideoScenes(input)
 
+test("an existing animation selection survives the renderer rename for a retry and a competing film render", () => {
+	// These are the two source fingerprints from before and after the scene image rename.
+	const publishedBuild = "e14d44279057bdf0fafc7725276fae9d37277a2d0dfad6dee9c5efc04254b4ae"
+	const renamedBuild = "aff8b4e73f4e1b688a572c3e6c131978644c6f442f8178863cb46b7cf36ad7aa"
+	const previous = planVideoScenes({ ...input, renderBuild: publishedBuild })
+	const selected = verifyVideoScenePlan({ ...previous, pictureAnimations: [region] }, previous)
+	const saved = JSON.stringify(toStoredVideoScenePlan(selected))
+	const current = planVideoScenes({ ...input, renderBuild: toVideoSceneBuildHash(renamedBuild) })
+
+	// Both workers find the completed selection. A different build still has its own identity.
+	for (const isRetry of [false, true]) {
+		expect(reserveChapterAnimation(saved, current, isRetry, true, 100)).toEqual({
+			result: { status: "ready", plan: selected },
+		})
+	}
+	const changed = sha256Hash("different renderer")
+	expect(toVideoSceneBuildHash(changed)).toBe(changed)
+})
+
 test("a retry reuses a first-format selection only for the same approved scene images", () => {
-	const { sceneImages, ...fields } = expected
+	const { videoSceneImages, ...fields } = expected
 	const saved = JSON.stringify({
 		...fields,
 		version: 1,
 		inputHash: sha256Hash("first renderer"),
-		inventory: sceneImages.map(({ sourceImageHash, animationFileHash, ...image }) => ({
+		inventory: videoSceneImages.map(({ sourceImageHash, animationFileHash, ...image }) => ({
 			...image,
 			id: sourceImageHash,
 			motion: animationFileHash,
@@ -67,7 +93,7 @@ test("a retry reuses a first-format selection only for the same approved scene i
 	expect(reserveChapterAnimation(saved, expected, false, true, 100).result.status).toBe("ready")
 	const pending = JSON.stringify({ plan: JSON.parse(saved), until: 10_100, attempt: "first-worker" })
 	expect(reserveChapterAnimation(pending, expected, false, true, 100).result).toEqual({ status: "wait" })
-	const removed = planVideoScenes({ ...input, sceneImages: [] })
+	const removed = planVideoScenes({ ...input, videoSceneImages: [] })
 	expect(() => reserveChapterAnimation(saved, removed, true, true, 100)).toThrow("no longer approved")
 })
 
@@ -170,7 +196,7 @@ test("a chapter can save and replay ten moving pictures and rejects an eleventh"
 		...input,
 		frameCount: 2000,
 		sourceImageHashes,
-		sceneImages: sourceImageHashes.map((sourceImageHash) => ({
+		videoSceneImages: sourceImageHashes.map((sourceImageHash) => ({
 			sourceImageHash,
 			width: 1280,
 			height: 720,
@@ -178,7 +204,7 @@ test("a chapter can save and replay ten moving pictures and rejects an eleventh"
 		})),
 	})
 
-	// check the largest allowed selection against the same sceneImages on replay
+	// check the largest allowed selection against the same approved pictures on replay
 	const regions = sourceImageHashes.map((sourceImageHash) => ({ ...region, sourceImageHash }))
 	const selected = verifyVideoScenePlan(
 		{ ...plan, pictureAnimations: regions.slice(0, CHAPTER_ANIMATION_CANDIDATE_LIMIT) },
@@ -196,10 +222,12 @@ test("concurrent renders join the reservation and a crashed planner consumes onl
 	expect(reserveChapterAnimation(bytes, expected, true, true, 200).result.status).toBe("wait")
 	const expired = reserveChapterAnimation(bytes, expected, true, true, 1000000)
 	expect(expired.save).toEqual(expected)
-	expect(reserveChapterAnimation(JSON.stringify(expected), expected, true, true, 1000001)).toEqual({
+	expect(
+		reserveChapterAnimation(JSON.stringify(toStoredVideoScenePlan(expected)), expected, true, true, 1000001),
+	).toEqual({
 		result: { status: "ready", plan: expected },
 	})
-	const replaced = planVideoScenes({ ...input, sceneImages: [] })
+	const replaced = planVideoScenes({ ...input, videoSceneImages: [] })
 	expect(() => reserveChapterAnimation(bytes, replaced, true, true, 200)).toThrow("no longer approved")
 })
 
@@ -234,7 +262,7 @@ test.each(["reservation", "selection", "commit"] as const)(
 			await expect(saveVideoScenePlan(expected, false, select, stop.signal)).rejects.toThrow(
 				stage === "selection" ? "Selection failed" : "Film cancelled",
 			)
-			expect(JSON.parse(new TextDecoder().decode(stored))).toEqual(expected)
+			expect(JSON.parse(new TextDecoder().decode(stored))).toEqual(toStoredVideoScenePlan(expected))
 			expect(await saveVideoScenePlan(expected, true, select)).toEqual(expected)
 			expect(calls).toBe(stage === "reservation" ? 0 : 1)
 		} finally {

@@ -17,7 +17,13 @@ import * as videoAudio from "./videoAudio"
 import * as videoChapterImages from "./videoChapterImages"
 import * as videoFilm from "./videoFilm"
 import * as videoImageParts from "./videoImageParts"
-import { planVideoScenes, sha256Hash, toRetainedPosterHash, toVideoScenePlansHash } from "./videoScenePlan"
+import {
+	planVideoScenes,
+	sha256Hash,
+	toRetainedPosterHash,
+	toStoredVideoScenePlan,
+	toVideoScenePlansHash,
+} from "./videoScenePlan"
 import type { VideoSegment } from "./videoTimeline"
 
 // a published podcast episode with audio, a transcript, and its own image, in the column order the film's read selects
@@ -277,7 +283,7 @@ test.each(["matching", "replaced", "changed-poster", "legacy"] as const)(
 				title: "",
 				captions: [],
 				sourceImageHashes: [sourceImageHash],
-				sceneImages: [{ sourceImageHash, origin: "resource", width: 1280, height: 720 }],
+				videoSceneImages: [{ sourceImageHash, origin: "resource", width: 1280, height: 720 }],
 			})
 		}
 		const published = createPlan(picture)
@@ -290,12 +296,12 @@ test.each(["matching", "replaced", "changed-poster", "legacy"] as const)(
 		const oldPoster = { stillPng: picture, zoomLimit: 2, isPodcastCard: false }
 		const newPoster = { ...oldPoster, stillPng: replacement }
 		const hash = toVideoScenePlansHash(
-			[sha256Hash(JSON.stringify(published))],
+			[sha256Hash(JSON.stringify(toStoredVideoScenePlan(published)))],
 			sceneSources,
 			toRetainedPosterHash(episode, segments, [], oldPoster),
 		)
 		const freshHash = toVideoScenePlansHash(
-			[sha256Hash(JSON.stringify(createPlan(current)))],
+			[sha256Hash(JSON.stringify(toStoredVideoScenePlan(createPlan(current))))],
 			sceneSources,
 			toRetainedPosterHash(episode, segments, [], newPoster),
 		)
@@ -320,7 +326,9 @@ test.each(["matching", "replaced", "changed-poster", "legacy"] as const)(
 		// only the matching plan may read and publish the retained pixels
 		const downloads = spyOn(storage, "downloadPodcastEpisodeFile").mockResolvedValue(undefined)
 		spyOn(storage, "attachmentExists").mockResolvedValue(true)
-		spyOn(storage, "getAttachmentBytes").mockResolvedValue(Buffer.from(JSON.stringify(createPlan(current))))
+		spyOn(storage, "getAttachmentBytes").mockResolvedValue(
+			Buffer.from(JSON.stringify(toStoredVideoScenePlan(createPlan(current)))),
+		)
 		const cutoff = spyOn(monthlyBudgetCutoffs, "isMonthlyBudgetCutoffPassed").mockResolvedValue(scenario === "legacy")
 		spyOn(videoAudio, "loadVideoAudio").mockResolvedValue({
 			audioPath: "audio.mp3",

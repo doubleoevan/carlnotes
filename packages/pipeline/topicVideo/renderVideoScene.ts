@@ -15,7 +15,7 @@ import type { VideoCaptionCue } from "./videoCaptions"
 import { loadPodcastCardStillPng, toVideoStillPng } from "./videoFrames"
 import { joinVideoPartShots, renderSegmentShots, type VideoChapterImages, type VideoSegmentImage } from "./videoParts"
 import { checkVideoSceneOutput } from "./videoSceneOutput"
-import { planVideoScenes, sha256Hash } from "./videoScenePlan"
+import { planVideoScenes, sha256Hash, toStoredVideoScenePlan } from "./videoScenePlan"
 import { saveVideoScenePlan } from "./videoSceneStorage"
 import { VIDEO_FRAMES_PER_SECOND, type VideoSegment } from "./videoTimeline"
 
@@ -50,7 +50,7 @@ export async function renderVideoScene({
 	const directory = await mkdtemp(join(workDirectory, "scene-"))
 	try {
 		const prepared = await prepareVideoSceneImages(chapter.images, directory, signal)
-		const { sceneImages, images } = prepared
+		const { videoSceneImages, images } = prepared
 		const { position, startSeconds, frameCount } = segment
 		const endFrame = Math.round(startSeconds * VIDEO_FRAMES_PER_SECOND) + frameCount
 		const chapterCaptions = captions.filter(
@@ -59,14 +59,14 @@ export async function renderVideoScene({
 		const bundle = fileURLToPath(new URL("./videoEncode.ts", import.meta.url))
 		const renderBuild = await videoSceneBuild(bundle)
 		const input = {
-			sceneImages,
+			videoSceneImages,
 			renderBuild,
 			episode: podcastEpisodeId,
 			position,
 			startSeconds,
 			frameCount,
 			title: chapter.hasPublicSceneSource ? chapter.lowerThirdText.title : "",
-			sourceImageHashes: sceneImages.map((asset) => asset.sourceImageHash),
+			sourceImageHashes: videoSceneImages.map((asset) => asset.sourceImageHash),
 			captions: chapter.hasPublicSceneSource ? chapterCaptions : [],
 		}
 		const expected = planVideoScenes(input)
@@ -79,7 +79,7 @@ export async function renderVideoScene({
 				localAnimationAssets.size < FILM_LOCAL_ANIMATION_LIMIT
 				? async () => {
 						// Consider only shown pictures that have no approved loop. Keep each exact image once per call.
-						const candidates = sceneImages.flatMap((asset, index) => {
+						const candidates = videoSceneImages.flatMap((asset, index) => {
 							const origin = asset.origin
 							const image = images[index]
 							if (
@@ -87,7 +87,7 @@ export async function renderVideoScene({
 								origin === "house" ||
 								asset.animationFileHash ||
 								!expected.beats.some((beat) => beat.sourceImageHash === asset.sourceImageHash) ||
-								sceneImages.findIndex((entry) => entry.sourceImageHash === asset.sourceImageHash) !== index
+								videoSceneImages.findIndex((entry) => entry.sourceImageHash === asset.sourceImageHash) !== index
 							) {
 								return []
 							}
@@ -112,7 +112,7 @@ export async function renderVideoScene({
 			signal,
 		)
 		// A paid animation uses the owner's monthly allowance. Approved host loops have their own artwork.
-		const omniAsset =
+		const animatedSourceImageHash =
 			chapter.hasPublicSceneSource && animationBilling && !animationBilling.isPlatformBilled
 				? await applyGeneratedPictureAnimation({
 						plan,
@@ -127,11 +127,11 @@ export async function renderVideoScene({
 		// Allocate local effects in chapter order. Repeated shots of one picture use the same slot.
 		for (const [index, image] of images.entries()) {
 			const region = plan.pictureAnimations?.find(
-				(choice) => choice.sourceImageHash === sceneImages[index]?.sourceImageHash,
+				(choice) => choice.sourceImageHash === videoSceneImages[index]?.sourceImageHash,
 			)
 			if (
 				region &&
-				region.sourceImageHash !== omniAsset &&
+				region.sourceImageHash !== animatedSourceImageHash &&
 				acceptLocalPictureAnimation(localAnimationAssets, region.sourceImageHash)
 			) {
 				image.pictureAnimation = region
@@ -142,7 +142,7 @@ export async function renderVideoScene({
 			startFrame: beat.start,
 			frameCount: beat.end - beat.start,
 			move: beat.move,
-			imageIndex: index % plan.sceneImages.length,
+			imageIndex: index % plan.videoSceneImages.length,
 		}))
 		const shotPaths = await renderSegmentShots({
 			podcastEpisodeId,
@@ -158,7 +158,7 @@ export async function renderVideoScene({
 		await joinVideoPartShots({ shotPaths, listPath: join(directory, "shots.txt"), partPath: output, signal })
 		await checkVideoSceneOutput(output, frameCount, signal)
 		// bind the completed frames to the exact plan held by this encoder
-		onEncodedPlan?.(sha256Hash(JSON.stringify(plan)))
+		onEncodedPlan?.(sha256Hash(JSON.stringify(toStoredVideoScenePlan(plan))))
 		return output
 	} finally {
 		await rm(directory, { recursive: true, force: true })
@@ -167,7 +167,7 @@ export async function renderVideoScene({
 
 // Bind each animation loop to its reviewed source and store its file hash in the private plan.
 async function prepareVideoSceneImages(input: VideoSegmentImage[], directory: string, signal?: AbortSignal) {
-	const sceneImages: NonNullable<import("./videoScenePlan").VideoSceneInput["sceneImages"]> = []
+	const videoSceneImages: NonNullable<import("./videoScenePlan").VideoSceneInput["videoSceneImages"]> = []
 	const images: VideoSegmentImage[] = []
 	for (const image of input) {
 		signal?.throwIfAborted()
@@ -180,7 +180,7 @@ async function prepareVideoSceneImages(input: VideoSegmentImage[], directory: st
 		if (reviewedAnimationPath && clip) {
 			await Bun.write(reviewedAnimationPath, clip)
 		}
-		sceneImages.push({
+		videoSceneImages.push({
 			sourceImageHash,
 			width: info.width,
 			height: info.height,
@@ -193,7 +193,7 @@ async function prepareVideoSceneImages(input: VideoSegmentImage[], directory: st
 			reviewedAnimationPath,
 		})
 	}
-	return { images, sceneImages }
+	return { images, videoSceneImages }
 }
 
 // Hash the montage, animation lookup and encoder together so a retry uses the appropriate plan.
@@ -214,5 +214,12 @@ async function videoSceneBuild(bundle: string): Promise<string> {
 		].map((path) => fileURLToPath(new URL(path, import.meta.url))),
 	]
 	const rendererFileHashes = await Promise.all(paths.map(async (path) => sha256Hash(await Bun.file(path).bytes())))
-	return sha256Hash(rendererFileHashes.join("/"))
+	return toVideoSceneBuildHash(sha256Hash(rendererFileHashes.join("/")))
+}
+
+/** Two builds render identical frames across the scene-image rename. Both reuse the same saved selections. */
+export function toVideoSceneBuildHash(fileHash: string): string {
+	return fileHash === "aff8b4e73f4e1b688a572c3e6c131978644c6f442f8178863cb46b7cf36ad7aa"
+		? "e14d44279057bdf0fafc7725276fae9d37277a2d0dfad6dee9c5efc04254b4ae"
+		: fileHash
 }

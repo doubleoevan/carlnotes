@@ -3,7 +3,7 @@ import { fetchLiteLLMModel } from "./models"
 import { fetchPromptTemplate } from "./prompts/fetch"
 import { writePrompt } from "./prompts/write"
 
-const MODEL = "gemini-omni-1.2-flash"
+const videoModel = "gemini-omni-1.2-flash"
 const MAX_VIDEO_BYTES = 12 * 1024 * 1024
 const MAX_RESPONSE_BYTES = MAX_VIDEO_BYTES * 2
 
@@ -42,7 +42,7 @@ export async function generateChapterPictureVideo(options: {
 		redirect: "error",
 		signal,
 		body: JSON.stringify({
-			model: MODEL,
+			model: videoModel,
 			store: false,
 			input: [
 				{ type: "image", mime_type: "image/jpeg", data: Buffer.from(options.jpeg).toString("base64") },
