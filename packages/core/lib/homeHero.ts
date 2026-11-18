@@ -13,8 +13,8 @@ export const HERO_CALL_TO_ACTION = "Give Carl a topic. You know the one. He'll b
 export const HERO_TAGLINE = "Carl stays up. You stay informed."
 
 // the hero image's description, and the pitch button's name and title
-export const HERO_IMAGE_ALT = "Carl, holding a raccoon and a machine learning textbook"
+export const HERO_IMAGE_ALT = "Carl writes in a notebook beside a laptop and a mug of coffee"
 export const HERO_PITCH_LABEL = "Meet Carl"
 
 // the hero image's size, which both heroes keep as its aspect ratio
-export const HERO_IMAGE_SIZE = { width: 472, height: 535 }
+export const HERO_IMAGE_SIZE = { width: 472, height: 352 }

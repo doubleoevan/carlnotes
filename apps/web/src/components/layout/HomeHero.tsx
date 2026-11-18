@@ -13,9 +13,8 @@ import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/c
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { SECTION_LABEL_CLASS } from "@/lib/styleClasses"
 import type { toLinkClickHandler } from "@/lib/utils"
-import { Attribution } from "./Attribution"
 
-// the tooltip on the hero's two note buttons
+// the tooltip on the narrow-screen note button
 const HERO_NOTE_TOOLTIP = "A note from Carl"
 
 /**
@@ -24,36 +23,37 @@ const HERO_NOTE_TOOLTIP = "A note from Carl"
  */
 export function HomeHero({ onHomeClick }: { onHomeClick: ReturnType<typeof toLinkClickHandler> | undefined }) {
 	return (
-		<div className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] items-end gap-x-4 sm:mt-3">
-			{/* Carl links home. the image is pulled down so his lower half starts behind the search bar */}
-			<AnchorLink href="/" onClick={onHomeClick} aria-label="CarlNotes home" className="shrink-0 sm:ml-4">
+		<div className="grid grid-cols-[min(50%,8.5rem)_minmax(0,1fr)] items-end gap-x-4 pt-1 pb-6 min-[370px]:grid-cols-[min(50%,9.25rem)_minmax(0,1fr)] min-[460px]:grid-cols-[7.25rem_minmax(0,1fr)] min-[704px]:grid-cols-[6.25rem_minmax(0,1fr)] md:grid-cols-[14rem_minmax(0,1fr)] md:pt-3 lg:grid-cols-[13rem_minmax(0,1fr)]">
+			{/* align the illustration with the search bar's icon and let it extend behind the bar */}
+			<AnchorLink
+				href="/"
+				onClick={onHomeClick}
+				aria-label="CarlNotes home"
+				className="-mb-2 ml-[calc(0.75rem+1px)] md:-mb-4"
+			>
 				<img
 					src="/carl-hero.png"
 					width={HERO_IMAGE_SIZE.width}
 					height={HERO_IMAGE_SIZE.height}
 					alt={HERO_IMAGE_ALT}
-					className="w-28 pb-6 -mb-4 sm:w-52"
+					className="h-auto w-full rounded-lg"
 				/>
 			</AnchorLink>
-			{/* the copy clears the search bar overlapping the hero's bottom edge */}
-			<div className="min-w-0 pb-10">
-				{/* Carl's pitch, then the call to action and the tagline.
-			    the pitch on a narrow screen is hidden and shows up in a popup */}
-				<div className="animate-hydrate text-sm sm:mt-3" style={{ animationDelay: "80ms" }}>
-					<p className="hidden max-w-xl sm:block">
-						{CARL_PITCH}
-						<AttributionButton />
-					</p>
-					<p className="mt-3 font-bold">
-						{HERO_CALL_TO_ACTION}
-						<PitchButton />
-					</p>
-					<p className="text-hero-accent mt-1 font-bold">
-						<AnchorLink href="/" onClick={onHomeClick} className="hover:underline">
-							{HERO_TAGLINE}
-						</AnchorLink>
-					</p>
-				</div>
+			{/* the pitch moves into the note button when it needs more room */}
+			<div
+				className="animate-hydrate min-w-0 self-center pb-1.5 text-[0.8125rem] leading-tight wrap-break-word md:text-sm"
+				style={{ animationDelay: "80ms" }}
+			>
+				<p className="hidden max-w-xl md:block">{CARL_PITCH}</p>
+				<p className="font-bold md:mt-3">
+					{HERO_CALL_TO_ACTION}
+					<PitchButton />
+				</p>
+				<p className="text-hero-accent mt-1 font-bold">
+					<AnchorLink href="/" onClick={onHomeClick} className="hover:underline">
+						{HERO_TAGLINE}
+					</AnchorLink>
+				</p>
 			</div>
 		</div>
 	)
@@ -66,7 +66,7 @@ function PitchButton() {
 			<Tooltip>
 				<TooltipTrigger asChild>
 					<PopoverTrigger
-						className="hover:opacity-75 ml-1 inline-grid size-5 translate-y-0.5 place-items-center align-text-bottom sm:hidden"
+						className="hover:opacity-75 ml-1 inline-grid size-5 translate-y-0.5 place-items-center align-text-bottom md:hidden"
 						aria-label={HERO_PITCH_LABEL}
 					>
 						{/* the tile fills this inline box exactly */}
@@ -80,32 +80,6 @@ function PitchButton() {
 				{/* the title label. the first line clears the close button */}
 				<div className={cn(SECTION_LABEL_CLASS, "mb-2 text-center")}>{HERO_PITCH_LABEL}</div>
 				<p>{CARL_PITCH}</p>
-			</PopoverContent>
-		</Popover>
-	)
-}
-
-// the note button tucked after the pitch. it opens the persona credit in a popover with a close ✕
-function AttributionButton() {
-	return (
-		<Popover>
-			<Tooltip>
-				<TooltipTrigger asChild>
-					<PopoverTrigger
-						className="hover:opacity-75 ml-1 inline-grid size-5 translate-y-0.5 place-items-center align-text-bottom"
-						aria-label="About the CarlNotes persona"
-					>
-						{/* the tile fills this inline box exactly */}
-						<NoteIcon className="size-5 rounded-sm" />
-					</PopoverTrigger>
-				</TooltipTrigger>
-				<TooltipContent>{HERO_NOTE_TOOLTIP}</TooltipContent>
-			</Tooltip>
-			<PopoverContent align="start" className="w-80 text-sm">
-				<PopoverCloseButton />
-				{/* the persona credit's label. the first line clears the close button */}
-				<div className={cn(SECTION_LABEL_CLASS, "mb-1 text-center")}>The Real Carl</div>
-				<Attribution />
 			</PopoverContent>
 		</Popover>
 	)

@@ -162,7 +162,7 @@ name.
 | `EditTopicModal` | not yet shared | Web edits the topic in a dialog with toasts. Mobile uses a native sheet with inline errors and the share sheet for the invite link. An adapter could hold that difference. |
 | `Header` | platform difference | Web shows a desktop nav, theme toggle, sign-in links, and a hamburger menu over the hero. Mobile shows a compact brand row in a safe area with the user menu. |
 | `HomeHeadline` | platform difference | Both read the headline from core homeHero. Web reveals it with stacked copies under a CSS mask wipe, and mobile with the native `ShimmerText`. Only the two sentences are shared. |
-| `HomeHero` | not yet shared | Both use the copy in core homeHero. Web opens the pitch and persona credit in hover popovers. Mobile opens the pitch in a native sheet. An adapter could hold that difference. |
+| `HomeHero` | not yet shared | Both align the illustration with the search icon and overlap it with the search toolbar. On narrow screens, web opens the pitch in a popover and mobile opens it in a native sheet. |
 | `HostAvatar` | not yet shared | Both show Carl's or Vienna's portrait from the Nightshift assets. Web uses an img tag, mobile an expo-image sized to the font scale. |
 | `InviteMembersModal` | not yet shared | Both wrap the app's own `TeamInviteFields` and send the staged invites. Web shows them in a dialog, mobile in a native sheet. An adapter could hold that difference. |
 | `InviteUserToTeamButton` | not yet shared | Web lists the teams in a popover menu with hover tooltips and toasts. Mobile lists them in a native sheet and loads statuses with react-query. An adapter could hold that difference. |
@@ -323,7 +323,7 @@ has a React Native Storybook story; the device comparison runs on the rebuilt de
 | The update badges, each group and the overflow | `Common/UpdateCountBadge` | not yet, stories only |
 | The topic screen's loading state with the film's card, the player card, and the empty section cards, and its player card with and without the podcast feed button | `Topic/TopicSkeleton`, Default, FilmCard, PlayerCard, PlayerCardWithFeedButton | not yet, stories only |
 | A team's loading state with its four card sections over its three tables | `Layout/PageSkeleton`, Team | not yet, stories only |
-| The visitor hero | `Layout/Header`, VisitorHome | not yet, stories only |
+| The visitor hero | `Layout/HomeHero`, Visitor | The 375 px dark web preview and iPhone SE Home share the image size, search icon alignment, and toolbar overlap. The note opens a web popover and a native sheet. |
 | The sign-up prompts | none, the sign-up screen is a route | not yet |
 | The invitation screen's states | `Invite/InviteNotice` | not yet, stories only |
 | The sign-in buttons with GitHub | none, the sign-in screen is a route | not yet |

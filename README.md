@@ -4,7 +4,7 @@ CarlNotes is a web app that reads each Topic's Sources on a schedule or on deman
 Topic's prompt. Its users get them in the Topic's Feed, a scan email, a podcast episode, and a chat. This README covers
 the stack, how the apps and packages fit together, the evals, and the commands that run, check, and deploy the app.
 
-<img src="apps/web/public/carl-hero.png" alt="Carl, holding a raccoon and a machine learning textbook" width="200" align="left" />
+<img src="apps/web/public/carl-hero.png" alt="Carl writes in a notebook beside a laptop and a mug of coffee" width="200" align="left" />
 
 **He already read it. All of it.**
 
@@ -434,13 +434,6 @@ waits on it. Dependabot's security updates do not see transitive packages, so th
 advisory on one. Dependency changes run through the pinned Bun, `bunx bun@1.4.4 add ...`, so the lockfile keeps the
 format CI's Bun reads. CI reads that version from `.bun-version` through the shared `.github/actions/setup-bun` step.
 The Dockerfile pins the same version in its image tag, and `bun run check` fails if the two differ.
-
-## Attribution
-
-The persona for CarlNotes was inspired by [Jake Van Clief](https://www.linkedin.com/in/jake-van-clief-74b66915a/). The
-real Jake runs [Eduba](https://eduba.io), an AI training and consulting company, makes videos on
-[YouTube](https://www.youtube.com/@JEVanClief), and teaches AI systems over at [Clief
-Notes](https://www.skool.com/cliefnotes). Go learn from him. Carl would.
 
 ## License
 

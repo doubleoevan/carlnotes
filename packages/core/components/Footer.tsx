@@ -22,7 +22,7 @@ export function Footer({ elements: { Root, Legal, Row, Text, Closing, Link } }: 
 				<Row>
 					<Text>© 2026 CarlNotes</Text>
 					<Text>AGPL-3.0 licensed.</Text>
-					<Text>Take the code. Leave the raccoon.</Text>
+					<Text>{"Take the code. It's on the house."}</Text>
 				</Row>
 				{/* public site pages and source */}
 				<Row>

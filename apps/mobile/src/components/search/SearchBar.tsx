@@ -1,5 +1,6 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { SEARCH_LABEL, SEARCH_MAX_CHARS, SEARCH_MIN_CHARS, SEARCH_PLACEHOLDER } from "@carlnotes/contracts/search"
+import { colors } from "@carlnotes/nightshift/colors"
 import { router } from "expo-router"
 import { Search, X } from "lucide-react-native"
 import type { ReactNode } from "react"
@@ -8,6 +9,7 @@ import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { TopicFeedControls, type TopicFeedControlsProps } from "@/components/topic/TopicFeedControls"
 import { useSearchBar } from "@/providers/SearchBarProvider"
+import { useColorMode } from "@/theme"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
 
 /**
@@ -22,6 +24,7 @@ export function SearchBar({
 	// keep editing on the current screen and open results only on submission
 	const { searchText, setSearchText, setSearchFilters } = useSearchBar()
 	const { data: session } = authClient().useSession()
+	const colorMode = useColorMode()
 	const handleSubmit = (): void => {
 		if (searchText.trim().length < SEARCH_MIN_CHARS) {
 			return
@@ -39,6 +42,7 @@ export function SearchBar({
 				<TextInput
 					accessibilityLabel={SEARCH_LABEL}
 					placeholder={SEARCH_PLACEHOLDER}
+					placeholderTextColor={colors.mutedForeground[colorMode]}
 					maxLength={SEARCH_MAX_CHARS}
 					value={searchText}
 					onChangeText={setSearchText}
@@ -46,7 +50,7 @@ export function SearchBar({
 					autoCorrect={false}
 					returnKeyType="search"
 					style={toTypeRoleStyle("body")}
-					className="min-h-12 min-w-0 flex-1 text-foreground placeholder:text-muted-foreground"
+					className="min-h-12 min-w-0 flex-1 text-foreground"
 				/>
 				{searchText ? (
 					<Button variant="ghost" size="icon" accessibilityLabel="Clear search" onPress={() => setSearchText("")}>

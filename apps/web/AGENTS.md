@@ -226,10 +226,9 @@ the browser bundle and renders pages through the server build, behind its own ro
   footer. `Header.tsx` is the global header, with `UserMenu.tsx`, the signed-in user's dropdown, `HeaderMenu.tsx`, the
   mobile-only menu, and `ThemeToggle.tsx`. The menu opens by script, so its button shows on a narrow screen only under
   the `scripted` class, and without JavaScript the header keeps its links at every width, wrapped onto a second row. `HomeHero.tsx` is a visitor's home page hero below the header's top bar,
-  with its pitch and persona note buttons, and `HomeHeadline.tsx` is the home page's shimmering headline, on both faces.
+  with its pitch note button, and `HomeHeadline.tsx` is the home page's shimmering headline, on both faces.
   The header shows the tutorial video button beside the logo on every page. `Footer.tsx` is the global footer,
-  `DocsLink.tsx` is every link to the docs, which opens in a new tab, and `Attribution.tsx` is the persona credit in the
-  hero's popover.
+  `DocsLink.tsx` is every link to the docs, which opens in a new tab.
 - `components/admin/` — the admin console's own pieces beyond its tables: `MobileMinimumVersionsCard.tsx`, each
   platform's minimum app version with who saved it and the input that raises, lowers, or clears it;
   `DailySpendCutoffsCard.tsx`, the Limits section: the meter of the day's free-plan spend and rings of the waiting first

@@ -17,8 +17,7 @@ import { UserMenu } from "./UserMenu"
 export type HeaderProps = { isHome?: boolean; isHeroShown?: boolean; isReheating?: boolean; onReheat?: () => void }
 
 /**
- * Shows the compact web brand and tutorial above the native reading screens. While a visitor's hero scrolls below
- * it on Home, the hero holds the tutorial button instead.
+ * Shows the compact brand and tutorial above the native reading screens. The visitor's Home hero sits close below it.
  */
 export function Header({ isHome = false, isHeroShown = false, isReheating = false, onReheat }: HeaderProps) {
 	// keep each tutorial opening in its own playback lifetime
@@ -36,7 +35,7 @@ export function Header({ isHome = false, isHeroShown = false, isReheating = fals
 	return (
 		<ClassNameSafeAreaView edges={["top", "left", "right"]} className="bg-hero">
 			{/* a visitor's hero sits closer below the brand row, as on the web */}
-			<View className={`w-full max-w-3xl self-center px-4 pt-3 ${isHeroShown ? "pb-3" : "pb-6"}`}>
+			<View className={`w-full max-w-3xl self-center px-4 pt-3 ${isHeroShown ? "pb-1" : "pb-6"}`}>
 				<View className="flex-row flex-wrap items-center gap-2">
 					{/* return to search before home, and reheat if already home */}
 					<AnchorLink

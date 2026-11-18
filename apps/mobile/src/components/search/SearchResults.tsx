@@ -16,6 +16,7 @@ import { Text } from "@/components/primitives/text"
 import { EmptyListCard } from "@/components/table/TableCard"
 import type { TopicFeedControlsProps } from "@/components/topic/TopicFeedControls"
 import { TopicHomeActions } from "@/components/topic/TopicHomeActions"
+import { useIsScreenActive } from "@/hooks/useIsScreenActive"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
 import { SearchResultsList } from "./SearchResultsList"
 
@@ -92,6 +93,7 @@ function useSearchResults({ filters, searchText }: Pick<TopicFeedControlsProps, 
 	const [queryText, setQueryText] = useState("")
 	const [selection, setSelection] = useState({ key: "", page: 1 })
 	const { data: session } = authClient().useSession()
+	const isScreenActive = useIsScreenActive()
 	useEffect(() => {
 		const timer = setTimeout(() => setQueryText(searchText.trim()), 300)
 		return () => clearTimeout(timer)
@@ -115,7 +117,8 @@ function useSearchResults({ filters, searchText }: Pick<TopicFeedControlsProps, 
 			pages: [await searchSite(searchRequestPayload.parse({ ...searchRequest, page: pageNumber }), signal)],
 			pageParams: [pageNumber],
 		}),
-		enabled: queryText.length >= SEARCH_MIN_CHARS,
+		// the retained Search tab only sends queries while it is on screen
+		enabled: isScreenActive && queryText.length >= SEARCH_MIN_CHARS,
 		gcTime: 0,
 	})
 	// keep the current page reachable when a confirmed action removes its last result
