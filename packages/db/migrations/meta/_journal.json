@@ -1296,6 +1296,13 @@
       "when": 1795024798711,
       "tag": "0184_topic_video_monthly_motion",
       "breakpoints": true
+    },
+    {
+      "idx": 185,
+      "version": "7",
+      "when": 1795038112818,
+      "tag": "0185_animation_plan_allowance",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,5 @@
 // Reserve distinct paid animations across all films belonging to an account.
+import { isAdminRole } from "@carlnotes/contracts/enums"
 import { PLANS } from "@carlnotes/contracts/plans"
 import { and, count, eq } from "drizzle-orm"
 import { db } from "./index"
@@ -20,7 +21,7 @@ export async function reserveTopicVideoAnimation(
 	return db.transaction(async (tx) => {
 		// Serialize admission across this owner's Topics and check who owns the episode.
 		const [owner] = await tx
-			.select({ plan: users.plan })
+			.select({ plan: users.plan, role: users.role })
 			.from(users)
 			.innerJoin(podcastEpisodes, and(eq(podcastEpisodes.id, episodeId), eq(podcastEpisodes.ownerId, users.id)))
 			.where(eq(users.id, ownerId))
@@ -42,19 +43,25 @@ export async function reserveTopicVideoAnimation(
 				: { kind: "full" }
 		}
 
-		// Count reservations as well as finished animations before allocating another slot.
-		const [used] = await tx.select({ slots: count() }).from(topicVideoAnimationUses).where(period)
-		if ((used?.slots ?? 0) >= PLANS[owner.plan].monthlyFilmAnimationLimit) {
+		// Extra admin shots leave the plan slot available if its original reservation is released.
+		const [used] = await tx
+			.select({ slots: count() })
+			.from(topicVideoAnimationUses)
+			.where(and(period, eq(topicVideoAnimationUses.usesPlanAllowance, true)))
+		const hasPlanSlot = (used?.slots ?? 0) < PLANS[owner.plan].monthlyFilmAnimationLimit
+		if (!hasPlanSlot && !isAdminRole(owner.role)) {
 			return { kind: "full" }
 		}
+
+		// Record admin reservations too. Only the Free plan's first picture is platform-funded.
 		const [row] = await tx
 			.insert(topicVideoAnimationUses)
-			.values({ month, ownerId, episodeId, sourceImageHash })
+			.values({ month, ownerId, episodeId, sourceImageHash, usesPlanAllowance: hasPlanSlot })
 			.returning({ id: topicVideoAnimationUses.id })
 		if (!row) {
 			throw Error("The animation allowance could not be reserved")
 		}
-		return { kind: "reserved", id: row.id, platformPays: owner.plan === "free" }
+		return { kind: "reserved", id: row.id, platformPays: owner.plan === "free" && hasPlanSlot }
 	})
 }
 

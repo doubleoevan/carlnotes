@@ -238,6 +238,6 @@ The films queue group polls both existing film queues. A single process-wide slo
 or an image rebuild through cleanup. A selected upgrade checks for outstanding new films before admission.
 A newly arrived film can wait for an upgrade that has already started. The automatic backfill stays at version 3.
 
-A newly brewed version 4 film can use one five-second Gemini Omni animation of an eligible public Finding’s generated picture. Each account gets one unique picture per UTC month on Free, three on Plus and seven on Premium. The platform pays for Free’s shot. Plus and Premium use the owner’s model key. Optional platform-paid upgrades skip Omni. The worker stops calling the picture planner after it selects eight distinct local effects across the film. The reusable host steam uses neither allowance.
+A newly brewed version 4 film can use one five-second Gemini Omni animation of an eligible public Finding’s generated picture. Free accounts get one unique picture per UTC month, Plus gets three and Premium gets seven. An admin owner can generate additional pictures on their model key. The platform pays for the first Free picture each month. Optional platform-paid upgrades skip Omni. The worker stops calling the picture planner after it selects eight distinct local effects across the film. The reusable host steam uses neither allowance.
 
 The Scan smoke test renders its model prompt samples through `scanPromptChecks.ts`.

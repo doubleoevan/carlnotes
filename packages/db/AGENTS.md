@@ -356,6 +356,6 @@ Each rater reads their own saved note.
 
 Topic memory subject aliases are private to a Topic. `schema/topicMemories.ts` stores canonical names and aliases with a linked public Finding.
 
-`topicVideoAnimationQuota.ts` locks the owner when reserving an eligible picture for the UTC month across their films. Removing a film keeps its monthly slot. Deleting the episode row clears the reservation’s episode reference. Removing the account clears its reservations.
+`topicVideoAnimationQuota.ts` locks the owner when reserving an eligible picture for the UTC month across their films. Reservations mark whether they use the plan allowance so a released slot can fund another picture even when an admin has paid for extras. Removing a film keeps its monthly slot. Deleting the episode row clears the reservation’s episode reference. Removing the account clears its reservations.
 
 `topicMemoryFeedback.ts` checks the rater under the Topic lock and saves the vote and optional note together.

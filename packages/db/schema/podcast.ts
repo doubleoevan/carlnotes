@@ -269,10 +269,12 @@ export const topicVideoAnimationUses = pgTable(
 			.references(() => users.id, { onDelete: "cascade" }),
 		month: timestamp("month", { withTimezone: true }).notNull(),
 		sourceImageHash: text("asset").notNull(),
+		usesPlanAllowance: boolean("uses_plan_allowance").notNull().default(true),
 		episodeId: text("episode_id").references(() => podcastEpisodes.id, { onDelete: "set null" }),
 	},
 	(table) => [
 		uniqueIndex("topic_video_motion_uses_owner_month_asset").on(table.ownerId, table.month, table.sourceImageHash),
+		index("topic_video_animation_uses_plan_allowance_idx").on(table.ownerId, table.month, table.usesPlanAllowance),
 		index("topic_video_motion_uses_episode_idx").on(table.episodeId),
 	],
 )
