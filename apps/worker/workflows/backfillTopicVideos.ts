@@ -19,7 +19,7 @@ const WRITE_TIMEOUT_MS = 2 * 60 * 1000
 const WRITE_ATTEMPTS = 3
 
 // the listing may retry
-const { listBackfillPodcastEpisodeIds } = proxyActivities<typeof backfillActivities>({
+const { listBackfillPodcastEpisodeIds, canUpgradeSelectedTopicVideo } = proxyActivities<typeof backfillActivities>({
 	startToCloseTimeout: WRITE_TIMEOUT_MS,
 	retry: { maximumAttempts: WRITE_ATTEMPTS },
 })
@@ -47,6 +47,7 @@ const EMPTY_BACKFILL_SUMMARY: TopicVideoBackfillSummary = {
 // cursor, and the counts so far
 export type BackfillTopicVideosWorkflowInput = {
 	concurrency: number
+	selectedEpisodeId?: string
 	startedAt?: string
 	afterCursor?: backfillActivities.BackfillTopicVideoCursor
 	summary?: TopicVideoBackfillSummary
@@ -59,10 +60,19 @@ export type BackfillTopicVideosWorkflowInput = {
  */
 export async function backfillTopicPodcastEpisodeVideosWorkflow({
 	concurrency,
+	selectedEpisodeId,
 	startedAt = new Date().toISOString(),
 	afterCursor,
 	summary = EMPTY_BACKFILL_SUMMARY,
 }: BackfillTopicVideosWorkflowInput): Promise<TopicVideoBackfillSummary> {
+	// A manual upgrade only takes a ready episode, and gives the live queue first choice of capacity.
+	if (selectedEpisodeId) {
+		const eligible = await canUpgradeSelectedTopicVideo(selectedEpisodeId)
+		return addBackfillOutcome(
+			EMPTY_BACKFILL_SUMMARY,
+			eligible ? await runBackfillRender(selectedEpisodeId, 4) : { outcome: "skipped" },
+		)
+	}
 	// one page of podcast episodes, public Topics first. a continued run's summary with no generated image count gets
 	// zero
 	const podcastEpisodePage = await listBackfillPodcastEpisodeIds({ startedAt, afterCursor, limit: BACKFILL_PAGE_SIZE })
@@ -72,7 +82,7 @@ export async function backfillTopicPodcastEpisodeVideosWorkflow({
 	const { podcastEpisodeIds } = podcastEpisodePage
 	let attemptedPodcastEpisodeCount = 0
 	for (const batchPodcastEpisodeIds of toChunks(podcastEpisodeIds, concurrency)) {
-		const backfillOutcomes = await Promise.all(batchPodcastEpisodeIds.map(runBackfillRender))
+		const backfillOutcomes = await Promise.all(batchPodcastEpisodeIds.map((id) => runBackfillRender(id)))
 		pageSummary = backfillOutcomes.reduce(addBackfillOutcome, pageSummary)
 
 		// log the counts so far, and how many podcast episodes the backfill has left
@@ -107,16 +117,24 @@ type BackfillOutcome =
 
 // render one podcast episode's film on the platform's bill. a render that fails every attempt is marked failed, so no
 // later listing finds it again. a ready film whose render failed keeps playing
-async function runBackfillRender(podcastEpisodeId: string): Promise<BackfillOutcome> {
+async function runBackfillRender(podcastEpisodeId: string, renderVersion?: 4): Promise<BackfillOutcome> {
 	try {
-		const renderResult = await renderTopicPodcastEpisodeVideoActivity({ podcastEpisodeId, isPlatformBilled: true })
+		const renderResult = await renderTopicPodcastEpisodeVideoActivity({
+			podcastEpisodeId,
+			isPlatformBilled: true,
+			...(renderVersion ? { renderVersion } : {}),
+		})
 		return renderResult.outcome === "rendered" ? renderResult : { outcome: "skipped" }
 	} catch (error) {
 		// a cancelled backfill stops here. any other failure is marked and counted, and the backfill moves on
 		if (isCancellation(error)) {
 			throw error
 		}
-		await markTopicPodcastEpisodeVideoFailedActivity({ podcastEpisodeId, reason: toWorkflowFailureReason(error) })
+		await markTopicPodcastEpisodeVideoFailedActivity({
+			podcastEpisodeId,
+			reason: toWorkflowFailureReason(error),
+			...(renderVersion ? { renderVersion } : {}),
+		})
 		return { outcome: "failed" }
 	}
 }

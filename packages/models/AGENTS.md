@@ -92,6 +92,9 @@ The `summarize-personal-sources-context.md` prompt is evaluated through `evals/p
 
 `prompts/score-personal-source-resource.md` produces page-only public explanations, supporting page excerpts, and numbered sender-private annotations in one premium call. Account IDs never enter the model.
 
+`prompts/plan-picture-animation.md` asks the chat model to inspect numbered picture crops from one public Finding chapter.
+It can select a supplied crop and effect or keep the picture still. The worker validates every selection before saving it.
+
 `prompts/write-dashboard-paragraph.md` writes Carl's paragraph above a Dashboard page's charts from counts and place
 names alone, built by `packages/pipeline/dashboardParagraph.ts` and evaluated through `evals/dashboard-paragraph/`.
 
@@ -100,3 +103,5 @@ names alone, built by `packages/pipeline/dashboardParagraph.ts` and evaluated th
 `prompts/judge-topic-memory-duplicates.md` independently labels pairs for the eval in `evals/topic-memories/`.
 The shared `topic-memory-background.md` fragment fences ranked topic memories and corrections. `current-day-context.md`
 distinguishes event dates from Scan dates and compares them against the current UTC day.
+
+`chapterPictureVideo.ts` sends one approved illustration through LiteLLM’s Gemini Interactions route with message redaction and provider storage disabled. `prompts/animate-chapter-picture.md` describes the motion selected for that illustration.

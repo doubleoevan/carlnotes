@@ -65,6 +65,7 @@ const {
 	publishPodcastEpisode,
 	failPodcastEpisode,
 	isTopicPodcastEpisodeVideoEnabled,
+	selectNewTopicVideoRenderVersion,
 } = proxyActivities<typeof podcastEpisodeActivities>({
 	startToCloseTimeout: WRITE_TIMEOUT_MS,
 	retry: { maximumAttempts: WRITE_ATTEMPTS },
@@ -200,13 +201,19 @@ export async function recordPodcastEpisodeWorkflow({
 // start the podcast episode's film if films are on. a film already started, or a failed start, leaves no film
 async function startTopicVideo(podcastEpisodeId: string): Promise<void> {
 	try {
-		if (!(await isTopicPodcastEpisodeVideoEnabled())) {
+		const usesVersionedScenes = patched("topic-video-chapter-scenes-v4")
+		const renderVersion = usesVersionedScenes
+			? await selectNewTopicVideoRenderVersion()
+			: (await isTopicPodcastEpisodeVideoEnabled())
+				? 3
+				: false
+		if (!renderVersion) {
 			return
 		}
 		await startChild(TOPIC_VIDEO_WORKFLOW, {
 			workflowId: toTopicVideoWorkflowId(podcastEpisodeId),
 			taskQueue: TOPIC_VIDEO_TASK_QUEUE,
-			args: [{ podcastEpisodeId }],
+			args: [usesVersionedScenes ? { podcastEpisodeId, renderVersion } : { podcastEpisodeId }],
 			parentClosePolicy: ParentClosePolicy.ABANDON,
 		})
 	} catch {

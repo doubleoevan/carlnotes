@@ -568,3 +568,7 @@ Doppler holds two secrets that cannot be made again without losing data. Keep a 
 
 Cloudflare's rules, Northflank's cron schedules and service sizes, and the Sentry alerts are in no file. The
 Services table above and the Deploy alerts section are their only record.
+
+### Animated film chapters
+
+The [film worker guide](film-rendering.md) covers admission, resource limits, measured compute costs and selected upgrades.

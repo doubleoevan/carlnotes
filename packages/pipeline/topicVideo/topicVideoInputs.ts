@@ -12,12 +12,12 @@ import {
 import { toHostWithoutWww } from "@carlnotes/contracts/seo"
 import { type DbHandle, db } from "@carlnotes/db"
 import { podcastEpisodeChapters, podcastEpisodes, topicVideos } from "@carlnotes/db/schema/podcast"
-import { resources } from "@carlnotes/db/schema/scans"
+import { findings, resources } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
 import { getAttachmentBytes } from "@carlnotes/db/store"
 import { toTopicVideoImageKey, toTopicVideoImageLargeOriginalKey } from "@carlnotes/db/topicVideoKeys"
 import { loadUncheckedImageHashes } from "@carlnotes/db/uncheckedImages"
-import { asc, eq } from "drizzle-orm"
+import { and, asc, eq, sql } from "drizzle-orm"
 import sharp from "sharp"
 import { toChapterTurns } from "../podcast/podcastEpisodeScript"
 import { toPodcastEpisodeImageOriginalKey, toTopicImageOriginalKey } from "../topicImages/topicImageFiles"
@@ -58,6 +58,7 @@ export type VideoChapterRow = {
 	endSeconds: number
 	// the Resource the chapter narrates, and whether that Resource was judged unsafe
 	resourceId: string
+	hasPublicSceneSource?: boolean
 	isUnsafe: boolean
 }
 
@@ -242,9 +243,19 @@ export function loadVideoChapterRows(podcastEpisodeId: string): Promise<VideoCha
 			endSeconds: podcastEpisodeChapters.endSeconds,
 			resourceId: podcastEpisodeChapters.resourceId,
 			isUnsafe: resources.isUnsafe,
+			hasPublicSceneSource: sql<boolean>`coalesce(${findings.sourceVisibility} = 'public' AND NOT ${resources.isUnsafe},false)`,
 		})
 		.from(podcastEpisodeChapters)
+		.innerJoin(podcastEpisodes, eq(podcastEpisodes.id, podcastEpisodeChapters.podcastEpisodeId))
 		.innerJoin(resources, eq(resources.id, podcastEpisodeChapters.resourceId))
+		.leftJoin(
+			findings,
+			and(
+				eq(findings.id, podcastEpisodeChapters.findingId),
+				eq(findings.topicId, podcastEpisodes.topicId),
+				eq(findings.resourceId, podcastEpisodeChapters.resourceId),
+			),
+		)
 		.where(eq(podcastEpisodeChapters.podcastEpisodeId, podcastEpisodeId))
 		.orderBy(asc(podcastEpisodeChapters.position))
 }

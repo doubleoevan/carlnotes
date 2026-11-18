@@ -94,6 +94,8 @@ each chapter's finding, and captions of what Carl and Vienna say. It is the same
 and the audio share one place. Stop the audio at 12 minutes, press play on the film, and the film starts at 12 minutes.
 When a film ends, nothing plays after it.
 
+Some pictures in a film have animated details, such as ripples on water or steam rising from Carl’s and Vienna’s mugs.
+
 ![Coffee Break Cinema on a topic page, the film's opening image with its play button, the chapters along the seek
 bar, and the playback controls](../../../assets/screenshots/coffee-break-cinema.png)
 

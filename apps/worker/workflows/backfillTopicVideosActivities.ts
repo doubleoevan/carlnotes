@@ -2,9 +2,11 @@
 // of every ready film below the current render version. the renders are the film queue's own activities. they run in
 // the worker process, not the sandbox
 
+import { TOPIC_VIDEO_TASK_QUEUE } from "@carlnotes/contracts/topicVideoWork"
 import { db } from "@carlnotes/db"
 import { podcastEpisodes, topicVideos } from "@carlnotes/db/schema/podcast"
 import { topics } from "@carlnotes/db/schema/topics"
+import { getClient, withClientDeadline } from "@carlnotes/pipeline/temporalClient"
 import {
 	isTopicVideoBelowRenderVersion,
 	TOPIC_VIDEO_RENDER_VERSION,
@@ -168,4 +170,28 @@ async function listFilmPodcastEpisodeIds({
 		podcastEpisodeIds: filmRows.map((filmRow) => filmRow.podcastEpisodeId),
 		nextCursor: lastFilm ? { kind: "film", publicRank: lastFilm.publicRank === 0 ? 0 : 1, id: lastFilm.id } : null,
 	}
+}
+
+/** Admits an operator-selected ready film only while no new film or rebuild is running. */
+export async function canUpgradeSelectedTopicVideo(podcastEpisodeId: string): Promise<boolean> {
+	// Resolve readiness before contacting Temporal. Missing or already upgraded films consume no capacity.
+	const [eligible] = await db
+		.select({ id: topicVideos.id })
+		.from(topicVideos)
+		.where(
+			and(
+				eq(topicVideos.podcastEpisodeId, podcastEpisodeId),
+				eq(topicVideos.status, "ready"),
+				lt(topicVideos.renderVersion, 4),
+			),
+		)
+		.limit(1)
+	if (!eligible) {
+		return false
+	}
+	const client = await getClient()
+	const running = await withClientDeadline(client, () =>
+		client.workflow.count(`ExecutionStatus = 'Running' AND TaskQueue = '${TOPIC_VIDEO_TASK_QUEUE}'`),
+	)
+	return Number(running.count) === 0
 }

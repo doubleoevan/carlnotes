@@ -20,7 +20,7 @@ launch: the worker, the sweep, and the web service. Parts B, C, and D are the ch
 - **A web service.** The unapplied `split-web-from-api` change is folded in and deleted. A `web` service from the
   same image takes pages, documents, feeds, docs, the Specials pages, and public files through Northflank path
   routing, while the `app` service keeps serving every path. The api drains on a deploy.
-- **A film service that scales.** The film Workers run as a service of their own through a role setting, sized from
+- **A film service that scales.** The film Workers run as a service of their own through a queue group setting, sized from
   a measurement and scaled on the film backlog. A render stores each encoded shot, resumes on a retry, stops if its
   podcast episode is removed, and does not count an attempt a deploy interrupted.
 - **A backfill whose cost is recorded.** The platform's render and image cost, and four paid calls that record
@@ -48,7 +48,7 @@ No route, field, or MCP tool return that a released build reads is removed or ch
 ### Modified Capabilities
 
 - `static-serving`, `deploy-mechanics`, `docs-site`, `workspace-structure`: the web service on the api's own entry,
-  its path routes and health checks, the worker's roles as services, the release order, and the drain on a deploy.
+  its path routes and health checks, the worker's queue groups as services, the release order, and the drain on a deploy.
 - `request-capacity`: pools sized by shares.
 - `performance-telemetry`, `monitoring-analytics`: each service's gauge line, the new queues' backlogs, renders and
   sheds a minute, the sweep's finish time, and warnings sent once an hour across sweeps.
@@ -68,7 +68,7 @@ No route, field, or MCP tool return that a released build reads is removed or ch
 
 ## Impact
 
-- `apps/worker`: `temporal.ts` (roles, six new Workers, a metrics endpoint), `schedule.ts`, a close-out module, the
+- `apps/worker`: `temporal.ts` (queue groups, six new Workers, a metrics endpoint), `schedule.ts`, a close-out module, the
   recording, film, backfill, and discussion workflows, and their activities.
 - `packages/pipeline`: `stageTimeouts.ts`, `review/`, `podcast/`, `topicVideo/`, `topicPosts/`,
   `topicImages/`, `temporalClient.ts`, `scanWorkflowClient.ts`, `pushDelivery.ts`, and the cover modules moved in.

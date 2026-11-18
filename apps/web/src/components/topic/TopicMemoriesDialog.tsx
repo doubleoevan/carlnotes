@@ -6,9 +6,10 @@ import {
 	toScanHistoryCounts,
 	toTopicMemoriesTitle,
 } from "@carlnotes/core/components/TopicMemoriesDialog"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { useRef, useState } from "react"
 import { Dialog, DialogContent, DialogTitle } from "@/components/primitives/dialog"
-import { PLAIN_PAGE_BUTTON_CLASS, PLAIN_PAGE_BUTTON_ICON_CLASS } from "@/lib/styleClasses"
+import { PLAIN_PAGE_BUTTON_CLASS, PLAIN_PAGE_BUTTON_ICON_CLASS, POPOVER_HEADING_CLASS } from "@/lib/styleClasses"
 import { topicMemoriesDialogElements } from "./topicMemoriesDialogElements"
 
 type TopicMemoriesDialogProps = {
@@ -57,20 +58,25 @@ export function TopicMemoriesDialog({
 				<Dialog open onOpenChange={setIsOpen}>
 					<DialogContent
 						aria-describedby={undefined}
+						className="gap-0 pt-4 [&>[data-slot=dialog-close]]:top-1 [&>[data-slot=dialog-close]]:right-1"
 						onCloseAutoFocus={(event) => {
 							event.preventDefault()
 							triggerRef.current?.focus()
 						}}
 					>
-						<DialogTitle>{toTopicMemoriesTitle(topicMemoryCount)}</DialogTitle>
-						<SharedTopicMemoriesDialog
-							key={`${topicId}:${userId ?? ""}`}
-							topicId={topicId}
-							userId={userId}
-							elements={topicMemoriesDialogElements}
-							canRateTopicMemories={canRateTopicMemories}
-							onTopicMemoryRemoved={onTopicMemoryRemoved}
-						/>
+						<DialogTitle className={cn(POPOVER_HEADING_CLASS, "pl-8 leading-7")}>
+							{toTopicMemoriesTitle(topicMemoryCount)}
+						</DialogTitle>
+						<div className="grid gap-4">
+							<SharedTopicMemoriesDialog
+								key={`${topicId}:${userId ?? ""}`}
+								topicId={topicId}
+								userId={userId}
+								elements={topicMemoriesDialogElements}
+								canRateTopicMemories={canRateTopicMemories}
+								onTopicMemoryRemoved={onTopicMemoryRemoved}
+							/>
+						</div>
 					</DialogContent>
 				</Dialog>
 			)}

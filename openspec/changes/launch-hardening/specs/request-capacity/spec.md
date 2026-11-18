@@ -6,13 +6,13 @@ Each long-running process SHALL size its connection pool from the database at st
 and takes 0.9 times that value, the share Neon's connection pooler holds on its server side for one user and database.
 That number divided by the pool count and rounded down is one pool share, and the pool's size SHALL be the process's
 own pool shares times it. The api, the web service, the sweep, the budget reset, and a Temporal worker in the `films`
-role take one pool share, and every other Temporal worker takes two. The pool count is the sum of the pool shares of
+queue group take one pool share, and every other Temporal worker takes two. The pool count is the sum of the pool shares of
 the processes that can hold a pool at once. It is a constant in `packages/db/index.ts`, 14 by default, counting two api
 replicas, two web replicas, two main worker replicas at two pool shares each, one film replica, the sweep, the budget
 reset, and three more for the replicas a rolling deploy overlaps with and the release jobs. `DATABASE_POOL_COUNT` SHALL
 override the pool count, and production SHALL set it to the sum with every service at its autoscaling maximum.
 `DATABASE_POOL_MAX` SHALL override the computed size itself. The processes that size their pool are the api, the web
-service, the Temporal worker in either role, the sweep, and the budget reset. A short-lived job such as the migration
+service, the Temporal worker in either queue group, the sweep, and the budget reset. A short-lived job such as the migration
 or the docs embed keeps the default. Until the read completes, and if the read fails, the pool SHALL hold the default
 of 15, the size a 0.25 CU compute allows, and a failed read SHALL be reported to Sentry. A process with no
 `DATABASE_URL`, such as a test, SHALL keep the default and read nothing. Each process SHALL log the size it computed,
@@ -76,7 +76,7 @@ inside its own pool and fails nothing.
 
 #### Scenario: A film replica takes one pool share
 
-- **WHEN** a Temporal worker starts in the `films` role with `max_connections` 901 and a pool count of 25
+- **WHEN** a Temporal worker starts in the `films` queue group with `max_connections` 901 and a pool count of 25
 - **THEN** its pool holds at most 32 connections, half a main worker's
 
 ### Requirement: A visitor's render past the concurrency limit is shed

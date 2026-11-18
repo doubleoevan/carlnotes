@@ -1,6 +1,6 @@
 # apps/docs/
 
-The repository’s [runtime architecture](runtime-architecture.md), [development services](development-services.md), and [deployment](deployment.md) guides live beside the Starlight project. They document contributor and operator workflows.
+The repository’s [runtime architecture](runtime-architecture.md), [development services](development-services.md), and [deployment](deployment.md), and [film worker](film-rendering.md) guides live beside the Starlight project. They document contributor and operator workflows.
 `personal-sources-rollout.md` is the operator checklist for receiving flags, encryption, Resend Inbound setup,
 controlled Gmail/newsletter checks, provider retention evidence, and rollback. It is outside the public docs tree.
 
@@ -33,6 +33,7 @@ from `apps/docs/dist`, so it runs no process of its own, and nothing imports it.
   `public/favicon.svg` is the site's icon.
 - `design/` — design references outside the site: `homepage.html`, and `podcast/` with the player mockups and
   `cover-base.png`, the illustration `apps/api/share/podcastCover.ts` draws the podcast covers over.
+  Films use `coffee-break-hosts.jpeg` as the background for the steam rising above both mugs.
   `release-notes.md` is the convention for writing a release's notes, and `ai-scaffolding.md` describes how the repo
   constrains generated code.
 - Imports: `@carlnotes/contracts` only, plus Astro, Starlight, Sätteri, `simple-icons`, and the `hast` types for the

@@ -5,12 +5,18 @@
 import { loadSpendControlSettings } from "@carlnotes/db/dailySpendCutoffs"
 import { getAttachmentBytes } from "@carlnotes/db/store"
 import { GENERATED_CHAPTER_IMAGE_LIMIT_PER_CHAPTER } from "@carlnotes/db/topicVideoKeys"
-import { loadOrFetchResourceImages, type ResourceImage } from "../resourceImages/fetchResourceImages"
+import {
+	loadApprovedStoredResourceImages,
+	loadOrFetchResourceImages,
+	type ResourceImage,
+} from "../resourceImages/fetchResourceImages"
 import {
 	type GeneratedChapterImageBilling,
 	type GeneratedChapterImageRef,
 	loadGeneratedChapterImages,
 } from "./generatedChapterImages"
+import { loadStoredChapterImages } from "./storedChapterImages"
+import type { VideoSceneSource } from "./topicVideoImageCheck"
 import { type ShownImageStill, toChapterLowerThirdText, type VideoChapterRow } from "./topicVideoInputs"
 import {
 	loadPodcastCardStillPng,
@@ -33,12 +39,16 @@ type PrepareChapterImagesOptions = GeneratedChapterImageBilling & {
 	videoChapterRows: VideoChapterRow[]
 	segments: VideoSegment[]
 	shownImageStill: ShownImageStill
+	podcastCardAnimationPath?: string
 	isChapterImageGenerationSkipped?: boolean
+	priorVersion?: number
+	requiresPublicSceneSources?: boolean
 }
 
 // each chapter's images by its position, the images of a segment that has none of its own, the images that the intro
 // and the sign-off cut through, and how many generated images this render generated
 export type PreparedChapterImages = {
+	sceneSources?: VideoSceneSource[]
 	chapterImages: Map<number, VideoChapterImages>
 	podcastCardImages: VideoSegmentImage[]
 	firstChapterImages: VideoSegmentImage[]
@@ -52,19 +62,28 @@ export type PreparedChapterImages = {
  * the signal's reason once it is aborted.
  */
 export async function prepareChapterImages({
+	podcastCardAnimationPath,
 	videoChapterRows,
 	segments,
 	shownImageStill,
 	isChapterImageGenerationSkipped,
+	requiresPublicSceneSources,
+	priorVersion,
 	...generatedChapterImageBilling
 }: PrepareChapterImagesOptions): Promise<PreparedChapterImages> {
 	// load or fetch every chapter's Resource Images
 	const { signal } = generatedChapterImageBilling
-	const resourceIds = videoChapterRows.map(({ resourceId }) => resourceId)
-	const resourceImagesById = await loadOrFetchResourceImages(resourceIds, signal)
+	const eligibleRows = requiresPublicSceneSources
+		? videoChapterRows.filter((row) => row.hasPublicSceneSource)
+		: videoChapterRows
+	const resourceIds = eligibleRows.map(({ resourceId }) => resourceId)
+	const resourceImagesById = isChapterImageGenerationSkipped
+		? await loadApprovedStoredResourceImages(resourceIds)
+		: await loadOrFetchResourceImages(resourceIds, signal)
 
 	// how many generated images each safe chapter lacks
-	const safeChapterRows = videoChapterRows.filter((videoChapterRow) => !videoChapterRow.isUnsafe)
+	const safeChapterRows = eligibleRows.filter((videoChapterRow) => !videoChapterRow.isUnsafe)
+	const safePositions = new Set(safeChapterRows.map((row) => row.position))
 	const chapterSeconds = toChapterSeconds(segments)
 	const missingGeneratedChapterImageCounts = safeChapterRows.map((videoChapterRow) => ({
 		position: videoChapterRow.position,
@@ -76,19 +95,27 @@ export async function prepareChapterImages({
 
 	// generate what the chapters lack, each chapter's first missing image before any chapter's second, up to the limit
 	// in the spend control settings
-	const { generatedChapterImageLimit } = await loadSpendControlSettings()
-	const generatedChapterImages = await loadGeneratedChapterImages({
-		...generatedChapterImageBilling,
-		isChapterImageGenerationSkipped,
-		generatedChapterImageRefs: toGeneratedChapterImageRefs(
-			missingGeneratedChapterImageCounts,
-			generatedChapterImageLimit,
-		),
-	})
+	const generatedChapterImages = isChapterImageGenerationSkipped
+		? {
+				jpegBytesByPosition: await loadStoredChapterImages(
+					generatedChapterImageBilling.podcastEpisodeId,
+					safeChapterRows.map((row) => row.position),
+					priorVersion,
+				),
+				newlyGeneratedChapterImageCount: 0,
+			}
+		: await loadGeneratedChapterImages({
+				...generatedChapterImageBilling,
+				generatedChapterImageRefs: toGeneratedChapterImageRefs(
+					missingGeneratedChapterImageCounts,
+					(await loadSpendControlSettings()).generatedChapterImageLimit,
+				),
+			})
 
 	// the podcast card, and the pair that a segment with nothing else cuts between, with the film's own image unless the
 	// film shows the podcast card
 	const podcastCardImage: VideoSegmentImage = {
+		reviewedAnimationPath: podcastCardAnimationPath,
 		loadStillPng: loadPodcastCardStillPng,
 		zoomLimit: PODCAST_CARD_ZOOM_LIMIT,
 	}
@@ -107,16 +134,24 @@ export async function prepareChapterImages({
 
 	// each chapter's Resource images, then its generated images, then the podcast card
 	const chapterImages = new Map<number, VideoChapterImages>()
+	const upgradeVersion = requiresPublicSceneSources ? priorVersion : undefined
 	for (const videoChapterRow of videoChapterRows) {
 		const resourceSegmentImages = resourceSegmentImagesById.get(videoChapterRow.resourceId) ?? []
 		const generatedJpegs = generatedChapterImages.jpegBytesByPosition.get(videoChapterRow.position) ?? []
-		const ownImages = [...resourceSegmentImages, ...generatedJpegs.map(toGeneratedSegmentImage)]
+		const ownImages = !safePositions.has(videoChapterRow.position)
+			? []
+			: [...resourceSegmentImages, ...generatedJpegs.map(toGeneratedSegmentImage)]
+		// Earlier films have no saved scene plan. Keep the published film when its chapter artwork cannot be recovered.
+		checkHistoricalChapterImages(upgradeVersion, videoChapterRow.position, ownImages)
 		chapterImages.set(videoChapterRow.position, {
 			images: ownImages.length > 0 ? [...ownImages, podcastCardImage] : podcastCardImages,
 			lowerThirdText: toChapterLowerThirdText(videoChapterRow),
+			hasPublicSceneSource: safePositions.has(videoChapterRow.position) && videoChapterRow.hasPublicSceneSource,
 		})
 	}
+	// Chapters with fallback artwork contribute no source images to the publication check.
 	return {
+		sceneSources: requiresPublicSceneSources ? toVideoSceneSources(safeChapterRows, resourceImagesById) : undefined,
 		chapterImages,
 		podcastCardImages,
 		firstChapterImages: toFirstChapterImages({ chapterImages, podcastCardImage, isFilmImagePodcastCard: !filmImage }),
@@ -212,6 +247,8 @@ export function toGeneratedChapterImageRefs(
 // a Resource's stored image as a segment's image: its still from the stored jpeg, and the zoom its pixels hold
 function toResourceSegmentImage(resourceImage: ResourceImage): VideoSegmentImage {
 	return {
+		origin: "resource",
+		loadSceneImage: () => getAttachmentBytes(resourceImage.objectKey),
 		loadStillPng: async () => toVideoStillPng(await getAttachmentBytes(resourceImage.objectKey)),
 		zoomLimit: toShotZoomLimit(resourceImage),
 	}
@@ -220,7 +257,27 @@ function toResourceSegmentImage(resourceImage: ResourceImage): VideoSegmentImage
 // a generated image as a segment's image: its still from the jpeg, and the zoom an image at the film's size holds
 function toGeneratedSegmentImage(jpegBytes: Uint8Array): VideoSegmentImage {
 	return {
+		origin: "generated",
+		loadSceneImage: async () => jpegBytes,
 		loadStillPng: () => toVideoStillPng(jpegBytes),
 		zoomLimit: toShotZoomLimit({ width: VIDEO_WIDTH, height: VIDEO_HEIGHT }),
 	}
+}
+
+function checkHistoricalChapterImages(
+	version: number | undefined,
+	position: number,
+	images: VideoSegmentImage[],
+): void {
+	if (version && version < 4 && !images.length) {
+		throw Error(`Historical artwork unavailable for chapter ${position}. Keeping the ready film.`)
+	}
+}
+
+function toVideoSceneSources(rows: VideoChapterRow[], images: Map<string, ResourceImage[]>): VideoSceneSource[] {
+	return rows.map(({ position, resourceId }) => ({
+		position,
+		resourceId,
+		resourceImageKeys: (images.get(resourceId) ?? []).map((image) => image.objectKey),
+	}))
 }

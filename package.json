@@ -25,6 +25,9 @@
 		"mcp-views:freeze": "bun scripts/freeze-mcp-view-bundle.ts",
 		"mobile:env:sync": "doppler run -- bun scripts/sync-mobile-env.ts && doppler run --config prd -- bun scripts/sync-mobile-env.ts",
 		"reviewer:seed": "bun scripts/seed-reviewer-account.ts",
+		"films:benchmark": "bun run build:film-scenes && bun packages/pipeline/topicVideo/benchmarkVideoScenes.ts",
+		"films:verify-renderer": "bun run build:film-scenes && bun packages/pipeline/topicVideo/videoScene.smoke.ts",
+		"build:film-scenes": "bun build packages/pipeline/topicVideo/videoSceneBrowser.ts --target browser --minify --outfile packages/pipeline/topicVideo/dist/videoSceneBrowser.js",
 		"build:ui": "bun run --cwd apps/web build",
 		"build:docs": "bun run --cwd apps/docs build",
 		"dev:storybook": "STORYBOOK_DISABLE_TELEMETRY=1 bun run --cwd apps/web dev:storybook",
@@ -120,6 +123,8 @@
 		"carl-down": "bash scripts/carl-down.sh",
 		"litellm:restart": "doppler run -- docker compose restart litellm",
 		"temporal": "doppler run -- bun apps/worker/temporal.ts",
+		"temporal:main": "doppler run -- env WORKER_QUEUE_GROUP=main bun apps/worker/temporal.ts",
+		"temporal:films": "doppler run -- env WORKER_QUEUE_GROUP=films bun apps/worker/temporal.ts",
 		"schedule": "doppler run -- bun apps/worker/runMonitoredJob.ts scan-sweep -- bun apps/worker/schedule.ts",
 		"reset:monthly-budgets": "doppler run -- bun apps/worker/runMonitoredJob.ts reset-monthly-budgets -- bun apps/worker/resetMonthlyBudgets.ts"
 	},

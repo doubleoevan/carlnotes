@@ -104,7 +104,7 @@ export function TopicScanButton({
 			reloadTopicFeed: onScanned,
 			revert: stopScan,
 			logLabel: "manual scan failed",
-			fallbackMessage: "The raccoon got that one. Carl suggests you put another pot on.",
+			fallbackMessage: "The machine gave out on that one. Carl suggests you put another pot on.",
 		})
 	}
 

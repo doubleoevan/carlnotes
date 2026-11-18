@@ -42,6 +42,7 @@ test("a film renders the section open on the film's poster, under a heading with
 	expect(html).toContain("Coffee Break Cinema")
 	expect(html).not.toContain("Topic Cinema")
 	expect(html).toContain('data-state="open"')
+	expect(html).toMatch(/<h4[^>]*>Better beans<\/h4>[\s\S]*?<img[^>]+poster\.jpg/)
 	expect(html).toContain('src="/api/topic-podcast-episode-video-images/episode-1/hash/poster.jpg"')
 	expect(html).toContain('aria-label="Play episode 7"')
 	expect(html).not.toMatch(/<h\d[^>]*>[^<]*video/i)

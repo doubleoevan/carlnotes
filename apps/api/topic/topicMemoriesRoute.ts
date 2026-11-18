@@ -1,4 +1,5 @@
 // the Journal reads and its owner and team lead feedback write
+
 import {
 	type TopicMemoriesPage,
 	topicMemoriesQuery,
@@ -7,11 +8,8 @@ import {
 import { db } from "@carlnotes/db"
 import { canRateTopicMemories } from "@carlnotes/db/findingPermissions"
 import { topics } from "@carlnotes/db/schema/topics"
-import {
-	loadMemberTopicMemoriesPage,
-	loadTopicMemoriesPage,
-	saveTopicMemoryFeedback,
-} from "@carlnotes/db/topicMemories"
+import { loadMemberTopicMemoriesPage, loadTopicMemoriesPage } from "@carlnotes/db/topicMemories"
+import { saveTopicMemoryFeedback } from "@carlnotes/db/topicMemoryFeedback"
 import { gatedTopicColumns, toTopicRole } from "@carlnotes/db/topicPermissions"
 import { zValidator } from "@hono/zod-validator"
 import { eq } from "drizzle-orm"

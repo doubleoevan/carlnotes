@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test"
 import {
 	generatedChapterImageLimit,
 	isTopicVideoBackfillEnabled,
+	newTopicVideoRenderVersion,
 	topicVideoBackfillConcurrency,
 	topicVideoConcurrency,
 } from "./podcastEpisodeSettings"
@@ -105,4 +106,25 @@ test("a film concurrency of zero turns the backfill off too", () => {
 	Bun.env[CONCURRENCY_SETTING] = "0"
 	Bun.env[BACKFILL_CONCURRENCY_SETTING] = "3"
 	expect(isTopicVideoBackfillEnabled()).toBe(false)
+})
+
+test("stopping and resuming animated admissions changes only the version selected for the next recording", () => {
+	const before = Bun.env.TOPIC_VIDEO_ANIMATED_CHAPTERS
+	try {
+		delete Bun.env.TOPIC_VIDEO_ANIMATED_CHAPTERS
+		expect(newTopicVideoRenderVersion()).toBe(3)
+		Bun.env.TOPIC_VIDEO_ANIMATED_CHAPTERS = "true"
+		const admitted = newTopicVideoRenderVersion()
+		delete Bun.env.TOPIC_VIDEO_ANIMATED_CHAPTERS
+		expect(newTopicVideoRenderVersion()).toBe(3)
+		expect(admitted).toBe(4)
+		Bun.env.TOPIC_VIDEO_ANIMATED_CHAPTERS = "true"
+		expect(newTopicVideoRenderVersion()).toBe(4)
+	} finally {
+		if (before === undefined) {
+			delete Bun.env.TOPIC_VIDEO_ANIMATED_CHAPTERS
+		} else {
+			Bun.env.TOPIC_VIDEO_ANIMATED_CHAPTERS = before
+		}
+	}
 })

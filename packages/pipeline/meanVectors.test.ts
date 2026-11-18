@@ -186,6 +186,10 @@ test("marking podcast episodes removed returns the chapter image keys for each c
 		...toChapterImageKeys("episodes/episode-1/video/chapter-1-image"),
 		...toChapterImageKeys("episodes/episode-1/video/chapter-0-image-s2"),
 		...toChapterImageKeys("episodes/episode-1/video/chapter-1-image-s2"),
+		"episodes/episode-1/video/chapter-0-scene-plan.json",
+		"episodes/episode-1/video/chapter-1-scene-plan.json",
+		"episodes/episode-1/video/picture-motion.json",
+		"episodes/episode-1/video/picture-motion.mkv",
 	])
 })
 

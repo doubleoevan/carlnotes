@@ -84,7 +84,7 @@ is two steps (design D15): the by-hand concurrent build in production, then the 
 - [ ] 4.4 Add the root scripts `web` and `api` and document them in the README's Development section. Verify:
       `bun run web` boots locally and answers `/api/health`, `/api/health/ready`, and a page
 - [ ] 4.5 (finding P3) Size a pool by shares in `packages/db/index.ts`: the caller passes its shares (the api, the web
-      service, the sweep, the reset, and the film role one; the worker's main role and the unset role two), the
+      service, the sweep, the reset, and the film queue group one; the worker's main queue group and the unset queue group two), the
       default count becomes 14, and the comment says what it counts. Verify: `packages/db/index.test.ts` pins the
       default, a one-share and a two-share size at 901 and at 209, and the startup line's text
 - [ ] 4.6 Add `deploy-web` to `infra/northflank/release-main.json` after `deploy-app` and before `run-edge-purge`, and
@@ -148,12 +148,12 @@ is two steps (design D15): the by-hand concurrent build in production, then the 
 
 ## 7. Films on a service of their own that scales out (item 7)
 
-- [ ] 7.1 Read `WORKER_ROLE` (`films`, `main`, or unset for every Worker) in a module a test can import, and gate in
+- [ ] 7.1 Read `WORKER_QUEUE_GROUP` (`films`, `main`, or unset for every Worker) in a module a test can import, and gate in
       `apps/worker/temporal.ts`: which Workers are created, the backfill start, the Personal sources email settings
       check, the extra gauges, the gauge line's process name, and the pool's shares. Verify: unit tests for the
-      role's parse and each role's queue list
-- [ ] 7.2 Add the root scripts `temporal:films` and `temporal:main`, setting the role after `doppler run --`, and
-      document them in the README. Verify: each boots locally and logs only its role's Workers
+      queue group's parse and each queue group's queue list
+- [ ] 7.2 Add the root scripts `temporal:films` and `temporal:main`, setting the queue group after `doppler run --`, and
+      document them in the README. Verify: each boots locally and logs only its queue group's Workers
 - [ ] 7.3 Set every ffmpeg thread count to 2 in `videoEncode.ts`: each input's decoder, the filter graph, and the
       encoder. A thread count changes no pixel and the H.264 headers stay identical, so the stream copy join holds.
       Do this first: it also bounds the shared worker's memory before the film service exists. Verify:
@@ -168,8 +168,8 @@ is two steps (design D15): the by-hand concurrent build in production, then the 
       memory together, the temp folder's peak bytes and whether it is on disk or in memory, and the render's seconds
       over the film's length. Verify: the readings are recorded in design.md A.8 beside the laptop's, and the film
       service's memory and disk are set from them
-- [ ] 7.6 Serve the worker's demand gauges at a Prometheus endpoint: for the films role its running renders plus the
-      film queue's backlog divided by the queue's pollers, and for the main role the same for scans. Verify: a
+- [ ] 7.6 Serve the worker's demand gauges at a Prometheus endpoint: for the films queue group its running renders plus the
+      film queue's backlog divided by the queue's pollers, and for the main queue group the same for scans. Verify: a
       test reads the endpoint's text for each role
 - [ ] 7.7 Add the film service's Release step to `release-main.json` beside `deploy-worker`. Verify: as 4.6
 - [ ] 7.8 By hand in Northflank: set the worker's and the film service's termination grace above two minutes; create the
@@ -186,10 +186,10 @@ is two steps (design D15): the by-hand concurrent build in production, then the 
       line, and report a film queue nothing polls from the sweep. Count the remaining films over every Topic, not
       the current page. Verify: gauge and sweep tests
 - [ ] 8.2 (finding R1) Give the film workflow a first activity on a short-write queue that writes the `rendering`
-      row, behind `patched`, and move the failure mark to the same queue. The main role hosts that queue's Worker,
+      row, behind `patched`, and move the failure mark to the same queue. The main queue group hosts that queue's Worker,
       with no workflow bundle. Verify: a workflow test that a queued film has its row before a render slot is
       free, a replay of a film started before the change, and the bundle check
-- [ ] 8.3 Give rebuilds a queue and a slot of their own on the film role. Tasks already scheduled on `episode-videos`
+- [ ] 8.3 Give rebuilds a queue and a slot of their own on the film queue group. Tasks already scheduled on `episode-videos`
       stay there, so that Worker keeps the rebuild registered. Verify: a test that a rebuild runs while a render
       holds the render slot
 - [ ] 8.4 Have the backfill wait before each render while the live film queue has a backlog. Verify: a workflow test

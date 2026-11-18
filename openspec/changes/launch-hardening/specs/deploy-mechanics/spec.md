@@ -353,26 +353,26 @@ analytics, and telemetry before the process exits.
 - **WHEN** a draining process holds analytics events, telemetry spans, or error reports it has not sent
 - **THEN** it sends them before it exits
 
-### Requirement: The worker runs as a main role and a films role
+### Requirement: The worker runs as a main queue group and a films queue group
 
-The worker SHALL read the setting `WORKER_ROLE`. With `films` it SHALL host the film Workers and the film rebuild
-Worker and no other. With `main` it SHALL host every other Worker. With no role it SHALL host every Worker, as it does
-in development. Production SHALL run the `films` role as a film service of its own, beside the `temporal-worker`
+The worker SHALL read the setting `WORKER_QUEUE_GROUP`. With `films` it SHALL host the film Workers and the film rebuild
+Worker and no other. With `main` it SHALL host every other Worker. With no queue group it SHALL host every Worker, as it does
+in development. Production SHALL run the `films` queue group as a film service of its own, beside the `temporal-worker`
 service that runs `main`, so a film encode never shares a process with a Scan.
 
 #### Scenario: A film replica renders films alone
 
-- **WHEN** a worker starts with `WORKER_ROLE` set to `films`
+- **WHEN** a worker starts with `WORKER_QUEUE_GROUP` set to `films`
 - **THEN** it polls the film queues and no scan, recording, or email queue
 
 #### Scenario: A main worker renders no film
 
-- **WHEN** a worker starts with `WORKER_ROLE` set to `main`
+- **WHEN** a worker starts with `WORKER_QUEUE_GROUP` set to `main`
 - **THEN** it hosts no film Worker, so no film renders or rebuilds in its process
 
-#### Scenario: No role hosts every Worker
+#### Scenario: No queue group hosts every Worker
 
-- **WHEN** a worker starts with `WORKER_ROLE` unset
+- **WHEN** a worker starts with `WORKER_QUEUE_GROUP` unset
 - **THEN** it hosts every Worker, so development and a deploy that has not created the film service yet run as before
 
 #### Scenario: A film replica that runs out of memory ends films alone
@@ -398,7 +398,7 @@ service has.
 ### Requirement: The film service and the main worker scale on their demand gauges
 
 The film service SHALL scale from one to four replicas on the film demand gauge, with the threshold at one film
-replica's slots. The `temporal-worker` service, which runs the `main` role, SHALL scale from two to four replicas on
+replica's slots. The `temporal-worker` service, which runs the `main` queue group, SHALL scale from two to four replicas on
 the scan demand gauge. Both gauges are the ones the worker serves at its Prometheus endpoint, as the
 performance-telemetry capability states. If the platform's plan has no custom metric autoscaling, both services SHALL
 scale on cpu at 70 percent instead.

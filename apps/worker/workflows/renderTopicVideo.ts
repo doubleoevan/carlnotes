@@ -3,7 +3,7 @@
 // because a workflow under way replays them by name
 
 import { toWorkflowFailureReason } from "@carlnotes/contracts/scanFailure"
-import { proxyActivities } from "@temporalio/workflow"
+import { CancellationScope, isCancellation, patched, proxyActivities } from "@temporalio/workflow"
 import type * as activities from "./renderTopicVideoActivities"
 
 // a render gets four hours an attempt and three attempts, and one with no heartbeat for ten minutes is a stall. a
@@ -29,18 +29,34 @@ const { markTopicPodcastEpisodeVideoFailedActivity } = proxyActivities<typeof ac
 })
 
 // the podcast episode whose film to render or rebuild
-export type TopicVideoWorkflowInput = { podcastEpisodeId: string }
+export type TopicVideoWorkflowInput = { podcastEpisodeId: string; renderVersion?: 3 | 4 }
 
 /**
  * Renders a podcast episode's film, and marks it failed after the last attempt.
  */
 export async function renderTopicPodcastEpisodeVideoWorkflow({
 	podcastEpisodeId,
+	renderVersion,
 }: TopicVideoWorkflowInput): Promise<void> {
 	try {
-		await renderTopicPodcastEpisodeVideoActivity({ podcastEpisodeId })
+		await renderTopicPodcastEpisodeVideoActivity(
+			renderVersion ? { podcastEpisodeId, renderVersion } : { podcastEpisodeId },
+		)
 	} catch (error) {
-		await markTopicPodcastEpisodeVideoFailedActivity({ podcastEpisodeId, reason: toWorkflowFailureReason(error) })
+		if (renderVersion === 4 && isCancellation(error)) {
+			// An interrupted first render must leave the rendering state. A failed upgrade keeps its ready files.
+			if (patched("settle-cancelled-film")) {
+				await CancellationScope.nonCancellable(() =>
+					markTopicPodcastEpisodeVideoFailedActivity({ podcastEpisodeId, renderVersion, reason: "cancelled" }),
+				)
+			}
+			throw error
+		}
+		await markTopicPodcastEpisodeVideoFailedActivity({
+			podcastEpisodeId,
+			reason: toWorkflowFailureReason(error),
+			...(renderVersion ? { renderVersion } : {}),
+		})
 		throw error
 	}
 }

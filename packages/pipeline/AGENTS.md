@@ -239,7 +239,7 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
   an image's size holds without blur. It also plans the intro's and the sign-off's shots. `videoEncode.ts` encodes one
   shot at a
   time with its move, its crossfade from the shot before, and the lower third. `videoParts.ts` renders the chapters
-  part and joins the film, and `videoImageParts.ts` renders the intro, which opens on the film's image and cuts through
+  part, `videoFilm.ts` joins the film, and `videoImageParts.ts` renders the intro, which opens on the film's image and cuts through
   each chapter's first image, and the sign-off, which cuts through them and pulls back from the film's image, each
   under a lower third that stays. `videoAudio.ts` downloads the audio and returns its length, the timeline, and the
   captions that the render and the rebuild share.
@@ -263,12 +263,14 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
   failed draw, then renders, uploads, and bills a film, writing a failed row for missing inputs. A recorded podcast
   episode's film renders in full whatever its owner's spend. Its owner was under the podcast episodes cutoff when the
   podcast episode was planned. A ready film below the current render version renders again under versioned keys while it
-  keeps playing, and one guarded update swaps it in. `rebuildTopicVideo.ts` renders only the intro and the
-  sign-off again for a new image, over the chapters' stored images, and joins them with the stored chapters part. It
+  keeps playing, and one guarded update swaps it in. `rebuildTopicVideo.ts` renders the intro and sign-off for a new
+  image and retains the published narration and captions. `rebuildVideoChapters.ts` copies verified chapters or uses
+  the full chapter encoder with the approved pictures and cached animation. It
   also rebuilds a film marked rendering that still has its files, whatever its owner spent, and marks it ready. A film
   draws no unchecked upload: `loadTopicVideoPodcastEpisode` shows the next checked image in the film's order, and
   the rebuild skips a film that plays while an unchecked upload would be its image. Its
   swap takes the Topic's image visibility lock, shared, and throws an error if the film's image changed meanwhile.
+  `renderFilmFiles.ts` produces the parts, captions and finished film. `topicVideoLock.ts` serializes private scene plan and animation writes with episode removal.
   `topicVideoRows.ts` is the film row both of them write: the render version, the skipped, rendering,
   ready, re-rendered, and failed writes, the render state read, the upload that records its pending deletion first, and
   what a film's rendered minutes cost. `saveImageTopicVideosRendering` marks each ready film drawn from
@@ -387,3 +389,29 @@ write rechecks an approved replacement under the Topic lock before moving its pr
 That slice gives each claim's event date precision and last-seen Scan date.
 Run `bun run smoke:topic-memories` against disposable Postgres with pgvector to exercise the write transaction and
 MCP membership gate. `evals/topic-memories/` replays dev Findings through the same production proposal and write paths.
+
+A version 4 Finding chapter saves the approved image hashes, reviewed animation file hashes, camera moves and exclusive
+frame endpoints in its private scene plan. `videoSceneStorage.ts` serializes writes under the episode’s film row
+lock. `reviewedAnimation.ts` matches approved image bytes to silent loops. The reusable host loop lives in
+`assets/film/coffee-break-hosts.webm`. Its source image hash check matches the steam to `apps/docs/design/podcast/coffee-break-hosts.jpeg`,
+the film illustration with bare mugs. An operator may supply additional
+reviewed loops in `TOPIC_VIDEO_REVIEWED_ANIMATION_DIR`, named by the original artwork’s SHA-256 followed by `.webm`.
+For eligible public chapter pictures without a loop, `pictureAnimationChoices.ts` prepares numbered crops and
+`planPictureAnimation.ts` asks the vision model to confirm one crop per picture or leave it still. The chapter owns one
+planning reservation. Retries reuse the validated regions. `pictureAnimation.ts` renders each effect inside its crop
+before `videoEncode.ts` applies the camera move and transition. `storedChapterImages.ts` recovers the same generated pictures on retry. The Three.js page and its
+supervised offline browser capture are tools for reviewing visual treatments. A published film uses FFmpeg.
+
+`topicVideo/benchmarkVideoScenes.ts` replays a reviewed local fixture through both encoders. It verifies the
+manifest hashes and writes the silent parts, two narrated clips and the plan to a new private directory.
+`videoScene.smoke.ts` exercises the runtime browser, encoder and cancellation. `topicVideoSlot.ts` shares the
+worker allocation with image rebuilds. The publication of the replacement film rechecks the public Finding association and fetched images.
+Each new version 4 chapters key identifies the ordered plans that encoded the retained pictures and their approved
+sources. A poster rebuild verifies that key before copying chapters. When the check fails or an older version 4 film
+lacks the binding, the rebuild encodes and swaps a new chapters part. Only the bookends count toward the owner's render cost. A superseded rebuild leaves its uploads pending deletion and records no rebuild event.
+
+`generatedPictureAnimation.ts` uses the account’s monthly allowance for at most one planner-selected generated illustration in a new episode. It strips provider audio and checks all 120 video frames. `generatedAnimationStorage.ts` reserves the request before sending it and binds the reusable silent video to the source image hash. Episode deletion includes both objects. Chapters share eight local effects. The paid animation and the host steam have separate slots.
+
+`topicVideo/videoRenderResourceLimits.ts` enforces the memory and working-directory limits on film renders, rebuilds and the offline chapter capture.
+
+The disposable Postgres Journal smoke suite shares `topicMemorySmokeFixtures.ts`. Its Journal checks live in `topicMemoryJournalSmokeChecks.ts`; its claim repair checks live in `topicMemoryRepairSmokeChecks.ts`.

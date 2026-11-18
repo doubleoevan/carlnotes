@@ -159,13 +159,15 @@ function toVideoElements(): TopicVideoElements {
 		mediaElement: videoElement,
 		toSourceUrl: (podcastEpisode) => podcastEpisode.video?.videoUrl ?? null,
 	})
+	let clearCaptions: (() => void) | undefined
 	registerTopicVideoAdapter({
 		...videoElementBinding.adapter,
 		load: (options) => {
 			// name the film and point the track at its captions before the film loads
 			const { title, video } = options.podcastEpisode
 			videoElement.setAttribute("aria-label", title ? `Film of ${title}` : "Film")
-			captionsTrackElement.src = video?.captionsUrl ?? ""
+			clearCaptions?.()
+			clearCaptions = loadFilmCaptions(captionsTrackElement, video?.captionsUrl)
 			return videoElementBinding.adapter.load(options)
 		},
 		unload: () => {
@@ -173,6 +175,8 @@ function toVideoElements(): TopicVideoElements {
 			if (document.pictureInPictureElement === videoElement) {
 				void document.exitPictureInPicture().catch(() => {})
 			}
+			clearCaptions?.()
+			clearCaptions = undefined
 			videoElementBinding.adapter.unload()
 			videoElement.load()
 		},
@@ -223,5 +227,39 @@ function runOnceFilmSizeIsKnown(videoElement: HTMLVideoElement, call: () => void
 		call()
 	} else {
 		videoElement.addEventListener("loadedmetadata", call, { once: true })
+	}
+}
+
+// A sandboxed MCP view has an opaque origin. Its captions need anonymous CORS, while the film's
+// signed redirect uses an ordinary media request. Load the VTT separately and preserve each native cue.
+function loadFilmCaptions(target: HTMLTrackElement, source?: string): () => void {
+	if (!source || window.origin !== "null" || source.startsWith("data:")) {
+		if (source) {
+			target.src = source
+		}
+		return () => target.removeAttribute("src")
+	}
+	const loader = document.createElement("audio")
+	loader.crossOrigin = "anonymous"
+	const track = document.createElement("track")
+	track.kind = "captions"
+	loader.append(track)
+	const copiedCues: TextTrackCue[] = []
+	const onLoad = (): void => {
+		for (const cue of Array.from(track.track.cues ?? [])) {
+			target.track.addCue(cue)
+			copiedCues.push(cue)
+		}
+	}
+	track.addEventListener("load", onLoad, { once: true })
+	track.track.mode = "hidden"
+	track.src = source
+	return () => {
+		track.removeEventListener("load", onLoad)
+		// A disabled track hides its cue list, including the cues added for the previous episode.
+		for (const cue of copiedCues) {
+			target.track.removeCue(cue)
+		}
+		track.remove()
 	}
 }

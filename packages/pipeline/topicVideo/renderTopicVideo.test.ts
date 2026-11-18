@@ -1,12 +1,16 @@
 // the film render's skips and its render version, with the connection pool stubbed: a render never asks about the
 // owner's spend, a podcast episode missing its inputs gets a failed row once, a film at the current render version is
 // skipped, and a ready film below it is rendered again and swapped while it stays ready
+
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
+import { existsSync } from "node:fs"
+import { dirname } from "node:path"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as monthlyBudgetCutoffs from "@carlnotes/db/monthlyBudgetCutoffs"
 import * as podcastFeedCache from "@carlnotes/db/podcastFeedCache"
 import * as storage from "@carlnotes/db/store"
 import * as ffmpeg from "@carlnotes/models/ffmpeg"
+import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import { renderTopicVideo } from "./renderTopicVideo"
 import * as topicVideoImage from "./topicVideoImage"
 import * as topicVideoInputs from "./topicVideoInputs"
@@ -14,6 +18,7 @@ import * as topicVideoRows from "./topicVideoRows"
 import { TOPIC_VIDEO_RENDER_VERSION } from "./topicVideoRows"
 import * as videoCaptions from "./videoCaptions"
 import * as videoChapterImages from "./videoChapterImages"
+import * as videoFilm from "./videoFilm"
 import * as videoHotTakes from "./videoHotTakes"
 import * as videoImageParts from "./videoImageParts"
 import * as videoParts from "./videoParts"
@@ -167,7 +172,7 @@ function stubRenderSteps(): { upload: ReturnType<typeof spyOn>; deleteObjects: R
 		newlyGeneratedChapterImageCount: 5,
 	})
 	spyOn(videoParts, "renderVideoChaptersPart").mockResolvedValue("/work/chapters.mp4")
-	spyOn(videoParts, "writeVideoFilm").mockResolvedValue(undefined)
+	spyOn(videoFilm, "writeVideoFilm").mockResolvedValue(undefined)
 
 	// each upload records its key, and the feeds' cache is dropped
 	const upload = spyOn(topicVideoRows, "uploadTopicVideoFile").mockImplementation(
@@ -298,4 +303,106 @@ test("a re-render with missing inputs records the failed render version and keep
 	expect(failedVersionUpdate?.text).toContain('set "failed_render_version" = $')
 	expect(failedVersionUpdate?.values).toContain(TOPIC_VIDEO_RENDER_VERSION)
 	expect(failedVersionUpdate?.values).not.toContain("failed")
+})
+
+test.each(["upload", "publication"])(
+	"an animated replacement keeps its ready predecessor after a failed %s",
+	async (stage) => {
+		const queries = stubRenderReads(toFilmStateRow("ready", 3))
+		const { upload, deleteObjects } = stubRenderSteps()
+		if (stage === "upload") {
+			upload.mockRejectedValueOnce(Error("simulated failure"))
+		} else {
+			spyOn(topicVideoRows, "publishTopicVideoReplacement").mockRejectedValueOnce(Error("simulated failure"))
+		}
+		await expect(
+			renderTopicVideo({ podcastEpisodeId: "episode-1", renderVersion: 4, isPlatformBilled: true }),
+		).rejects.toThrow("simulated failure")
+		expect(toFilmRowUpdates(queries)).toEqual([])
+		expect(deleteObjects).not.toHaveBeenCalled()
+	},
+)
+
+test.skipIf(!Bun.which("ffmpeg"))(
+	"an oversized live encode stops and cleans up without replacing the ready film",
+	async () => {
+		// feed a real encoder through the audio preparation step and retain the existing ready row
+		const restore = saveEnvSettings(["TOPIC_VIDEO_DISK_LIMIT_MIB"])
+		const sent = stubRenderReads(toFilmStateRow("ready", 1))
+		const { upload } = stubRenderSteps()
+		let workDirectory = ""
+		let stopped = false
+		Bun.env.TOPIC_VIDEO_DISK_LIMIT_MIB = "1"
+		spyOn(storage, "downloadPodcastEpisodeFile").mockImplementation(async ({ filePath, signal }) => {
+			workDirectory = dirname(filePath)
+			try {
+				await ffmpeg.runFfmpeg({
+					ffmpegArguments: [
+						"-y",
+						"-re",
+						"-f",
+						"lavfi",
+						"-i",
+						"testsrc2=s=640x360:r=24",
+						"-threads",
+						"1",
+						"-c:v",
+						"rawvideo",
+						"-t",
+						"15",
+						"-f",
+						"rawvideo",
+						filePath,
+					],
+					signal,
+					timeoutMs: 20000,
+				})
+			} finally {
+				stopped = signal?.aborted ?? false
+			}
+		})
+		try {
+			await expect(renderTopicVideo({ podcastEpisodeId: "episode-1", renderVersion: 4 })).rejects.toThrow(
+				"1 MiB temporary disk limit",
+			)
+			expect(stopped).toBe(true)
+			expect(existsSync(workDirectory)).toBe(false)
+			expect(upload).not.toHaveBeenCalled()
+			expect(toFilmRowUpdates(sent)).toEqual([])
+		} finally {
+			restore()
+		}
+	},
+	30000,
+)
+
+test("a film stays ready when the worker already exceeds its memory allowance", async () => {
+	// run the regular render entry point with a limit below the worker’s resident memory
+	const restore = saveEnvSettings(["TOPIC_VIDEO_MEMORY_LIMIT_MIB"])
+	const sent = stubRenderReads(toFilmStateRow("ready", 1))
+	const { upload } = stubRenderSteps()
+	try {
+		Bun.env.TOPIC_VIDEO_MEMORY_LIMIT_MIB = "1"
+		await expect(renderTopicVideo({ podcastEpisodeId: "episode-1", renderVersion: 4 })).rejects.toThrow(
+			"1 MiB memory limit",
+		)
+		expect(upload).not.toHaveBeenCalled()
+		expect(toFilmRowUpdates(sent)).toEqual([])
+	} finally {
+		restore()
+	}
+})
+
+test("cancellation during upload leaves the previous film playable", async () => {
+	const sent = stubRenderReads(toFilmStateRow("ready", 3))
+	const controller = new AbortController()
+	const { upload } = stubRenderSteps()
+	upload.mockImplementationOnce(async () => {
+		controller.abort(new Error("cancelled upload"))
+		return "unpublished-intro"
+	})
+	await expect(
+		renderTopicVideo({ podcastEpisodeId: "episode-1", renderVersion: 4, signal: controller.signal }),
+	).rejects.toThrow("cancelled upload")
+	expect(toFilmRowUpdates(sent)).toEqual([])
 })

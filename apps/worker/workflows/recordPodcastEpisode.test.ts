@@ -34,6 +34,7 @@ function toRecordingActivities(podcastEpisodeId: string, isFilmEnabled: boolean)
 		failPodcastEpisode: async () => undefined,
 		drawPodcastEpisodeImageActivity: async () => undefined,
 		isTopicPodcastEpisodeVideoEnabled: async () => isFilmEnabled,
+		selectNewTopicVideoRenderVersion: async () => (isFilmEnabled ? 4 : false),
 	}
 }
 
@@ -69,7 +70,8 @@ test("a published podcast episode starts its film on the film queue if films are
 	const recordingResult = await runRecording("episode-on", {
 		isFilmEnabled: true,
 		filmActivities: {
-			renderTopicPodcastEpisodeVideoActivity: async ({ podcastEpisodeId }) => {
+			renderTopicPodcastEpisodeVideoActivity: async ({ podcastEpisodeId, renderVersion }) => {
+				expect(renderVersion).toBe(4)
 				renderedPodcastEpisodeIds.push(podcastEpisodeId)
 				return { outcome: "rendered", renderSeconds: 1, byteSize: 1, generatedChapterImageCount: 0 }
 			},

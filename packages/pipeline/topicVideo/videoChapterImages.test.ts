@@ -163,7 +163,7 @@ test("a chapter with enough Resource Images generates none, and shows them befor
 
 	// the three stored images, then the podcast card, with nothing generated
 	expect(await toImageKinds(images)).toEqual(["resource", "resource", "resource", "podcast-card"])
-	expect(images.map((image) => image.zoomLimit)).toEqual([2, 2, 2, 2])
+	expect(images.map((image) => image.zoomLimit)).toEqual([2, 2, 2, 1.6])
 	expect(renderOriginal).not.toHaveBeenCalled()
 	expect(loadOrFetchImages).toHaveBeenCalledWith(["resource-0"], undefined)
 })
@@ -183,7 +183,7 @@ test("a long chapter with one Resource Image generates the difference", async ()
 	])
 
 	// a generated image is at the film's size, so it zooms less than a large Resource Image
-	expect(images.map((image) => image.zoomLimit)).toEqual([2, 1.25, 1.25, 1.25, 1.25, 2])
+	expect(images.map((image) => image.zoomLimit)).toEqual([2, 1.25, 1.25, 1.25, 1.25, 1.6])
 })
 
 test("a chapter with no Resource Image shows its generated image and the podcast card", async () => {
@@ -324,4 +324,48 @@ test("a failed image generation leaves the chapter on its other images, and is r
 	expect(await toImageKinds(images)).toEqual(["resource", "podcast-card"])
 	expect(reportError).toHaveBeenCalled()
 	expect(upload).not.toHaveBeenCalled()
+})
+
+test("a missing public Finding association supplies only house artwork for animated scenes", async () => {
+	stubChapterReads()
+	storeResourceImages(1, 1)
+	const row = toVideoChapterRow(1)
+	const prepared = await prepareChapterImages({
+		...OWNER_BILLING,
+		requiresPublicSceneSources: true,
+		videoChapterRows: [row],
+		segments: [toChapterSegment(1, 90)],
+		shownImageStill: PODCAST_CARD_IMAGE,
+	})
+	expect(loadOrFetchImages).toHaveBeenCalledWith([], undefined)
+	expect(await toImageKinds(prepared.chapterImages.get(1)?.images ?? [])).toHaveLength(1)
+	expect(renderOriginal).not.toHaveBeenCalled()
+})
+
+test("an unsafe public Finding uses only house artwork and contributes no source to the ready check", async () => {
+	stubChapterReads()
+	const prepared = await prepareChapterImages({
+		...OWNER_BILLING,
+		requiresPublicSceneSources: true,
+		videoChapterRows: [{ ...toVideoChapterRow(0, true), hasPublicSceneSource: true }],
+		segments: [toChapterSegment(0, 30)],
+		shownImageStill: PODCAST_CARD_IMAGE,
+	})
+	expect(prepared.sceneSources).toEqual([])
+	expect(prepared.chapterImages.get(0)?.hasPublicSceneSource).toBe(false)
+	expect(await toImageKinds(prepared.chapterImages.get(0)?.images ?? [])).toEqual(["podcast-card"])
+})
+
+test("a selected historical upgrade keeps its published film when the chapter pictures cannot be recovered", async () => {
+	stubChapterReads()
+	await expect(
+		prepareChapterImages({
+			...OWNER_BILLING,
+			priorVersion: 2,
+			requiresPublicSceneSources: true,
+			videoChapterRows: [toVideoChapterRow(0)],
+			segments: [toChapterSegment(0, 30)],
+			shownImageStill: PODCAST_CARD_IMAGE,
+		}),
+	).rejects.toThrow("Historical artwork unavailable for chapter 0")
 })

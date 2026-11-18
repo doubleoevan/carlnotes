@@ -8,6 +8,7 @@ import * as storage from "@carlnotes/db/store"
 import * as temporalClient from "@carlnotes/pipeline/temporalClient"
 import * as viewerCounts from "../counts/viewerCounts"
 import { toSignedInApp } from "../testSession"
+import { toPlayToken } from "./playTokens"
 import type { PodcastEpisodeRow, TopicRow } from "./podcastEpisodeRows"
 import * as episodeRows from "./podcastEpisodeRows"
 import { startStaleFilmRebuild, topicVideosRoute } from "./topicVideoRoutes"
@@ -172,4 +173,32 @@ test("a film with its own image rebuilds for that image alone, never for its pod
 	const app = toSignedInApp(topicVideosRoute, "listener")
 	expect((await app.request("/episodes/episode-1/video.mp4", jsonRequest)).status).toBe(200)
 	expect(rebuild).toHaveBeenCalledWith("episode-1")
+})
+
+test("opaque frames can read captions only with a valid play token and continuing episode access", async () => {
+	const original = Bun.env.BETTER_AUTH_SECRET
+	Bun.env.BETTER_AUTH_SECRET = "caption-test-secret"
+	try {
+		// The episode lookup models an authorized reader until membership is revoked.
+		const access = spyOn(episodeRows, "loadAccessiblePodcastEpisode").mockResolvedValue({ podcastEpisodeRow, topic })
+		stubConnectionPool(() => [toReadyFilmRow("image-new")])
+		spyOn(storage, "attachmentStream").mockImplementation(() => new Blob(["WEBVTT"]).stream())
+		const app = toSignedInApp(topicVideosRoute, "listener")
+		const uri = "/episodes/episode-1/captions.vtt"
+		const request = (suffix: string) => app.request(uri + suffix, { headers: { Origin: "null" } })
+		const token = encodeURIComponent(toPlayToken({ podcastEpisodeId: "episode-1", userId: "reader" }))
+		expect((await request("?play=" + token)).headers.get("Access-Control-Allow-Origin")).toBe("null")
+		expect((await request("")).headers.has("Access-Control-Allow-Origin")).toBe(false)
+		expect((await request("?play=invalid")).status).toBe(404)
+		access.mockResolvedValue(null)
+		const denied = await request("?play=" + token)
+		expect(denied.status).toBe(404)
+		expect(denied.headers.has("Access-Control-Allow-Origin")).toBe(false)
+	} finally {
+		if (original === undefined) {
+			delete Bun.env.BETTER_AUTH_SECRET
+		} else {
+			Bun.env.BETTER_AUTH_SECRET = original
+		}
+	}
 })

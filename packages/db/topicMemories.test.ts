@@ -5,12 +5,8 @@ import { db } from "./index"
 import { EMBED_DIMENSIONS } from "./schema/scans"
 import { topicMemories, topicMemoryFeedback } from "./schema/topicMemories"
 import { topics } from "./schema/topics"
-import {
-	loadRankedTopicMemories,
-	loadTopicMemoriesPage,
-	saveTopicMemoryFeedback,
-	toVisibleTopicMemoryGroupRows,
-} from "./topicMemories"
+import { loadRankedTopicMemories, loadTopicMemoriesPage, toVisibleTopicMemoryGroupRows } from "./topicMemories"
+import { saveTopicMemoryFeedback } from "./topicMemoryFeedback"
 
 afterEach(restoreConnectionPool)
 
@@ -132,32 +128,4 @@ test("clearing a rating also removes the caller's correction", async () => {
 	expect(deletion?.values).toEqual(["topic-memory-1", "owner-1"])
 	expect(deletion?.text).not.toContain('"rating"')
 	expect(queries.some(({ text }) => text.startsWith('update "topic_memories"'))).toBe(false)
-})
-
-test("the saved topic memory limit lets another rater endorse an already saved topic memory", async () => {
-	// both requests see a full cap, but adding a second vote cannot consume a slot
-	const rate = (): ReturnType<typeof saveTopicMemoryFeedback> =>
-		saveTopicMemoryFeedback({
-			topicId: "topic-1",
-			topicMemoryId: "topic-memory-1",
-			userId: "owner-1",
-			feedback: { rating: "up" },
-		})
-	let isSavedTopicMemory = false
-	const queries = stubConnectionPool(({ text }) => {
-		if (text.includes('from "topics"')) {
-			return [toTableRow(topics, { id: "topic-1", ownerId: "owner-1" })]
-		}
-		// the Topic already has reached the saved topic memory limit
-		if (text.startsWith("select count(")) {
-			return [[30]]
-		}
-		return text.startsWith("select") ? [["topic-memory-1", isSavedTopicMemory]] : []
-	})
-	expect(await rate()).toBe("savedTopicMemoryLimit")
-	expect(queries.some(({ text }) => text.startsWith("insert"))).toBe(false)
-	// adding an endorsement to a saved topic memory takes no extra slot
-	isSavedTopicMemory = true
-	expect(await rate()).toBe("saved")
-	expect(queries.filter(({ text }) => text.startsWith("insert"))).toHaveLength(1)
 })

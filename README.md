@@ -9,13 +9,11 @@ the stack, how the apps and packages fit together, the evals, and the commands t
 **He already read it. All of it.**
 
 Carl doesn't check the news. The news checks in with Carl. Carl never sleeps. He drinks coffee and reads everything. He
-finished the internet. Now he checks nightly for new stuff. And when you drop by, he has notes and a podcast.
+finished the internet. Now he checks nightly for new stuff. And when you drop by, he has notes, a podcast and film.
 
-**Give Carl a topic. You know the one. He'll brew a hot cup of what you just missed.**
+Give Carl a topic. **You know the one.** He'll brew a hot cup of what you just missed.
 
 Carl stays up. You stay informed.
-
-<br clear="left" />
 
 [![codecov](https://codecov.io/gh/doubleoevan/carlnotes/branch/main/graph/badge.svg)](https://codecov.io/gh/doubleoevan/carlnotes)
 [![evals](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fdoubleoevan%2Fcarlnotes%2Fmain%2Fevals%2Fresults%2Fbadge.json)](evals/README.md)
@@ -217,6 +215,8 @@ bun run dev:worker   # scheduled-scan sweep loop, one sweep a minute (the script
 bun run reset:monthly-budgets # replace every LiteLLM key created before the month began, as the daily cron does. a later run in the same month replaces only the keys that an earlier run failed to replace
                      # schedule, reset:monthly-budgets, db:migrate, docs:embed, and edge:purge run their command through apps/worker/runMonitoredJob.ts: in prd the sweep and the reset check in to their Sentry cron monitors, and a failed release job is reported. elsewhere it only runs the command
 bun run temporal     # Temporal worker for topic scans and attachment processing, as the Northflank service starts it; needs a Temporal server (docker-compose `temporal`, or `temporal server start-dev`)
+bun run temporal:main # start the scan and recording worker, including dispatch of new films
+bun run temporal:films # poll only film and film-backfill queues on a separately resourced worker
 bun run dev:temporal # the same worker, kept as the dev name beside dev:api and dev:ui
 bun run dev:temporal:watch # the same worker, restarted on save; what `bun run dev` uses. a restart mid-review leaves that scan waiting out its 30-minute activity timeout before it fails
 bun run dev:email    # React Email preview at localhost:3011; Bun renders templates and approval states to temporary HTML; no Doppler needed
@@ -239,6 +239,9 @@ bun run edge:purge   # clear the pages and the signed-out feed that Cloudflare s
 bun run sync:releases # re-read every published GitHub release into the releases table the /releases endpoint serves; it seeds history and repairs a missed webhook delivery, and is safe to re-run
 bun run sync:releases:prd # the same sync against the production database; run it once after the first deploy, since the table starts empty. the webhook writes it going forward
 bun run releases:preview <tag> "<title>" # store release-notes/<tag>.local.md in the dev releases table with the repo's screenshots inlined, so /releases and /releases/<tag> read as they will before the release exists on GitHub
+bun run films:benchmark <frozen-fixture-dir> <new-output-dir> # compare the two film renderers locally with the same approved media
+bun run films:verify-renderer # verify offline software graphics, deterministic seeks, encoded frames and capture cancellation
+bun run build:film-scenes # bundle the offline Chromium scene preview for authoring and verification
 bun run build:ui     # production build of apps/web to apps/web/dist, the MCP views' two scripts and stylesheet in apps/web/dist/mcp-views included (no doppler, so it runs in CI and deploys)
 bun run build:docs   # build static docs to apps/docs/dist, which the api serves at /docs
                      # /docs on the api (3000) and through the Vite proxy (5173) is this build, which only changes when you rerun this script and doesn't hot reload

@@ -60,6 +60,7 @@ function DialogContent({
 				{/* the ✕ close in the top corner */}
 				{!hideCloseButton && (
 					<DialogPrimitive.Close
+						data-slot="dialog-close"
 						className="focus-visible:ring-ring/50 text-muted-foreground hover:text-foreground absolute top-4 right-4 grid size-8 place-items-center rounded-md outline-none focus-visible:ring-[3px] aria-disabled:pointer-events-none aria-disabled:opacity-50"
 						aria-label="Close"
 						// mark the close button disabled while it keeps its focus

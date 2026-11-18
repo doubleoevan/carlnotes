@@ -67,6 +67,11 @@ export const topicVideosRoute = new Hono<AppEnv>()
 		// a browser track reads captions only from this origin, so a plain GET returns the file itself
 		if (captionsKey && context.req.method === "GET" && !isJsonAccepted(context)) {
 			context.header("Cache-Control", PRIVATE_NO_STORE_CACHE_CONTROL)
+			// Only a validated episode play token can read these captions from an opaque MCP frame.
+			if (podcastEpisodePlayRequest?.playTokenCaller && context.req.header("Origin") === "null") {
+				context.header("Access-Control-Allow-Origin", "null")
+				context.header("Vary", "Origin, Accept")
+			}
 			return context.body(attachmentStream(captionsKey), 200, { "Content-Type": "text/vtt; charset=utf-8" })
 		}
 		return toPodcastEpisodeFileResponse(context, {

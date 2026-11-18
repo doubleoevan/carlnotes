@@ -1,6 +1,8 @@
 // object storage through Bun's built-in S3 client the S3_* env values alone select: the uploads, the reads,
 // the object keys, deleteStoredObject, and the pending object deletions
 
+import { createWriteStream } from "node:fs"
+import { pipeline } from "node:stream/promises"
 import { toChunks } from "@carlnotes/contracts/arrays"
 import type { DashboardSubject } from "@carlnotes/contracts/dashboards"
 import type { McpViewScriptFile } from "@carlnotes/contracts/mcpViewHtml"
@@ -331,23 +333,39 @@ export function toPodcastEpisodeChapterKey(podcastEpisodeId: string, position: n
 }
 
 // a podcast episode object's key, the local file, and the file's content type
-type UploadPodcastEpisodeFileOptions = { key: string; filePath: string; contentType: string }
+type UploadPodcastEpisodeFileOptions = { key: string; filePath: string; contentType: string; signal?: AbortSignal }
 
 // upload a local file to object storage under a podcast episode key, streamed instead of read into memory
 export async function uploadPodcastEpisodeFile({
 	key,
 	filePath,
 	contentType,
+	signal,
 }: UploadPodcastEpisodeFileOptions): Promise<void> {
-	await bucket().write(key, Bun.file(filePath), { type: contentType })
+	signal?.throwIfAborted()
+	const file = Bun.file(filePath)
+	if (signal) {
+		// Cancelling the source stream also stops reading a large film from disk while the upload is in flight.
+		await bucket().write(key, new Response(file.stream().pipeThrough(new TransformStream(), { signal })), {
+			type: contentType,
+		})
+	} else {
+		await bucket().write(key, file, { type: contentType })
+	}
+	signal?.throwIfAborted()
 }
 
 // a podcast episode object's key, and the local file to write it to
-type DownloadPodcastEpisodeFileOptions = { key: string; filePath: string }
+type DownloadPodcastEpisodeFileOptions = { key: string; filePath: string; signal?: AbortSignal }
 
 // download a stored podcast episode object to a local file, streamed instead of read into memory
-export async function downloadPodcastEpisodeFile({ key, filePath }: DownloadPodcastEpisodeFileOptions): Promise<void> {
-	await Bun.write(filePath, bucket().file(key))
+export async function downloadPodcastEpisodeFile({
+	key,
+	filePath,
+	signal,
+}: DownloadPodcastEpisodeFileOptions): Promise<void> {
+	signal?.throwIfAborted()
+	await pipeline(bucket().file(key).stream(), createWriteStream(filePath), { signal })
 }
 
 // a presigned url that reads a Podcast Episode's audio, film, or captions from object storage, with range requests

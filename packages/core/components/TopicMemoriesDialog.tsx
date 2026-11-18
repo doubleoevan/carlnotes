@@ -5,7 +5,6 @@ import {
 	type TopicMemoryFeedback,
 	toTopicMemoryDisplayText,
 } from "@carlnotes/contracts/topicMemories"
-import { TOPIC_MEMORY_SAVED_LIMIT } from "@carlnotes/contracts/topicMemoryWork"
 import { type ComponentType, type ReactNode, useState } from "react"
 import { type TopicMemoriesClient, useTopicMemories } from "../hooks/useTopicMemories"
 import type { Rating } from "./RatingThumbs"
@@ -110,10 +109,6 @@ export function TopicMemoriesDialog({
 							</Row>
 						))}
 			</List>
-			{/* Feedback can reorder a topic memory or remove it from the list. */}
-			{journal.hasReachedSavedTopicMemoryLimit && (
-				<Message isError>{`You can save up to ${TOPIC_MEMORY_SAVED_LIMIT} takeaways per Topic.`}</Message>
-			)}
 			{journal.hasSaveError && <Message isError>Carl couldn’t save that feedback. Try again.</Message>}
 			{isError && <Retry onPress={() => void refetch()} />}
 			{pageCount > 1 && (

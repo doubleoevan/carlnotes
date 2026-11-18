@@ -2,7 +2,9 @@
 // film's mux with its audio and captions. each run has a timeout and stops once the render's signal aborts
 
 import { runFfmpeg } from "@carlnotes/models/ffmpeg"
+import { type PictureAnimation, pictureAnimationFilters } from "./pictureAnimation"
 import { ESPRESSO, VIDEO_HEIGHT, VIDEO_WIDTH } from "./videoFrames"
+import { H264_ARGUMENTS } from "./videoH264"
 import { SHOT_CROSSFADE_FRAMES, toShotPanZoom, toShotZoomRatePerSecond, type VideoShotMove } from "./videoShots"
 import {
 	LOWER_THIRD_FADE_SECONDS,
@@ -12,37 +14,6 @@ import {
 	toSegmentSeconds,
 	VIDEO_FRAMES_PER_SECOND,
 } from "./videoTimeline"
-
-// every run's H.264 settings. the same settings in every run let shots and parts join by stream copy, and a keyframe
-// every two seconds that never moves for a scene change opens every run on a keyframe and keeps seeks fast
-const H264_ARGUMENTS = [
-	"-c:v",
-	"libx264",
-	"-profile:v",
-	"high",
-	"-level",
-	"4.0",
-	"-pix_fmt",
-	"yuv420p",
-	"-r",
-	String(VIDEO_FRAMES_PER_SECOND),
-	"-preset",
-	"veryfast",
-	"-crf",
-	"28",
-	"-tune",
-	"stillimage",
-	"-maxrate",
-	"1500k",
-	"-bufsize",
-	"3000k",
-	"-g",
-	String(VIDEO_FRAMES_PER_SECOND * 2),
-	"-keyint_min",
-	String(VIDEO_FRAMES_PER_SECOND * 2),
-	"-sc_threshold",
-	"0",
-]
 
 // the film's audio: AAC-LC at 96 kbps, one channel at 44.1 kHz, the same as the podcast episode's MP3
 const AAC_ARGUMENTS = ["-c:a", "aac", "-b:a", "96k", "-ac", "1", "-ar", "44100"]
@@ -67,6 +38,8 @@ const ESPRESSO_COLOR = `0x${ESPRESSO.slice(1)}`
 // one shot's picture: its still's file, how far its image may zoom, its move, its frames to the next cut, and the
 // frames it is on screen, which include its crossfade into the next shot
 export type VideoShotPicture = {
+	pictureAnimation?: PictureAnimation
+	reviewedAnimationPath?: string
 	stillPath: string
 	zoomLimit: number
 	move: VideoShotMove
@@ -107,20 +80,16 @@ export async function encodeVideoShot(videoShotEncode: VideoShotEncode, signal?:
 export function toVideoShotArguments(videoShotEncode: VideoShotEncode): string[] {
 	// the shot's own still, with its move from its first frame
 	const { previousShot, lowerThird, frameCount, isSegmentStart, isSegmentEnd } = videoShotEncode
-	const inputArguments = ["-i", videoShotEncode.stillPath]
-	const filters = [`[0:v]${toShotMoveFilter({ shotPicture: videoShotEncode, frameOffset: 0, frameCount })}[shot]`]
+	const inputArguments = toShotInput(videoShotEncode)
+	const filters = shotFilters(videoShotEncode, 0, 0, frameCount, "shot")
 	let shownLabel = "shot"
 
 	// the still before it keeps moving where its own run stopped, and fades out over the shot
 	if (previousShot) {
 		const crossfadeSeconds = toSegmentSeconds(SHOT_CROSSFADE_FRAMES)
-		const tailMoveFilter = toShotMoveFilter({
-			shotPicture: previousShot,
-			frameOffset: previousShot.frameCount,
-			frameCount: SHOT_CROSSFADE_FRAMES,
-		})
-		inputArguments.push("-i", previousShot.stillPath)
-		filters.push(`[1:v]${tailMoveFilter},format=yuva420p,fade=t=out:st=0:d=${crossfadeSeconds}:alpha=1[tail]`)
+		inputArguments.push(...toShotInput(previousShot))
+		filters.push(...shotFilters(previousShot, 1, previousShot.frameCount, SHOT_CROSSFADE_FRAMES, "outgoing"))
+		filters.push(`[outgoing]format=yuva420p,fade=t=out:st=0:d=${crossfadeSeconds}:alpha=1[tail]`)
 		filters.push("[shot][tail]overlay=0:0:eof_action=pass[crossfaded]")
 		shownLabel = "crossfaded"
 	}
@@ -138,11 +107,51 @@ export function toVideoShotArguments(videoShotEncode: VideoShotEncode): string[]
 	const segmentFades = toSegmentFades({ frameCount, isSegmentStart, isSegmentEnd })
 	filters.push(`[${shownLabel}]${[...segmentFades, "format=yuv420p"].join(",")}[segment]`)
 	return [
-		...["-y", ...inputArguments],
+		...[
+			"-y",
+			...(videoShotEncode.reviewedAnimationPath ||
+			previousShot?.reviewedAnimationPath ||
+			videoShotEncode.pictureAnimation ||
+			previousShot?.pictureAnimation
+				? ["-filter_complex_threads", "2"]
+				: []),
+			...inputArguments,
+		],
 		...["-filter_complex", filters.join(";"), "-map", "[segment]", "-frames:v", String(frameCount)],
 		...H264_ARGUMENTS,
 		...["-an", videoShotEncode.shotPath],
 	]
+}
+
+// Move the marked region first, then apply the montage camera to the whole picture.
+function shotFilters(shot: VideoShotPicture, input: number, frameOffset: number, frameCount: number, output: string) {
+	const camera = toShotMoveFilter({ shotPicture: shot, frameOffset, frameCount })
+	if (shot.reviewedAnimationPath || !shot.pictureAnimation) {
+		return [`[${input}:v]${camera}[${output}]`]
+	}
+	// Convert the full-range RGB effect to the montage's video range before the camera and dissolve.
+	return [
+		...pictureAnimationFilters(shot.pictureAnimation, input, frameOffset, frameCount),
+		`[animation${input}]scale=in_range=full:out_range=limited,format=yuv420p,${camera}[${output}]`,
+	]
+}
+
+// Loop only the locally reviewed silent picture. The same camera and transitions process both inputs.
+function toShotInput(shot: VideoShotPicture): string[] {
+	return shot.reviewedAnimationPath
+		? [
+				"-threads",
+				"2",
+				"-protocol_whitelist",
+				"file",
+				"-stream_loop",
+				"-1",
+				"-f",
+				"matroska",
+				"-i",
+				shot.reviewedAnimationPath,
+			]
+		: ["-i", shot.stillPath]
 }
 
 // a shot's picture, how many of its frames were drawn before this run, and how many frames this run draws
@@ -167,7 +176,13 @@ function toShotMoveFilter({ shotPicture, frameOffset, frameCount }: ToShotMoveFi
 		"pan-left": `z='${panZoom}':x='(iw-iw/zoom)*(1-${panProgress})':y='ih/2-(ih/zoom/2)'`,
 		"pan-right": `z='${panZoom}':x='(iw-iw/zoom)*${panProgress}':y='ih/2-(ih/zoom/2)'`,
 	}
-	return `zoompan=${{ ...zoomMoves, ...panMoves }[move]}:d=${frameCount}:${ZOOM_OUTPUT}`
+	// Advance the picture itself before the exact same pan or zoom. The outgoing crossfade resumes at its cut.
+	const camera = { ...zoomMoves, ...panMoves }[move]
+	if (shotPicture.reviewedAnimationPath) {
+		const end = frameOffset + frameCount
+		return `trim=start_frame=${frameOffset}:end_frame=${end},setpts=PTS-STARTPTS,scale=5120:2880:flags=bicubic,zoompan=${camera}:d=1:${ZOOM_OUTPUT}`
+	}
+	return `zoompan=${camera}:d=${shotPicture.pictureAnimation ? 1 : frameCount}:${ZOOM_OUTPUT}`
 }
 
 // the lower third's fades for a shot that starts some seconds into its segment: in after 0.6 seconds of the segment,

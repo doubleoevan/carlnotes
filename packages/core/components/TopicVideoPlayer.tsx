@@ -28,6 +28,7 @@ export type TopicVideoPlayerElements = {
 	Group: ComponentType<{ children: ReactNode; className?: string }>
 	// the page's card around the film player, a column with the player's own gap
 	Card: ComponentType<{ children: ReactNode }>
+	Title: ComponentType<{ children: string; className: string }>
 	// the film's frame. it shows the poster until this podcast episode's film draws, and reports the controls its
 	// platform supports
 	Surface: ComponentType<{
@@ -75,7 +76,7 @@ export function TopicVideoPlayer({
 	podcastEpisode,
 	isCard = false,
 	cardFooter,
-	elements: { Group, Card, Surface, PlayButton, Controls, SeekBar, ControlButton, Feedback },
+	elements: { Group, Card, Title, Surface, PlayButton, Controls, SeekBar, ControlButton, Feedback },
 }: TopicVideoPlayerProps & { elements: TopicVideoPlayerElements }) {
 	// whether this podcast episode is loaded, whether it is loaded as the film, and the controls the frame supports
 	const player = usePodcastEpisodePlayer()
@@ -170,6 +171,10 @@ export function TopicVideoPlayer({
 	if (isCard) {
 		return (
 			<Card>
+				{/* the film title stays above the picture during playback */}
+				{podcastEpisode.title && (
+					<Title className="font-sans text-lg leading-snug font-bold">{podcastEpisode.title}</Title>
+				)}
 				{topicVideoPlayer}
 				{cardFooter}
 			</Card>

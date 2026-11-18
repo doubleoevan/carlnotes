@@ -3,7 +3,7 @@
 import { afterEach, expect, test } from "bun:test"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import { TOPIC_VIDEO_RENDER_VERSION } from "@carlnotes/pipeline/topicVideo/topicVideoRows"
-import { listBackfillPodcastEpisodeIds } from "./backfillTopicVideosActivities"
+import { canUpgradeSelectedTopicVideo, listBackfillPodcastEpisodeIds } from "./backfillTopicVideosActivities"
 
 // when the backfill started, and a Topic's time as the database writes it
 const STARTED_AT = "2026-11-09T12:00:00.000Z"
@@ -163,4 +163,10 @@ test("a full page of films returns a film cursor, which the next page starts aft
 	expect(toTopicListingQuery(sentQueries)).toBeUndefined()
 	expect(toFilmListingQuery(sentQueries)?.text).toContain(") > (")
 	expect(toFilmListingQuery(sentQueries)?.values).toContain("film-8")
+})
+
+test("the selected upgrade only admits an already-ready film below version four", async () => {
+	const queries = stubConnectionPool(() => [])
+	expect(await canUpgradeSelectedTopicVideo("episode")).toBe(false)
+	expect(queries[0]?.values).toEqual(["episode", "ready", 4, 1])
 })

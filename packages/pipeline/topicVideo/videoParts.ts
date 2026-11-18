@@ -1,18 +1,11 @@
-// a podcast episode film's chapters part on local files, the shots that every segment is encoded as, and the film
-// joined from its parts. a segment is a montage, one run for each of its shots, and its stills and lower third are
+// a podcast episode film's chapters part on local files, the shots that every segment is encoded as, and their transitions.
+// A segment is a montage, one run for each of its shots, and its stills and lower third are
 // deleted once its shots are encoded. every ffmpeg run stops once the signal aborts
 
 import { join } from "node:path"
 import { reportError } from "@carlnotes/server/monitoring"
-import {
-	encodeVideoShot,
-	joinVideo,
-	muxFilm,
-	remuxFilm,
-	type VideoShotEncode,
-	type VideoShotPicture,
-	writeConcatList,
-} from "./videoEncode"
+import type { PictureAnimation } from "./pictureAnimation"
+import { encodeVideoShot, joinVideo, type VideoShotEncode, type VideoShotPicture, writeConcatList } from "./videoEncode"
 import { type LowerThirdText, loadPodcastCardStillPng, PODCAST_CARD_ZOOM_LIMIT, toLowerThirdPng } from "./videoFrames"
 import { HOT_TAKES_LOWER_THIRD_TEXT } from "./videoHotTakes"
 import { toCaptionBreakFrames, toShotScreenFrameCount, toVideoShots, type VideoShot } from "./videoShots"
@@ -20,10 +13,21 @@ import { LOWER_THIRD_OUT_SECONDS, toSegmentSeconds, VIDEO_FRAMES_PER_SECOND, typ
 
 // one image a segment's shots show: the load of its still, composed at four times the film's size, and how far the
 // image may zoom
-export type VideoSegmentImage = { loadStillPng: () => Promise<Uint8Array>; zoomLimit: number }
+export type VideoSegmentImage = {
+	pictureAnimation?: PictureAnimation
+	reviewedAnimationPath?: string
+	origin?: "resource" | "generated" | "house"
+	loadSceneImage?: () => Promise<Uint8Array>
+	loadStillPng: (frameWidth?: number) => Promise<Uint8Array>
+	zoomLimit: number
+}
 
 // one chapter's images in the order its shots show them, and its lower third
-export type VideoChapterImages = { images: VideoSegmentImage[]; lowerThirdText: LowerThirdText }
+export type VideoChapterImages = {
+	hasPublicSceneSource?: boolean
+	images: VideoSegmentImage[]
+	lowerThirdText: LowerThirdText
+}
 
 // the film's podcast episode, the folder that the render works in, the film's timeline, each chapter's images by its
 // position, the images that the segments where the hosts answer Comments cut between, when each caption starts in the
@@ -33,6 +37,7 @@ type RenderVideoChaptersPartOptions = {
 	workDirectory: string
 	segments: VideoSegment[]
 	// what each segment shows, and where its shots may cut
+	renderChapter?: (segment: Extract<VideoSegment, { kind: "chapter" }>, chapter: VideoChapterImages) => Promise<string>
 	chapterImages: Map<number, VideoChapterImages>
 	podcastCardImages: VideoSegmentImage[]
 	captionStartSeconds: number[]
@@ -48,6 +53,7 @@ export async function renderVideoChaptersPart({
 	podcastEpisodeId,
 	workDirectory,
 	segments,
+	renderChapter,
 	chapterImages,
 	podcastCardImages,
 	captionStartSeconds,
@@ -64,6 +70,10 @@ export async function renderVideoChaptersPart({
 		const chapter = segment.kind === "chapter" ? chapterImages.get(segment.position) : undefined
 		if (segment.kind === "chapter" && !chapter) {
 			throw new Error(`the film has no chapter at position ${segment.position}`)
+		}
+		if (segment.kind === "chapter" && chapter && renderChapter) {
+			shotPaths.push(await renderChapter(segment, chapter))
+			continue
 		}
 		const segmentShotPaths = await renderSegmentShots({
 			podcastEpisodeId,
@@ -96,6 +106,7 @@ export async function renderVideoChaptersPart({
 // the film's podcast episode, the folder that the render works in, the segment, its images in the order its shots show
 // them, its lower third, when each caption starts in the audio, and the signal that stops the encodes
 type RenderSegmentShotsOptions = {
+	plannedShots?: VideoShot[]
 	podcastEpisodeId: string
 	workDirectory: string
 	segment: Extract<VideoSegment, { kind: "chapter" | "hot-takes" }>
@@ -107,10 +118,16 @@ type RenderSegmentShotsOptions = {
 }
 
 // one of a segment's stills on disk, and how far its image may zoom
-export type SegmentStill = { stillPath: string; zoomLimit: number }
+export type SegmentStill = {
+	pictureAnimation?: PictureAnimation
+	stillPath: string
+	zoomLimit: number
+	reviewedAnimationPath?: string
+}
 
 // render one segment as its shots, one run each, and return the shots' files in order
-async function renderSegmentShots({
+export async function renderSegmentShots({
+	plannedShots,
 	podcastEpisodeId,
 	workDirectory,
 	segment,
@@ -126,7 +143,7 @@ async function renderSegmentShots({
 		captionBreakFrames: toCaptionBreakFrames({ captionStartSeconds, segmentStartSeconds, frameCount }),
 		seed: `${podcastEpisodeId}:${segment.kind}:${segment.position}`,
 	}
-	const shotCount = toVideoShots({ ...shotPlan, imageCount: images.length }).length
+	const shotCount = plannedShots?.length ?? toVideoShots({ ...shotPlan, imageCount: images.length }).length
 
 	// write the stills and the lower third, then plan the shots over the stills that loaded
 	const filePrefix = join(workDirectory, `${segment.kind}-${segment.position}`)
@@ -135,11 +152,12 @@ async function renderSegmentShots({
 		filePrefix,
 		images,
 		stillCount: shotCount,
+		requirePlannedStills: !!plannedShots,
 		signal,
 	})
 	const lowerThirdPath = `${filePrefix}-lower-third.png`
 	await Bun.write(lowerThirdPath, await toLowerThirdPng(lowerThirdText))
-	const shots = toVideoShots({ ...shotPlan, imageCount: segmentStills.length })
+	const shots = plannedShots ?? toVideoShots({ ...shotPlan, imageCount: segmentStills.length })
 
 	// encode the shots, then delete the stills and the lower third
 	const shotPaths = await encodeSegmentShots({
@@ -161,6 +179,7 @@ type WriteSegmentStillsOptions = {
 	filePrefix: string
 	images: VideoSegmentImage[]
 	stillCount: number
+	requirePlannedStills?: boolean
 	signal?: AbortSignal
 }
 
@@ -173,6 +192,7 @@ export async function writeSegmentStills({
 	filePrefix,
 	images,
 	stillCount,
+	requirePlannedStills,
 	signal,
 }: WriteSegmentStillsOptions): Promise<SegmentStill[]> {
 	const segmentStills: SegmentStill[] = []
@@ -184,6 +204,10 @@ export async function writeSegmentStills({
 
 		// load the image's still, and leave the image out if it cannot be read
 		const stillPng = await image.loadStillPng().catch((error: unknown) => {
+			signal?.throwIfAborted()
+			if (requirePlannedStills) {
+				throw new Error("A planned film picture could not be prepared", { cause: error })
+			}
 			reportError(error, "topic-video", { podcastEpisodeId, step: "chapter-still" })
 			return null
 		})
@@ -192,7 +216,12 @@ export async function writeSegmentStills({
 		if (stillPng) {
 			const stillPath = `${filePrefix}-still-${segmentStills.length}.png`
 			await Bun.write(stillPath, stillPng)
-			segmentStills.push({ stillPath, zoomLimit: image.zoomLimit })
+			segmentStills.push({
+				stillPath,
+				zoomLimit: image.zoomLimit,
+				...(image.pictureAnimation ? { pictureAnimation: image.pictureAnimation } : {}),
+				...(image.reviewedAnimationPath ? { reviewedAnimationPath: image.reviewedAnimationPath } : {}),
+			})
 		}
 	}
 
@@ -320,63 +349,4 @@ function toShotEncode({
 		isSegmentEnd: shotIndex === shotPictures.length - 1,
 		shotPath,
 	}
-}
-
-// the parts in film order, any of them missing, and the folder that the join's list goes in
-type VideoPartsInOrder = {
-	workDirectory: string
-	introPath: string | null
-	chaptersPath: string | null
-	signOffPath: string | null
-}
-
-// the parts, the podcast episode's MP3, the captions, the film to write, and the signal that stops the mux
-type WriteVideoFilmOptions = VideoPartsInOrder & {
-	audioPath: string
-	captionsPath: string
-	filmPath: string
-	signal?: AbortSignal
-}
-
-/**
- * Writes the film: the parts joined by stream copy, with the audio and the captions.
- */
-export async function writeVideoFilm({
-	audioPath,
-	captionsPath,
-	filmPath,
-	signal,
-	...videoParts
-}: WriteVideoFilmOptions): Promise<void> {
-	const listPath = await writePartsList(videoParts)
-	await muxFilm({ listPath, audioPath, captionsPath, filmPath }, signal)
-}
-
-// the parts, the film that plays now, the rebuilt film to write, and the signal that stops the remux
-type RewriteVideoFilmOptions = VideoPartsInOrder & { currentFilmPath: string; filmPath: string; signal?: AbortSignal }
-
-/**
- * Writes a rebuilt film: the parts joined by stream copy, with the audio and the captions of the film that plays now.
- */
-export async function rewriteVideoFilm({
-	currentFilmPath,
-	filmPath,
-	signal,
-	...videoParts
-}: RewriteVideoFilmOptions): Promise<void> {
-	const listPath = await writePartsList(videoParts)
-	await remuxFilm({ listPath, currentFilmPath, filmPath }, signal)
-}
-
-// write the concat list of the parts that exist, in film order
-async function writePartsList({
-	workDirectory,
-	introPath,
-	chaptersPath,
-	signOffPath,
-}: VideoPartsInOrder): Promise<string> {
-	const partPaths = [introPath, chaptersPath, signOffPath].filter((partPath): partPath is string => partPath !== null)
-	const listPath = join(workDirectory, "parts.txt")
-	await writeConcatList(partPaths, listPath)
-	return listPath
 }

@@ -2,11 +2,12 @@
 import { afterEach, beforeEach, expect, test } from "bun:test"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import { readTopicVideoStartup } from "./temporal"
+import { readWorkerQueueGroup } from "./workerQueueGroup"
 
 // the film settings the tests change
 const CONCURRENCY_SETTING = "TOPIC_VIDEO_CONCURRENCY"
 const BACKFILL_CONCURRENCY_SETTING = "TOPIC_VIDEO_BACKFILL_CONCURRENCY"
-const TOPIC_VIDEO_SETTINGS = [CONCURRENCY_SETTING, BACKFILL_CONCURRENCY_SETTING]
+const TOPIC_VIDEO_SETTINGS = [CONCURRENCY_SETTING, BACKFILL_CONCURRENCY_SETTING, "WORKER_QUEUE_GROUP", "WORKER_ROLE"]
 
 // each test starts with no film setting set, and the settings are put back after it
 const restoreEnvSettings = saveEnvSettings(TOPIC_VIDEO_SETTINGS)
@@ -41,4 +42,16 @@ test("a film concurrency of zero polls no film queue and starts no film backfill
 		isTopicVideoQueuePolled: false,
 		isTopicVideoBackfillStarted: false,
 	})
+})
+
+test("the main queue group leaves film polling to the isolated films queue group", () => {
+	Bun.env.WORKER_QUEUE_GROUP = "main"
+	expect(readTopicVideoStartup()).toEqual({ isTopicVideoQueuePolled: false, isTopicVideoBackfillStarted: false })
+	Bun.env.WORKER_QUEUE_GROUP = "films"
+	expect(readTopicVideoStartup().isTopicVideoQueuePolled).toBe(true)
+	Bun.env.WORKER_ROLE = "main"
+	expect(readWorkerQueueGroup()).toBe("films")
+	delete Bun.env.WORKER_QUEUE_GROUP
+	expect(readWorkerQueueGroup()).toBe("main")
+	expect(() => readWorkerQueueGroup("film")).toThrow()
 })

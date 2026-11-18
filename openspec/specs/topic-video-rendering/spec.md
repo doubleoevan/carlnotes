@@ -33,8 +33,12 @@ The recording SHALL NOT wait for the film. A Podcast Episode SHALL show a film o
 ### Requirement: The backfill gives each Topic's latest Podcast Episode a film
 
 One backfill workflow under a fixed id SHALL render a film for each Topic's latest published Podcast Episode that has
-no film row, and SHALL give no other Podcast Episode its first film. It SHALL also re-render every ready film below
-the current render version. A second start SHALL join the one running. It SHALL list public Topics first, then private
+no film row, and SHALL give no other Podcast Episode its first film. It SHALL include ready films due solely for animation only when an operator has enabled the upgrade and selected those films. A second start SHALL join the one running.
+
+#### Scenario: Starting the backfill
+
+- **WHEN** the backfill starts automatically or by hand
+- **THEN** it SHALL list public Topics first, then private
 and team Topics, a page at a time. The worker SHALL start it on boot in every environment, and
 `bun run films:backfill` SHALL start or join it by hand.
 
@@ -109,8 +113,12 @@ chapter starts at the same second in the film as in the audio, to within one fra
 
 The film's intro SHALL run from its start to the first chapter's start. It SHALL open on the film's own image, or the
 image that the Podcast Episode shows if the film has none, cut through the first image of each chapter in chapter
-order, each image once, and return to the film's image for its last shot if it has three shots or more. The sign-off
-SHALL run from the last chapter's end to the film's end, cut through the same chapter images, and end on the film's
+order, each image once, and return to the film's image for its last shot if it has three shots or more.
+
+#### Scenario: The film reaches its final chapter boundary
+
+- **WHEN** the final chapter ends
+- **THEN** the sign-off SHALL run from the last chapter's end to the film's end, cut through the same chapter images, and end on the film's
 image. Their shots SHALL be cut as a chapter's montage is. If fewer than two chapter images remain, the podcast card
 SHALL take turns with them, unless the film's image is the podcast card. An intro or a sign-off with no chapter image
 SHALL show the film's image in every shot. The intro's lower third SHALL show the Podcast Episode's title and details
@@ -145,8 +153,12 @@ Each SHALL fade in and stay until its part ends.
 
 The first time a film renders, before its intro and sign-off, the worker SHALL draw the film's own image: 16:9 at 2752
 by 1536, full frame with no paper edge or border, in film lighting and the app's palette, painted to every edge with no
-dark band along the bottom. The lower third's espresso plate SHALL keep the title readable over any image. The topic
-image's scene writer SHALL write its scene, and an image model that draws at that size SHALL draw it from a film house
+dark band along the bottom. The lower third's espresso plate SHALL keep the title readable over any image.
+
+#### Scenario: The worker prepares the poster
+
+- **WHEN** the worker draws the film image
+- **THEN** the topic image's scene writer SHALL write its scene, and an image model that draws at that size SHALL draw it from a film house
 style prompt. It SHALL be stored under the film's folder as that original and as a 1280 by 720 copy, which the poster
 shows. Its cost SHALL add to the film's cost.
 
@@ -290,8 +302,12 @@ image SHALL pass the image moderation that an uploaded image passes before it is
 
 A draw SHALL bill the Topic owner's key and add its cost to the film's cost, and the backfill's draws SHALL bill the
 platform. A draw SHALL NOT check the owner's spend cutoff. If the owner's budget is spent, a draw fails, or a drawn
-image does not pass the image moderation, the chapter SHALL go on with the images it has, and the render SHALL go on. A
-render that is stopped SHALL start no further draw. A generated image SHALL be stored in the film's folder. A render's
+image does not pass the image moderation, the chapter SHALL go on with the images it has, and the render SHALL go on.
+
+#### Scenario: The render is interrupted or retried
+
+- **WHEN** a render is stopped or attempted again
+- **THEN** a render that is stopped SHALL start no further draw. A generated image SHALL be stored in the film's folder. A render's
 second attempt and a re-render SHALL reuse a stored image drawn in the current film house style, and it SHALL be
 deleted with the film. A re-render SHALL draw again the images a chapter has in an older style, and once the film is
 saved it SHALL delete them. Until then the api SHALL serve a chapter's image in the older style.
@@ -732,19 +748,23 @@ the current version. A render asked for a ready film at the current version SHAL
 
 ### Requirement: The backfill re-renders every film below the current render version
 
-The backfill SHALL re-render every ready film below the current render version, including a film it rendered itself,
-on the platform's bill. It SHALL fetch the images of a film's Resources before it renders the film. A Podcast
+An explicitly enabled animation upgrade SHALL use the existing backfill to re-render selected ready films below the current render version on the platform's bill, including a film the backfill rendered itself. Operators can extend the selection to all eligible films after a canary. An animation-only upgrade SHALL read the stored chapter images and SHALL make no source-fetch, image-generation, or speech calls.
+
+#### Scenario: A selected film cannot be upgraded
+
+- **WHEN** the backfill checks a film's eligibility
+- **THEN** if the historical inputs cannot be reconstructed at the required quality it SHALL defer the upgrade, leaving the ready film playable. A Podcast
 Episode with no film SHALL get none from the re-render. A second run SHALL list no film that is already current.
 
 #### Scenario: Every existing film is re-rendered
 
-- **GIVEN** 78 ready films at version 1
+- **GIVEN** 78 ready films at version 1 selected for an enabled upgrade with their complete assets
 - **WHEN** the backfill runs
-- **THEN** each of the 78 is re-rendered with chapter montages and stored at the current render version
+- **THEN** each of the 78 is re-rendered with animated chapters and stored at the current render version
 
 #### Scenario: A film the backfill rendered is re-rendered too
 
-- **GIVEN** a film that the backfill rendered for a Topic's latest Podcast Episode before this capability shipped
+- **GIVEN** a film that the backfill rendered for a Topic's latest Podcast Episode before this capability shipped, selected for an enabled upgrade
 - **WHEN** the backfill runs
 - **THEN** that film is re-rendered
 
@@ -762,8 +782,8 @@ Episode with no film SHALL get none from the re-render. A second run SHALL list 
 
 #### Scenario: A re-render bills nobody
 
-- **WHEN** the backfill re-renders a film and draws six generated images for it
-- **THEN** the draws run on the platform's key, and the film's cost does not rise
+- **WHEN** the backfill re-renders a film using six stored generated images
+- **THEN** the upgrade incurs zero image draws and leaves the owner's spend unchanged
 
 ### Requirement: A re-render never takes the playing film away
 
@@ -886,3 +906,85 @@ Episode's image or a Topic's image that went back to its uploader in that change
 - **GIVEN** a film image that went back to its uploader
 - **WHEN** a sweep's check finds it clean
 - **THEN** the upload becomes the film's image again, and the intro and the sign-off rebuild from it
+
+### Requirement: Finding pictures can move within the original montage
+
+The film SHALL retain the approved chapter pictures, their order, crop, zoom, pan, shot timing, crossfades, attribution and captions. A reviewed silent animation MAY add animation inside an exact matching picture. The camera SHALL act on the complete picture. The renderer SHALL keep the original shot whenever safe animation is unavailable.
+
+#### Scenario: Steam rises above both mugs in the host illustration
+
+- **WHEN** an animated film shows the reviewed host illustration in a Finding chapter, hot take, opening or sign-off
+- **THEN** a shimmer travels up the steam above both mugs. Both hosts, their hands, the mugs and the microphone stay fixed relative to the desk
+- **AND** the complete picture follows its normal camera move and dissolve
+
+#### Scenario: The chapter uses an unfamiliar image
+
+- **WHEN** an eligible public chapter picture has no reviewed animation matching its bytes
+- **THEN** one bounded vision request per chapter MAY confirm a numbered close-up and its predefined effect
+- **AND** the renderer SHALL validate the picture, origin and region before applying that effect beneath the original camera move
+- **AND** a skipped picture or failed selection SHALL keep the original shot
+
+### Requirement: A chapter has a reusable validated video scene plan
+
+Each Finding chapter SHALL persist an episode-owned plan with its approved inventory, reviewed animation file hashes, selected regions and effects, camera moves and frame intervals. Data from an article SHALL NOT supply executable content or file paths. A retry SHALL reuse the original plan against the currently approved inventory. A removed asset SHALL prevent publication of its prior animation.
+
+#### Scenario: A retry encounters a missing picture or animation
+
+- **WHEN** the persisted plan requires an approved picture or animation clip which is no longer available
+- **THEN** the retry fails visibly and the existing ready film remains available
+
+### Requirement: Animation occupies only the Finding chapter's assigned frames
+
+Each animated chapter SHALL return video only, at 1280 by 720 and 24 frames per second. Its frame count SHALL equal the difference between the rounded absolute narration endpoints. The joined film SHALL preserve the audio, chapter seeks, caption timing, intro, sign-off, and designated Comment segments.
+
+#### Scenario: Fractional boundaries do not accumulate drift
+
+- **WHEN** a film contains adjacent fractional-second starts, a chapter with a Comment segment, and a sign-off
+- **THEN** decoded frame counts match every timeline interval, the joined chapters play in order, and seeking on web, mobile or MCP lands at the same narrated chapter as before
+
+### Requirement: A bounded render preserves the published episode and film
+
+The worker SHALL limit concurrent capture and encoding, memory, temporary disk, and elapsed time. On cancellation or exhaustion it SHALL stop the entire render process tree, release its resources, and preserve the existing publication. A retry SHALL keep the target quality and complete duration.
+
+#### Scenario: Capture stalls or the encoder dies
+
+- **WHEN** the film activity times out, is cancelled, or fails after a partial encode or upload
+- **THEN** its children exit, temporary files are reclaimed and no partial film becomes ready
+- **AND** a published Podcast Episode and any previously ready film remain playable
+
+#### Scenario: An owner crosses a spend cutoff after recording
+
+- **WHEN** a recorded Podcast Episode needs animation and its owner's spend has since crossed a cutoff
+- **THEN** the film completes in full at the published standard through the existing owner billing path
+
+#### Scenario: An optional upgrade competes with a first render
+
+- **WHEN** new films are waiting or the worker lacks capacity for an optional upgrade
+- **THEN** it defers admission of the upgrade and gives new films the available render capacity
+- **AND** after a complete replacement passes validation, a single guarded publication swaps all ready file references
+
+### Requirement: A new film can animate one generated illustration with Gemini Omni
+
+A new animated film SHALL send at most one displayed generated illustration selected for a public Finding to Gemini Omni. The platform SHALL fund one distinct shot per Free account per UTC calendar month. Plus and Premium SHALL fund up to three and seven respectively from the owner’s budget. Each film MAY also use up to eight distinct local picture effects and the reusable host steam.
+
+#### Scenario: A paid generation succeeds
+
+- **WHEN** the provider returns a five-second video, the worker SHALL remove provider audio and verify the silent video’s dimensions, rate and frame count
+- **THEN** matching shots SHALL use the saved video with the original montage and narration
+
+#### Scenario: A request fails or its activity retries
+
+- **WHEN** a competing or retried render encounters a prior reservation for the episode
+- **THEN** it SHALL reuse a completed animation for the same approved picture, or retain its local effect after failure, without another provider request
+
+#### Scenario: The account has used its monthly allowance
+
+- **WHEN** another film requests an eligible picture in the same UTC month
+- **THEN** an existing animation of that exact picture for the account may be reused without a charge
+- **AND** a new picture receives no paid generation once the account reaches its plan limit
+
+#### Scenario: The film has used its local effects
+
+- **WHEN** eight distinct local pictures have been assigned animation
+- **THEN** later chapters SHALL make no new picture planning requests
+- **AND** the host steam and the Omni animation SHALL use none of these eight slots

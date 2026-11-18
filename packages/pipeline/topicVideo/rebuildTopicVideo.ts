@@ -1,21 +1,25 @@
-// a ready film rebuilt for a new image, its own or else its podcast episode's: only the intro and the sign-off are
-// rendered again, over the chapters' images that the render stored, joined with the stored chapters part, and the audio
-// and captions are copied from the film that plays now. a film marked rendering because its image was unpublished or
-// rejected is rebuilt the same way from its stored files, and plays again once it is
+// rebuild a film for a changed or withdrawn image. use approved stored pictures for the bookends and any chapters
+// that need new frames, and keep the published narration and captions
 
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { type DbTransaction, db } from "@carlnotes/db"
+import { db } from "@carlnotes/db"
 import { isMonthlyBudgetCutoffPassed } from "@carlnotes/db/monthlyBudgetCutoffs"
 import { deletePodcastFeedCache } from "@carlnotes/db/podcastFeedCache"
 import { topicVideos } from "@carlnotes/db/schema/podcast"
-import { clearPendingObjectDeletion, deleteStoredObjects, downloadPodcastEpisodeFile } from "@carlnotes/db/store"
-import { toTopicVideoImagePartKey } from "@carlnotes/db/topicVideoKeys"
-import { lockTopicImageVisibility } from "@carlnotes/db/uncheckedImages"
+import { clearPendingObjectDeletion, downloadPodcastEpisodeFile } from "@carlnotes/db/store"
+import {
+	toTopicVideoChaptersKey,
+	toTopicVideoImagePartKey,
+	toTopicVideoRenderAttemptUploadKey,
+} from "@carlnotes/db/topicVideoKeys"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { and, eq, sql } from "drizzle-orm"
 import { recordReplacedImageDeletions } from "../topicImages/topicImageRenders"
+import { rebuildVideoChapters } from "./rebuildVideoChapters"
+import { loadPodcastCardAnimationPath } from "./reviewedAnimation"
+import { checkTopicVideoImage, checkVideoSceneSources, type VideoSceneSource } from "./topicVideoImageCheck"
 import {
 	loadShownImageStill,
 	loadTopicVideoPodcastEpisode,
@@ -24,10 +28,12 @@ import {
 	type TopicVideoPodcastEpisode,
 } from "./topicVideoInputs"
 import { toTopicVideoCostDollars, uploadTopicVideoFile } from "./topicVideoRows"
+import { withTopicVideoSlot } from "./topicVideoSlot"
 import { loadVideoAudio } from "./videoAudio"
 import { prepareChapterImages } from "./videoChapterImages"
+import { rewriteVideoFilm } from "./videoFilm"
 import { renderVideoImageParts } from "./videoImageParts"
-import { rewriteVideoFilm } from "./videoParts"
+import { withVideoRenderResourceLimits } from "./videoRenderResourceLimits"
 import { toSegmentSeconds } from "./videoTimeline"
 
 // what a rebuild did. it rendered the new intro and sign-off, or skipped a podcast episode that is not published, a
@@ -35,7 +41,10 @@ import { toSegmentSeconds } from "./videoTimeline"
 // shows the current image, or an owner past the podcast episode spend cutoff
 export type RebuildTopicVideoResult =
 	| { outcome: "rebuilt"; renderSeconds: number }
-	| { outcome: "skipped"; reason: "unpublished" | "not-ready" | "unchecked" | "current" | "spend-cutoff" }
+	| {
+			outcome: "skipped"
+			reason: "unpublished" | "not-ready" | "unchecked" | "current" | "spend-cutoff" | "superseded"
+	  }
 
 // the stored keys of a ready film, or of a film marked rendering that still has its files, the image hash it was
 // rendered from, and the render version it was rendered at
@@ -53,8 +62,8 @@ type ReadyTopicVideo = {
 /**
  * Rebuilds a ready film for the image it shows now, its own or else its podcast episode's, swaps the keys in one
  * update, and schedules the replaced files for deletion after the grace. A film marked rendering because its image was
- * unpublished or rejected is rebuilt too, and is ready again after the swap. A failure deletes what it uploaded and
- * throws an error, and the film row stays as it was. An image that changed while the rebuild ran throws an error too,
+ * unpublished or rejected is rebuilt too, and is ready again after publication. A failed attempt leaves its unique
+ * uploads pending deletion. An image that changed while the rebuild ran throws an error,
  * so the next attempt reads the new image. An aborted signal kills the ffmpeg run in progress and fails the rebuild
  * before it uploads.
  */
@@ -62,6 +71,9 @@ export async function rebuildTopicVideo(
 	podcastEpisodeId: string,
 	signal?: AbortSignal,
 ): Promise<RebuildTopicVideoResult> {
+	return withTopicVideoSlot(signal, (activeSignal) => rebuildFilm(podcastEpisodeId, activeSignal))
+}
+async function rebuildFilm(podcastEpisodeId: string, signal: AbortSignal): Promise<RebuildTopicVideoResult> {
 	// the podcast episode and its ready film, or why it is not rebuilt
 	const renderStartMs = performance.now()
 	const rebuildInputs = await loadRebuildInputs(podcastEpisodeId)
@@ -69,29 +81,33 @@ export async function rebuildTopicVideo(
 		return rebuildInputs
 	}
 
-	// render in a temp folder, upload the new files unless the rebuild was stopped, and swap them in
+	// render in a temp folder, upload the new files unless the rebuild was stopped, and publish them together
 	const { topicVideoPodcastEpisode, readyTopicVideo } = rebuildInputs
 	const workDirectory = await mkdtemp(join(tmpdir(), "episode-video-rebuild-"))
 	const uploadedKeys: string[] = []
 	try {
-		const rebuiltFilm = await rebuildFilmFiles({
+		const rebuiltFilm = await withVideoRenderResourceLimits(workDirectory, signal, (encodeSignal) =>
+			rebuildFilmFiles({
+				topicVideoPodcastEpisode,
+				readyTopicVideo,
+				workDirectory,
+				signal: encodeSignal,
+			}),
+		)
+		signal?.throwIfAborted()
+		const published = await saveRebuiltFilm({
 			topicVideoPodcastEpisode,
 			readyTopicVideo,
-			workDirectory,
+			rebuiltFilm,
+			uploadedKeys,
 			signal,
 		})
-		signal?.throwIfAborted()
-		await saveRebuiltFilm({ topicVideoPodcastEpisode, readyTopicVideo, rebuiltFilm, uploadedKeys })
-
-		// the saved row plays the uploaded files, so a failure after the save deletes none of them
-		uploadedKeys.length = 0
+		if (!published) {
+			return { outcome: "skipped", reason: "superseded" }
+		}
 
 		// the film feeds list the rebuilt film's size on their next fetch
 		await deletePodcastFeedCache(topicVideoPodcastEpisode.topicId)
-	} catch (error) {
-		// an attempt that fails leaves no new files behind
-		await deleteStoredObjects(uploadedKeys)
-		throw error
 	} finally {
 		await rm(workDirectory, { recursive: true, force: true })
 	}
@@ -139,7 +155,10 @@ async function loadRebuildInputs(podcastEpisodeId: string): Promise<RebuildInput
 	}
 
 	// a film already rendered from the current image is left as it is, and one marked rendering is ready again
-	if (readyTopicVideo.renderedImageHash === topicVideoPodcastEpisode.imageHash) {
+	if (
+		readyTopicVideo.renderedImageHash === topicVideoPodcastEpisode.imageHash &&
+		(isFilmPlaying || readyTopicVideo.renderVersion < 4)
+	) {
 		if (!isFilmPlaying) {
 			await saveCurrentFilmReady(topicVideoPodcastEpisode, readyTopicVideo)
 		}
@@ -159,30 +178,14 @@ async function loadRebuildInputs(podcastEpisodeId: string): Promise<RebuildInput
 	}
 }
 
-// the image a film was drawn from is the one it shows now: the film's podcast episode and Topic, and the image's hash
-type ShownImageCheck = Pick<TopicVideoPodcastEpisode, "podcastEpisodeId" | "topicId" | "imageHash">
-
-// throw an error unless a film still shows the image it was drawn from, read on a transaction that takes the Topic's
-// image visibility lock shared. no unchecked image under the Topic is unpublished until that transaction ends
-async function checkImageStillShown(
-	transaction: DbTransaction,
-	{ podcastEpisodeId, topicId, imageHash }: ShownImageCheck,
-): Promise<void> {
-	await lockTopicImageVisibility(transaction, topicId, "shared")
-	const topicVideoPodcastEpisode = await loadTopicVideoPodcastEpisode(podcastEpisodeId, transaction)
-	if (topicVideoPodcastEpisode?.imageHash !== imageHash) {
-		throw new Error("the film's image changed during its rebuild")
-	}
-}
-
 // mark a film ready again that was marked rendering and is drawn from the image it shows now
 async function saveCurrentFilmReady(
 	topicVideoPodcastEpisode: TopicVideoPodcastEpisode,
-	{ renderedImageHash }: ReadyTopicVideo,
+	{ renderedImageHash, chaptersKey, filmKey }: ReadyTopicVideo,
 ): Promise<void> {
 	await db.transaction(async (transaction) => {
 		// the image is still the one the film shows, and the film is still the one that was read
-		await checkImageStillShown(transaction, topicVideoPodcastEpisode)
+		await checkTopicVideoImage(transaction, topicVideoPodcastEpisode)
 		await transaction
 			.update(topicVideos)
 			.set({ status: "ready" })
@@ -191,6 +194,8 @@ async function saveCurrentFilmReady(
 					eq(topicVideos.podcastEpisodeId, topicVideoPodcastEpisode.podcastEpisodeId),
 					eq(topicVideos.status, "rendering"),
 					eq(topicVideos.renderedImageHash, renderedImageHash),
+					eq(topicVideos.chaptersKey, chaptersKey),
+					eq(topicVideos.filmKey, filmKey),
 				),
 			)
 	})
@@ -224,6 +229,8 @@ async function loadReadyTopicVideo(podcastEpisodeId: string): Promise<ReadyTopic
 
 // the rebuilt intro, sign-off, and film on disk, and the film seconds rendered again
 type RebuiltFilm = {
+	sceneSources?: VideoSceneSource[]
+	chapters: { path: string; scenePlansHash?: string }
 	introPath: string | null
 	signOffPath: string | null
 	filmPath: string
@@ -254,16 +261,16 @@ async function rebuildFilmFiles({
 		workDirectory,
 		signal,
 	})
-
-	// the stored chapters part and the film that plays now
-	const chaptersPath = join(workDirectory, "chapters.mp4")
-	const currentFilmPath = join(workDirectory, "current.mp4")
-	await downloadPodcastEpisodeFile({ key: readyTopicVideo.chaptersKey, filePath: chaptersPath })
-	await downloadPodcastEpisodeFile({ key: readyTopicVideo.filmKey, filePath: currentFilmPath })
+	const captionStartSeconds = captionCues.map((cue) => cue.startSeconds)
 
 	// the chapters' images that the render stored, for the intro and the sign-off to cut through, with none generated
 	const shownImageStill = await loadShownImageStill(topicVideoPodcastEpisode)
-	const { firstChapterImages } = await prepareChapterImages({
+	const podcastCardAnimationPath =
+		readyTopicVideo.renderVersion === 4 ? await loadPodcastCardAnimationPath() : undefined
+	const preparedChapterImages = await prepareChapterImages({
+		requiresPublicSceneSources: readyTopicVideo.renderVersion === 4,
+		priorVersion: readyTopicVideo.renderVersion,
+		podcastCardAnimationPath,
 		podcastEpisodeId,
 		ownerId,
 		isPlatformBilled: false,
@@ -274,8 +281,28 @@ async function rebuildFilmFiles({
 		signal,
 	})
 
+	// use verified chapters or encode them again with the currently approved poster and picture sources
+	const { firstChapterImages, sceneSources } = preparedChapterImages
+	const chapters = await rebuildVideoChapters({
+		podcastEpisodeId,
+		ownerId,
+		workDirectory,
+		renderVersion: readyTopicVideo.renderVersion,
+		chaptersKey: readyTopicVideo.chaptersKey,
+		segments,
+		captionCues,
+		preparedChapterImages,
+		shownImageStill,
+		signal,
+	})
+
+	// copy only narration and captions from the previously published film
+	const chaptersPath = chapters.path
+	const currentFilmPath = join(workDirectory, "current.mp4")
+	await downloadPodcastEpisodeFile({ key: readyTopicVideo.filmKey, filePath: currentFilmPath, signal })
 	// the new intro and sign-off, joined with the chapters by stream copy
 	const imageParts = await renderVideoImageParts({
+		podcastCardAnimationPath,
 		podcastEpisodeId,
 		workDirectory,
 		segments,
@@ -283,41 +310,48 @@ async function rebuildFilmFiles({
 		chapterImages: firstChapterImages,
 		introText: topicVideoPodcastEpisode.introText,
 		signOffText: topicVideoPodcastEpisode.signOffText,
-		captionStartSeconds: captionCues.map((captionCue) => captionCue.startSeconds),
+		captionStartSeconds,
 		signal,
 	})
 	const filmPath = join(workDirectory, "film.mp4")
 	await rewriteVideoFilm({ workDirectory, ...imageParts, chaptersPath, currentFilmPath, filmPath, signal })
 
-	// the seconds rendered again are the intro's and the sign-off's
+	// a poster rebuild bills the bookends, including when older chapter artwork requires replacement
 	const imagePartFrameCount = segments
 		.filter((segment) => segment.kind === "intro" || segment.kind === "sign-off")
 		.reduce((frameCount, segment) => frameCount + segment.frameCount, 0)
-	return { ...imageParts, filmPath, renderedSeconds: toSegmentSeconds(imagePartFrameCount) }
+	return { ...imageParts, sceneSources, chapters, filmPath, renderedSeconds: toSegmentSeconds(imagePartFrameCount) }
 }
 
 // the podcast episode, its film before the rebuild, the rebuilt files, and the keys uploaded so far
 type SaveRebuiltFilmOptions = {
+	signal: AbortSignal
 	topicVideoPodcastEpisode: TopicVideoPodcastEpisode
 	readyTopicVideo: ReadyTopicVideo
 	rebuiltFilm: RebuiltFilm
 	uploadedKeys: string[]
 }
 
-// upload the new files, then swap the keys and add the cost in one update, scheduling the replaced files for deletion
+// upload the new files, then publish the new keys and add the cost in one update, scheduling the replaced files for deletion
 async function saveRebuiltFilm({
+	signal,
 	topicVideoPodcastEpisode,
 	readyTopicVideo,
 	rebuiltFilm,
 	uploadedKeys,
-}: SaveRebuiltFilmOptions): Promise<void> {
+}: SaveRebuiltFilmOptions): Promise<boolean> {
 	// the new files are keyed by the current image's hash and the render version the film was rendered at
 	const { podcastEpisodeId, imageHash } = topicVideoPodcastEpisode
 	const { renderVersion } = readyTopicVideo
+	const attempt = crypto.randomUUID()
 	const uploadImagePart = (filePath: string | null, part: "intro" | "sign-off" | "film"): Promise<string | null> =>
 		uploadTopicVideoFile({
+			signal,
 			filePath,
-			key: toTopicVideoImagePartKey({ podcastEpisodeId, part, imageHash, renderVersion }),
+			key: toTopicVideoRenderAttemptUploadKey(
+				toTopicVideoImagePartKey({ podcastEpisodeId, part, imageHash, renderVersion }),
+				attempt,
+			),
 			contentType: "video/mp4",
 			uploadedKeys,
 		})
@@ -326,22 +360,44 @@ async function saveRebuiltFilm({
 		signOffKey: await uploadImagePart(rebuiltFilm.signOffPath, "sign-off"),
 		filmKey: (await uploadImagePart(rebuiltFilm.filmPath, "film")) ?? "",
 	}
+	const { chapters } = rebuiltFilm
+	const chaptersKey = chapters.scenePlansHash
+		? await uploadTopicVideoFile({
+				signal,
+				filePath: chapters.path,
+				key: toTopicVideoRenderAttemptUploadKey(
+					toTopicVideoChaptersKey(podcastEpisodeId, renderVersion, chapters.scenePlansHash),
+					attempt,
+				),
+				contentType: "video/mp4",
+				uploadedKeys,
+			})
+		: readyTopicVideo.chaptersKey
+	if (!chaptersKey) {
+		throw Error("The replacement chapters upload did not produce a key")
+	}
 
-	// swap the keys only on the film this rebuild read: the same image and the same chapters part. a film removed or
+	// publish the replacement only for the film this rebuild read: the same image and the same chapters part. a film removed or
 	// rendered again meanwhile keeps its new files pending deletion. a film marked rendering is ready again
 	const costDollars = toTopicVideoCostDollars(rebuiltFilm.renderedSeconds)
 	const isFilmAsRead = and(
 		eq(topicVideos.podcastEpisodeId, podcastEpisodeId),
 		eq(topicVideos.renderedImageHash, readyTopicVideo.renderedImageHash),
 		eq(topicVideos.chaptersKey, readyTopicVideo.chaptersKey),
+		eq(topicVideos.filmKey, readyTopicVideo.filmKey),
 	)
-	await db.transaction(async (transaction) => {
+	return db.transaction(async (transaction) => {
 		// the rebuilt film shows the image it was drawn from, or the rebuild fails and its next attempt reads the new one
-		await checkImageStillShown(transaction, topicVideoPodcastEpisode)
-		const swappedRows = await transaction
+		await checkTopicVideoImage(transaction, topicVideoPodcastEpisode)
+		if (rebuiltFilm.sceneSources) {
+			await checkVideoSceneSources(transaction, podcastEpisodeId, rebuiltFilm.sceneSources)
+		}
+		signal.throwIfAborted()
+		const updatedRows = await transaction
 			.update(topicVideos)
 			.set({
 				...newKeys,
+				chaptersKey,
 				status: "ready",
 				renderedImageHash: imageHash,
 				byteSize: Bun.file(rebuiltFilm.filmPath).size,
@@ -349,8 +405,8 @@ async function saveRebuiltFilm({
 			})
 			.where(isFilmAsRead)
 			.returning({ id: topicVideos.id })
-		if (swappedRows.length === 0) {
-			return
+		if (updatedRows.length === 0) {
+			return false
 		}
 
 		// the new keys belong to the row, and the replaced files go after the grace
@@ -358,9 +414,14 @@ async function saveRebuiltFilm({
 			await clearPendingObjectDeletion(uploadedKey, transaction)
 		}
 		const { introKey, signOffKey, filmKey } = readyTopicVideo
-		const replacedPartKeys = [introKey, signOffKey, filmKey].filter((objectKey): objectKey is string =>
-			Boolean(objectKey),
-		)
+		const replacedPartKeys = [
+			introKey,
+			signOffKey,
+			filmKey,
+			...(chapters.scenePlansHash ? [readyTopicVideo.chaptersKey] : []),
+		].filter((objectKey): objectKey is string => Boolean(objectKey))
 		await recordReplacedImageDeletions(transaction, replacedPartKeys)
+		signal.throwIfAborted()
+		return true
 	})
 }

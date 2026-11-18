@@ -47,8 +47,8 @@ export const topicMemoryPageNumber = z.coerce
 	.max(Math.floor(Number.MAX_SAFE_INTEGER / TOPIC_MEMORY_PAGE_SIZE))
 	.default(1)
 export const topicMemoriesQuery = z.object({ page: topicMemoryPageNumber })
-// clients can distinguish the saved topic memory limit from ordinary saved feedback
-export const topicMemoryFeedbackResult = z.object({ status: z.enum(["saved", "savedTopicMemoryLimit"]) })
+// acknowledge a persisted rating, note edit or cleared vote
+export const topicMemoryFeedbackResult = z.object({ status: z.literal("saved") })
 export const topicMemoryFeedbackPayload = z.object({
 	rating: z.enum(["up", "down"]).nullable(),
 	note: z

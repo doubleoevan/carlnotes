@@ -58,3 +58,7 @@ Dockerfile
 # macos and editor noise
 .DS_Store
 *.log
+
+# Private QA media and local-only probes never belong in an image build context.
+logs
+.*.local.ts

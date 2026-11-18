@@ -10,7 +10,8 @@
 		"apps/web/src/components/primitives/tooltip.tsx": ["exports"]
 	},
 	// system binaries the package.json scripts run, installed outside node_modules
-	"ignoreBinaries": ["doppler", "cloudflared"],
+	// The capture subprocess pipes its output into the runtime image's FFmpeg.
+	"ignoreBinaries": ["doppler", "cloudflared", "ffmpeg"],
 	"workspaces": {
 		".": {
 			// previewEmails.ts starts the react-email CLI with Node. the CLI loads the pinned @react-email/ui

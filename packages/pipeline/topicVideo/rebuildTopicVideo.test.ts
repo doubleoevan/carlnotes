@@ -7,14 +7,18 @@ import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "@carl
 import * as monthlyBudgetCutoffs from "@carlnotes/db/monthlyBudgetCutoffs"
 import * as podcastFeedCache from "@carlnotes/db/podcastFeedCache"
 import * as storage from "@carlnotes/db/store"
+import { toTopicVideoChaptersKey, toTopicVideoRenderAttemptUploadKey } from "@carlnotes/db/topicVideoKeys"
 import * as analytics from "@carlnotes/server/analytics"
 import { rebuildTopicVideo } from "./rebuildTopicVideo"
+import * as filmFiles from "./renderFilmFiles"
 import * as topicVideoInputs from "./topicVideoInputs"
 import * as topicVideoRows from "./topicVideoRows"
 import * as videoAudio from "./videoAudio"
 import * as videoChapterImages from "./videoChapterImages"
+import * as videoFilm from "./videoFilm"
 import * as videoImageParts from "./videoImageParts"
-import * as videoParts from "./videoParts"
+import { planVideoScenes, sha256Hash, toRetainedPosterHash, toVideoScenePlansHash } from "./videoScenePlan"
+import type { VideoSegment } from "./videoTimeline"
 
 // a published podcast episode with audio, a transcript, and its own image, in the column order the film's read selects
 const PUBLISHED_PODCAST_EPISODE_ROW = [
@@ -131,7 +135,14 @@ test("a film marked rendering that is drawn from the current image is ready agai
 
 	// the film is ready again if it is still marked rendering and drawn from that image. the second value is the time
 	// the row changed
-	expect(filmUpdate?.values.toSpliced(1, 1)).toEqual(["ready", "episode-1", "rendering", "image-new"])
+	expect(filmUpdate?.values.toSpliced(1, 1)).toEqual([
+		"ready",
+		"episode-1",
+		"rendering",
+		"image-new",
+		"chapters.mp4",
+		"film.mp4",
+	])
 })
 
 // a film marked rendering plays nothing, so the spend cutoff that keeps a stale film playing does not stop its rebuild
@@ -171,7 +182,7 @@ test("a film marked rendering is rebuilt whatever its owner spent, and its rebui
 		newlyGeneratedChapterImageCount: 0,
 	})
 	spyOn(videoImageParts, "renderVideoImageParts").mockResolvedValue({ introPath: null, signOffPath: null })
-	spyOn(videoParts, "rewriteVideoFilm").mockResolvedValue(undefined)
+	spyOn(videoFilm, "rewriteVideoFilm").mockResolvedValue(undefined)
 	spyOn(topicVideoRows, "uploadTopicVideoFile").mockResolvedValue("film-key")
 
 	// the rebuild runs past the cutoff, and throws an error before the swap because the image changed while it ran
@@ -214,9 +225,9 @@ test("a rebuild swaps only a film that still has the chapters part it read", asy
 		newlyGeneratedChapterImageCount: 0,
 	})
 	spyOn(videoImageParts, "renderVideoImageParts").mockResolvedValue({ introPath: "/work/intro.mp4", signOffPath: null })
-	spyOn(videoParts, "rewriteVideoFilm").mockResolvedValue(undefined)
-	spyOn(podcastFeedCache, "deletePodcastFeedCache").mockResolvedValue(undefined)
-	spyOn(analytics, "trackEvent").mockImplementation(() => {})
+	spyOn(videoFilm, "rewriteVideoFilm").mockResolvedValue(undefined)
+	const clearFeed = spyOn(podcastFeedCache, "deletePodcastFeedCache").mockResolvedValue(undefined)
+	const track = spyOn(analytics, "trackEvent").mockImplementation(() => {})
 
 	// each upload records its key
 	const uploadedKeys: string[] = []
@@ -226,15 +237,17 @@ test("a rebuild swaps only a film that still has the chapters part it read", asy
 		}
 		return filePath ? key : null
 	})
-	await rebuildTopicVideo("episode-1")
+	expect(await rebuildTopicVideo("episode-1")).toEqual({ outcome: "skipped", reason: "superseded" })
+	expect(clearFeed).not.toHaveBeenCalled()
+	expect(track).not.toHaveBeenCalled()
 
 	// the intro and the sign-off cut through the chapters' stored images, with none generated
 	expect(prepareChapterImages).toHaveBeenCalledWith(expect.objectContaining({ isChapterImageGenerationSkipped: true }))
 
 	// the new parts are keyed by the new image and the film's render version
 	expect(uploadedKeys).toEqual([
-		"episodes/episode-1/video/intro-image-new-v2.mp4",
-		"episodes/episode-1/video/film-image-new-v2.mp4",
+		expect.stringMatching(/^episodes\/episode-1\/video\/intro-image-new-v2-[a-f0-9-]{36}\.mp4$/),
+		expect.stringMatching(/^episodes\/episode-1\/video\/film-image-new-v2-[a-f0-9-]{36}\.mp4$/),
 	])
 
 	// the swap names the image and the chapters part the rebuild read, and with no row swapped nothing else is written.
@@ -246,3 +259,143 @@ test("a rebuild swaps only a film that still has the chapters part it read", asy
 	expect(swapUpdate?.values).toContain("chapters-v2.mp4")
 	expect(sentQueries.some((sentQuery) => sentQuery.text.includes('"pending_object_deletions"'))).toBe(false)
 })
+
+test.each(["matching", "replaced", "changed-poster", "legacy"] as const)(
+	"a poster rebuild verifies the %s scene plan against the published chapters key",
+	async (scenario) => {
+		// render one public source picture, then authorize a different picture in a competing plan
+		const episode = "episode-1"
+		const picture = Buffer.from("first picture")
+		const replacement = Buffer.from("second picture")
+		const createPlan = (bytes: Buffer): ReturnType<typeof planVideoScenes> => {
+			const sourceImageHash = sha256Hash(bytes)
+			return planVideoScenes({
+				episode,
+				position: 0,
+				frameCount: 120,
+				startSeconds: 0,
+				title: "",
+				captions: [],
+				sourceImageHashes: [sourceImageHash],
+				sceneImages: [{ sourceImageHash, origin: "resource", width: 1280, height: 720 }],
+			})
+		}
+		const published = createPlan(picture)
+		const current = scenario === "replaced" ? replacement : picture
+		const sceneSources = [{ position: 0, resourceId: "resource", resourceImageKeys: [] }]
+		const segments: VideoSegment[] = [{ kind: "chapter", position: 0, startSeconds: 0, frameCount: 120 }]
+		if (scenario === "changed-poster") {
+			segments.push({ kind: "hot-takes", position: 0, startSeconds: 5, frameCount: 240 })
+		}
+		const oldPoster = { stillPng: picture, zoomLimit: 2, isPodcastCard: false }
+		const newPoster = { ...oldPoster, stillPng: replacement }
+		const hash = toVideoScenePlansHash(
+			[sha256Hash(JSON.stringify(published))],
+			sceneSources,
+			toRetainedPosterHash(episode, segments, [], oldPoster),
+		)
+		const freshHash = toVideoScenePlansHash(
+			[sha256Hash(JSON.stringify(createPlan(current)))],
+			sceneSources,
+			toRetainedPosterHash(episode, segments, [], newPoster),
+		)
+		const chaptersKey = toTopicVideoRenderAttemptUploadKey(
+			toTopicVideoChaptersKey(episode, 4, scenario === "legacy" ? undefined : hash),
+			crypto.randomUUID(),
+		)
+		const row = [scenario === "legacy" ? "rendering" : "ready", null, chaptersKey, null, "old.mp4", "image-old", 4]
+		const queries = stubConnectionPool(({ text }) => {
+			if (text.includes('from "episodes" inner join "topics"')) {
+				return [[...PUBLISHED_PODCAST_EPISODE_ROW, null]]
+			}
+			if (text.includes("for share") && text.includes('from "episode_chapters"')) {
+				return [[0, "resource"]]
+			}
+			if (text.startsWith('update "topic_videos"')) {
+				return [["film"]]
+			}
+			return text.startsWith('select "status"') ? [row] : []
+		})
+
+		// only the matching plan may read and publish the retained pixels
+		const downloads = spyOn(storage, "downloadPodcastEpisodeFile").mockResolvedValue(undefined)
+		spyOn(storage, "attachmentExists").mockResolvedValue(true)
+		spyOn(storage, "getAttachmentBytes").mockResolvedValue(Buffer.from(JSON.stringify(createPlan(current))))
+		const cutoff = spyOn(monthlyBudgetCutoffs, "isMonthlyBudgetCutoffPassed").mockResolvedValue(scenario === "legacy")
+		spyOn(videoAudio, "loadVideoAudio").mockResolvedValue({
+			audioPath: "audio.mp3",
+			durationSeconds: 5,
+			captionCues: [],
+			segments,
+		})
+		spyOn(topicVideoInputs, "loadShownImageStill").mockResolvedValue(newPoster)
+		spyOn(videoChapterImages, "prepareChapterImages").mockResolvedValue({
+			chapterImages: new Map([
+				[
+					0,
+					{
+						images: [{ loadSceneImage: async () => current, loadStillPng: async () => current, zoomLimit: 2 }],
+						lowerThirdText: { title: "", detail: "" },
+					},
+				],
+			]),
+			sceneSources,
+			podcastCardImages: [],
+			firstChapterImages: [],
+			newlyGeneratedChapterImageCount: 0,
+		})
+		// record the exact replacement frames and the key that becomes ready
+		const encode = spyOn(filmFiles, "renderFilmChapters").mockResolvedValue({
+			chaptersPath: "safe-chapters.mp4",
+			scenePlansHash: freshHash,
+		})
+		spyOn(videoImageParts, "renderVideoImageParts").mockResolvedValue({ introPath: null, signOffPath: null })
+		const rewrite = spyOn(videoFilm, "rewriteVideoFilm").mockResolvedValue(undefined)
+		const upload = spyOn(topicVideoRows, "uploadTopicVideoFile").mockImplementation(
+			async ({ filePath, key, uploadedKeys }) => {
+				if (!filePath) {
+					return null
+				}
+				uploadedKeys.push(key)
+				return key
+			},
+		)
+		spyOn(podcastFeedCache, "deletePodcastFeedCache").mockResolvedValue(undefined)
+		const track = spyOn(analytics, "trackEvent").mockImplementation(() => {})
+
+		// a legacy film that lost its poster can become ready even above its owner's cutoff
+		expect((await rebuildTopicVideo(episode)).outcome).toBe("rebuilt")
+		expect(track).toHaveBeenCalledTimes(1)
+		const publication = queries.find((query) => query.text.startsWith('update "topic_videos"'))
+		expect(publication?.values).toContain("ready")
+		expect(publication?.values).toContain(chaptersKey)
+		expect(publication?.values).toContain("old.mp4")
+		const downloadedKeys = downloads.mock.calls.map(([file]) => file.key)
+		if (scenario === "matching") {
+			expect(encode).not.toHaveBeenCalled()
+			expect(downloadedKeys).toEqual([chaptersKey, "old.mp4"])
+			return
+		}
+		if (scenario === "legacy") {
+			expect(cutoff).not.toHaveBeenCalled()
+		}
+
+		// only published narration and captions are read from the old film on the replacement path
+		expect(downloadedKeys).toEqual(["old.mp4"])
+		expect(encode).toHaveBeenCalledWith(
+			expect.objectContaining({
+				animationBilling: { ownerId: "owner-1", isPlatformBilled: false, isStoredAnimationOnly: true },
+			}),
+		)
+		expect(rewrite).toHaveBeenCalledWith(expect.objectContaining({ chaptersPath: "safe-chapters.mp4" }))
+		const uploadKey = upload.mock.calls.find(([file]) => file.filePath === "safe-chapters.mp4")?.[0].key
+		expect(uploadKey).toContain(freshHash)
+		expect(publication?.values).toContain(uploadKey)
+		expect(
+			queries.some(
+				(query) =>
+					query.text.startsWith('insert into "pending_object_deletions"') && query.values.includes(chaptersKey),
+			),
+		).toBe(true)
+	},
+)

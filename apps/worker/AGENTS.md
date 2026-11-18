@@ -223,3 +223,21 @@ once if they are one person, and `notificationsEmails.ts` names the post by its 
 
 `workflows/topicMemories.ts` runs one succeeded Scan's Journal consolidation on its own queue. Its backfill reads the
 latest five succeeded Scans of a Topic oldest first. `bun run topic-memories:backfill` under Doppler starts or joins the operator run.
+
+A recording records its film render version in the child workflow input after the
+`topic-video-chapter-scenes-v4` patch. Earlier histories and automatic backfills keep version 3.
+`TOPIC_VIDEO_ANIMATED_CHAPTERS=true` admits new recordings to version 4. Replaying an activity keeps its recorded
+version. FFmpeg reads a reviewed animation clip in place of its still during a Finding shot. It applies the original
+camera move and transition to that input. Eligible new pictures share one bounded vision request per Finding chapter.
+The private plan stores each confirmed effect and its region. A failed selection leaves the montage playable.
+Comments and both bookends keep the montage and the host illustration’s reviewed steam loop.
+Encode cancellation uses the activity signal. The film slot and its deadline cover the whole attempt.
+
+`workerQueueGroup.ts` selects the queues. The main queue group runs scans and recordings and dispatches new films.
+The films queue group polls both existing film queues. A single process-wide slot covers an encode, a selected upgrade
+or an image rebuild through cleanup. A selected upgrade checks for outstanding new films before admission.
+A newly arrived film can wait for an upgrade that has already started. The automatic backfill stays at version 3.
+
+A newly brewed version 4 film can use one five-second Gemini Omni animation of an eligible public Finding’s generated picture. Each account gets one unique picture per UTC month on Free, three on Plus and seven on Premium. The platform pays for Free’s shot. Plus and Premium use the owner’s model key. Optional platform-paid upgrades skip Omni. The worker stops calling the picture planner after it selects eight distinct local effects across the film. The reusable host steam uses neither allowance.
+
+The Scan smoke test renders its model prompt samples through `scanPromptChecks.ts`.

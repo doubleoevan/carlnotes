@@ -11,8 +11,6 @@ import { toUprightImageSize } from "../uprightImageSize"
 export const VIDEO_WIDTH = 1280
 export const VIDEO_HEIGHT = 720
 const COMPOSED_SCALE = 4
-const COMPOSED_WIDTH = VIDEO_WIDTH * COMPOSED_SCALE
-const COMPOSED_HEIGHT = VIDEO_HEIGHT * COMPOSED_SCALE
 
 // the espresso that the film fades through and that the lower third sits on, and the lower third's text colors
 export const ESPRESSO = darkRoast.hero
@@ -29,16 +27,18 @@ const COVER_RATIO_TOLERANCE = 0.02
 // the largest image a still is decoded from
 const MAX_STILL_INPUT_PIXELS = 40_000_000
 
-// Carl and Vienna's podcast card, the illustration that every podcast cover is drawn over. a chapter with no image of
-// its own shows it
-const PODCAST_COVER_ILLUSTRATION_URL = new URL("../../../apps/docs/design/podcast/cover-base.png", import.meta.url)
+// the film illustration of Carl and Vienna has clear space for steam above each mug
+export const PODCAST_CARD_ILLUSTRATION_URL = new URL(
+	"../../../apps/docs/design/podcast/coffee-break-hosts.jpeg",
+	import.meta.url,
+)
 
 // where the podcast card's band starts, as a share of the illustration's width: under the dark band a cover's title
 // sits on, so the 16:9 band shows both hosts, their mugs, and the microphone
 const PODCAST_CARD_BAND_TOP_RATIO = 560 / 3000
 
-// how far the podcast card may zoom in a shot. its illustration is 3000 pixels wide
-export const PODCAST_CARD_ZOOM_LIMIT = 2
+// the podcast card can zoom until one source pixel fills one film pixel
+export const PODCAST_CARD_ZOOM_LIMIT = 2048 / VIDEO_WIDTH
 
 // a still covers the frame, or fits inside it over a blurred backdrop of itself
 export type VideoStillFit = "cover" | "fill"
@@ -57,7 +57,12 @@ export function toVideoStillFit({ width, height }: { width: number; height: numb
  * at most four times its own size, which is its own size on the film, over a blurred, darkened copy of itself. Throws
  * an error for an image that cannot be decoded.
  */
-export async function toVideoStillPng(imageBytes: Uint8Array): Promise<Uint8Array> {
+export async function toVideoStillPng(
+	imageBytes: Uint8Array,
+	frameWidth = VIDEO_WIDTH * COMPOSED_SCALE,
+): Promise<Uint8Array> {
+	const scale = frameWidth / VIDEO_WIDTH
+	const frameHeight = Math.round(VIDEO_HEIGHT * scale)
 	// read the image's size, turned upright, without decoding it
 	const toUprightImage = (): Sharp => sharp(imageBytes, { limitInputPixels: MAX_STILL_INPUT_PIXELS }).rotate()
 	const { width, height } = toUprightImageSize(await sharp(imageBytes).metadata())
@@ -65,7 +70,7 @@ export async function toVideoStillPng(imageBytes: Uint8Array): Promise<Uint8Arra
 	// a covering image is the whole still
 	const coverImage = toUprightImage().flatten({ background: ESPRESSO })
 	if (toVideoStillFit({ width, height }) === "cover") {
-		return coverImage.resize(COMPOSED_WIDTH, COMPOSED_HEIGHT, { fit: "cover" }).png().toBuffer()
+		return coverImage.resize(frameWidth, frameHeight, { fit: "cover" }).png().toBuffer()
 	}
 
 	// otherwise the backdrop covers the frame, blurred and darkened at the film's size, where a blur costs far less
@@ -78,15 +83,19 @@ export async function toVideoStillPng(imageBytes: Uint8Array): Promise<Uint8Arra
 
 	// the image fits at most four times its own size
 	const foregroundBytes = await toUprightImage()
-		.resize(Math.min(COMPOSED_WIDTH, width * COMPOSED_SCALE), Math.min(COMPOSED_HEIGHT, height * COMPOSED_SCALE), {
-			fit: "inside",
-		})
+		.resize(
+			Math.min(frameWidth, Math.max(1, Math.round(width * scale))),
+			Math.min(frameHeight, Math.max(1, Math.round(height * scale))),
+			{
+				fit: "inside",
+			},
+		)
 		.png()
 		.toBuffer()
 
 	// enlarge the backdrop to the still's size, and center the image over it
 	return sharp(backdrop.data, { raw: backdrop.info })
-		.resize(COMPOSED_WIDTH, COMPOSED_HEIGHT)
+		.resize(frameWidth, frameHeight)
 		.composite([{ input: foregroundBytes, gravity: "center" }])
 		.png()
 		.toBuffer()
@@ -112,7 +121,7 @@ export function loadPodcastCardStillPng(): Promise<Uint8Array> {
 // compose the podcast card's still from the illustration
 async function composePodcastCardStillPng(): Promise<Uint8Array> {
 	// read the illustration and its width
-	const illustrationBytes = await Bun.file(PODCAST_COVER_ILLUSTRATION_URL).bytes()
+	const illustrationBytes = await Bun.file(PODCAST_CARD_ILLUSTRATION_URL).bytes()
 	const { width = 0 } = await sharp(illustrationBytes).metadata()
 
 	// cut the band at the film's shape, and compose it as any other still

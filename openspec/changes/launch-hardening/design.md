@@ -35,7 +35,7 @@ hundred files and nothing live until all of it is done. Four
 | X1 | **The daily spend cutoffs are thresholds in force, never "off by default".** At their defaults ($65, $100, $150, and 5 waiting scans a sweep) the wave's own people pass them: a new free person costs about $0.56 on their first day (A.26), so the $100 cutoff passes after 180 to 1,000 signups | From then every free person's first and manual Scan waits and starts at 20 an hour while 3,000 arrive (production's sweep runs every 15 minutes, read from Northflank on 2026-11-13, and each sweep starts 5), and chat pauses for every free user until midnight UTC. No capacity in this change can lift a spend cutoff | No code changes the cutoffs, as the request says. The Launch runbook gains a step before the wave: set the three cutoffs and the first scan dispatch limit on the Limits card from expected signups times $0.56. **The dollar figure is yours.** 3,000 signups would spend about $1,670 |
 | X2 | **The speech provider allows 10,000 requests a day**, by a comment in `.env.example` that was not checked with Google. Each chapter, chapter retry, discussion, and spoken chat reply is one | Past it, podcast episodes publish with chapters missing or fail, and chat replies lose their voice that day. Slots cannot add what the provider will not serve | The scheduled chapter queue takes 32 slots a replica, the size at which the worker stops being the limit. The runbook records the allowance and counts the day's speech requests. **Raising the allowance with Google is yours** |
 | X3 | **Scan capacity is fixed at about 290 first Scans an hour** on two replicas of 8 slots, and nothing scaled it | 3,000 first Scans would take ten to thirteen hours | Capacity: scheduled Scans move to a queue of their own, the main worker scales out on the scan backlog, and a task measures 16 and 24 slots a replica. The model and fetch providers' rate limits then become the limit, and those are yours to raise (the runbook lists each) |
-| X4 | **The connection pool.** With every service at its autoscaling maximum an equal share at production's `max_connections` of 901 is 35 to 42 connections, and a worker replica already peaks at 78 open | Queries queue inside a pool, and one that waits 10 seconds fails its request or its activity | Pools are sized by shares, with the worker's main role taking two. **Raising the Neon compute's maximum before the wave is yours**: 4 CU reads 1,802 by Neon's formula. The runbook's step names the startup line that confirms it |
+| X4 | **The connection pool.** With every service at its autoscaling maximum an equal share at production's `max_connections` of 901 is 35 to 42 connections, and a worker replica already peaks at 78 open | Queries queue inside a pool, and one that waits 10 seconds fails its request or its activity | Pools are sized by shares, with the worker's main queue group taking two. **Raising the Neon compute's maximum before the wave is yours**: 4 CU reads 1,802 by Neon's formula. The runbook's step names the startup line that confirms it |
 | X5 | **A Topic at its limit on a quiet feed stops changing between Scans** once item eleven stops re-scoring removed pages | Its scheduled email says "nothing new" more often and its push is sent less often. Today those "new" Findings are pages deleted and written again, losing their reactions and read state each time. The Topic's notes card would also go blank more often, because it reads the latest Scan's recap even if empty | The notes card and the feed card read the newest Scan that wrote a recap, as the page's meta description already does, so a quiet Scan never blanks the note. The docs state the rule |
 | X6 | **An unchecked image.** A public image whose check could not run is shown to its owner alone | Other people see the previous image or the default for the minutes that the image is unchecked. The owner sees the new image at once with one line of copy | As item twenty-two asks. It happens only while the moderation endpoint is failing |
 | X7 | **A quiet person's late activity moves to the next day's notifications email** once the quiet day is recorded | A person quiet at 15:00 UTC who gets a reaction at 18:00 is mailed the next day at 15:00, where today a later sweep mails them at about 18:01 | Record the quiet day, as item ten asks. The living spec already says this for a person who was sent an email |
@@ -242,7 +242,7 @@ would tip it.
 
 - **Chose:** the web service runs 2 to 4 replicas on `nf-compute-100-2`, scaling on cpu at 70%, the shape `app`
   already has. A process's pool is its shares of the pooler's server pool: the api, the web service, the sweep, the
-  reset, and a film replica take one share, and the worker's main role takes two. The default pool count in
+  reset, and a film replica take one share, and the worker's main queue group takes two. The default pool count in
   `packages/db/index.ts` becomes 14 shares at rest (two api, two web, two main workers at two each, one film
   replica, the sweep, the reset, three for overlap and jobs). Production's `DATABASE_POOL_COUNT` is the sum at every
   service's maximum: 25 with app 4, web 4, main worker 4, film 4.
@@ -287,9 +287,9 @@ would tip it.
 - **Rejected:** 16 (today's limit exactly), a queue named for the flex tier (the tier is a consequence of the
   trigger), and no patch (Temporal allows it, but two lines make a replayed history schedule where it recorded).
 
-### D6. Films run as the worker's `films` role, on a service that scales on film demand (close)
+### D6. Films run as the worker's `films` queue group, on a service that scales on film demand (close)
 
-- **Chose:** the setting `WORKER_ROLE` takes `films`, `main`, or nothing for every Worker, set by the root scripts
+- **Chose:** the setting `WORKER_QUEUE_GROUP` takes `films`, `main`, or nothing for every Worker, set by the root scripts
   `temporal:films` and `temporal:main` after `doppler run --`, because a Doppler value would win over the
   service's own. The film service runs on `nf-compute-200` (2 vCPU, 4 GB) with one live slot, one backfill slot, and
   one rebuild slot a replica. Every ffmpeg thread count is set to 2: each input, the filter graph, and the encoder.
@@ -456,7 +456,7 @@ would tip it.
 
 ## Migration Plan
 
-1. Ship the code. Nothing changes in production yet: with no role set the worker hosts every Worker, the `app`
+1. Ship the code. Nothing changes in production yet: with no queue group set the worker hosts every Worker, the `app`
    service serves every path, and the new queues are polled by the worker that exists.
 2. Build the new indexes by hand (D15), then let the release run its migration.
 3. In Northflank, by hand: set each service's termination grace above the worker's two minutes; create the `web`
@@ -895,8 +895,8 @@ Numbers:
 
 Facts the design rests on:
 
-- **No role switch exists.** The worker is the image with its command overridden to `bun run temporal`
-  (`package.json:116`), and `apps/worker/temporal.ts` runs on import (`:305-307`). A role has to gate six things in
+- **No queue group switch exists.** The worker is the image with its command overridden to `bun run temporal`
+  (`package.json:116`), and `apps/worker/temporal.ts` runs on import (`:305-307`). A queue group has to gate six things in
   that file: which Workers are created (`:120-229`), the backfill start (`:236-239`), the Personal sources email
   settings check (`:115`), the extra gauges (`:295-302`), the gauge line's process name (`:233`), and the pool sizing
   (`:116`). `isTopicPodcastEpisodeVideoEnabled` reads the film concurrency as on or off inside the recording Worker

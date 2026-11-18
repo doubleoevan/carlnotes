@@ -18,7 +18,7 @@ import { classifyImage } from "@carlnotes/models/moderation"
 import { runWithConcurrency } from "@carlnotes/server/concurrency"
 import { toDataUrl } from "@carlnotes/server/dataUrl"
 import { reportError } from "@carlnotes/server/monitoring"
-import { and, asc, eq, inArray } from "drizzle-orm"
+import { and, asc, eq, gte, inArray } from "drizzle-orm"
 import { fetchResourceImageCandidate, loadLinkPreviewImageCandidate } from "./fetchResourceImageCandidates"
 import { toResourceImageCandidateUrls } from "./resourceImageCandidates"
 import {
@@ -163,6 +163,21 @@ async function waitForFetchedResourceImages(resourceId: string, signal?: AbortSi
 
 	// the other film's fetch took too long
 	return []
+}
+
+/** Reads only already approved, current-filter images for a replay, without fetching a page. */
+export async function loadApprovedStoredResourceImages(resourceIds: string[]): Promise<Map<string, ResourceImage[]>> {
+	const approved = await db
+		.select({ id: resources.id })
+		.from(resources)
+		.where(
+			and(
+				inArray(resources.id, resourceIds),
+				eq(resources.isUnsafe, false),
+				gte(resources.imagesFilterVersion, RESOURCE_IMAGE_FILTER_VERSION),
+			),
+		)
+	return loadStoredResourceImages(approved.map((row) => row.id))
 }
 
 // the stored images of some Resources, by resource id, in their stored order

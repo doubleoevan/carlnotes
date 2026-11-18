@@ -24,7 +24,8 @@ type RenderVideoImagePartsOptions = {
 	workDirectory: string
 	segments: VideoSegment[]
 	// what the parts show
-	shownImageStill: Pick<ShownImageStill, "stillPng" | "zoomLimit">
+	shownImageStill: ShownImageStill
+	podcastCardAnimationPath?: string
 	chapterImages: VideoSegmentImage[]
 	introText: LowerThirdText
 	signOffText: LowerThirdText
@@ -45,6 +46,7 @@ type ImagePartSegment = Extract<VideoSegment, { kind: "intro" | "sign-off" }>
  * encoded.
  */
 export async function renderVideoImageParts({
+	podcastCardAnimationPath,
 	podcastEpisodeId,
 	workDirectory,
 	segments,
@@ -73,6 +75,7 @@ export async function renderVideoImageParts({
 
 	// the film's image is the first still, and the chapters' stills follow, as many as either part's shots show
 	const filmImageStill: SegmentStill = {
+		reviewedAnimationPath: shownImageStill.isPodcastCard ? podcastCardAnimationPath : undefined,
 		stillPath: join(workDirectory, "film-image-still.png"),
 		zoomLimit: shownImageStill.zoomLimit,
 	}

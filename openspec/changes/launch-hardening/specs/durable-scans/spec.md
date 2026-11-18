@@ -95,7 +95,7 @@ being one idempotent write.
 The number of scan activities one worker replica runs at once SHALL come from `SCAN_CONCURRENCY`, defaulting to 8 if
 unset or not a whole number above zero, read the way `DATABASE_POOL_MAX` is read. Daily capacity for first and manual
 Scans is the worker replicas that run scan activities × `SCAN_CONCURRENCY` × 86,400 / the mean scan duration in seconds.
-A replica on the films role runs none, and scheduled Scans have slots of their own. `SCAN_CONCURRENCY` SHALL be set from
+A replica on the films queue group runs none, and scheduled Scans have slots of their own. `SCAN_CONCURRENCY` SHALL be set from
 a scan duration measured in production, never assumed.
 
 #### Scenario: The setting takes effect

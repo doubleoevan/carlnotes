@@ -51,7 +51,7 @@ Packages, private `@carlnotes/<name>` workspaces that export source, in dependen
   ffmpeg, and the prompts under `prompts/`.
 - `packages/pipeline/` — the scan pipeline: ingesters, review, chat replies and retrieval, attachments, link previews,
 	  private Personal sources confirmation and Topic matching under `personalSources/`,
-  the podcast episode, its film render under `topicVideo/`, the images of a Resource's page that its
+  the podcast episode, its film render, offline video scenes and fixed-input benchmark under `topicVideo/`, the images of a Resource's page that its
   films show under `resourceImages/`, what follows a Topic Post's publish under
   `topicPosts/`, the topic image render, the card and cover drawing with its fonts under `assets/fonts/`, and the
   Temporal client.

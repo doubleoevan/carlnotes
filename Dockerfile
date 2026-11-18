@@ -57,7 +57,7 @@ RUN bun run build:storybook
 
 # the runtime includes only what serving a request needs: production dependencies, the workspaces Bun executes, and the
 # built web app and docs. the toolchain and every dev dependency stay behind in the build stage
-FROM oven/bun:1.4.4@sha256:1d22548f177f4ff38e0c15baa3c2c46c6c2060ba2d1bc573bb4720b407548f1d AS runtime
+FROM oven/bun:1.4.4@sha256:1d22548f177f4ff38e0c15baa3c2c46c6c2060ba2d1bc573bb4720b407548f1d AS media-tools
 WORKDIR /app
 ENV NODE_ENV=production
 
@@ -66,8 +66,18 @@ ENV NODE_ENV=production
 # the worker joins a podcast episode's audio with ffmpeg, and the api encodes a cover, transcodes a chat recording,
 # and encodes a spoken answer to MP3 with its libmp3lame encoder
 RUN apt-get update \
-	&& apt-get install -y --no-install-recommends ca-certificates ffmpeg \
+	&& apt-get install -y --no-install-recommends ca-certificates procps ffmpeg=7:7.1.5-0+deb13u1 \
 	&& rm -rf /var/lib/apt/lists/*
+
+FROM media-tools AS film-tools
+
+# The locked Playwright version selects the matching headless Chromium revision and software WebGL libraries.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/film-browsers
+RUN bunx --bun playwright-core@1.64.1 install --with-deps --only-shell chromium \
+    && chmod -R a+rX /opt/film-browsers \
+    && rm -rf /var/lib/apt/lists/*
+
+FROM media-tools AS runtime
 
 # Doppler injects the secrets at start. copy its binary from its published image, pinned by version and digest
 COPY --from=dopplerhq/cli:3.77.0@sha256:bc59e0e97ea596a2c402f108043b9fd6ad574db253998364de939c0ca373453e /bin/doppler /bin/doppler
@@ -98,8 +108,8 @@ COPY packages ./packages
 COPY apps/api ./apps/api
 COPY apps/worker ./apps/worker
 
-# the illustration that every podcast cover is drawn over
-COPY apps/docs/design/podcast/cover-base.png ./apps/docs/design/podcast/cover-base.png
+# the podcast cover and the film's host illustration
+COPY apps/docs/design/podcast/cover-base.png apps/docs/design/podcast/coffee-break-hosts.jpeg ./apps/docs/design/podcast/
 
 # the blog's markdown, which the api renders per request. the docs moved to the Starlight site above
 COPY content ./content

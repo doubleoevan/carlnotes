@@ -6,7 +6,7 @@ import * as monitoring from "@carlnotes/server/monitoring"
 import {
 	loadTopicVideoRenderState,
 	markTopicVideoFailed,
-	saveTopicVideoRerendered,
+	publishTopicVideoReplacement,
 	TOPIC_VIDEO_RENDER_VERSION,
 } from "./topicVideoRows"
 
@@ -95,7 +95,7 @@ test("a swap takes the new keys and schedules the files the row played for delet
 		"episodes/episode-1/video/captions.vtt",
 	]
 	const sentQueries = stubConnectionPool(({ text }) => (text.includes("for no key update") ? [replacedFilmRow] : []))
-	await saveTopicVideoRerendered(RERENDERED_FILM)
+	await publishTopicVideoReplacement(RERENDERED_FILM)
 
 	// the read and the update apply only to a ready film below the current render version
 	const lockedRead = sentQueries.find((sentQuery) => sentQuery.text.includes("for no key update"))
@@ -117,7 +117,7 @@ test("a swap takes the new keys and schedules the files the row played for delet
 
 test("a swap that finds no ready film below the version changes nothing", async () => {
 	const sentQueries = stubConnectionPool(() => [])
-	await saveTopicVideoRerendered(RERENDERED_FILM)
+	await publishTopicVideoReplacement(RERENDERED_FILM)
 	expect(toFilmRowUpdates(sentQueries)).toEqual([])
 	expect(toPendingDeletionWrites(sentQueries)).toEqual([])
 })

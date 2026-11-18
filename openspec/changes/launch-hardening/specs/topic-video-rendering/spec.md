@@ -95,8 +95,8 @@ skipped, not failed.
 ### Requirement: The failure mark and rebuilds never wait behind a render
 
 The step that marks a film failed SHALL run on the short-write task queue that the film's row is written on, polled
-by a Worker with no workflow bundle on the worker's main role, so a mark is written even if no film Worker runs. A
-rebuild SHALL run on a task queue and a slot of its own on the films role. A mark or a rebuild that was scheduled on
+by a Worker with no workflow bundle on the worker's main queue group, so a mark is written even if no film Worker runs. A
+rebuild SHALL run on a task queue and a slot of its own on the films queue group. A mark or a rebuild that was scheduled on
 `episode-videos` before the move SHALL still run there.
 
 #### Scenario: A rebuild runs beside a full render
@@ -131,18 +131,18 @@ rows SHALL count in the day's total spend, and SHALL never count in a user's mon
 - **WHEN** the free-plan spend is read
 - **THEN** the re-render's cost is not in it
 
-### Requirement: The main role still starts a new Podcast Episode's film
+### Requirement: The main queue group still starts a new Podcast Episode's film
 
-A worker on the `main` role hosts no film Worker, as the deploy-mechanics capability states, and SHALL still start a
-published Podcast Episode's film workflow, which a worker on the `films` role renders. The film concurrency setting
-SHALL stay above 0 on the main role, because 0 there turns new films off.
+A worker on the `main` queue group hosts no film Worker, as the deploy-mechanics capability states, and SHALL still start a
+published Podcast Episode's film workflow, which a worker on the `films` queue group renders. The film concurrency setting
+SHALL stay above 0 on the main queue group, because 0 there turns new films off.
 
-#### Scenario: A recording on the main role starts its film
+#### Scenario: A recording on the main queue group starts its film
 
-- **WHEN** a Podcast Episode publishes on a worker whose role is `main`
+- **WHEN** a Podcast Episode publishes on a worker whose queue group is `main`
 - **THEN** its film's workflow is started, its `rendering` row is written, and a films replica renders it
 
-#### Scenario: Film concurrency 0 on the main role starts no film
+#### Scenario: Film concurrency 0 on the main queue group starts no film
 
 - **WHEN** a Podcast Episode publishes on a main worker whose film concurrency is 0
 - **THEN** no film workflow is started for it

@@ -67,6 +67,11 @@ const elements: TopicVideoPlayerElements = {
 	Card: ({ children }) => (
 		<View className="gap-3 rounded-lg border border-separator bg-card p-5 shadow-raised">{children}</View>
 	),
+	Title: ({ children, className }) => (
+		<Text accessibilityRole="header" className={className}>
+			{children}
+		</Text>
+	),
 	Surface: TopicVideoSurface,
 	PlayButton: ({ podcastEpisode, isPlaying, onPress }) => (
 		<SharedPodcastEpisodePlayButton

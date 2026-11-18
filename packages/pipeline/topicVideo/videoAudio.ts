@@ -43,7 +43,7 @@ export async function loadVideoAudio({
 	// the audio, its exact length, and the pauses in it
 	const { podcastEpisodeId, audioKey, script } = topicVideoPodcastEpisode
 	const audioPath = join(workDirectory, "audio.mp3")
-	await downloadPodcastEpisodeFile({ key: audioKey, filePath: audioPath })
+	await downloadPodcastEpisodeFile({ key: audioKey, filePath: audioPath, signal })
 	const durationSeconds = await probeDurationSeconds(audioPath, signal)
 	const pauseSeconds = await detectPauseSeconds(audioPath, signal)
 
@@ -57,10 +57,14 @@ export async function loadVideoAudio({
 	const segments = toVideoTimeline({ chapterTimes: videoChapterRows, hotTakesStartSeconds, durationSeconds })
 
 	// the captions from the script, timed with the pauses in the audio
-	const captionCues = toVideoCaptionCues({
+	const recordedCues = toVideoCaptionCues({
 		chapters: toVideoCaptionChapters(script, videoChapterRows),
 		pauseSeconds,
 		hotTakesStartSeconds: segments.flatMap((segment) => (segment.kind === "hot-takes" ? [segment.startSeconds] : [])),
 	})
+	// Older episode timings can include trailing silence after the published recording ends.
+	const captionCues = recordedCues
+		.filter((cue) => cue.startSeconds < durationSeconds)
+		.map((cue) => ({ ...cue, endSeconds: Math.min(cue.endSeconds, durationSeconds) }))
 	return { audioPath, durationSeconds, segments, captionCues }
 }

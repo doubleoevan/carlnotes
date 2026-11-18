@@ -66,3 +66,8 @@ export function generatedChapterImageLimit(): number {
 export function isMcpViewFilmPlaybackEnabled(): boolean {
 	return Bun.env.MCP_VIEW_FILM_PLAYBACK === "true"
 }
+
+/** Selects the render version once, when a newly published episode starts its film. */
+export function newTopicVideoRenderVersion(): 3 | 4 {
+	return Bun.env.TOPIC_VIDEO_ANIMATED_CHAPTERS === "true" ? 4 : 3
+}

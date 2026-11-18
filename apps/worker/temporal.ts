@@ -31,6 +31,7 @@ import {
 import { runWithRetries } from "@carlnotes/server/retry"
 import { type ExtraGaugesReading, startRuntimeGauges } from "@carlnotes/server/runtimeGauges"
 import { NativeConnection, Worker } from "@temporalio/worker"
+import { readWorkerQueueGroup } from "./workerQueueGroup"
 import * as topicVideoBackfillActivities from "./workflows/backfillTopicVideosActivities"
 import * as dashboardActivities from "./workflows/buildDashboardSnapshotsActivities"
 import * as attachmentActivities from "./workflows/processAttachmentActivities"
@@ -112,16 +113,64 @@ function connectWithRetry(): Promise<NativeConnection> {
 
 // connect to Temporal, build a worker per queue, and poll until the process stops
 async function run(): Promise<void> {
+	// A disabled film replica can pass its deployment health check without opening database or queue connections.
+	if (readWorkerQueueGroup() === "films" && !TOPIC_VIDEO_STARTUP.isTopicVideoQueuePolled) {
+		console.info("Film worker idle while TOPIC_VIDEO_CONCURRENCY is zero")
+		for (;;) {
+			await Bun.sleep(86_400_000)
+		}
+	}
+
 	// monitoring, then tracing for this worker's model calls, in that order so Langfuse keeps its own provider beside Sentry's.
 	// both do nothing without their keys. then size the connection pool from the database
 	startMonitoring()
 	startTelemetry()
-	validatePersonalSourcesEmailSettings()
+	if (readWorkerQueueGroup() !== "films") {
+		validatePersonalSourcesEmailSettings()
+	}
 	await sizeConnectionPool()
 
 	// a Worker polls exactly one queue and takes one workflowsPath
 	const connection = await connectWithRetry()
+	const mainWorkers = readWorkerQueueGroup() === "films" ? [] : createMainWorkers(connection)
 	const workers = await Promise.all([
+		...mainWorkers,
+		...(TOPIC_VIDEO_STARTUP.isTopicVideoQueuePolled ? createTopicVideoWorkers(connection) : []),
+	])
+
+	// log the pool, the event loop delay, the scan queue, and Redis once a minute, and warn on a backed-up queue or a
+	// Redis connection that is down. it starts after the workflow bundles build, so building them never reads as a stall
+	startRuntimeGauges({ processName: "worker", readPoolGauges, readExtraGauges: readWorkerExtraGauges })
+
+	// any worker stopping ends the process. once the workers poll, the film backfill starts or joins without a wait,
+	// unless the backfill is off
+	hasStartedPolling = true
+	if (TOPIC_VIDEO_STARTUP.isTopicVideoBackfillStarted) {
+		startTopicVideoBackfill()
+	}
+	const runningWorkers = workers.map((worker) => worker.run())
+	try {
+		await Promise.race(runningWorkers)
+	} finally {
+		// the other workers still polling on the shared connection are stopped before that connection closes
+		for (const worker of workers) {
+			try {
+				worker.shutdown()
+			} catch {}
+		}
+
+		// drain every worker before the connection and everything they report go away
+		await Promise.allSettled(runningWorkers)
+		await connection.close()
+		await shutdownTelemetry()
+		await shutdownAnalytics()
+		await shutdownMonitoring()
+	}
+}
+
+// The main queue group owns recording dispatch, scans and every queue outside film encoding.
+function createMainWorkers(connection: NativeConnection): Promise<Worker>[] {
+	return [
 		// receive bounded mail independently of model calls and Scan slots
 		Worker.create({
 			connection,
@@ -238,37 +287,7 @@ async function run(): Promise<void> {
 			shutdownGraceTime: SHUTDOWN_GRACE_MS,
 			maxConcurrentActivityTaskExecutions: DASHBOARD_CONCURRENCY,
 		}),
-		...(TOPIC_VIDEO_STARTUP.isTopicVideoQueuePolled ? createTopicVideoWorkers(connection) : []),
-	])
-
-	// log the pool, the event loop delay, the scan queue, and Redis once a minute, and warn on a backed-up queue or a
-	// Redis connection that is down. it starts after the workflow bundles build, so building them never reads as a stall
-	startRuntimeGauges({ processName: "worker", readPoolGauges, readExtraGauges: readWorkerExtraGauges })
-
-	// any worker stopping ends the process. once the workers poll, the film backfill starts or joins without a wait,
-	// unless the backfill is off
-	hasStartedPolling = true
-	if (TOPIC_VIDEO_STARTUP.isTopicVideoBackfillStarted) {
-		startTopicVideoBackfill()
-	}
-	const runningWorkers = workers.map((worker) => worker.run())
-	try {
-		await Promise.race(runningWorkers)
-	} finally {
-		// the other workers still polling on the shared connection are stopped before that connection closes
-		for (const worker of workers) {
-			try {
-				worker.shutdown()
-			} catch {}
-		}
-
-		// drain every worker before the connection and everything they report go away
-		await Promise.allSettled(runningWorkers)
-		await connection.close()
-		await shutdownTelemetry()
-		await shutdownAnalytics()
-		await shutdownMonitoring()
-	}
+	]
 }
 
 // the film workers: new films and rebuilds on one queue, and the backfill of each Topic's latest podcast episode on
@@ -322,8 +341,8 @@ type TopicVideoStartup = {
  */
 export function readTopicVideoStartup(): TopicVideoStartup {
 	return {
-		isTopicVideoQueuePolled: topicVideoConcurrency() > 0,
-		isTopicVideoBackfillStarted: isTopicVideoBackfillEnabled(),
+		isTopicVideoQueuePolled: readWorkerQueueGroup() !== "main" && topicVideoConcurrency() > 0,
+		isTopicVideoBackfillStarted: readWorkerQueueGroup() !== "main" && isTopicVideoBackfillEnabled(),
 	}
 }
 

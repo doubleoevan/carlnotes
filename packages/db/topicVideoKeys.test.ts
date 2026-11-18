@@ -11,6 +11,7 @@ import {
 	toTopicVideoImageLargeOriginalKey,
 	toTopicVideoImagePartKey,
 	toTopicVideoKeys,
+	toTopicVideoRenderAttemptUploadKey,
 } from "./topicVideoKeys"
 
 // a film's keys sit under its podcast episode, and the parts drawn from the image name the image's hash. a film at
@@ -99,6 +100,10 @@ test("toTopicVideoKeys lists each chapter's generated images in every style unde
 		...toTopicVideoChapterImageKeys("episode-1", 1, 1),
 		...toTopicVideoChapterImageKeys("episode-1", 0),
 		...toTopicVideoChapterImageKeys("episode-1", 1),
+		"episodes/episode-1/video/chapter-0-scene-plan.json",
+		"episodes/episode-1/video/chapter-1-scene-plan.json",
+		"episodes/episode-1/video/picture-motion.json",
+		"episodes/episode-1/video/picture-motion.mkv",
 	])
 
 	// no film row, so no chapter image
@@ -109,4 +114,11 @@ test("toTopicVideoKeys lists each chapter's generated images in every style unde
 		chapterCount: 2,
 	})
 	expect(filmlessKeys).toEqual([])
+})
+
+test("an upload failure in one animated attempt can only delete that attempt's objects", () => {
+	const key = toTopicVideoChaptersKey("episode", 4)
+	expect(toTopicVideoRenderAttemptUploadKey(key, "first")).not.toBe(toTopicVideoRenderAttemptUploadKey(key, "second"))
+	expect(toTopicVideoRenderAttemptUploadKey(key, "first")).not.toBe(key)
+	expect(toTopicVideoRenderAttemptUploadKey(key, undefined)).toBe(key)
 })

@@ -15,6 +15,11 @@ type ToTopicVideoImagePartKeyOptions = {
 	renderVersion: number
 }
 
+/** Keeps each render attempt’s uploads separate until the replacement film is published. */
+export function toTopicVideoRenderAttemptUploadKey(key: string, renderAttemptId: string | undefined): string {
+	return renderAttemptId ? key.replace(/(\.[^.]+)$/u, `-${renderAttemptId}$1`) : key
+}
+
 /**
  * Returns the object key of a film part drawn from one image at one render version. A new image and a new render
  * version each give the part a new key.
@@ -31,8 +36,28 @@ export function toTopicVideoImagePartKey({
 /**
  * Returns the object key of a film's chapters part at one render version, which a rebuild keeps.
  */
-export function toTopicVideoChaptersKey(podcastEpisodeId: string, renderVersion: number): string {
-	return `episodes/${podcastEpisodeId}/video/chapters${toRenderVersionSuffix(renderVersion)}.mp4`
+export function toTopicVideoChaptersKey(
+	podcastEpisodeId: string,
+	renderVersion: number,
+	scenePlansHash?: string,
+): string {
+	const plansSuffix = scenePlansHash ? `-plans-${scenePlansHash}` : ""
+	return `episodes/${podcastEpisodeId}/video/chapters${toRenderVersionSuffix(renderVersion)}${plansSuffix}.mp4`
+}
+
+/**
+ * Reads the scene plans hash from the episode's immutable chapters part, or null for an older upload.
+ */
+export function readTopicVideoScenePlansHash(podcastEpisodeId: string, chaptersKey: string): string | null {
+	const match = /-plans-([a-f0-9]{64})-([a-f0-9-]{36})\.mp4$/u.exec(chaptersKey)
+	if (!match) {
+		return null
+	}
+
+	// require the complete episode key and render attempt before trusting its hash
+	const [, hash, attempt] = match
+	const expected = toTopicVideoRenderAttemptUploadKey(toTopicVideoChaptersKey(podcastEpisodeId, 4, hash), attempt)
+	return expected === chaptersKey ? (hash ?? null) : null
 }
 
 /**
@@ -60,6 +85,17 @@ export function toTopicVideoImageKey(podcastEpisodeId: string, imageHash: string
  */
 export function toTopicVideoImageLargeOriginalKey(podcastEpisodeId: string, imageHash: string): string {
 	return `episodes/${podcastEpisodeId}/video/image-${imageHash}-original.jpg`
+}
+
+/** Returns the private plan slot for this episode and chapter, also used when deleting the episode. */
+export function toTopicVideoScenePlanKey(episode: string, position: number): string {
+	return `episodes/${episode}/video/chapter-${position}-scene-plan.json`
+}
+
+/** Returns the reservation and silent animation owned by a film. */
+export function toTopicVideoAnimationKeys(episode: string) {
+	const prefix = `episodes/${episode}/video/picture-motion`
+	return { decision: `${prefix}.json`, video: `${prefix}.mkv` }
 }
 
 // how many generated images one chapter of a film may have
@@ -163,5 +199,10 @@ export function toTopicVideoKeys(topicVideo: TopicVideoKeyColumns): string[] {
 	// ponytail: lists every key a chapter may have in every style. store each chapter's count if a removal gets slow
 	const positions = Array.from({ length: chapterCount }, (_, position) => position)
 	const chapterImageKeys = toTopicVideoChapterImageKeysThroughStyle(podcastEpisodeId, positions)
-	return [...storedKeys, ...chapterImageKeys]
+	return [
+		...storedKeys,
+		...chapterImageKeys,
+		...positions.map((position) => toTopicVideoScenePlanKey(podcastEpisodeId, position)),
+		...(chapterCount > 0 ? Object.values(toTopicVideoAnimationKeys(podcastEpisodeId)) : []),
+	]
 }

@@ -44,6 +44,8 @@ type PlanConfig = {
 	// how many image regenerations the user may run in a UTC month, across topic, podcast episode, Topic Post, and
 	// film images
 	imageRegenerationLimit: number
+	// unique chapter picture animations funded in a UTC month
+	monthlyFilmAnimationLimit: number
 	// how many Topic Post Discussion regenerations the person may run in a UTC month
 	discussionRegenerationLimit: number
 	// how many images one Topic Post's body may hold, and the most bytes one body image file may hold
@@ -90,6 +92,7 @@ export const PLANS = {
 		linkInviteMaxUses: 25,
 		inviteLimit: 30,
 		imageRegenerationLimit: 2,
+		monthlyFilmAnimationLimit: 1,
 		discussionRegenerationLimit: 2,
 		topicPostBodyImageLimit: 5,
 		topicPostBodyImageBytes: 5 * MEGABYTE,
@@ -115,6 +118,7 @@ export const PLANS = {
 		linkInviteMaxUses: 100,
 		inviteLimit: 30,
 		imageRegenerationLimit: 15,
+		monthlyFilmAnimationLimit: 3,
 		discussionRegenerationLimit: 10,
 		topicPostBodyImageLimit: 20,
 		topicPostBodyImageBytes: 10 * MEGABYTE,
@@ -140,6 +144,7 @@ export const PLANS = {
 		linkInviteMaxUses: 250,
 		inviteLimit: 50,
 		imageRegenerationLimit: 30,
+		monthlyFilmAnimationLimit: 7,
 		discussionRegenerationLimit: 20,
 		topicPostBodyImageLimit: 40,
 		topicPostBodyImageBytes: 10 * MEGABYTE,

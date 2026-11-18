@@ -392,5 +392,5 @@ test("the intro's still comes from the larger original, or from the film-size jp
 
 	// a film with no image shows the podcast card
 	const noImageKeys = { imageOriginalKey: null, imageLargeOriginalKey: null }
-	expect(await loadShownImageStill(noImageKeys)).toMatchObject({ zoomLimit: 2, isPodcastCard: true })
+	expect(await loadShownImageStill(noImageKeys)).toMatchObject({ zoomLimit: 1.6, isPodcastCard: true })
 })

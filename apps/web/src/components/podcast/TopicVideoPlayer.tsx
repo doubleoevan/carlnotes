@@ -71,6 +71,7 @@ const playButtonElements: PodcastEpisodePlayButtonElements = {
 export const TOPIC_VIDEO_PLAYER_ELEMENTS: TopicVideoPlayerElements = {
 	Group: ({ children, className }) => <div className={className}>{children}</div>,
 	Card: ({ children }) => <div className={FILM_CARD_CLASS}>{children}</div>,
+	Title: ({ children, className }) => <h4 className={className}>{children}</h4>,
 	Surface: TopicVideoSurface,
 	PlayButton: ({ podcastEpisode, isPlaying, onPress }) => (
 		<SharedPodcastEpisodePlayButton

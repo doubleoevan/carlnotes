@@ -62,3 +62,11 @@ test("a chapter ends where its hot takes start, unless either would run under th
 		{ kind: "chapter", position: 1, startSeconds: 20, frameCount: 480 },
 	])
 })
+
+test("rounded chapter metadata cannot extend a film past the published recording", () => {
+	const timeline = toVideoTimeline({
+		chapterTimes: [{ position: 0, startSeconds: 0, endSeconds: 624.508 }],
+		durationSeconds: 623.88,
+	})
+	expect(timeline).toEqual([{ kind: "chapter", position: 0, startSeconds: 0, frameCount: 14973 }])
+})

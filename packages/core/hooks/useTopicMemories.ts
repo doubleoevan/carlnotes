@@ -20,7 +20,6 @@ type TopicMemoriesDialogState = {
 	pageNumber: number
 	isSaving: boolean
 	hasSaveError: boolean
-	hasReachedSavedTopicMemoryLimit: boolean
 	// both platform adapters call the same paging and feedback actions
 	handleRate: (item: TopicMemory, feedback: TopicMemoryFeedback) => void
 	handleOpenPage: (page: number) => void
@@ -65,10 +64,7 @@ export function useTopicMemories({
 	const mutation = useMutation({
 		mutationFn: ({ id, feedback }: { id: string; feedback: TopicMemoryFeedback }) =>
 			client.rate({ topicId, topicMemoryId: id, feedback }),
-		onSuccess: async ({ status }, { feedback }) => {
-			if (status === "savedTopicMemoryLimit") {
-				return
-			}
+		onSuccess: async (_result, { feedback }) => {
 			// a downvote without a correction removes the topic memory from the header count
 			if (feedback.rating === "down" && !feedback.note?.trim()) {
 				onTopicMemoryRemoved?.()
@@ -82,7 +78,6 @@ export function useTopicMemories({
 		pageNumber: shownPage,
 		isSaving: mutation.isPending,
 		hasSaveError: mutation.isError,
-		hasReachedSavedTopicMemoryLimit: mutation.data?.status === "savedTopicMemoryLimit",
 		handleRate: (item, feedback) => mutation.mutate({ id: item.id, feedback }),
 		handleOpenPage: setPageNumber,
 	}

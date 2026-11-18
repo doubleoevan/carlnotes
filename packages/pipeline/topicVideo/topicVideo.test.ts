@@ -8,21 +8,65 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { runFfmpeg } from "@carlnotes/models/ffmpeg"
 import sharp from "sharp"
+import { loadPodcastCardAnimationPath } from "./reviewedAnimation"
 import { detectPauseSeconds, toVideoCaptionCues, toWebVtt } from "./videoCaptions"
+import { rewriteVideoFilm, writeVideoFilm } from "./videoFilm"
 import { loadPodcastCardStillPng, PODCAST_CARD_ZOOM_LIMIT, toVideoStillPng } from "./videoFrames"
 import { renderVideoImageParts } from "./videoImageParts"
-import {
-	renderVideoChaptersPart,
-	rewriteVideoFilm,
-	type VideoChapterImages,
-	type VideoSegmentImage,
-	writeVideoFilm,
-} from "./videoParts"
+import { renderVideoChaptersPart, type VideoChapterImages, type VideoSegmentImage } from "./videoParts"
 import { toShotZoomLimit } from "./videoShots"
 import { toVideoTimeline, VIDEO_FRAMES_PER_SECOND } from "./videoTimeline"
 
 // whether ffmpeg and ffprobe are on this machine
 const isFfmpegMissing = !Bun.which("ffmpeg") || !Bun.which("ffprobe")
+
+// The steam may move above each mug. Both hosts, the microphone and the cups stay fixed in this illustration.
+test.skipIf(isFfmpegMissing)("only the steam above each mug moves in the host loop", async () => {
+	// Require the same registered artwork and silent loop that a film render selects.
+	const clip = await loadPodcastCardAnimationPath()
+	if (!clip) {
+		throw new Error("Missing motion for the film's host illustration")
+	}
+	const carlSteam = "w=208:h=328:x=312:y=108"
+	const viennaSteam = "w=220:h=332:x=852:y=152"
+	const filters = [
+		"[0:v]split=3[scene][carl][vienna]",
+		`[scene]drawbox=${carlSteam}:color=black:t=fill,drawbox=${viennaSteam}:color=black:t=fill[still]`,
+		`[carl]crop=${carlSteam}[leftSteam]`,
+		`[vienna]crop=${viennaSteam}[rightSteam]`,
+	]
+
+	// Compare decoded pixels across the loop, independently for the background and each plume.
+	const bytes = await runFfmpeg({
+		ffmpegArguments: [
+			"-i",
+			clip,
+			"-filter_complex",
+			filters.join(";"),
+			"-map",
+			"[still]",
+			"-map",
+			"[leftSteam]",
+			"-map",
+			"[rightSteam]",
+			"-f",
+			"framemd5",
+			"pipe:1",
+		],
+	})
+	const frameHashes = new TextDecoder()
+		.decode(bytes)
+		.split("\n")
+		.filter((line) => /^\d+,/u.test(line))
+	const hashesFor = (stream: number): string[] =>
+		frameHashes
+			.filter((line) => line.startsWith(`${stream},`))
+			.map((line) => line.slice(line.lastIndexOf(",") + 1).trim())
+	expect(hashesFor(0)).toHaveLength(144)
+	expect(new Set(hashesFor(0)).size).toBe(1)
+	expect(new Set(hashesFor(1)).size).toBeGreaterThan(1)
+	expect(new Set(hashesFor(2)).size).toBeGreaterThan(1)
+})
 
 // the fixture podcast episode's chapters, where the hosts turn to a Comment in the second one, its length, and the
 // lower thirds of its intro and sign-off
@@ -121,7 +165,11 @@ test.skipIf(isFfmpegMissing)(
 			podcastEpisodeId: "fixture-podcast-episode",
 			workDirectory,
 			segments,
-			shownImageStill: { stillPng: await filmImage.loadStillPng(), zoomLimit: filmImage.zoomLimit },
+			shownImageStill: {
+				isPodcastCard: false,
+				stillPng: await filmImage.loadStillPng(),
+				zoomLimit: filmImage.zoomLimit,
+			},
 			chapterImages: [...chapterImages.values()].flatMap((videoChapterImages) => videoChapterImages.images.slice(0, 1)),
 			introText: INTRO_TEXT,
 			signOffText: SIGN_OFF_TEXT,
@@ -194,7 +242,11 @@ test.skipIf(isFfmpegMissing)(
 			podcastEpisodeId: "fixture-podcast-episode",
 			workDirectory: rebuildDirectory,
 			segments,
-			shownImageStill: { stillPng: await newFilmImage.loadStillPng(), zoomLimit: newFilmImage.zoomLimit },
+			shownImageStill: {
+				isPodcastCard: false,
+				stillPng: await newFilmImage.loadStillPng(),
+				zoomLimit: newFilmImage.zoomLimit,
+			},
 			chapterImages: [],
 			introText: INTRO_TEXT,
 			signOffText: SIGN_OFF_TEXT,

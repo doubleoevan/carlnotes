@@ -278,18 +278,24 @@ export type TopicVideoBackfillStart = {
 /**
  * Starts the film backfill at a concurrency, or joins the one running.
  */
-export async function startTopicVideoBackfillWorkflow(concurrency: number): Promise<TopicVideoBackfillStart> {
-	// start the backfill under its fixed id
+export async function startTopicVideoBackfillWorkflow(
+	concurrency: number,
+	selectedEpisodeId?: string,
+): Promise<TopicVideoBackfillStart> {
+	// A selected upgrade joins its own retry independently of the boot backfill.
+	const workflowId = selectedEpisodeId
+		? `${TOPIC_VIDEO_BACKFILL_WORKFLOW_ID}-v4-${selectedEpisodeId}`
+		: TOPIC_VIDEO_BACKFILL_WORKFLOW_ID
 	const client = await getClient()
 	const toBackfillStart = (): TopicVideoBackfillStart => ({
-		whenFinished: () => client.workflow.getHandle(TOPIC_VIDEO_BACKFILL_WORKFLOW_ID).result(),
+		whenFinished: () => client.workflow.getHandle(workflowId).result(),
 	})
 	try {
 		await withClientDeadline(client, () =>
 			client.workflow.start(TOPIC_VIDEO_BACKFILL_WORKFLOW, {
 				taskQueue: TOPIC_VIDEO_BACKFILL_TASK_QUEUE,
-				workflowId: TOPIC_VIDEO_BACKFILL_WORKFLOW_ID,
-				args: [{ concurrency }],
+				workflowId,
+				args: [selectedEpisodeId ? { concurrency: 1, selectedEpisodeId } : { concurrency }],
 			}),
 		)
 	} catch (error) {

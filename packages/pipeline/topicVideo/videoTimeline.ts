@@ -45,7 +45,12 @@ export function toVideoTimeline({
 	durationSeconds,
 }: ToVideoTimelineOptions): VideoSegment[] {
 	// the chapters in order, with each one ending where the next one starts
-	const orderedChapterTimes = chapterTimes.toSorted((first, second) => first.startSeconds - second.startSeconds)
+	const boundedTimes = chapterTimes.map((chapter) => ({
+		...chapter,
+		startSeconds: Math.max(0, Math.min(durationSeconds, chapter.startSeconds)),
+		endSeconds: Math.max(0, Math.min(durationSeconds, chapter.endSeconds)),
+	}))
+	const orderedChapterTimes = boundedTimes.toSorted((first, second) => first.startSeconds - second.startSeconds)
 	const firstStartSeconds = orderedChapterTimes[0]?.startSeconds ?? durationSeconds
 	const lastEndSeconds = orderedChapterTimes.at(-1)?.endSeconds ?? durationSeconds
 	const chapterSegments = orderedChapterTimes.flatMap((chapterTime, i): VideoSegment[] => {

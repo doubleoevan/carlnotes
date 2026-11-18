@@ -11,7 +11,11 @@ import { Context } from "@temporalio/activity"
 const HEARTBEAT_INTERVAL_MS = 30_000
 
 // the podcast episode, and whether the platform pays for its film, as the backfill does
-export type RenderTopicVideoActivityInput = { podcastEpisodeId: string; isPlatformBilled?: boolean }
+export type RenderTopicVideoActivityInput = {
+	podcastEpisodeId: string
+	isPlatformBilled?: boolean
+	renderVersion?: 3 | 4
+}
 
 /**
  * Renders a podcast episode's film, heartbeating every 30 seconds, and stops the render once the attempt is cancelled.
@@ -19,8 +23,12 @@ export type RenderTopicVideoActivityInput = { podcastEpisodeId: string; isPlatfo
 export function renderTopicPodcastEpisodeVideoActivity({
 	podcastEpisodeId,
 	isPlatformBilled,
+	renderVersion,
 }: RenderTopicVideoActivityInput): Promise<RenderTopicVideoResult> {
-	return runWithHeartbeat((signal) => renderTopicVideo({ podcastEpisodeId, isPlatformBilled, signal }))
+	const isRetry = renderVersion === 4 && Context.current().info.attempt > 1
+	return runWithHeartbeat((signal) =>
+		renderTopicVideo({ podcastEpisodeId, isPlatformBilled, renderVersion, isRetry, signal }),
+	)
 }
 
 /**
@@ -46,7 +54,7 @@ async function runWithHeartbeat<StepResult>(
 }
 
 // the podcast episode whose film failed, and the failure's reason
-export type MarkTopicVideoFailedInput = { podcastEpisodeId: string; reason: string }
+export type MarkTopicVideoFailedInput = { podcastEpisodeId: string; reason: string; renderVersion?: 3 | 4 }
 
 /**
  * Marks a podcast episode's film failed after its last attempt.
@@ -54,6 +62,7 @@ export type MarkTopicVideoFailedInput = { podcastEpisodeId: string; reason: stri
 export function markTopicPodcastEpisodeVideoFailedActivity({
 	podcastEpisodeId,
 	reason,
+	renderVersion,
 }: MarkTopicVideoFailedInput): Promise<void> {
-	return markTopicVideoFailed(podcastEpisodeId, reason)
+	return markTopicVideoFailed(podcastEpisodeId, reason, renderVersion)
 }

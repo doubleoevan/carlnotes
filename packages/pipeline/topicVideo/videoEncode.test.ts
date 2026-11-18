@@ -171,3 +171,23 @@ test("the rebuild copies the audio and captions from the current film", () => {
 	}).join(" ")
 	expect(remuxArguments).toContain("-map 0:v -map 1:a -map 1:s -c copy")
 })
+
+test("animation uses the still's exact camera path and continues across the ten-frame dissolve", () => {
+	// Compare the native filter expressions for all four camera moves on the same source artwork.
+	for (const move of ["pan-left", "pan-right", "zoom-in", "zoom-out"] as const) {
+		const baseline = { ...MIDDLE_SHOT, move }
+		const original = toFilterGraph(toVideoShotArguments(baseline))
+		const animated = toFilterGraph(
+			toVideoShotArguments({
+				...baseline,
+				reviewedAnimationPath: "reviewed.webm",
+				previousShot: { ...baseline, reviewedAnimationPath: "outgoing.webm" },
+			}),
+		)
+		const camera = original.match(/zoompan=(.*?):d=\d+:/u)?.[1]
+		expect(camera).toBeDefined()
+		expect(animated).toContain(`zoompan=${camera}:d=1:`)
+		expect(animated).toContain("trim=start_frame=134:end_frame=144")
+		expect(animated).toContain("fade=t=out")
+	}
+})

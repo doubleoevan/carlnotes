@@ -149,8 +149,9 @@ The Journal SHALL read one page of active topic memories at a time. It SHALL sho
 
 #### Scenario: The owner reaches the saved topic memory limit
 
-- **WHEN** an owner or team lead tries to save a thirty-first active topic memory
-- **THEN** the Journal reports the cap without creating another saved topic memory
+- **WHEN** an owner or team lead rates another active topic memory after reaching the former threshold of thirty endorsements
+- **THEN** the Journal SHALL save the rating and its optional note
+- **AND** the rater SHALL be able to see and edit that feedback on reopening the Journal, including for a topic memory outside Carl’s ranked prompt selection
 
 #### Scenario: A guest opens a private Topic's Journal
 

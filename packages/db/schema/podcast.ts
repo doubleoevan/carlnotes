@@ -258,3 +258,21 @@ export const topicVideoSections = pgTable(
 		index("topic_video_sections_episode_id_idx").on(table.podcastEpisodeId),
 	],
 )
+
+// A reservation survives deleting its episode. Removing an account releases its monthly records.
+export const topicVideoAnimationUses = pgTable(
+	"topic_video_motion_uses",
+	{
+		id: primaryId(),
+		ownerId: text("owner_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		month: timestamp("month", { withTimezone: true }).notNull(),
+		sourceImageHash: text("asset").notNull(),
+		episodeId: text("episode_id").references(() => podcastEpisodes.id, { onDelete: "set null" }),
+	},
+	(table) => [
+		uniqueIndex("topic_video_motion_uses_owner_month_asset").on(table.ownerId, table.month, table.sourceImageHash),
+		index("topic_video_motion_uses_episode_idx").on(table.episodeId),
+	],
+)

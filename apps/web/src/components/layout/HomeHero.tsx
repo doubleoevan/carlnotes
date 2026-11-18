@@ -7,10 +7,12 @@ import {
 	HERO_TAGLINE,
 } from "@carlnotes/core/lib/homeHero"
 import { cn } from "@carlnotes/nightshift/classNames"
+import { useLocation } from "@tanstack/react-router"
 import { NoteIcon } from "@/components/branding/NoteIcon"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
+import { toSignupHref } from "@/components/session/signupPrompts"
 import { SECTION_LABEL_CLASS } from "@/lib/styleClasses"
 import type { toLinkClickHandler } from "@/lib/utils"
 
@@ -22,34 +24,39 @@ const HERO_NOTE_TOOLTIP = "A note from Carl"
  * search bar on the home page itself.
  */
 export function HomeHero({ onHomeClick }: { onHomeClick: ReturnType<typeof toLinkClickHandler> | undefined }) {
+	const returnPath = useLocation({ select: (location) => location.pathname + location.searchStr })
 	return (
-		<div className="grid grid-cols-[min(50%,8.5rem)_minmax(0,1fr)] items-end gap-x-4 pt-1 pb-6 min-[370px]:grid-cols-[min(50%,9.25rem)_minmax(0,1fr)] min-[460px]:grid-cols-[7.25rem_minmax(0,1fr)] min-[704px]:grid-cols-[6.25rem_minmax(0,1fr)] md:grid-cols-[14rem_minmax(0,1fr)] md:pt-3 lg:grid-cols-[13rem_minmax(0,1fr)]">
+		<div className="grid grid-cols-[min(47%,11.5rem)_minmax(0,1fr)] gap-x-3 pt-1 pb-6 md:gap-x-4 min-[460px]:grid-cols-[8rem_minmax(0,1fr)] min-[704px]:grid-cols-[6.25rem_minmax(0,1fr)] md:grid-cols-[20rem_minmax(0,1fr)] md:pt-3 lg:grid-cols-[16rem_minmax(0,1fr)]">
 			{/* align the illustration with the search bar's icon and let it extend behind the bar */}
 			<AnchorLink
 				href="/"
 				onClick={onHomeClick}
 				aria-label="CarlNotes home"
-				className="-mb-2 ml-[calc(0.75rem+1px)] md:-mb-4"
+				className="relative -mb-2 ml-[calc(0.75rem+1px)] md:-mb-4"
 			>
 				<img
 					src="/carl-hero.png"
 					width={HERO_IMAGE_SIZE.width}
 					height={HERO_IMAGE_SIZE.height}
 					alt={HERO_IMAGE_ALT}
-					className="h-auto w-full rounded-lg"
+					className="absolute inset-0 h-full w-full rounded-lg object-cover object-[34%_center]"
 				/>
 			</AnchorLink>
 			{/* the pitch moves into the note button when it needs more room */}
 			<div
-				className="animate-hydrate min-w-0 self-center pb-1.5 text-[0.8125rem] leading-tight wrap-break-word md:text-sm"
+				className="animate-hydrate min-w-0 py-3 md:py-4 text-sm leading-snug wrap-break-word md:text-base md:leading-normal"
 				style={{ animationDelay: "80ms" }}
 			>
-				<p className="hidden max-w-xl md:block">{CARL_PITCH}</p>
-				<p className="font-bold md:mt-3">
-					{HERO_CALL_TO_ACTION}
+				<p className="hidden max-w-prose text-pretty md:block">{CARL_PITCH}</p>
+				<p className="max-w-prose font-normal leading-tight md:mt-2">
+					{HERO_CALL_TO_ACTION.opening}{" "}
+					<AnchorLink href={toSignupHref("new-topic", returnPath)} className="font-bold underline underline-offset-2">
+						{HERO_CALL_TO_ACTION.linkText}
+					</AnchorLink>{" "}
+					{HERO_CALL_TO_ACTION.closing}
 					<PitchButton />
 				</p>
-				<p className="text-hero-accent mt-1 font-bold">
+				<p className="text-hero-accent mt-1 font-bold leading-tight">
 					<AnchorLink href="/" onClick={onHomeClick} className="hover:underline">
 						{HERO_TAGLINE}
 					</AnchorLink>

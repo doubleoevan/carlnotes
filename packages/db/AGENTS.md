@@ -350,8 +350,12 @@ shared Comments for its discussion and, for one reader, its chat. `store.ts` hol
 
 `schema/topicMemories.ts` stores Topic Memories, year or month or day event dates, each rater's feedback, and exact decision records.
 `topicMemoryGroups.ts` computes reversible groups within the same subject, claim type and value. `topicMemories.ts` applies access
-filtering before grouping, selects one ranked claim per group for prompts, and enforces the saved topic memory
-limit under the Topic lock. A page request past the grouped count returns the current last page in the same read.
+filtering before grouping and selects a bounded set of ranked claims for prompts. An owner or team lead may rate
+every active topic memory. The Topic lock protects concurrent feedback writes. A page request past the grouped count returns the current last page in the same read.
 Each rater reads their own saved note.
 
 Topic memory subject aliases are private to a Topic. `schema/topicMemories.ts` stores canonical names and aliases with a linked public Finding.
+
+`topicVideoAnimationQuota.ts` locks the owner when reserving an eligible picture for the UTC month across their films. Removing a film keeps its monthly slot. Deleting the episode row clears the reservation’s episode reference. Removing the account clears its reservations.
+
+`topicMemoryFeedback.ts` checks the rater under the Topic lock and saves the vote and optional note together.

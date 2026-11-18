@@ -5,11 +5,11 @@
 The api, the web service, and the worker SHALL each write one JSON log line a minute with the process's name, the
 instance it runs as, which is its host's name, the pool's `totalCount`, `idleCount`, and `waitingCount`, and the event
 loop delay's p99 and largest value over the minute, after which the delay histogram SHALL reset. The instance tells one
-replica's lines from another's. The web service's line SHALL name the process `web`, and a worker started in a role
-SHALL name that role in its line, so a film replica's lines are told apart from a main worker's. The worker's line
+replica's lines from another's. The web service's line SHALL name the process `web`, and a worker started in a queue group
+SHALL name that queue group in its line, so a film replica's lines are told apart from a main worker's. The worker's line
 SHALL also include the scan queue's poller count, backlog depth, and the oldest pending task's age, and the same three
 numbers for the scheduled scan queue `topic-scans-scheduled`, the scheduled chapter queue
-`episode-scheduled-chapters`, and the film queue `episode-videos`. A worker in a role SHALL include only the queues
+`episode-scheduled-chapters`, and the film queue `episode-videos`. A worker in a queue group SHALL include only the queues
 its role polls. The api's and the web service's lines SHALL also include whether the Redis client is connected and the
 minute's cache hits, cache misses, and Redis errors, after which those counts reset, the page renders the minute
 started and the renders it shed, after which those counts reset too, and how many podcast cover draws wait in the
@@ -40,13 +40,13 @@ The log line SHALL be written whether or not any telemetry key is set.
 
 #### Scenario: A film replica reports the film queue
 
-- **WHEN** a worker in the `films` role writes its minute line
-- **THEN** the line names the role and has the film queue's pollers, depth, and oldest age, and no scan queue's
+- **WHEN** a worker in the `films` queue group writes its minute line
+- **THEN** the line names the queue group and has the film queue's pollers, depth, and oldest age, and no scan queue's
 
 #### Scenario: A main worker reports its queues
 
-- **WHEN** a worker in the `main` role writes its minute line
-- **THEN** the line names the role and has the pollers, depth, and oldest age of the scan queue, the scheduled scan
+- **WHEN** a worker in the `main` queue group writes its minute line
+- **THEN** the line names the queue group and has the pollers, depth, and oldest age of the scan queue, the scheduled scan
   queue, and the scheduled chapter queue
 
 #### Scenario: Waiting cover draws show in the line
@@ -154,8 +154,8 @@ the crossing SHALL still appear in the minute log and nothing SHALL be sent.
 ### Requirement: The worker serves its demand gauges at a Prometheus endpoint
 
 The worker SHALL serve its demand as gauges at a Prometheus endpoint in its own process, for the platform's autoscaling
-to read. A worker in the `films` role SHALL serve film demand: the renders it is running plus the film queue's backlog
-divided by the queue's pollers. A worker in the `main` role SHALL serve scan demand at the same endpoint, from the scan
+to read. A worker in the `films` queue group SHALL serve film demand: the renders it is running plus the film queue's backlog
+divided by the queue's pollers. A worker in the `main` queue group SHALL serve scan demand at the same endpoint, from the scan
 work it is running and the scan queues' backlog.
 
 #### Scenario: A film backlog raises film demand

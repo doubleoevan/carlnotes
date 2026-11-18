@@ -1,7 +1,7 @@
 // the lines the app shows while waiting for a response. each one has to finish the sentence "Carl is ___"
 
 export const THINKING_LINES = [
-	"consulting the raccoon",
+	"making power moves",
 	"grinding beans",
 	"reading the footnotes to the footnotes",
 	"having epiphanies",
@@ -17,7 +17,7 @@ export const THINKING_LINES = [
 	"connecting the dots",
 	"following the money",
 	"reading the note he left for future Carl",
-	"cross-examining the raccoon",
+	"cross-examining the witnesses",
 	"reopening cold cases",
 	"asking for his lawyer",
 	"squinting at the fine print",
@@ -31,7 +31,6 @@ export const THINKING_LINES = [
 	"on a mission",
 	"on a quest",
 	"on a great adventure",
-	"ignoring the raccoon's legal advice",
 	"in the eye of the hurricane",
 	"making it weird",
 	"bending the spacetime continuum",
@@ -68,6 +67,7 @@ export const THINKING_LINES = [
 	"opening Pandora's box",
 	"getting a second opinion",
 	"working the night shift",
+	"saving the best part for last",
 ]
 
 // what is left of the current shuffle, refilled once the last line is dealt

@@ -2,6 +2,7 @@
 
 import { reportError } from "@carlnotes/server/monitoring"
 import { LangfuseClient } from "@langfuse/client"
+import animateChapterPictureTemplate from "./animate-chapter-picture.md" with { type: "text" }
 import attachContextTemplate from "./attach-context.md" with { type: "text" }
 import attachImageContextTemplate from "./attach-image-context.md" with { type: "text" }
 import chatConductTemplate from "./chat-conduct.md" with { type: "text" }
@@ -25,6 +26,7 @@ import currentDayContextTemplate from "./current-day-context.md" with { type: "t
 import judgeTopicMemoryDuplicatesTemplate from "./judge-topic-memory-duplicates.md" with { type: "text" }
 import moderateUserTextTemplate from "./moderate-user-text.md" with { type: "text" }
 import outlinePodcastEpisodeTemplate from "./outline-podcast-episode.md" with { type: "text" }
+import planPictureAnimationTemplate from "./plan-picture-animation.md" with { type: "text" }
 import podcastEpisodeHostsTemplate from "./podcast-episode-hosts.md" with { type: "text" }
 import proposeTopicMemoriesTemplate from "./propose-topic-memories.md" with { type: "text" }
 import reconcileTopicMemoryClaimsTemplate from "./reconcile-topic-memory-claims.md" with { type: "text" }
@@ -64,6 +66,8 @@ export const FALLBACK_PROMPT_TEMPLATES = {
 	"search-topic": searchTopicTemplate,
 	"attach-context": attachContextTemplate,
 	"attach-image-context": attachImageContextTemplate,
+	"plan-picture-animation": planPictureAnimationTemplate,
+	"animate-chapter-picture": animateChapterPictureTemplate,
 	"chat-topic": chatTopicTemplate,
 	"chat-propose-topic-edit": chatProposeTopicEditTemplate,
 	"chat-preview-topic-edit": chatPreviewTopicEditTemplate,

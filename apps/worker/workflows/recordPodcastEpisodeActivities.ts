@@ -11,7 +11,7 @@ import {
 import type { PodcastEpisodeOutline } from "@carlnotes/pipeline/podcast/podcastEpisodeOutline"
 import { type PodcastEpisodeSegment, RejectedScriptError } from "@carlnotes/pipeline/podcast/podcastEpisodeScript"
 import * as writePodcastEpisodeScript from "@carlnotes/pipeline/podcast/writePodcastEpisodeScript"
-import { topicVideoConcurrency } from "@carlnotes/server/podcastEpisodeSettings"
+import { newTopicVideoRenderVersion, topicVideoConcurrency } from "@carlnotes/server/podcastEpisodeSettings"
 import { ApplicationFailure, activityInfo } from "@temporalio/activity"
 
 // the plan, the encode, the publish, and the failure are exported as they are. each throws only on an unexpected error
@@ -125,4 +125,9 @@ export async function isTopicPodcastEpisodeVideoEnabled(): Promise<boolean> {
 		return false
 	}
 	return !(await loadSpendControlSettings()).isTopicVideoRenderingPaused
+}
+
+/** Records the admitted render version in workflow history, so a retry survives a rollout or rollback. */
+export async function selectNewTopicVideoRenderVersion(): Promise<3 | 4 | false> {
+	return (await isTopicPodcastEpisodeVideoEnabled()) ? newTopicVideoRenderVersion() : false
 }

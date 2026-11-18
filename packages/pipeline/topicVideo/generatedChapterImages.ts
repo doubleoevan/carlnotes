@@ -309,7 +309,7 @@ type IsGeneratedChapterImageAllowedOptions = { jpegBytes: Uint8Array; podcastEpi
 
 // whether a generated image may be shown: the image moderation found no violation, or it was skipped with no moderation
 // key set. a violation, an image the moderation cannot read, and a failed check leave the image out
-async function isGeneratedChapterImageAllowed({
+export async function isGeneratedChapterImageAllowed({
 	jpegBytes,
 	podcastEpisodeId,
 	position,
