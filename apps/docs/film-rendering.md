@@ -44,8 +44,9 @@ per 720-hour month at this rate, including idle time. Film length, shot count an
 
 New film renders and poster rebuilds check resident memory across the worker process tree and allocated space in the attempt directory every second, and again before upload. The defaults are 6 GiB of memory and 1 GiB of temporary disk. Set `TOPIC_VIDEO_MEMORY_LIMIT_MIB` or `TOPIC_VIDEO_DISK_LIMIT_MIB` to lower either limit. An exhausted attempt aborts its downloads and encodes and removes its workspace before Temporal retries.
 
-Provision `temporal-films` on `nf-compute-400` with one replica, at least 2 GB temporary disk, 256 MiB shared
-memory and termination grace above two minutes. Use the same image, environment group and Temporal namespace
+Provision `temporal-films` on `nf-compute-400` with one replica, 2 GB of temporary disk, 64 MiB of shared
+memory and a 180-second termination grace period. Both the film benchmark and the graphics check ran with these
+disk and memory settings. Use the same image, production configuration and Temporal namespace
 as the main worker. Start it with `bun run temporal:films`. Confirm both film queues show its poller before switching
 `temporal-worker` to `bun run temporal:main` and registering the updated release pipeline. Each release brings up
 the compatible film worker before the main worker can dispatch the new version. Keep the compatible image
