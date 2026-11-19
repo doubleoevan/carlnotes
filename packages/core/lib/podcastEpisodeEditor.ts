@@ -35,17 +35,30 @@ export function isTopicVideoEditShown({
 	return canEditPodcastEpisode && Boolean(podcastEpisode?.video)
 }
 
+// the podcast episode whose film a topic page's Edit film edits, and the one its Edit podcast edits
+type TopicPageEditablePodcastEpisodes = {
+	topicVideoPodcastEpisode: PodcastEpisode | null
+	latestPodcastEpisode: PodcastEpisode | null
+}
+
 /**
- * Returns the podcast episode whose film a topic page's Edit film edits, the topic's latest film, or null if the
- * page's action menu does not offer Edit film.
+ * Returns the podcast episodes that a topic page's Edit film and Edit podcast edit: the podcast episode of the topic's
+ * latest film and the topic's latest podcast episode. Each is null if the page's action menu does not offer its
+ * option.
  */
-export function toTopicPageEditedPodcastEpisode(
-	topic: Pick<TopicResponse, "canEdit" | "podcast">,
-): PodcastEpisode | null {
-	const podcastEpisode = topic.podcast?.topicPodcastEpisodeVideoSection?.podcastEpisode
-	return podcastEpisode && isTopicVideoEditShown({ canEditPodcastEpisode: topic.canEdit, podcastEpisode })
-		? podcastEpisode
-		: null
+export function toTopicPageEditablePodcastEpisodes(
+	topic: Pick<TopicResponse, "canEdit" | "podcast" | "latestPodcastEpisode">,
+): TopicPageEditablePodcastEpisodes {
+	// the podcast episode of the topic's latest film, which the topic's editor may edit once the film is ready
+	const topicVideoPodcastEpisode = topic.podcast?.topicPodcastEpisodeVideoSection?.podcastEpisode ?? null
+	const isTopicVideoEditable = isTopicVideoEditShown({
+		canEditPodcastEpisode: topic.canEdit,
+		podcastEpisode: topicVideoPodcastEpisode,
+	})
+	return {
+		topicVideoPodcastEpisode: isTopicVideoEditable ? topicVideoPodcastEpisode : null,
+		latestPodcastEpisode: topic.canEdit ? topic.latestPodcastEpisode : null,
+	}
 }
 
 // what the Edit podcast form reads from the podcast episode's page: the podcast episode, its topic's name, and the

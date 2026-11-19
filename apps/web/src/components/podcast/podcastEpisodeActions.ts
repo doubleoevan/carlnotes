@@ -1,6 +1,6 @@
 // the options a podcast episode page gives the search bar's actions menu
 import type { PodcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpisodePage"
-import { EDIT_PODCAST_EPISODE_LABEL, isTopicVideoEditShown } from "@carlnotes/core/lib/podcastEpisodeEditor"
+import { isTopicVideoEditShown } from "@carlnotes/core/lib/podcastEpisodeEditor"
 import {
 	isPodcastEpisodeHomeOrderShown,
 	isPodcastEpisodeProfileOrderShown,
@@ -9,10 +9,10 @@ import {
 } from "@carlnotes/core/lib/podcastEpisodeHomeOrder"
 import { toPodcastEpisodeReportSubject } from "@carlnotes/core/lib/podcastEpisodeSocial"
 import { HOME_RANK_OPTION_LABELS, PROFILE_RANK_OPTION_LABELS } from "@carlnotes/core/lib/rankDialog"
-import { Home, ListOrdered, Pencil, Trash2 } from "lucide-react"
+import { Home, ListOrdered, Trash2 } from "lucide-react"
 import type { PodcastEpisodeDialog } from "@/components/podcast/PodcastEpisodeDialogs"
 import { isAddTopicToTeamShown } from "@/components/team/AddTopicToTeamButton"
-import { toAddTopicToTeamOption, toEditTopicVideoOption, toShareTopicOption } from "@/components/topic/TopicActions"
+import { toAddTopicToTeamOption, toEditOptions, toShareTopicOption } from "@/components/topic/TopicActions"
 import { type PageActionOption, useRegisterPageActions } from "@/stores/pageActionsStore"
 
 // the loaded page, whether the user is signed in, and the call that opens one of the menu's dialogs
@@ -23,8 +23,8 @@ type UseRegisterPodcastEpisodePageActionsOptions = {
 }
 
 /**
- * Registers the actions menu of a podcast episode's topic, with Edit film above Edit podcast, the home and profile
- * featured items, and Remove episode last.
+ * Registers the actions menu of a podcast episode's topic, with Edit topic, Edit film, and Edit podcast in the topic
+ * page's order, the home and profile featured items, and Remove episode last.
  */
 export function useRegisterPodcastEpisodePageActions({
 	podcastEpisodePage,
@@ -41,12 +41,12 @@ export function useRegisterPodcastEpisodePageActions({
 							? [toAddTopicToTeamOption(() => onOpenDialog("add-topic-to-team"))]
 							: []),
 						toShareTopicOption(() => onOpenDialog("share")),
-						...(podcastEpisodePage && isTopicVideoEditShown(podcastEpisodePage)
-							? [toEditTopicVideoOption(() => onOpenDialog("edit-film"))]
-							: []),
-						...(podcastEpisodePage?.canEditPodcastEpisode
-							? [{ label: EDIT_PODCAST_EPISODE_LABEL, Icon: Pencil, onSelect: () => onOpenDialog("edit") }]
-							: []),
+						// the podcast episode's edit permission is its topic's, so its editor edits the topic here too
+						...toEditOptions({
+							onEditTopic: podcastEpisodePage.canEditPodcastEpisode ? () => onOpenDialog("edit-topic-choice") : null,
+							onEditTopicVideo: isTopicVideoEditShown(podcastEpisodePage) ? () => onOpenDialog("edit-film") : null,
+							onEditPodcastEpisode: podcastEpisodePage.canEditPodcastEpisode ? () => onOpenDialog("edit") : null,
+						}),
 						...toPodcastEpisodeRankOptions(podcastEpisodePage, onOpenDialog),
 						...(podcastEpisodePage?.canRemovePodcastEpisode
 							? [{ label: "Remove episode", Icon: Trash2, onSelect: () => onOpenDialog("remove") }]

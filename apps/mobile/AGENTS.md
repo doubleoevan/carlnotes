@@ -381,10 +381,11 @@ closes the sheet. It compares the image's path, mapped through `toPlatformPath`,
 screen's own image is a plain image.
 `components/topic/EditImageDialog.tsx` is the Edit topic image and Edit podcast image sheet that the header image
 opens, and the Edit film sheet that the Edit film option opens from the action menu of the podcast episode screen and
-of the topic screen (`toEditTopicVideoOption` in `components/search/pageActionOptions.ts`, which also
-holds the Add topic to team and Share topic options and their labels, as both those screens' menus offer them), and
-`components/podcast/EditPodcastEpisodeDialog.tsx` the Edit podcast sheet of the podcast episode screen's menu, the
-web's dialogs of those names. `components/podcast/PodcastEpisodeHeader.tsx` holds that screen's header and
+of the topic screen, and `components/podcast/EditPodcastEpisodeDialog.tsx` the Edit podcast sheet of both screens'
+menus, the web's dialogs of those names. `toEditOptions` in `components/search/pageActionOptions.ts` lists Edit topic,
+Edit film, and Edit podcast in the web's order, and the file also holds the Add topic to team and Share topic options
+and their labels, as both those screens' menus offer them. `components/podcast/PodcastEpisodeHeader.tsx` holds the
+podcast episode screen's header and
 `components/podcast/PodcastEpisodeSkeleton.tsx` its loading state, the web's files of the same names, and `components/branding/NoteIconButton.tsx` the note tile as the button that opens a
 Topic roast sheet or a Topic Post's info sheet.
 `SearchRowTopicLink` in `components/search/SearchResultsList.tsx` opens a search row's or a news row's Topic without

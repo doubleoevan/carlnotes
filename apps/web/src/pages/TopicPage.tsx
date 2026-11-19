@@ -128,8 +128,9 @@ export function TopicPage() {
 						onToggleFollowTopic: () => void handleSubscriptionToggle(),
 						onRankHomeTopic: () => setOpenDialog("rank"),
 						onRankProfileTopic: () => setOpenDialog("rank-profile"),
-						onEditTopicVideo: () => setOpenDialog("edit-film"),
 						onEditTopic: () => setOpenDialog("edit-choice"),
+						onEditTopicVideo: () => setOpenDialog("edit-film"),
+						onEditPodcastEpisode: () => setOpenDialog("edit-podcast"),
 						onDeleteTopic: () => setOpenDialog("delete"),
 					}),
 					report: { subjectKind: "topic", subjectId: topic.id, subjectLabel: topic.name },
@@ -287,6 +288,7 @@ export function TopicPage() {
 						onSaveTopic={handleSaveTopic}
 						onTopicTeamsChanged={() => void reloadTopicPage()}
 						onTopicImageChanged={() => void reloadTopicPage()}
+						onPodcastEpisodeChanged={() => void reloadTopicPage()}
 						onRankTopic={handleRankTopic}
 						onTopicDeleted={async () => {
 							await reloadHomePage()

@@ -3,17 +3,18 @@ import { authClient } from "@carlnotes/client/authClient"
 import { type FetchTopicPageOptions, sendDeleteTopic, sendTopicSubscription } from "@carlnotes/client/topicClient"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
-import { useTopicVideoEditableImage } from "@carlnotes/core/hooks/useTopicVideoEditableImage"
-import { toTopicPageEditedPodcastEpisode } from "@carlnotes/core/lib/podcastEpisodeEditor"
+import { usePodcastEpisodeEditorPage } from "@carlnotes/core/hooks/useEditorPage"
+import { toTopicPageEditablePodcastEpisodes, toTopicVideoEditableImage } from "@carlnotes/core/lib/podcastEpisodeEditor"
 import { PROFILE_RANK_OPTION_LABELS } from "@carlnotes/core/lib/rankDialog"
 import { REQUEST_FAILED_TEXT } from "@carlnotes/core/lib/sessionCopy"
 import { toTopicActionLayout } from "@carlnotes/core/lib/topicActions"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { router } from "expo-router"
-import { ListOrdered, PawPrint, Pencil, Trash2, Users } from "lucide-react-native"
+import { ListOrdered, PawPrint, Trash2, Users } from "lucide-react-native"
 import { useState } from "react"
 import { Alert, View } from "react-native"
 import { ProfileRankDialog } from "@/components/common/RankDialog"
+import { EditPodcastEpisodeDialog } from "@/components/podcast/EditPodcastEpisodeDialog"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
@@ -21,7 +22,7 @@ import { PageActionMenu, type PageActionOption } from "@/components/search/PageA
 import {
 	ADD_TOPIC_TO_TEAM_LABEL,
 	toAddTopicToTeamOption,
-	toEditTopicVideoOption,
+	toEditOptions,
 	toShareTopicOption,
 } from "@/components/search/pageActionOptions"
 import { ShareTopic, ShareTopicSheet } from "@/components/share/ShareTopic"
@@ -157,22 +158,19 @@ export function TopicPageActions({
 			actionOptions.push(toAddTopicToTeamOption(() => setDialog("team")))
 		}
 		actionOptions.push(toShareTopicOption(() => setDialog("share")))
-		// Edit film, for a topic whose latest podcast episode has a film, leads the editing options, as on the web
-		actionOptions.push(...toEditTopicVideoOptions(topic, () => setDialog("edit-film")))
+		// the editing options in the web's order, then Delete topic
+		actionOptions.push(...toTopicEditOptions(topic, setDialog))
 		if (topic.canEdit) {
-			actionOptions.push(
-				{ label: "Edit topic", icon: Pencil, onSelect: () => setDialog("edit") },
-				{
-					label: "Delete topic",
-					icon: Trash2,
-					isDisabled: mutation.isPending,
-					onSelect: () =>
-						confirmDeleteTopic(topic, async () => {
-							await feed.reheat()
-							router.replace("/")
-						}),
-				},
-			)
+			actionOptions.push({
+				label: "Delete topic",
+				icon: Trash2,
+				isDisabled: mutation.isPending,
+				onSelect: () =>
+					confirmDeleteTopic(topic, async () => {
+						await feed.reheat()
+						router.replace("/")
+					}),
+			})
 		}
 	}
 	return (
@@ -197,9 +195,17 @@ export function TopicPageActions({
 	)
 }
 
-// Edit film for a user who may edit the topic's latest film, and no option for anyone else or a topic with no film
-function toEditTopicVideoOptions(topic: TopicResponse, onSelect: () => void): PageActionOption[] {
-	return toTopicPageEditedPodcastEpisode(topic) ? [toEditTopicVideoOption(onSelect)] : []
+// Edit topic for the topic's editor, with Edit film for a ready film and Edit podcast for a podcast episode
+function toTopicEditOptions(
+	topic: TopicResponse,
+	onOpenDialog: (dialog: TopicActionDialogKind) => void,
+): PageActionOption[] {
+	const { topicVideoPodcastEpisode, latestPodcastEpisode } = toTopicPageEditablePodcastEpisodes(topic)
+	return toEditOptions({
+		onEditTopic: topic.canEdit ? () => onOpenDialog("edit") : null,
+		onEditTopicVideo: topicVideoPodcastEpisode ? () => onOpenDialog("edit-film") : null,
+		onEditPodcastEpisode: latestPodcastEpisode ? () => onOpenDialog("edit-podcast") : null,
+	})
 }
 
 // a public topic's owner arranges their own profile's featured topics from inside the topic, as on the web
@@ -210,7 +216,7 @@ function toProfileRankOptions(topic: TopicResponse, onSelect: () => void): PageA
 }
 
 // the dialogs the topic's action menu opens, one at a time
-type TopicActionDialogKind = "edit" | "edit-film" | "team" | "share" | "rank-profile"
+type TopicActionDialogKind = "edit" | "edit-film" | "edit-podcast" | "team" | "share" | "rank-profile"
 
 // keep the chosen form mounted independently of the menu
 function TopicActionDialog({
@@ -224,15 +230,25 @@ function TopicActionDialog({
 	onClose: () => void
 	onRefresh: () => void
 }) {
-	// the podcast episode of the topic's latest film, for a user who may edit it
-	const editedPodcastEpisode = toTopicPageEditedPodcastEpisode(topic)
+	// the podcast episodes that Edit film and Edit podcast edit, for a user who may edit them
+	const { topicVideoPodcastEpisode, latestPodcastEpisode } = toTopicPageEditablePodcastEpisodes(topic)
 	return (
 		<>
-			{/* the image sheet of the topic's latest film, which the action menu's Edit film opens */}
-			{dialog === "edit-film" && editedPodcastEpisode && (
-				<TopicVideoImageDialog
-					podcastEpisode={editedPodcastEpisode}
-					onImageChanged={onRefresh}
+			{/* the image sheet of the topic's latest film, which the action menu's Edit film opens, and the Edit podcast
+			    sheet of the topic's latest podcast episode */}
+			{dialog === "edit-film" && topicVideoPodcastEpisode && (
+				<PodcastEpisodeEditorDialog
+					dialog={dialog}
+					podcastEpisode={topicVideoPodcastEpisode}
+					onPodcastEpisodeChanged={onRefresh}
+					onClose={() => onClose()}
+				/>
+			)}
+			{dialog === "edit-podcast" && latestPodcastEpisode && (
+				<PodcastEpisodeEditorDialog
+					dialog={dialog}
+					podcastEpisode={latestPodcastEpisode}
+					onPodcastEpisodeChanged={onRefresh}
 					onClose={() => onClose()}
 				/>
 			)}
@@ -259,27 +275,45 @@ function TopicActionDialog({
 	)
 }
 
-// the podcast episode whose film's image the sheet edits, the call after each new image is in place, and the close
-type TopicVideoImageDialogProps = {
+// the option's sheet, the podcast episode it edits, the call after a save or a new film image, and the close
+type PodcastEpisodeEditorDialogProps = {
+	dialog: Extract<TopicActionDialogKind, "edit-film" | "edit-podcast">
 	podcastEpisode: PodcastEpisode
-	onImageChanged: () => void
+	onPodcastEpisodeChanged: () => void
 	onClose: () => void
 }
 
-// the Edit film sheet on the topic screen, which opens once the podcast episode's page loads with the editor's view
-// of the film's image. a page that does not load reports it and closes
-function TopicVideoImageDialog({ podcastEpisode, onImageChanged, onClose }: TopicVideoImageDialogProps) {
-	const editableImage = useTopicVideoEditableImage({
+// the Edit film or Edit podcast sheet on the topic screen, which opens once the podcast episode's page loads with the
+// editor's view of the podcast episode and its film. a page that does not load reports it and closes
+function PodcastEpisodeEditorDialog({
+	dialog,
+	podcastEpisode,
+	onPodcastEpisodeChanged,
+	onClose,
+}: PodcastEpisodeEditorDialogProps) {
+	const podcastEpisodePage = usePodcastEpisodeEditorPage({
 		podcastEpisode,
 		onLoadFailed: () => {
 			showClientError(REQUEST_FAILED_TEXT)
 			onClose()
 		},
 	})
-	if (!editableImage) {
+	if (!podcastEpisodePage) {
 		return null
 	}
-	return <EditImageDialog editableImage={editableImage} onImageChanged={onImageChanged} onClose={onClose} />
+	return dialog === "edit-film" ? (
+		<EditImageDialog
+			editableImage={toTopicVideoEditableImage(podcastEpisodePage)}
+			onImageChanged={onPodcastEpisodeChanged}
+			onClose={onClose}
+		/>
+	) : (
+		<EditPodcastEpisodeDialog
+			podcastEpisodePage={podcastEpisodePage}
+			onPodcastEpisodeChanged={onPodcastEpisodeChanged}
+			onClose={onClose}
+		/>
+	)
 }
 
 // the signed-in state for the active Topic

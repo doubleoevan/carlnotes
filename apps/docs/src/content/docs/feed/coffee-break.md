@@ -132,9 +132,9 @@ Cinema on the episode's page says **Carl and Vienna are filming...**, and so doe
 film yet. The film takes its place when it is ready, with no reload.
 
 Carl draws the film's image the first time the film is made, from what the episode covers. Until it is drawn, the film
-opens on the episode's image. A topic's editor can change it. Pick **Edit film** in the **⋮** actions menu, right
-above **Edit podcast** on the episode's page and right after **Share topic** on the topic's page, where it edits the
-topic's latest film. Type an **Image prompt** and press **Regenerate** for a new image, or press the image to upload
+opens on the episode's image. A topic's editor can change it. Pick **Edit film** in the **⋮** actions menu of the
+podcast episode's page or the topic's page, between **Edit topic** and **Edit podcast**. On the topic's page it edits
+the topic's latest film. Type an **Image prompt** and press **Regenerate** for a new image, or press the image to upload
 your own JPEG, PNG, or WebP, which is cropped to the film's wide frame. Each change saves on its own, so the window
 has no Save button. A regeneration counts toward the same monthly limit as your other
 [images](/docs/topics/topic-and-podcast-visions/#regenerate). The poster changes at once, and the film's opening and
@@ -255,8 +255,9 @@ brew](../../../assets/screenshots/podcast-switch.png)
 Below it, **Hot takes for Carl and Vienna** decides whether the podcast takes the hot takes the topic's editors
 share. It starts on, and only the owner can turn it off.
 
-A topic's editor can change a podcast episode's title, description, and image. Pick **Edit podcast** in the podcast
-episode page's **⋮** actions menu, change the fields, and press **Save**. The image changes save on their own, as
+A topic's editor can change a podcast episode's title, description, and image. Pick **Edit podcast** in the **⋮**
+actions menu of the podcast episode's page, or of the topic's page for its latest podcast episode, change the fields,
+and press **Save**. The image changes save on their own, as
 [Topic and podcast visions](/docs/topics/topic-and-podcast-visions/#edit-an-image) describes. A title or description
 that breaks the content rules is rejected.
 

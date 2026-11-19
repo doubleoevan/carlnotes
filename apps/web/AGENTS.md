@@ -559,9 +559,9 @@ as the popup's one link to the page. It reads the open page from the router, and
 plain image. Every image that opens its page goes through it, never its own link.
 `components/topic/EditImageDialog.tsx` is the Edit topic image and Edit podcast
 image dialog that the header image opens, and the Edit film dialog that the Edit film option opens from the actions
-menu of the podcast episode page and of the topic page (`toEditTopicVideoOption` in
-`components/topic/TopicActions.tsx`), and `components/podcast/EditPodcastEpisodeDialog.tsx` the Edit podcast dialog
-of the podcast episode page's actions menu.
+menu of the podcast episode page and of the topic page, and `components/podcast/EditPodcastEpisodeDialog.tsx` the
+Edit podcast dialog of both pages' actions menus. `toEditOptions` in `components/topic/TopicActions.tsx` lists
+Edit topic, Edit film, and Edit podcast in the order both menus share.
 `components/common/RankDialog.tsx` is the web's rows and frame for core's `RankDialog`, the list that orders featured
 topics, films, podcast episodes, or Topic Posts: the admin's home order list on a topic page and a podcast episode
 page, and a person's own featured items on their profile page, films among them, and on the page of one of their topics, podcast

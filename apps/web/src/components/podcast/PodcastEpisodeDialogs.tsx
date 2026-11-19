@@ -1,16 +1,20 @@
 import { sendPodcastEpisodeHomeOrder, sendTopicVideoHomeOrder } from "@carlnotes/client/podcastEpisodeClient"
 import { type PodcastEpisode, toHomePodcastEpisodeLabel } from "@carlnotes/contracts/podcast"
 import type { PodcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpisodePage"
+import { useTopicEditorPage } from "@carlnotes/core/hooks/useEditorPage"
 import { toPodcastEpisodeTitleLabel } from "@carlnotes/core/lib/labels"
 import { toPodcastEpisodeEditableImage, toTopicVideoEditableImage } from "@carlnotes/core/lib/podcastEpisodeEditor"
 import { type FeaturedOrderMove, toHomeRankDialogLabels } from "@carlnotes/core/lib/rankDialog"
-import { SAVE_FAILED_TEXT } from "@carlnotes/core/lib/sessionCopy"
+import { REQUEST_FAILED_TEXT, SAVE_FAILED_TEXT } from "@carlnotes/core/lib/sessionCopy"
 import { toast } from "sonner"
 import { ProfileRankDialog, RankDialog } from "@/components/common/RankDialog"
 import { ShareTopic } from "@/components/share/ShareTopic"
 import { AddTopicToTeamDialog } from "@/components/team/AddTopicToTeamDialog"
 import { EditImageDialog } from "@/components/topic/EditImageDialog"
+import { EditTopicModal } from "@/components/topic/EditTopicModal"
+import { TopicEditorChoiceDialog } from "@/components/topic/TopicEditorChoiceDialog"
 import { sendFeaturedOrderMoves } from "@/lib/featuredOrderMoves"
+import { useTopicFeed } from "@/providers/TopicFeedProvider"
 import { EditPodcastEpisodeDialog } from "./EditPodcastEpisodeDialog"
 import { RemovePodcastEpisodeDialog } from "./RemovePodcastEpisodeDialog"
 
@@ -18,6 +22,8 @@ import { RemovePodcastEpisodeDialog } from "./RemovePodcastEpisodeDialog"
 export type PodcastEpisodeDialog =
 	| "share"
 	| "add-topic-to-team"
+	| "edit-topic-choice"
+	| "edit-topic"
 	| "edit"
 	| "edit-film"
 	| "edit-image"
@@ -56,6 +62,17 @@ export function PodcastEpisodeDialogs({
 			{openDialog === "add-topic-to-team" && (
 				<AddTopicToTeamDialog topic={topic} onTopicTeamsChanged={onPodcastEpisodePageChanged} onClose={handleClose} />
 			)}
+			{/* the actions menu's Edit topic choice, then the topic's form if the user picks it */}
+			{openDialog === "edit-topic-choice" && (
+				<TopicEditorChoiceDialog
+					topicId={topic.id}
+					onChooseTopicForm={() => onOpenDialog("edit-topic")}
+					onClose={handleClose}
+				/>
+			)}
+			{openDialog === "edit-topic" && (
+				<TopicFormDialog topicId={topic.id} onTopicChanged={onPodcastEpisodePageChanged} onClose={handleClose} />
+			)}
 			{/* the actions menu's Edit podcast dialog */}
 			{openDialog === "edit" && (
 				<EditPodcastEpisodeDialog
@@ -86,6 +103,44 @@ export function PodcastEpisodeDialogs({
 				/>
 			)}
 		</>
+	)
+}
+
+// the topic whose form opens, the reload after a save or a new image, and the close
+type TopicFormDialogProps = {
+	topicId: string
+	onTopicChanged: () => void
+	onClose: () => void
+}
+
+// the Edit topic form on the podcast episode page, which opens once the topic's page loads. a page that does not load
+// reports it and closes
+function TopicFormDialog({ topicId, onTopicChanged, onClose }: TopicFormDialogProps) {
+	const { reloadTopicFeed } = useTopicFeed()
+	const topic = useTopicEditorPage({
+		topicId,
+		onLoadFailed: () => {
+			toast.error(REQUEST_FAILED_TEXT)
+			onClose()
+		},
+	})
+	if (!topic) {
+		return null
+	}
+
+	// a save closes the form and reloads this page and the homepage feed behind it
+	const handleTopicSaved = async (): Promise<void> => {
+		onClose()
+		onTopicChanged()
+		await reloadTopicFeed()
+	}
+	return (
+		<EditTopicModal
+			topic={topic}
+			onClose={onClose}
+			onTopicSaved={handleTopicSaved}
+			onTopicImageChanged={onTopicChanged}
+		/>
 	)
 }
 

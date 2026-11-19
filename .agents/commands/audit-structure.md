@@ -1042,6 +1042,9 @@ Check for:
      `setFeaturedOrder`, `releaseFeaturedOrder`, `isHomeFeaturedOnly`, `toFeaturedOnlyFilter`,
      `isPageTopicPostFeatured`, `isTopicPostFeaturable`, and `home-featured-only`). the 0.1.0 contract's `pinned…Count`
      fields and the `spend_control_settings.is_home_pinned_only` column keep the old name
+   - `packages/core/hooks/useTopicVideoEditableImage.ts` and `useTopicVideoEditableImage` (now `useEditorPage.ts` with
+     `usePodcastEpisodeEditorPage` and `useTopicEditorPage`), `toTopicPageEditedPodcastEpisode` (now
+     `toTopicPageEditablePodcastEpisodes`), and `toEditTopicVideoOption` in both apps (now `toEditOptions`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

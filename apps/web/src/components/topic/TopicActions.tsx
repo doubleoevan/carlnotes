@@ -3,9 +3,13 @@ import type { TopicActionContext, TopicActionLayout } from "@carlnotes/core/lib/
 export { toTopicActionLayout } from "@carlnotes/core/lib/topicActions"
 
 import type { TopicResponse } from "@carlnotes/contracts/topics"
-import { EDIT_TOPIC_VIDEO_LABEL, toTopicPageEditedPodcastEpisode } from "@carlnotes/core/lib/podcastEpisodeEditor"
+import {
+	EDIT_PODCAST_EPISODE_LABEL,
+	EDIT_TOPIC_VIDEO_LABEL,
+	toTopicPageEditablePodcastEpisodes,
+} from "@carlnotes/core/lib/podcastEpisodeEditor"
 import { HOME_RANK_OPTION_LABELS, PROFILE_RANK_OPTION_LABELS } from "@carlnotes/core/lib/rankDialog"
-import { Clapperboard, Home, ListOrdered, PawPrint, Pencil, Share, Trash2, Users } from "lucide-react"
+import { Clapperboard, Home, ListOrdered, Mic, PawPrint, Pencil, Share, Trash2, Users } from "lucide-react"
 import type * as React from "react"
 import { ShareTopic } from "@/components/share/ShareTopic"
 import { AddTopicToTeamButton } from "@/components/team/AddTopicToTeamButton"
@@ -26,8 +30,9 @@ export function toTopicActionOptions({
 	onToggleFollowTopic,
 	onRankHomeTopic,
 	onRankProfileTopic,
-	onEditTopicVideo,
 	onEditTopic,
+	onEditTopicVideo,
+	onEditPodcastEpisode,
 	onDeleteTopic,
 }: {
 	topic: TopicResponse
@@ -38,10 +43,13 @@ export function toTopicActionOptions({
 	onToggleFollowTopic: () => void
 	onRankHomeTopic: () => void
 	onRankProfileTopic: () => void
-	onEditTopicVideo: () => void
 	onEditTopic: () => void
+	onEditTopicVideo: () => void
+	onEditPodcastEpisode: () => void
 	onDeleteTopic: () => void
 }): PageActionOption[] {
+	// the podcast episodes that Edit film and Edit podcast edit, each null if the menu does not offer its option
+	const { topicVideoPodcastEpisode, latestPodcastEpisode } = toTopicPageEditablePodcastEpisodes(topic)
 	return [
 		// the follow option leads the menu if Follow shows and is not the call to action
 		...(topicActionLayout.isSubscribeInMenu
@@ -61,16 +69,14 @@ export function toTopicActionOptions({
 			: []),
 		// the Add topic to team option opens its dialog if Join Team holds the bar's left
 		...(topicActionLayout.isAddTopicToTeamInMenu ? [toAddTopicToTeamOption(onAddTopicToTeam)] : []),
-		// sharing sits directly above editing, and Edit film, for a topic whose latest podcast episode has a film, leads
-		// the editing options
+		// sharing sits directly above the editing options, and Delete topic follows them
 		toShareTopicOption(onShareTopic),
-		...(toTopicPageEditedPodcastEpisode(topic) ? [toEditTopicVideoOption(onEditTopicVideo)] : []),
-		...(topic.canEdit
-			? [
-					{ label: "Edit topic", Icon: Pencil, onSelect: onEditTopic },
-					{ label: "Delete topic", Icon: Trash2, onSelect: onDeleteTopic },
-				]
-			: []),
+		...toEditOptions({
+			onEditTopic: topic.canEdit ? onEditTopic : null,
+			onEditTopicVideo: topicVideoPodcastEpisode ? onEditTopicVideo : null,
+			onEditPodcastEpisode: latestPodcastEpisode ? onEditPodcastEpisode : null,
+		}),
+		...(topic.canEdit ? [{ label: "Delete topic", Icon: Trash2, onSelect: onDeleteTopic }] : []),
 	]
 }
 
@@ -108,11 +114,28 @@ export function toShareTopicOption(onSelect: () => void): PageActionOption {
 	return { label: "Share topic", Icon: Share, onSelect }
 }
 
+// the calls that open the Edit topic, Edit film, and Edit podcast dialogs, each null if the page does not offer
+// that option
+type EditOptionsOptions = {
+	onEditTopic: (() => void) | null
+	onEditTopicVideo: (() => void) | null
+	onEditPodcastEpisode: (() => void) | null
+}
+
 /**
- * Returns the actions menu's Edit film option, which opens the film's image dialog.
+ * Returns the actions menu's editing options in the order that the topic page and the podcast episode page share:
+ * Edit topic, Edit film, then Edit podcast.
  */
-export function toEditTopicVideoOption(onSelect: () => void): PageActionOption {
-	return { label: EDIT_TOPIC_VIDEO_LABEL, Icon: Clapperboard, onSelect }
+export function toEditOptions({
+	onEditTopic,
+	onEditTopicVideo,
+	onEditPodcastEpisode,
+}: EditOptionsOptions): PageActionOption[] {
+	return [
+		...(onEditTopic ? [{ label: "Edit topic", Icon: Pencil, onSelect: onEditTopic }] : []),
+		...(onEditTopicVideo ? [{ label: EDIT_TOPIC_VIDEO_LABEL, Icon: Clapperboard, onSelect: onEditTopicVideo }] : []),
+		...(onEditPodcastEpisode ? [{ label: EDIT_PODCAST_EPISODE_LABEL, Icon: Mic, onSelect: onEditPodcastEpisode }] : []),
+	]
 }
 
 /**

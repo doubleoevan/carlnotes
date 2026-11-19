@@ -1,5 +1,6 @@
-// podcast episode editor tests: who sees Edit film on the podcast episode page and the topic page, the image the
-// film's image block opens with, and which image block reads an unchecked image's flag
+// podcast episode editor tests: who sees Edit film on the podcast episode page and the topic page, which podcast
+// episode a topic page's Edit podcast edits, the image the film's image block opens with, and which image block
+// reads an unchecked image's flag
 import { expect, test } from "bun:test"
 import { toPodcastEpisodeFixture, toTopicPodcastFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import { toTestTopicResponse } from "@carlnotes/contracts/topicFeedTestFixtures"
@@ -10,7 +11,7 @@ import {
 	isTopicVideoEditShown,
 	type PodcastEpisodeEditorPage,
 	toPodcastEpisodeEditableImage,
-	toTopicPageEditedPodcastEpisode,
+	toTopicPageEditablePodcastEpisodes,
 	toTopicVideoEditableImage,
 } from "./podcastEpisodeEditor"
 
@@ -45,9 +46,22 @@ test("Edit film hides for a user who may not edit, and for a podcast episode wit
 })
 
 test("a topic page's Edit film edits the topic's latest film, for the topic's editor alone", () => {
-	expect(toTopicPageEditedPodcastEpisode(toFilmTopic(true))).toBe(FILM_PODCAST_EPISODE)
-	expect(toTopicPageEditedPodcastEpisode(toFilmTopic(false))).toBeNull()
-	expect(toTopicPageEditedPodcastEpisode(toTestTopicResponse({ canEdit: true, podcast: null }))).toBeNull()
+	expect(toTopicPageEditablePodcastEpisodes(toFilmTopic(true)).topicVideoPodcastEpisode).toBe(FILM_PODCAST_EPISODE)
+	expect(toTopicPageEditablePodcastEpisodes(toFilmTopic(false)).topicVideoPodcastEpisode).toBeNull()
+	const noPodcastTopic = toTestTopicResponse({ canEdit: true, podcast: null })
+	expect(toTopicPageEditablePodcastEpisodes(noPodcastTopic).topicVideoPodcastEpisode).toBeNull()
+})
+
+test("a topic page's Edit podcast edits the topic's latest podcast episode, for the topic's editor alone", () => {
+	const latestPodcastEpisode = toPodcastEpisodeFixture({ video: null })
+	const toLatestPodcastEpisodeTopic = (canEdit: boolean): TopicResponse =>
+		toTestTopicResponse({ canEdit, latestPodcastEpisode })
+	expect(toTopicPageEditablePodcastEpisodes(toLatestPodcastEpisodeTopic(true)).latestPodcastEpisode).toBe(
+		latestPodcastEpisode,
+	)
+	expect(toTopicPageEditablePodcastEpisodes(toLatestPodcastEpisodeTopic(false)).latestPodcastEpisode).toBeNull()
+	const noPodcastEpisodeTopic = toTestTopicResponse({ canEdit: true, latestPodcastEpisode: null })
+	expect(toTopicPageEditablePodcastEpisodes(noPodcastEpisodeTopic).latestPodcastEpisode).toBeNull()
 })
 
 // the page fields of the podcast episode for an admin, who has no regeneration count

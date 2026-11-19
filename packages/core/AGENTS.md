@@ -569,10 +569,11 @@ with no tag, its byline's row, the podcast episode card at the right of its deta
 the right of its date row. `TopicImageEditor` edits a third kind of image, a Topic Post's, and a fourth, a film's own
 image (`topicVideo`), in the one layout: its `Image` element takes an `aspectRatio`, 16:9 for a film
 and 3:2 for every other image. `lib/podcastEpisodeEditor` builds the film's editable image from the podcast episode's
-page, and holds the Edit film label and who sees the option on a podcast episode page
-(`isTopicVideoEditShown`) and on a topic page, for the topic's latest film
-(`toTopicPageEditedPodcastEpisode`). `hooks/useTopicVideoEditableImage` reads the podcast episode's page
-for the topic page's Edit film. `lib/podcastEpisodeHomeOrder` says who sees the podcast episode page's Home and
+page, and holds the Edit film label, who sees the option on a podcast episode page (`isTopicVideoEditShown`), and
+which podcast episodes a topic page's Edit film and Edit podcast edit (`toTopicPageEditablePodcastEpisodes`).
+`hooks/useEditorPage` reads the page that an editor's dialog needs before it opens: a podcast episode's page for a
+topic page's Edit film and Edit podcast, and a topic's page for a podcast episode page's Edit topic.
+`lib/podcastEpisodeHomeOrder` says who sees the podcast episode page's Home and
 Featured rank options for podcasts and films.
 
 Topic Post Discussions and the Topic Post chat: `components/TopicPostDiscussionCard` shows a post's discussion on its
