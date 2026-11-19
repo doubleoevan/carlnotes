@@ -6,6 +6,8 @@ import {
 } from "@carlnotes/core/components/TopicVideoSection"
 import { type ComponentProps, type ComponentRef, type RefObject, useEffect, useMemo, useRef } from "react"
 import { type ScrollView, View } from "react-native"
+import { Button } from "@/components/primitives/button"
+import { Text } from "@/components/primitives/text"
 import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
 import { captureFilmVisitEvent } from "@/visitAnalytics"
 import { PodcastThemeSongNote } from "./PodcastThemeSongNote"
@@ -41,6 +43,7 @@ export function TopicVideoSection({ topic, onVideoRenderingPoll, scrollViewRef }
 			Player: TopicVideoPlayer,
 			RenderingCard: TopicVideoRenderingCard,
 			ProgressLine: UNPUBLISHED_PODCAST_EPISODE_CARD_ELEMENTS.ProgressLine,
+			NewFilmButton: NewFilmReadyButton,
 		}),
 		[scrollViewRef],
 	)
@@ -53,6 +56,15 @@ export function TopicVideoSection({ topic, onVideoRenderingPoll, scrollViewRef }
 			onVideoRenderingPoll={onVideoRenderingPoll}
 			elements={elements}
 		/>
+	)
+}
+
+// switch films when the viewer chooses the newly published one
+function NewFilmReadyButton({ label, onPress }: ComponentProps<TopicVideoSectionElements["NewFilmButton"]>) {
+	return (
+		<Button variant="secondary" className="self-start" accessibilityLabel={label} onPress={onPress}>
+			<Text>{label}</Text>
+		</Button>
 	)
 }
 

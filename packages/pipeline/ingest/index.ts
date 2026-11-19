@@ -26,10 +26,12 @@ import type {
 	Source,
 	SourceIngester,
 } from "./ingester"
+import { PaidSourceError } from "./ingester"
 import { toCanonicalUrl, toFallbackTitle } from "./normalize"
 import { podcastIngester } from "./podcast"
 import { redditIngester } from "./reddit"
 import { rssIngester } from "./rss"
+import { searchOncePerScan } from "./scanSearchResult"
 import { searchIngester } from "./search"
 import { urlIngester } from "./url"
 import { xIngester } from "./x"
@@ -60,7 +62,7 @@ type SourceOutcomeFields = { sourceId: string; sourceKind: string; label: string
 export type SourceOutcome =
 	| ({ status: "ok" } & SourceOutcomeFields & IngestResult)
 	| ({ status: "fallback" } & SourceOutcomeFields & IngestResult)
-	| ({ status: "failed"; reason: string } & SourceOutcomeFields)
+	| ({ status: "failed"; reason: string; costDollars?: number } & SourceOutcomeFields)
 	| ({ status: "skipped" } & SourceOutcomeFields)
 
 // a Resource that survived the merge, whether a custom Source found it, and the Source credited with it
@@ -99,18 +101,25 @@ export async function ingestFromTopicSources({
 		.where(eq(sources.topicId, topicId))
 		.orderBy(asc(sources.createdAt), asc(sources.id))
 
-	// run each Source through its ingester, with per-Source failures isolated, then label each outcome from its row
+	// Historical duplicate search Sources share the Scan's search allowance.
+	const searchSourceId = topicSources.find((source) => source.kind === "search" && source.status === "ready")?.id
+
+	// Track every Source, including skipped duplicate search Sources.
 	const ingestOutcome = await traceStage(
 		"ingest",
 		budget,
 		async () => {
 			const ranSourceOutcomes = await Promise.all(
-				topicSources.map((source) => ingestFromSource(source, { litellmApiKey, scanId })),
+				topicSources.map((source) => ingestFromSource(source, { litellmApiKey, scanId }, searchSourceId)),
 			)
 			const sourceOutcomes = await relabelSourceOutcomes(topicId, ranSourceOutcomes)
 			const summary = toScanSummary(sourceOutcomes)
 			// only a paid source like the web search reports a cost
-			charge(budget, "ingestion", summary.costDollars)
+			const searchOutcome = sourceOutcomes.find(
+				(outcome) => outcome.sourceKind === "search" && outcome.status !== "skipped",
+			)
+			const searchSpend = searchOutcome ? toSourceCost(searchOutcome) : 0
+			charge(budget, "ingestion", summary.costDollars - Math.min(budget.stageCosts.ingestion, searchSpend))
 			return { sourceOutcomes, summary }
 		},
 		(result) => ({ sourceCount: topicSources.length, foundCount: result.summary.foundCount }),
@@ -206,13 +215,13 @@ export function toScanSummary(outcomes: SourceOutcome[]): ScanSummary {
 			problemSources.push(problemSource)
 		}
 
-		// a failed or skipped Source contributes no Resources and no cost
+		// A failed paid Source can still have incurred model costs.
+		costDollars += toSourceCost(outcome)
 		if (outcome.status !== "ok" && outcome.status !== "fallback") {
 			continue
 		}
 
-		// sum this Source's cost. a Source of no default kind is a custom Source
-		costDollars += outcome.costDollars
+		// a Source of no default kind is a custom Source
 		const isCustomSource = toDefaultSource(outcome.sourceKind) === null
 
 		// merge its Resources, keeping the first one seen per canonical url and crediting it to this Source, and mark a
@@ -268,11 +277,14 @@ function toSourceResults(outcomes: SourceOutcome[], creditedResources: CreditedR
 	return outcomes.map((outcome) => toStoredSourceResult(outcome, foundCountBySourceId.get(outcome.sourceId) ?? 0))
 }
 
-// one Source's result, with no kept count yet. its cost is what the Scan charged for it: what a Source that ran
-// reported, and 0 for one that failed or was skipped
+// Even a failed Source can have completed a paid request.
+function toSourceCost(outcome: SourceOutcome): number {
+	return "costDollars" in outcome ? (outcome.costDollars ?? 0) : 0
+}
+
+// each Source reports its known spend even if it failed after a paid request
 function toStoredSourceResult(sourceOutcome: SourceOutcome, foundCount: number): StoredSourceResult {
-	const costDollars =
-		sourceOutcome.status === "ok" || sourceOutcome.status === "fallback" ? sourceOutcome.costDollars : 0
+	const costDollars = toSourceCost(sourceOutcome)
 	const sourceResultFields = {
 		sourceId: sourceOutcome.sourceId,
 		sourceKind: sourceOutcome.sourceKind,
@@ -325,7 +337,11 @@ export function toScannedSource(sourceOutcome: SourceOutcome): ScannedSource {
 }
 
 // run a Source through its registered ingester, turning any failure into an isolated outcome
-async function ingestFromSource(source: Source, ingestContext: IngestContext): Promise<SourceOutcome> {
+async function ingestFromSource(
+	source: Source,
+	ingestContext: IngestContext,
+	searchSourceId?: string,
+): Promise<SourceOutcome> {
 	// the fields every outcome of this Source has, labeled from the row read at the start
 	const sourceOutcomeFields = {
 		sourceId: source.id,
@@ -333,8 +349,8 @@ async function ingestFromSource(source: Source, ingestContext: IngestContext): P
 		label: toSourceResultLabel(source.kind, source.config),
 	}
 
-	// a Source that has not passed its screen is skipped before its ingester is reached
-	if (source.status !== "ready") {
+	// Only the first ready search Source spends the shared query allowance.
+	if (source.status !== "ready" || (source.kind === "search" && source.id !== searchSourceId)) {
 		return { status: "skipped", ...sourceOutcomeFields, durationMs: 0 }
 	}
 
@@ -347,7 +363,10 @@ async function ingestFromSource(source: Source, ingestContext: IngestContext): P
 	// run and time the ingester. an error stops only this Source, so the Scan keeps whatever the other sources found
 	const startedAt = performance.now()
 	try {
-		const ingestResult = await ingester(source, ingestContext)
+		const ingestResult =
+			source.kind === "search" && ingestContext.scanId
+				? await searchOncePerScan(ingestContext.scanId, () => ingester(source, ingestContext))
+				: await ingester(source, ingestContext)
 		const durationMs = Math.round(performance.now() - startedAt)
 		// a Source that found nothing is reported as a fallback
 		const status = ingestResult.resources.length === 0 ? "fallback" : "ok"
@@ -362,6 +381,12 @@ async function ingestFromSource(source: Source, ingestContext: IngestContext): P
 
 		// return the failure with its message, cut to the length a source result keeps
 		const reason = (error instanceof Error ? error.message : String(error)).slice(0, SOURCE_RESULT_REASON_CHARS)
-		return { status: "failed", ...sourceOutcomeFields, durationMs, reason }
+		return {
+			status: "failed",
+			...sourceOutcomeFields,
+			durationMs,
+			reason,
+			...(error instanceof PaidSourceError ? { costDollars: error.costDollars } : {}),
+		}
 	}
 }

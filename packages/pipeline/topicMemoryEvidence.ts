@@ -213,7 +213,7 @@ export async function loadTopicMemoryNeighbors(
 /**
  * Restricts Journal evidence to shown external Findings from public Sources.
  */
-function toTopicMemoryFindingFilter(topicId: string): SQL | undefined {
+export function toTopicMemoryFindingFilter(topicId: string): SQL | undefined {
 	return and(
 		eq(findings.topicId, topicId),
 		eq(findings.sourceVisibility, "public"),

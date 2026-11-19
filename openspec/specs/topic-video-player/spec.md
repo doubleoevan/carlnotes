@@ -666,3 +666,15 @@ read SHALL return the latest film alone, with no open state. The first render SH
 - **GIVEN** a user who collapsed the topic video section on a Topic
 - **WHEN** they open the same Topic again, in the browser or the mobile app
 - **THEN** the topic video section is open
+
+### Requirement: Film publication updates an open Topic page
+
+The Topic page SHALL poll while a newer film renders and show its poster upon publication. A loaded film SHALL continue playing or remain paused until the viewer chooses the new film. Topic and episode loading cards SHALL reserve space for the title and controls.
+
+#### Scenario: Publication during playback
+- **WHEN** another film finishes while the viewer has the current film loaded
+- **THEN** the page offers the new film and preserves playback until selected
+
+#### Scenario: Publication on an idle page
+- **WHEN** a film finishes and there is no active film session to preserve
+- **THEN** its poster appears without autoplay

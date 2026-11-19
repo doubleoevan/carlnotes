@@ -3,6 +3,7 @@ import { sendTopicHomeOrder, sendTopicSubscription, type TopicGate } from "@carl
 import { isAdminRole } from "@carlnotes/contracts/enums"
 import type { TopicFinding } from "@carlnotes/contracts/findings"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
+import { PodcastEpisodeRemovalProvider } from "@carlnotes/core/components/PodcastEpisodeRemovalProvider"
 import { sendTopicViewOnce } from "@carlnotes/core/lib/pageViews"
 import type { FeaturedOrderMove } from "@carlnotes/core/lib/rankDialog"
 import { selectTopicFindings } from "@carlnotes/core/lib/topicFeed"
@@ -269,12 +270,14 @@ export function TopicPage() {
 					</HydrateSection>
 					{/* the topic's Topic Posts, right below its comment thread */}
 					{topic.topicPosts && <TopicPostsSection topicId={topic.id} {...topic.topicPosts} />}
-					<TopicViews
-						topic={topic}
-						onMakeTopicPublic={() => setOpenDialog("make-public")}
-						onReloadTopicPage={reloadTopicPage}
-						onNoteCountChange={setNoteCount}
-					/>
+					<PodcastEpisodeRemovalProvider key={JSON.stringify([topic.id, session?.user.id])}>
+						<TopicViews
+							topic={topic}
+							onMakeTopicPublic={() => setOpenDialog("make-public")}
+							onReloadTopicPage={reloadTopicPage}
+							onNoteCountChange={setNoteCount}
+						/>
+					</PodcastEpisodeRemovalProvider>
 					{/* the topic's viewer and follower counts */}
 					<TopicCountsLine topicId={topic.id} isPublic={topic.visibility === "public"} />
 					<TopicDialogs

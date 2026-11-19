@@ -65,9 +65,11 @@ export function useTopicPagePayload({ topicId, topicSlug }: UseTopicPagePayloadO
 	// fetch the topic page payload, which says whether the topic is visible, gated to this user, or missing
 	const reloadTopicPage = useCallback(
 		async (fetchTopicPageOptions: FetchTopicPageOptions = {}) => {
-			// count this reload, so an earlier one's related topics never replace a later one's
+			// A slow read must not restore an episode removed by a later request.
 			reloadCountRef.current += 1
 			const reloadCount = reloadCountRef.current
+			const isCurrentReload = (): boolean =>
+				shownTopicIdRef.current === topicId && reloadCountRef.current === reloadCount
 			try {
 				// a signed-in reader's full load reads the related topics apart from the page, started beside it
 				const isRelatedTopicsSeparate = isSignedInRef.current && !fetchTopicPageOptions.isPoll
@@ -75,7 +77,7 @@ export function useTopicPagePayload({ topicId, topicSlug }: UseTopicPagePayloadO
 
 				// a poll reload leaves out the related topics, the reactions, and the comment thread, so the page keeps its own
 				const topicPage = await fetchTopicPage(topicId, { ...fetchTopicPageOptions, isRelatedTopicsSeparate })
-				if (shownTopicIdRef.current !== topicId) {
+				if (!isCurrentReload()) {
 					return
 				}
 				const fetchedTopic = topicPage.status === "visible" ? topicPage.topic : null
@@ -86,7 +88,7 @@ export function useTopicPagePayload({ topicId, topicSlug }: UseTopicPagePayloadO
 				// add the related topics once their own read arrives, if the page still shows their topic and no later reload
 				// started. the reload ends without waiting for them
 				void relatedTopicsRead?.then((relatedTopics) => {
-					if (reloadCountRef.current === reloadCount) {
+					if (isCurrentReload()) {
 						setTopic((shownTopic) => toTopicWithRelatedTopics({ shownTopic, topicId, relatedTopics }))
 					}
 				})
@@ -94,7 +96,7 @@ export function useTopicPagePayload({ topicId, topicSlug }: UseTopicPagePayloadO
 				console.error("topic page load failed", error)
 				// a failed reload for a topic the page left changes nothing on the page that replaced it, and a failed poll
 				// keeps the page it reads again
-				if (shownTopicIdRef.current === topicId && !fetchTopicPageOptions.isPoll) {
+				if (isCurrentReload() && !fetchTopicPageOptions.isPoll) {
 					setTopic(null)
 				}
 			}

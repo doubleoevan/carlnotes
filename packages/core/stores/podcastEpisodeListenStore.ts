@@ -10,7 +10,6 @@ import { toDiscussionTopicPostId } from "@carlnotes/contracts/topicPosts"
 const LISTEN_SAVE_INTERVAL_MS = 30_000
 
 // whether the user is signed in. only a signed-in user's progress is saved
-let isSignedIn = false
 let accountId: string | null = null
 let accountRequest: AbortController | undefined
 
@@ -26,14 +25,7 @@ export type SavePodcastEpisodeListenOptions = {
 }
 
 /**
- * Sets whether the user is signed in. Only a signed-in user's progress is saved.
- */
-export function setIsUserSignedIn(isUserSignedIn: boolean): void {
-	isSignedIn = isUserSignedIn
-}
-
-/**
- * Retires queued progress writes when the mobile account changes or exits.
+ * Retires pending playback requests when the account changes or exits.
  */
 export function setPodcastEpisodeListenAccount(userId: string | null): void {
 	if (accountId === userId) {
@@ -43,15 +35,19 @@ export function setPodcastEpisodeListenAccount(userId: string | null): void {
 	accountRequest?.abort()
 	accountRequest = new AbortController()
 	accountId = userId
-	isSignedIn = userId !== null
 	resetPodcastEpisodePlaybackStart()
+}
+
+/** Identifies the account that submitted an episode removal, even after its page closes. */
+export function podcastEpisodeAccountSignal(userId: string): AbortSignal | undefined {
+	return accountId === userId ? accountRequest?.signal : undefined
 }
 
 /**
  * Returns whether the user is signed in.
  */
 export function isUserSignedIn(): boolean {
-	return isSignedIn
+	return accountId !== null
 }
 
 /**
@@ -77,7 +73,7 @@ export function savePodcastEpisodeListen({
 	}
 
 	// only a signed-in user's progress is saved
-	if (!isSignedIn) {
+	if (!accountId) {
 		return
 	}
 	lastListenSavedAt = Date.now()

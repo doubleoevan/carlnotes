@@ -3,10 +3,11 @@ import { isPublishedPodcastEpisode } from "@carlnotes/contracts/podcast"
 import { FILMS_NAME, PODCAST_NAME } from "@carlnotes/contracts/podcastEpisodes"
 import { toPodcastEpisodePath, toTopicPath } from "@carlnotes/contracts/seo"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
-import { type ComponentType, type ReactNode, useState } from "react"
+import { type ComponentType, type ReactNode, useContext, useState } from "react"
 import { toTopicLoadedPodcastEpisode } from "../hooks/useShownPodcastEpisode"
 import { toSectionCountLabel } from "../lib/labels"
 import { toTabClassName } from "../lib/tabClasses"
+import { PodcastEpisodeRemovalContext } from "./PodcastEpisodeRemovalProvider"
 import type { PodcastEpisodeRowProps } from "./PodcastEpisodeRow"
 
 // the url query keys that name an older season of Coffee Break podcast episodes and of Coffee Break films
@@ -91,12 +92,16 @@ export function PodcastEpisodesCard({
 }) {
 	// reset the page on a season change and clamp it after an episode is removed
 	const [openedPage, setOpenedPage] = useState({ season: shownSeason, number: 1 })
-	const [podcastEpisodeToRemove, setPodcastEpisodeToRemove] = useState<PodcastEpisode | null>(null)
+	const [episodesToRemove, setEpisodesToRemove] = useState<PodcastEpisode[]>([])
+	const { hiddenEpisodeIds } = useContext(PodcastEpisodeRemovalContext)
+	const visibleEpisodes = hiddenEpisodeIds.size
+		? episodes.filter((episode) => !hiddenEpisodeIds.has(episode.id))
+		: episodes
 	const seasons = topic.podcast?.seasons ?? []
-	const pageCount = Math.ceil(episodes.length / 5)
+	const pageCount = Math.ceil(visibleEpisodes.length / 5)
 	const requestedPage = openedPage.season === shownSeason ? openedPage.number : 1
 	const pageNumber = Math.min(requestedPage, Math.max(1, pageCount))
-	const rows = renderRows(episodes, { pageNumber, pageSize: 5 })
+	const rows = renderRows(visibleEpisodes, { pageNumber, pageSize: 5 })
 
 	// the list's words, its season query key, and its latest mark, for podcast episodes or films
 	const rowNoun = filmList ? "film" : "episode"
@@ -109,7 +114,7 @@ export function PodcastEpisodesCard({
 	return (
 		<Section
 			title={filmList ? FILMS_NAME : `${PODCAST_NAME} episodes`}
-			countLabel={toSectionCountLabel(episodes.length, rowNoun)}
+			countLabel={toSectionCountLabel(visibleEpisodes.length, rowNoun)}
 		>
 			<Card>
 				<Tabs>
@@ -140,7 +145,14 @@ export function PodcastEpisodesCard({
 							isLatestPodcastEpisode={episode.id === latestPodcastEpisodeId}
 							isPlayButtonMuted={episode.id !== selectedEpisodeId}
 							podcastEpisodePath={isPublishedPodcastEpisode(episode) ? toPodcastEpisodePath(topic, episode) : null}
-							onRemovePodcastEpisode={canRemovePodcastEpisodes ? () => setPodcastEpisodeToRemove(episode) : undefined}
+							onRemovePodcastEpisode={
+								canRemovePodcastEpisodes
+									? () =>
+											setEpisodesToRemove((current) =>
+												current.some((row) => row.id === episode.id) ? current : [...current, episode],
+											)
+									: undefined
+							}
 							filmPlay={filmList && { onPress: () => filmList.onPlayFilm(episode) }}
 						/>
 					))}
@@ -157,17 +169,18 @@ export function PodcastEpisodesCard({
 					}}
 				/>
 			)}
-			{podcastEpisodeToRemove && (
+			{episodesToRemove.map((episode) => (
 				<Remove
-					podcastEpisode={podcastEpisodeToRemove}
-					onClose={() => setPodcastEpisodeToRemove(null)}
+					key={episode.id}
+					podcastEpisode={episode}
+					onClose={() => setEpisodesToRemove((current) => current.filter((row) => row.id !== episode.id))}
 					onPodcastEpisodeRemoved={async () => {
 						// reconcile the parent payload before reloading an older season
 						await onRemoved()
 						await onReload()
 					}}
 				/>
-			)}
+			))}
 		</Section>
 	)
 }

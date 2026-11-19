@@ -11,6 +11,7 @@
 
 /* shared components own their spacing and shapes on both platforms */
 @source "../../packages/core/components/PageSkeleton.tsx";
+@source "../../packages/core/components/TopicVideoCardSkeleton.tsx";
 /* include the text and spacing classes used by the shared Personal sources components */
 @source "../../packages/core/components/AiAgentAccountCard.tsx";
 @source "../../packages/core/components/PersonalSourceEntryList.tsx";

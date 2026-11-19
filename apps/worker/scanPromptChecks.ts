@@ -5,6 +5,7 @@ import { buildContextPrompt } from "@carlnotes/pipeline/attach"
 import { buildAgreementPrompt } from "@carlnotes/pipeline/chat/agreement"
 import { buildDashboardParagraphPrompt } from "@carlnotes/pipeline/dashboardParagraph"
 import { buildSearchPrompt } from "@carlnotes/pipeline/ingest/search"
+import { buildTopicMemorySearchPrompt } from "@carlnotes/pipeline/ingest/selectTopicMemorySearchQuery"
 import { buildPersonalSourcesContextPrompt } from "@carlnotes/pipeline/personalSources/contextPrompt"
 import { buildOutlinePrompt, buildSegmentPrompt } from "@carlnotes/pipeline/podcast/generatePodcastEpisodeScript"
 import { buildScorePrompt } from "@carlnotes/pipeline/review/score"
@@ -50,6 +51,11 @@ export async function writeSamplePrompts(): Promise<[string, boolean][]> {
 		},
 	])
 	const searchResult = await buildSearchPrompt("sample topic context", "sample topic")
+	const searchSelection = await buildTopicMemorySearchPrompt(
+		"Coffee",
+		["cafe opening"],
+		[{ claim: "The cafe opened.", rating: "up", note: "Follow this cafe." }],
+	)
 	const contextResult = await buildContextPrompt("sample document text")
 	const personalSourcesContextResult = await buildPersonalSourcesContextPrompt({
 		topic: "Coffee",
@@ -146,6 +152,7 @@ export async function writeSamplePrompts(): Promise<[string, boolean][]> {
 		topicMemorySplitResult,
 		topicMemoryReplacementResult,
 		searchResult,
+		searchSelection,
 		contextResult,
 		agreementResult,
 		updatesRecapResult,
@@ -166,6 +173,7 @@ export async function writeSamplePrompts(): Promise<[string, boolean][]> {
 		["topic memory split prompt", topicMemorySplitResult.prompt],
 		["topic memory replacement prompt", topicMemoryReplacementResult.prompt],
 		["search prompt", searchResult.prompt],
+		["topic memory search selection", searchSelection.prompt],
 		["attachment context prompt", contextResult.prompt],
 		["Personal sources context prompt", personalSourcesContextResult.prompt],
 		["agreement check prompt", agreementResult.prompt],

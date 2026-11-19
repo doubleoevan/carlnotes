@@ -148,6 +148,18 @@ export const resources = pgTable(
 	],
 )
 
+// The Scan claims its paid searches once. The worker discards the saved Resources after ingestion.
+export const scanSearchResults = pgTable("scan_search_results", {
+	scanId: text("scan_id")
+		.primaryKey()
+		.references(() => scans.id, { onDelete: "cascade" }),
+	result: jsonb("result").$type<{
+		resources: Pick<typeof resources.$inferInsert, "url" | "kind" | "title" | "snippet" | "durationSeconds">[]
+		costDollars: number
+		error?: string
+	}>(),
+})
+
 // a resource image is one image of a Resource's own page, stored for the films that narrate the Resource
 export const resourceImages = pgTable(
 	"resource_images",

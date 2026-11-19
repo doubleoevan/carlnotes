@@ -12,6 +12,7 @@ import {
 } from "../lib/podcastEpisodeCopy"
 import { toTopicPageTopicVideoSection, toTopicVideoDisplay } from "../lib/topicVideoDisplay"
 import {
+	playInTopicVideoSection,
 	setTopicVideoSectionOpen,
 	type TopicVideoSection as TopicVideoSectionRead,
 	useTopicVideoSection,
@@ -34,6 +35,7 @@ export type TopicVideoSectionElements = {
 	RenderingCard: ComponentType<{ podcastEpisode: PodcastEpisode }>
 	// the shimmering line after its emoji
 	ProgressLine: ComponentType<PodcastEpisodeProgressLine>
+	NewFilmButton: ComponentType<{ label: string; onPress: () => void }>
 }
 
 // the topic, the report of a user's toggle, the read of the topic's page again while a film renders, and the app's
@@ -56,6 +58,7 @@ export function TopicVideoSection({ topic, onToggled, onVideoRenderingPoll, elem
 	}
 	return (
 		<TopicVideoSectionBody
+			key={topic.id}
 			topicId={topic.id}
 			latestPodcastEpisode={topic.latestPodcastEpisode}
 			topicVideoSection={topicVideoSection}
@@ -74,7 +77,7 @@ function TopicVideoSectionBody({
 	topicVideoSection,
 	onToggled,
 	onVideoRenderingPoll,
-	elements: { Section, Player, RenderingCard, ProgressLine },
+	elements: { Section, Player, RenderingCard, ProgressLine, NewFilmButton },
 }: {
 	topicId: string
 	latestPodcastEpisode: TopicResponse["latestPodcastEpisode"]
@@ -84,15 +87,19 @@ function TopicVideoSectionBody({
 	elements: TopicVideoSectionElements
 }) {
 	// the shown film, whether the section is open, and how many times a row asked for it
-	const { podcastEpisode, isOpen, scrollRequestCount } = useTopicVideoSection(topicId, topicVideoSection)
+	const { podcastEpisode, isOpen, scrollRequestCount, hasNewFilmReady } = useTopicVideoSection(
+		topicId,
+		topicVideoSection,
+	)
 
-	// read the topic's page again while the shown film renders
+	// poll for the latest film even when the viewer has an older one open
 	const isVideoRendering = toTopicVideoDisplay(podcastEpisode) === "rendering"
-	useTopicVideoRenderingPoll({ isVideoRendering, onPoll: onVideoRenderingPoll })
-
-	// the topic's newer film, still rendering while an older one plays here
 	const isNewerVideoRendering =
 		latestPodcastEpisode?.isVideoRendering === true && latestPodcastEpisode.id !== podcastEpisode.id
+	useTopicVideoRenderingPoll({
+		isVideoRendering: isVideoRendering || isNewerVideoRendering,
+		onPoll: onVideoRenderingPoll,
+	})
 	return (
 		<Section
 			title={TOPIC_VIDEO_SECTION_TITLE}
@@ -110,7 +117,17 @@ function TopicVideoSectionBody({
 				<Player
 					podcastEpisode={podcastEpisode}
 					isCard
-					cardFooter={isNewerVideoRendering && <ProgressLine {...TOPIC_VIDEO_RENDERING_LINE} />}
+					cardFooter={
+						<>
+							{hasNewFilmReady && (
+								<NewFilmButton
+									label="New film ready"
+									onPress={() => playInTopicVideoSection(topicId, topicVideoSection.podcastEpisode)}
+								/>
+							)}
+							{isNewerVideoRendering && <ProgressLine {...TOPIC_VIDEO_RENDERING_LINE} />}
+						</>
+					}
 				/>
 			)}
 		</Section>

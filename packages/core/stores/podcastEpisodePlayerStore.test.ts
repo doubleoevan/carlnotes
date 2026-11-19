@@ -10,7 +10,7 @@ import type {
 } from "../lib/podcastEpisodeAudio"
 import { SKIP_BACK_SECONDS, SKIP_FORWARD_SECONDS, toNextPlaybackRate } from "../lib/podcastEpisodePlayback"
 import { TOPIC_POST_DISCUSSION_STORY } from "../lib/topicPostStories"
-import { setIsUserSignedIn } from "./podcastEpisodeListenStore"
+import { setPodcastEpisodeListenAccount } from "./podcastEpisodeListenStore"
 import { playPodcastEpisodeChapter, togglePodcastEpisodePlayback } from "./podcastEpisodePlayActions"
 import {
 	clearPodcastEpisodePlayer,
@@ -36,7 +36,7 @@ afterEach(() => {
 	// clear the film surface and the audio before restoring client spies
 	unregisterVideoAdapter()
 	unregisterAdapter()
-	setIsUserSignedIn(false)
+	setPodcastEpisodeListenAccount(null)
 	mock.restore()
 })
 
@@ -100,7 +100,7 @@ test("a completed episode starts at zero unless an explicit chapter takes preced
 test("one real play records one start across toggles and skips", async () => {
 	// play, toggle twice, seek, and report progress
 	const { listen, adapter, toLoad } = toAudioFixture()
-	setIsUserSignedIn(true)
+	setPodcastEpisodeListenAccount("listener")
 	await playPodcastEpisode(toPodcastEpisodeFixture())
 	// pause, resume, seek, and a position, all in one play
 	togglePlayback()
@@ -123,7 +123,7 @@ test("progress saves follow thirty seconds and visitors have no personal listens
 	await playPodcastEpisode(toPodcastEpisodeFixture())
 	expect(listen).not.toHaveBeenCalled()
 	// a signed-in user's progress is saved
-	setIsUserSignedIn(true)
+	setPodcastEpisodeListenAccount("listener")
 	await playPodcastEpisode(toPodcastEpisodeFixture({ id: "episode-2" }))
 	listen.mockClear()
 	// report a position at each count of seconds
@@ -138,7 +138,7 @@ test("late next-episode responses cannot replace a later user choice", async () 
 	const { toLoad } = toAudioFixture()
 	const nextEpisode = Promise.withResolvers<PodcastEpisode | null>()
 	spyOn(podcastEpisodeClient, "fetchNextUnplayedPodcastEpisode").mockReturnValue(nextEpisode.promise)
-	setIsUserSignedIn(true)
+	setPodcastEpisodeListenAccount("listener")
 	await playPodcastEpisode(toPodcastEpisodeFixture())
 	// the episode ends, and the user picks another before the next one loads
 	reportPodcastEpisodeAudioEvent({ type: "ended", loadId: toLoad().loadId })
@@ -169,7 +169,7 @@ test("clearing playback retires pending loads, fetches, and audio events", async
 
 test("a rejected play records no start and speed survives replacement", async () => {
 	const { adapter, listen } = toAudioFixture()
-	setIsUserSignedIn(true)
+	setPodcastEpisodeListenAccount("listener")
 	// a play the platform rejects
 	adapter.play = mock(async () => {
 		throw new Error("play rejected")
@@ -242,7 +242,7 @@ test("a Topic Post's discussion saves no progress, and ends with no next episode
 	// the discussion in the player's shape, played by a signed-in user
 	const { toLoad, listen } = toAudioFixture()
 	const nextPodcastEpisodeSpy = spyOn(podcastEpisodeClient, "fetchNextUnplayedPodcastEpisode").mockResolvedValue(null)
-	setIsUserSignedIn(true)
+	setPodcastEpisodeListenAccount("listener")
 	const discussion = toTopicPostDiscussionPodcastEpisode(TOPIC_POST_DISCUSSION_STORY)
 	if (!discussion) {
 		throw new Error("the story's post has a recording")
@@ -295,7 +295,7 @@ test("a film that ends plays no next podcast episode", async () => {
 	const nextPodcastEpisodeSpy = spyOn(podcastEpisodeClient, "fetchNextUnplayedPodcastEpisode").mockResolvedValue(
 		toPodcastEpisodeFixture({ id: "next-episode" }),
 	)
-	setIsUserSignedIn(true)
+	setPodcastEpisodeListenAccount("listener")
 	await playTopicVideo(FILM_PODCAST_EPISODE)
 	reportPodcastEpisodeAudioEvent({ type: "ended", loadId: film.toLoad().loadId })
 	await Promise.resolve()
@@ -372,7 +372,7 @@ test("a film play saves one playback start with its format, and the other format
 	// a signed-in user starts the film
 	const { listen } = toAudioFixture()
 	toVideoFixture()
-	setIsUserSignedIn(true)
+	setPodcastEpisodeListenAccount("listener")
 	await playTopicVideo(FILM_PODCAST_EPISODE)
 
 	// play the audio and the film again

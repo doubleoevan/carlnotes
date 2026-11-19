@@ -1,7 +1,10 @@
+import { sendRemovePodcastEpisode } from "@carlnotes/client/podcastEpisodeClient"
 import { toTopicPodcastFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import { toTestTopicResponse } from "@carlnotes/contracts/topicFeedTestFixtures"
+import { PodcastEpisodeRemovalProvider } from "@carlnotes/core/components/PodcastEpisodeRemovalProvider"
 import { PODCAST_STORY_FILM_EPISODE, PodcastEpisodeStory } from "@carlnotes/core/lib/podcastEpisodeStories"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
+import { mocked } from "storybook/test"
 import { PodcastEpisodesCard } from "./PodcastEpisodesCard"
 import { TopicVideoSection } from "./TopicVideoSection"
 
@@ -51,4 +54,21 @@ export const FilmsWithTopicVideoSection: Story = {
 }
 export const PodcastEpisodes: Story = {
 	render: () => <PodcastEpisodesCard topic={topic} onPodcastEpisodeRemoved={async () => {}} />,
+}
+
+// Both season lists stay usable while the preview server declines a removal.
+export const RemovalDeclined: Story = {
+	parameters: { session: "user" },
+	beforeEach: () => {
+		mocked(sendRemovePodcastEpisode).mockImplementation(async () => {
+			await new Promise((resolve) => setTimeout(resolve, 1500))
+			return false
+		})
+	},
+	render: () => (
+		<PodcastEpisodeRemovalProvider>
+			<PodcastEpisodesCard topic={topic} format="video" />
+			<PodcastEpisodesCard topic={topic} onPodcastEpisodeRemoved={async () => {}} />
+		</PodcastEpisodeRemovalProvider>
+	),
 }

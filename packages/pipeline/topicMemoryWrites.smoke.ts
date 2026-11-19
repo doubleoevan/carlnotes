@@ -16,6 +16,7 @@ import type { EmbeddedTopicMemoryWrite } from "./applyTopicMemoryWrite"
 import { checkTopicMemoryJournal } from "./topicMemoryJournalSmokeChecks"
 import { checkTopicMemoryRepairs } from "./topicMemoryRepairSmokeChecks"
 import { reviewTopicMemoryReplacements } from "./topicMemoryReplacements"
+import { checkTopicMemorySearch } from "./topicMemorySearchSmokeChecks"
 import {
 	insertBrew,
 	loadMemories,
@@ -45,6 +46,7 @@ afterAll(async () => {
 	await db.$client.end()
 })
 
+checkTopicMemorySearch()
 checkTopicMemoryJournal()
 checkTopicMemoryRepairs()
 

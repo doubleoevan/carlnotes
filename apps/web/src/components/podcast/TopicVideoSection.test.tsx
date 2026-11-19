@@ -2,13 +2,40 @@
 // the theme song's credits right after the title, with the film player in a card and its skips and speed showing
 // before the film plays, with the rendering card in the player's place while the topic's only film renders, the
 // filming line under the controls while a newer film renders, and absent for a topic with no film
-import { expect, test } from "bun:test"
+import { expect, mock, spyOn, test } from "bun:test"
 import { toPodcastEpisodeFixture, toTopicPodcastFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import { toTestTopicResponse } from "@carlnotes/contracts/topicFeedTestFixtures"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
+import {
+	TopicVideoSection as SharedTopicVideoSection,
+	type TopicVideoSectionElements,
+} from "@carlnotes/core/components/TopicVideoSection"
+import { updatePodcastEpisodePlayerState } from "@carlnotes/core/stores/podcastEpisodePlayerState"
+import * as playerStore from "@carlnotes/core/stores/podcastEpisodePlayerStore"
+import { focusManager } from "@tanstack/react-query"
+import { act } from "react"
 import { renderWithRouter } from "@/components/chat/renderWithRouter"
+import { renderTestHook } from "@/lib/hookTestHarness"
 import { INFO_CARD_CLASS } from "@/lib/styleClasses"
 import { TopicVideoSection } from "./TopicVideoSection"
+
+// mount the shared section with its actual polling and player selection
+const testElements: TopicVideoSectionElements = {
+	Section: ({ children }) => <section>{children}</section>,
+	Player: ({ podcastEpisode, cardFooter }) => (
+		<article>
+			<h4>{podcastEpisode.title}</h4>
+			{cardFooter}
+		</article>
+	),
+	RenderingCard: () => <p>Rendering</p>,
+	ProgressLine: ({ text }) => <p>{text}</p>,
+	NewFilmButton: ({ label, onPress }) => (
+		<button type="button" onClick={onPress}>
+			{label}
+		</button>
+	),
+}
 
 // the latest film's podcast episode
 const filmPodcastEpisode = toPodcastEpisodeFixture({
@@ -34,6 +61,85 @@ function toFilmTopic(hasFilm: boolean): TopicResponse {
 // the film section's html for a topic
 function renderFilmSection(topic: TopicResponse): Promise<string> {
 	return renderWithRouter(<TopicVideoSection topic={topic} onVideoRenderingPoll={() => {}} />)
+}
+
+for (const playback of ["idle", "playing", "paused", "audio", "removed"] as const) {
+	test(`publishing a newer film while the older film is ${playback} switches only an idle poster`, async () => {
+		// show the old film while the newer one renders
+		const newerFilm = {
+			...filmPodcastEpisode,
+			id: "new-film",
+			episodeNumber: playback === "removed" ? 6 : 8,
+			title: "New beans",
+		}
+		let topic = {
+			...toFilmTopic(true),
+			latestPodcastEpisode: { ...newerFilm, video: null, isVideoRendering: true },
+		} as TopicResponse
+		const reload = mock(() => {})
+		const play = spyOn(playerStore, "playTopicVideo").mockResolvedValue(true)
+		const oldState = playerStore.toPodcastEpisodePlayerState()
+		updatePodcastEpisodePlayerState({
+			format: playback === "audio" ? "audio" : "video",
+			podcastEpisode: playback === "idle" ? null : filmPodcastEpisode,
+			isPlaying: playback === "playing" || playback === "audio",
+			positionSeconds: 24,
+		})
+		const harness = await renderTestHook(
+			() => topic,
+			(shownTopic) => (
+				<SharedTopicVideoSection
+					topic={shownTopic}
+					elements={testElements}
+					onToggled={() => {}}
+					onVideoRenderingPoll={reload}
+				/>
+			),
+		)
+		try {
+			// a return to the page polls even with a playable poster still on screen
+			await act(async () => {
+				focusManager.setFocused(false)
+				focusManager.setFocused(true)
+			})
+			expect(reload).toHaveBeenCalledTimes(1)
+			expect(harness.container.querySelector("h4")?.textContent).toBe("Better beans")
+			expect(harness.container.querySelector("button")).toBeNull()
+
+			// apply the published page and verify polling stops without touching playback
+			topic = {
+				...toFilmTopic(true),
+				latestPodcastEpisode: newerFilm,
+				podcast: toTopicPodcastFixture({ topicPodcastEpisodeVideoSection: { podcastEpisode: newerFilm } }),
+			}
+			await harness.render()
+			await act(async () => {
+				focusManager.setFocused(false)
+				focusManager.setFocused(true)
+			})
+			expect(reload).toHaveBeenCalledTimes(1)
+			expect(play).not.toHaveBeenCalled()
+			expect(playerStore.toPodcastEpisodePlayerState().positionSeconds).toBe(24)
+
+			// only a viewer watching the older film gets the choice to start the new one
+			const button = harness.container.querySelector("button")
+			if (playback === "playing" || playback === "paused") {
+				expect(harness.container.querySelector("h4")?.textContent).toBe("Better beans")
+				expect(button?.textContent).toBe("New film ready")
+				await act(async () => button?.click())
+				expect(play).toHaveBeenCalledWith(newerFilm)
+			} else {
+				expect(button).toBeNull()
+			}
+			expect(harness.container.querySelector("h4")?.textContent).toBe("New beans")
+		} finally {
+			// release the page before restoring playback and focus
+			await harness.close()
+			updatePodcastEpisodePlayerState(oldState)
+			focusManager.setFocused(undefined)
+			play.mockRestore()
+		}
+	})
 }
 
 test("a film renders the section open on the film's poster, under a heading without the word video", async () => {

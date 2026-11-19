@@ -3,6 +3,7 @@ import {
 	TopicSkeleton as SharedTopicSkeleton,
 	type TopicSkeletonElements,
 } from "@carlnotes/core/components/TopicSkeleton"
+import { TopicVideoCardSkeleton as SharedTopicVideoCardSkeleton } from "@carlnotes/core/components/TopicVideoCardSkeleton"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Text, View } from "react-native"
 import { SkeletonPulse } from "@/components/common/SkeletonPulse"
@@ -126,18 +127,12 @@ export function EmptySectionCardSkeleton() {
 }
 
 /**
- * Reserves a film's card: the frame, the seek bar, and the controls, which wrap onto two rows.
+ * Reserves the film player inside the screen's card.
  */
 export function TopicVideoCardSkeleton() {
 	return (
 		<View className="gap-3 rounded-lg border border-separator bg-card p-5 shadow-raised">
-			<View className={cn(SKELETON_SHAPE_CLASS, "aspect-video w-full rounded-lg")} />
-			<View className={cn(SKELETON_SHAPE_CLASS, "h-1.5 rounded-full")} />
-			<View className="h-[94px] flex-row items-start gap-3">
-				<View className={cn(SKELETON_SHAPE_CLASS, "size-9 rounded-full")} />
-				<View className={cn(SKELETON_SHAPE_CLASS, "size-9 rounded-full")} />
-				<View className={cn(SKELETON_SHAPE_CLASS, "size-9 rounded-full")} />
-			</View>
+			<SharedTopicVideoCardSkeleton Box={View} shapeClassName={SKELETON_SHAPE_CLASS} seekBarClassName="h-11" />
 		</View>
 	)
 }

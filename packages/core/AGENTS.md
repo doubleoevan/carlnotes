@@ -372,7 +372,8 @@ lookups leave authoritative validation to the save endpoint. Live hook tests cov
 findings, the comment thread, the Topic Posts, then the info and settings beside the films' list, the podcast
 episodes' list, and the history. A Topic known to have no podcast episode leaves out the film, the player, and the
 films' list. App adapters supply the header, placeholder cards, columns, and motion/accessibility treatment. Web keeps
-its desktop grid and mobile uses a vertical column.
+its desktop grid and mobile uses a vertical column. `components/TopicVideoCardSkeleton` reserves the film title,
+frame, seek bar and control groups on the Topic and podcast episode pages in both apps.
 
 `components/PageSkeleton` owns the Profile, Teams, Activity, Account, Team, and Topic Post loading layouts, including
 shared identity, table, and budget placeholders. Browser and native adapters supply the elements each loaded page is
@@ -409,14 +410,15 @@ with the permitted scan control, and, with `isVideoRendering`, a published podca
 app's `ProgressLine` element draws the shimmering line after its emoji, with the words from `lib/podcastEpisodeCopy.ts`.
 `components/TopicVideoSection` shows that card through its `RenderingCard` element in the film player's place while the
 topic's only film renders, and `hooks/useTopicVideoRenderingPoll` reads the page again every 30 seconds while the app is
-focused and online, for at most four hours, so the film player shows once the film is ready.
+focused and online, for at most four hours. It also polls while a newer film renders behind an older one. When the
+new film is ready, an idle card shows its poster. A viewer playing or pausing the older film can switch with New film ready.
 
 
 Podcast presentation is shared as actual React composition under `components/`: `PodcastEpisodePlayerCard`,
 `UnpublishedPodcastEpisodeCard`, `PodcastEpisodeDetails`, `PodcastEpisodePlayButton`, `PodcastEpisodePill`,
 `PlaybackControlButtons`, `PodcastEpisodeSeekBar`, `PodcastEpisodeChapters`, `PodcastEpisodeRow`, `PodcastPlayer`,
 `PodcastEpisodeTranscript`, `PodcastThemeSongCredits`, `PodcastFeedDialog`, `RemovePodcastEpisodeDialog`,
-`PodcastEpisodesCard`, and `PodcastEpisodeChapterTag`. `PodcastEpisodeVideoButton` is the button that opens the Video
+`PodcastEpisodesCard`, `PodcastEpisodeRemovalProvider` for immediate removal from both season lists, and `PodcastEpisodeChapterTag`. `PodcastEpisodeVideoButton` is the button that opens the Video
 dialog and reports its section: a film card's play button on `PodcastEpisodeCard`'s video variant, the card's last
 child, which each app's `PodcastEpisodePlayButton` draws centered over the card's image under the label Play film, whose
 dialog plays the film once it loads, and a Video pill beside the play pill on a `NewsList` row whose Podcast Episode has

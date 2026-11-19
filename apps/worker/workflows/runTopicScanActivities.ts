@@ -4,7 +4,7 @@ import { toTopicPath } from "@carlnotes/contracts/seo"
 import type { StoredScanSourceResults, StoredSourceResult } from "@carlnotes/contracts/topics"
 import { db } from "@carlnotes/db"
 import { findingPersonalAnnotations } from "@carlnotes/db/schema/personalSources"
-import { findings, resources, scans } from "@carlnotes/db/schema/scans"
+import { findings, resources, scanSearchResults, scans } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
 import { type Budget, newBudget, toCheckpointBudget, toResumedBudget } from "@carlnotes/models/budget"
@@ -113,6 +113,15 @@ export async function reviewForScan(
 			// the Scan row and the owner's LiteLLM proxy key
 			const scan = await requireScan(scanId)
 			const litellmApiKey = await loadOrProvisionUserLiteLLMKey(ownerId)
+
+			// Temporal now holds the ingest result. Keep only the Scan's reservation in Postgres.
+			if (ingestResult.sourceOutcomes?.some((outcome) => outcome.sourceKind === "search")) {
+				await db
+					.update(scanSearchResults)
+					.set({ result: null })
+					.where(eq(scanSearchResults.scanId, scanId))
+					.catch((error: unknown) => reportError(error, "database", { scanId, operation: "clear-search-result" }))
+			}
 
 			const review = await reviewScan(
 				scan,

@@ -14,7 +14,6 @@ import { SKIP_BACK_SECONDS, SKIP_FORWARD_SECONDS, updatePodcastEpisodeMediaSessi
 import { addEventListeners } from "@/lib/utils"
 import { captureEpisodeVisitEvent, captureFilmVisitEvent } from "@/lib/visitAnalytics"
 
-export { setIsUserSignedIn } from "@carlnotes/core/stores/podcastEpisodeListenStore"
 // expose shared state and actions to the browser's player and voice controls
 export {
 	playPodcastEpisode,

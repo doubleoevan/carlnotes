@@ -3,6 +3,7 @@ import {
 	type TopicSkeletonElements,
 	type TopicSkeletonSection,
 } from "@carlnotes/core/components/TopicSkeleton"
+import { TopicVideoCardSkeleton as SharedTopicVideoCardSkeleton } from "@carlnotes/core/components/TopicVideoCardSkeleton"
 import { cn } from "@carlnotes/nightshift/classNames"
 import type * as React from "react"
 import {
@@ -19,6 +20,7 @@ import {
 	RANK_SLOT_CLASS,
 	RESOURCE_LIST_CARD_CLASS,
 	ROW_AVATAR_SKELETON_CLASS,
+	SKELETON_SHAPE_CLASS,
 } from "@/lib/styleClasses"
 import { MORE_UNDER_CARD_CLASS } from "./MoreButton"
 import { ChapterPillSkeleton, ExpanderSkeleton, ResourceSkeleton } from "./TopicFeedSkeleton"
@@ -198,21 +200,12 @@ export function EmptySectionCardSkeleton() {
 }
 
 /**
- * The loading state of a film's card: the frame, the seek bar, and the controls, which wrap onto two rows on a phone.
+ * Reserves the film player inside the page's card.
  */
 export function TopicVideoCardSkeleton() {
 	return (
 		<div className={FILM_CARD_CLASS}>
-			<div className="bg-muted aspect-video w-full animate-pulse rounded-lg" />
-			{/* the seek bar, at the height of its time labels on a wide screen */}
-			<div className="flex h-1.5 items-center sm:h-4">
-				<div className="bg-muted h-1.5 flex-1 animate-pulse rounded-full" />
-			</div>
-			<div className="flex h-[94px] items-start gap-3 sm:h-9 sm:items-center">
-				<div className="bg-muted size-9 animate-pulse rounded-full" />
-				<div className="bg-muted size-9 animate-pulse rounded-full" />
-				<div className="bg-muted size-9 animate-pulse rounded-full" />
-			</div>
+			<SharedTopicVideoCardSkeleton Box="div" shapeClassName={SKELETON_SHAPE_CLASS} seekBarClassName="h-1.5 sm:h-4" />
 		</div>
 	)
 }

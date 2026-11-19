@@ -2,6 +2,7 @@ import { authClient } from "@carlnotes/client/authClient"
 import type { FetchTopicPageOptions } from "@carlnotes/client/topicClient"
 import type { TopicFinding } from "@carlnotes/contracts/findings"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
+import { PodcastEpisodeRemovalProvider } from "@carlnotes/core/components/PodcastEpisodeRemovalProvider"
 import type { TopicFeedState } from "@carlnotes/core/hooks/useTopicFeedState"
 import { toTopicDetails } from "@carlnotes/core/lib/detailsLine"
 import { EDIT_IMAGE_DIALOG_TITLES } from "@carlnotes/core/lib/topicImageEditor"
@@ -152,7 +153,9 @@ export function TopicPageContent({
 				{/* the topic's Topic Posts, right below its comment thread */}
 				{topic.topicPosts && <TopicPostsSection topicId={topic.id} {...topic.topicPosts} />}
 			</View>
-			<TopicPageCards topic={topic} onNoteCountChange={setNoteCount} onTopicMemoryRemoved={onRefresh} />
+			<PodcastEpisodeRemovalProvider key={JSON.stringify([topic.id, session?.user.id])}>
+				<TopicPageCards topic={topic} onNoteCountChange={setNoteCount} onTopicMemoryRemoved={onRefresh} />
+			</PodcastEpisodeRemovalProvider>
 			<TopicCountsLine topic={topic} />
 			<Footer />
 			{/* the image sheet that an editor's press on the header image opens */}

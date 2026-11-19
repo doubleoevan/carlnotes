@@ -1,8 +1,11 @@
 import { showClientError } from "@carlnotes/client/apiClient"
 import { sendRemovePodcastEpisode } from "@carlnotes/client/podcastEpisodeClient"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
-import { type ComponentType, type ReactNode, useLayoutEffect, useMemo } from "react"
+import { type ComponentType, type ReactNode, useContext, useLayoutEffect, useMemo, useState } from "react"
+import { podcastEpisodeAccountSignal } from "../stores/podcastEpisodeListenStore"
 import { unloadPodcastEpisode } from "../stores/podcastEpisodePlayerStore"
+
+import { PodcastEpisodeRemovalContext } from "./PodcastEpisodeRemovalProvider"
 
 export type RemovePodcastEpisodeDialogProps = {
 	podcastEpisode: Pick<PodcastEpisode, "id" | "title" | "episodeNumber">
@@ -33,6 +36,9 @@ export function RemovePodcastEpisodeDialog({
 	onRemoved?: (id: string) => Promise<void>
 	userId: string | null
 }) {
+	const { setEpisodeHidden } = useContext(PodcastEpisodeRemovalContext)
+	const [confirmedRemoval, setConfirmedRemoval] = useState<object | null>(null)
+
 	// retire confirmation callbacks whenever the account or episode changes
 	const removal = useMemo(
 		() => ({ userId, podcastEpisodeId: podcastEpisode.id, isActive: false, isPending: false }),
@@ -50,10 +56,16 @@ export function RemovePodcastEpisodeDialog({
 		if (removal.isPending || !removal.isActive || !removal.userId) {
 			return
 		}
+		const accountSignal = podcastEpisodeAccountSignal(removal.userId)
 		removal.isPending = true
+		setConfirmedRemoval(removal)
+		setEpisodeHidden(removal.podcastEpisodeId, true)
 		try {
 			const isPodcastEpisodeRemoved = await sendRemovePodcastEpisode(removal.podcastEpisodeId).catch(() => false)
-			if (!removal.isActive) {
+			if (!isPodcastEpisodeRemoved) {
+				setEpisodeHidden(removal.podcastEpisodeId, false)
+			}
+			if (accountSignal?.aborted || (!removal.isActive && !accountSignal)) {
 				return
 			}
 			if (!isPodcastEpisodeRemoved) {
@@ -85,6 +97,9 @@ export function RemovePodcastEpisodeDialog({
 			}
 		}
 	}
+	if (confirmedRemoval === removal) {
+		return null
+	}
 	const name =
 		podcastEpisode.episodeNumber === null
 			? `"${podcastEpisode.title}"`
@@ -95,7 +110,11 @@ export function RemovePodcastEpisodeDialog({
 			confirmLabel="Remove podcast episode"
 			cancelLabel="Keep it"
 			onConfirm={handleRemove}
-			onClose={onClose}
+			onClose={() => {
+				if (!removal.isPending) {
+					onClose()
+				}
+			}}
 		>{`${name} leaves the topic page, every podcast feed, and its own page for good. Its number is not used again.`}</Confirm>
 	)
 }

@@ -1,8 +1,8 @@
 // the topic video section on the open topic page: the film it shows, whether it is open, and the requests to scroll to
 // it. the section opens on each page load
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
-import { useEffect } from "react"
-import { playTopicVideo } from "./podcastEpisodePlayerStore"
+import { useEffect, useState } from "react"
+import { playTopicVideo, usePodcastEpisodePlayer } from "./podcastEpisodePlayerStore"
 import { toStoreListeners } from "./storeListeners"
 
 // the topic video section as the topic read returns it: the latest film
@@ -31,11 +31,59 @@ const { publish, useStoreVersion } = toStoreListeners()
  * Returns the topic video section on a topic's page: the film it shows, whether it is open, and the count of scroll
  * requests.
  */
-export function useTopicVideoSection(topicId: string, topicVideoSection: TopicVideoSection): ShownTopicVideoSection {
+export function useTopicVideoSection(
+	topicId: string,
+	topicVideoSection: TopicVideoSection,
+): ShownTopicVideoSection & { hasNewFilmReady: boolean } {
 	// the page's changes end with the page, so the section opens again on the next visit
 	useStoreVersion()
 	useEffect(() => () => clearTopicVideoSectionChange(topicId), [topicId])
-	return toTopicVideoSection(topicId, topicVideoSection)
+
+	// remember the ready film the page offered before a new one arrived
+	const latestFilm = topicVideoSection.podcastEpisode
+	const [previousFilm, setPreviousFilm] = useState(latestFilm)
+	const selectedFilm = sectionChange?.topicId === topicId ? sectionChange.podcastEpisode : undefined
+	const latestChanged = Boolean(latestFilm.video) && previousFilm.id !== latestFilm.id
+	const hasNewFilm =
+		latestChanged &&
+		((latestFilm.publishedAt ?? "") > (previousFilm.publishedAt ?? "") ||
+			(latestFilm.publishedAt === previousFilm.publishedAt &&
+				(latestFilm.episodeNumber ?? 0) > (previousFilm.episodeNumber ?? 0)))
+
+	// keep the viewer's loaded film through publication, including a pause or a load in flight
+	const player = usePodcastEpisodePlayer()
+	const loadedFilm = player.podcastEpisode
+	const keepLoadedFilm =
+		hasNewFilm &&
+		player.format === "video" &&
+		!player.errorMessage &&
+		loadedFilm &&
+		loadedFilm.topicId === topicId &&
+		loadedFilm.id !== latestFilm.id &&
+		loadedFilm.id === (selectedFilm?.id ?? previousFilm.id) &&
+		!loadedFilm.isCompleted
+
+	// release an idle selection when the new poster takes its place
+	useEffect(() => {
+		if (latestChanged && !keepLoadedFilm) {
+			if (
+				selectedFilm &&
+				(hasNewFilm || selectedFilm.id === previousFilm.id) &&
+				selectedFilm.id !== latestFilm.id &&
+				sectionChange?.podcastEpisode === selectedFilm
+			) {
+				updateSectionChange(topicId, { podcastEpisode: undefined })
+			}
+			setPreviousFilm(latestFilm)
+		}
+	}, [hasNewFilm, keepLoadedFilm, latestChanged, latestFilm, previousFilm.id, selectedFilm, topicId])
+
+	// keep the playing surface mounted on the first render after publication
+	const section = toTopicVideoSection(topicId, topicVideoSection)
+	if (keepLoadedFilm) {
+		return { ...section, podcastEpisode: loadedFilm, hasNewFilmReady: true }
+	}
+	return { ...section, podcastEpisode: hasNewFilm ? latestFilm : section.podcastEpisode, hasNewFilmReady: false }
 }
 
 /**

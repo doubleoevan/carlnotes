@@ -2,7 +2,7 @@
 // run the eval with: bun run eval:search-queries
 
 import { cheapModel } from "@carlnotes/models/models"
-import { MAX_SEARCH_QUERIES } from "@carlnotes/pipeline/ingest/search"
+import { MAX_DEFAULT_SEARCH_QUERIES } from "@carlnotes/pipeline/ingest/search"
 import type { Assertion, GradingResult, TestCase } from "promptfoo"
 import { toGradingResult } from "../evalChecks"
 import { runEval, toRubricAssertions, toRubricGrader } from "../evalHarness"
@@ -15,7 +15,7 @@ const SEARCH_OPERATOR = /["“”]|\b(?:site|intitle|inurl|intext|filetype):|(?:
 
 // the checks that every case gets and that need no model
 const DETERMINISTIC_ASSERTIONS: Assertion[] = [
-	{ type: "javascript", metric: `writes 1 to ${MAX_SEARCH_QUERIES} queries`, value: gradeQueryCount },
+	{ type: "javascript", metric: `writes 1 to ${MAX_DEFAULT_SEARCH_QUERIES} queries`, value: gradeQueryCount },
 	{ type: "javascript", metric: "every query is distinct", value: gradeDistinctQueries },
 	{
 		type: "javascript",
@@ -54,11 +54,11 @@ function toTestCase(searchQueriesCase: SearchQueriesCase): TestCase {
 	return { description, vars: searchQueriesVariables, assert: rubricAssertions }
 }
 
-// fail the check unless the writer wrote at least one query and at most MAX_SEARCH_QUERIES
+// fail the check unless the writer wrote at least one query and at most MAX_DEFAULT_SEARCH_QUERIES
 function gradeQueryCount(writerOutput: string): GradingResult {
 	// count the queries and check the range
 	const searchQueryCount = toSearchQueries(writerOutput).length
-	const isSearchQueryCountInRange = searchQueryCount >= 1 && searchQueryCount <= MAX_SEARCH_QUERIES
+	const isSearchQueryCountInRange = searchQueryCount >= 1 && searchQueryCount <= MAX_DEFAULT_SEARCH_QUERIES
 	return toGradingResult(isSearchQueryCountInRange ? undefined : `the writer wrote ${searchQueryCount} queries`)
 }
 

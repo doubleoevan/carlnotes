@@ -28,3 +28,13 @@ export type SourceIngester = (source: Source, ingestContext?: IngestContext) => 
 
 // ingesters return Resources and the cost spent or 0 for fetches that don't use an API key
 export type IngestResult = { resources: IngestedResource[]; costDollars: number; fallbackMode?: string }
+
+/** Keeps a failed paid Source's known spend in the Scan report. */
+export class PaidSourceError extends Error {
+	constructor(
+		message: string,
+		readonly costDollars: number,
+	) {
+		super(message)
+	}
+}

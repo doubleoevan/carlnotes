@@ -32,6 +32,7 @@ import proposeTopicMemoriesTemplate from "./propose-topic-memories.md" with { ty
 import reconcileTopicMemoryClaimsTemplate from "./reconcile-topic-memory-claims.md" with { type: "text" }
 import scorePersonalSourceResourceTemplate from "./score-personal-source-resource.md" with { type: "text" }
 import searchTopicTemplate from "./search-topic.md" with { type: "text" }
+import selectTopicMemorySearchTemplate from "./select-topic-memory-search.md" with { type: "text" }
 import splitTopicMemoryTemplate from "./split-topic-memory.md" with { type: "text" }
 import suggestSourcesTemplate from "./suggest-sources.md" with { type: "text" }
 import summarizePersonalSourcesContextTemplate from "./summarize-personal-sources-context.md" with { type: "text" }
@@ -64,6 +65,7 @@ export const FALLBACK_PROMPT_TEMPLATES = {
 	"summarize-topic-scan": summarizeTopicScanTemplate,
 	"summarize-topic-post": summarizeTopicPostTemplate,
 	"search-topic": searchTopicTemplate,
+	"select-topic-memory-search": selectTopicMemorySearchTemplate,
 	"attach-context": attachContextTemplate,
 	"attach-image-context": attachImageContextTemplate,
 	"plan-picture-animation": planPictureAnimationTemplate,

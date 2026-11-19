@@ -91,7 +91,9 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
   to the four fields the scan report reads, for the payload the worker passes between stages. A Source's fallback mode
   comes from `@carlnotes/contracts/sources`. `ingester.ts` is the interface, whose optional `ingestContext` includes the
   Scan owner's key: the Topic owner's for a scheduled Scan and the starting user's for a manual one. The search
-  ingester's query generation bills that key like every other model call a Scan makes. `review/` — filtering and scoring
+  ingester bills query generation to that key. `topicMemorySearch.ts` supplies up to one extra query beyond the five default queries.
+  Its words come from a cited public Finding. `ingest/selectTopicMemorySearchQuery.ts` uses rating notes to choose
+  among those queries by number. `review/` — filtering and scoring
   (`ownTopicPages.ts` the topic's own CarlNotes pages that a Scan drops first, `filter.ts` the relevance gate,
   `topicContext.ts` the public/private review context, hash, and query embedding, `scoreExamplePages.ts` the pages
   Carl reads as examples, `reactionSignals.ts` a Finding's reaction signal, `dedupe.ts`
@@ -415,3 +417,5 @@ lacks the binding, the rebuild encodes and swaps a new chapters part. Only the b
 `topicVideo/videoRenderResourceLimits.ts` enforces the memory and working-directory limits on film renders, rebuilds and the offline chapter capture.
 
 The disposable Postgres Journal smoke suite shares `topicMemorySmokeFixtures.ts`. Its Journal checks live in `topicMemoryJournalSmokeChecks.ts`; its claim repair checks live in `topicMemoryRepairSmokeChecks.ts`.
+
+Web search reserves a Scan in `ingest/scanSearchResult.ts` before contacting paid providers. Ingest retries reuse its public Resources and cost. Review releases the cached payload after Temporal accepts the result.

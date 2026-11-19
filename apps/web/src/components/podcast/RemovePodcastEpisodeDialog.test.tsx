@@ -5,6 +5,7 @@ import {
 	type PodcastEpisodeRemovalConfirm,
 	RemovePodcastEpisodeDialog,
 } from "@carlnotes/core/components/RemovePodcastEpisodeDialog"
+import { setPodcastEpisodeListenAccount } from "@carlnotes/core/stores/podcastEpisodeListenStore"
 import {
 	clearPodcastEpisodePlayer,
 	registerPodcastEpisodeAudioAdapter,
@@ -191,3 +192,42 @@ for (const failingCallback of ["checkpoint", "refresh"] as const) {
 		}
 	})
 }
+
+test("an accepted removal retires a checkpoint after leaving the page in the same account", async () => {
+	const request = Promise.withResolvers<boolean>()
+	spyOn(client, "sendRemovePodcastEpisode").mockReturnValue(request.promise)
+	const cleanup = mock(async () => {})
+	const refresh = mock(() => {})
+	let confirm: (() => Promise<void>) | undefined
+	const Confirm: PodcastEpisodeRemovalConfirm = (props) => {
+		confirm = props.onConfirm
+		return null
+	}
+	setPodcastEpisodeListenAccount("owner")
+	try {
+		const harness = await renderTestHook(
+			() => null,
+			() => (
+				<RemovePodcastEpisodeDialog
+					userId="owner"
+					podcastEpisode={toPodcastEpisodeFixture()}
+					onClose={() => {}}
+					onPodcastEpisodeRemoved={refresh}
+					onRemoved={cleanup}
+					Confirm={Confirm}
+				/>
+			),
+		)
+		let pending: Promise<void> | undefined
+		await act(async () => {
+			pending = confirm?.()
+		})
+		await harness.close()
+		request.resolve(true)
+		await pending
+		expect(cleanup).toHaveBeenCalledTimes(1)
+		expect(refresh).not.toHaveBeenCalled()
+	} finally {
+		setPodcastEpisodeListenAccount(null)
+	}
+})

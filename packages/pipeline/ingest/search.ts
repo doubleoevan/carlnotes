@@ -7,12 +7,13 @@ import { writePrompt } from "@carlnotes/models/prompts/write"
 import { generateText, Output } from "ai"
 import { z } from "zod"
 import { buildTopicScanContext } from "../attach"
-import type { IngestContext, NewResource, Source, SourceIngester } from "./ingester"
+import { type IngestContext, type NewResource, PaidSourceError, type Source, type SourceIngester } from "./ingester"
 import { toResourceKind } from "./normalize"
+import { selectTopicMemorySearchQuery } from "./selectTopicMemorySearchQuery"
 import { fetchVideos, playlistIdFromUrl } from "./youtube"
 
 // query and fetch limits
-export const MAX_SEARCH_QUERIES = 5
+export const MAX_DEFAULT_SEARCH_QUERIES = 5
 const RESULTS_PER_QUERY = 10
 const FETCH_TIMEOUT_MS = 10_000
 // the longest user-controlled context sent to the model, in characters. the limit bounds a huge context's token spend
@@ -31,11 +32,28 @@ export const searchIngester: SourceIngester = async (source: Source, ingestConte
 	// generate search queries from the context on the Scan owner's key, then run them and keep whichever succeeds
 	const litellmApiKey = ingestContext?.litellmApiKey
 	const searchQueries = await generateSearchQueries({ topicContext, topicName, litellmApiKey })
-	const searchResponses = await runSearches(searchQueries)
+	const defaultSearches = Promise.allSettled(searchQueries.map(runSearch))
+
+	// The default requests run while Carl selects the optional sixth query.
+	const followUp =
+		ingestContext?.scanId && searchQueries.length
+			? await selectTopicMemorySearchQuery({
+					topicId: source.topicId,
+					scanId: ingestContext.scanId,
+					topic: [topicName, topicContext].join("\n"),
+					queries: searchQueries,
+					litellmApiKey,
+				})
+			: { query: undefined, costDollars: 0 }
+	const [defaultResults, followUpResults] = await Promise.all([
+		defaultSearches,
+		Promise.allSettled(followUp.query ? [runSearch(followUp.query)] : []),
+	])
+	const searchResponses = toSearchResponses([...defaultResults, ...followUpResults], followUp.costDollars)
 
 	// merge search query results. sum the per-search cost and collect the Resources
 	const resourceByUrl = new Map<string, NewResource>()
-	let costDollars = 0
+	let costDollars = followUp.costDollars
 	for (const response of searchResponses) {
 		const searchResults = parseResults(response)
 		costDollars += searchResults.costDollars
@@ -68,7 +86,7 @@ export async function buildSearchPrompt(context: string, name: string): Promise<
 	const { template, name: promptName, registryPrompt } = await fetchPromptTemplate("search-topic")
 
 	// fence the topic's user-supplied context in the prompt as untrusted
-	const prompt = writePrompt(template, { topicContext }, { maxQueries: String(MAX_SEARCH_QUERIES) })
+	const prompt = writePrompt(template, { topicContext }, { maxQueries: String(MAX_DEFAULT_SEARCH_QUERIES) })
 	return { prompt, name: promptName, registryPrompt }
 }
 
@@ -96,7 +114,7 @@ export async function generateSearchQueries({
 
 	// trim, drop blanks, and dedupe the model output, then limit it so a chatty model doesn't inflate the search call count
 	const queries = [...new Set(output.queries.map((query) => query.trim()).filter(Boolean))]
-	return queries.slice(0, MAX_SEARCH_QUERIES)
+	return queries.slice(0, MAX_DEFAULT_SEARCH_QUERIES)
 }
 
 // turn a search response into deduped Resources plus the dollar cost that the provider reported for the search
@@ -123,11 +141,8 @@ export function parseResults(response: SearchResponse): { resources: NewResource
 	return { resources: [...resourceByUrl.values()], costDollars: response.costDollars?.total ?? 0 }
 }
 
-// run every query in parallel and keep the responses that succeeded. one bad query must not discard the rest
-async function runSearches(searchQueries: string[]): Promise<SearchResponse[]> {
-	// settle every query so one rejection cannot cancel the others
-	const outcomes = await Promise.allSettled(searchQueries.map(runSearch))
-
+// Keep results in query order so default searches receive first credit for a shared URL.
+function toSearchResponses(outcomes: PromiseSettledResult<SearchResponse>[], costDollars: number): SearchResponse[] {
 	// collect the responses that succeeded and log each query that failed
 	const searchResponses: SearchResponse[] = []
 	for (const outcome of outcomes) {
@@ -140,7 +155,7 @@ async function runSearches(searchQueries: string[]): Promise<SearchResponse[]> {
 
 	// every query failing means the search itself is broken, so fail the Source instead of reporting zero results
 	if (outcomes.length > 0 && searchResponses.length === 0) {
-		throw new Error(`all ${outcomes.length} exa search queries failed`)
+		throw new PaidSourceError(`all ${outcomes.length} exa search queries failed`, costDollars)
 	}
 	return searchResponses
 }
@@ -169,7 +184,7 @@ export async function runSearch(query: string): Promise<SearchResponse> {
 		signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
 	})
 
-	// a failed response throws an error. runSearches keeps the queries that succeeded
+	// a failed response throws an error. the other queries can still succeed
 	if (!response.ok) {
 		throw new Error(`exa search returned ${response.status}`)
 	}

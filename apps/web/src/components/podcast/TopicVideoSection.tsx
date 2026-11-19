@@ -5,6 +5,7 @@ import {
 	type TopicVideoSectionElements,
 } from "@carlnotes/core/components/TopicVideoSection"
 import { type ComponentProps, useEffect, useRef } from "react"
+import { Button } from "@/components/primitives/button"
 import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
 import { captureFilmVisitEvent } from "@/lib/visitAnalytics"
 import { PodcastThemeSongNote } from "./PodcastThemeSongNote"
@@ -21,6 +22,11 @@ const elements: TopicVideoSectionElements = {
 		<UnpublishedPodcastEpisodeCard podcastEpisode={podcastEpisode} isVideoRendering />
 	),
 	ProgressLine: UNPUBLISHED_PODCAST_EPISODE_CARD_ELEMENTS.ProgressLine,
+	NewFilmButton: ({ label, onPress }) => (
+		<Button variant="secondary" className="self-start" onClick={onPress}>
+			{label}
+		</Button>
+	),
 }
 
 // the topic, and the read of its page again while its film renders

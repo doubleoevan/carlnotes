@@ -4,11 +4,12 @@ import {
 	type PodcastPlayerElements,
 	PodcastPlayer as SharedPodcastPlayer,
 } from "@carlnotes/core/components/PodcastPlayer"
+import { setPodcastEpisodeListenAccount } from "@carlnotes/core/stores/podcastEpisodeListenStore"
 import { toPodcastEpisodeQuestionLabel } from "@carlnotes/core/stores/podcastEpisodeQuestionRules"
 import { usePodcastEpisodeQuestion } from "@carlnotes/core/stores/podcastEpisodeQuestionStore"
 import { useEffect, useRef } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
-import { registerPodcastEpisodeAudio, seekPlaybackTo, setIsUserSignedIn } from "@/stores/podcastEpisodePlayerStore"
+import { registerPodcastEpisodeAudio, seekPlaybackTo } from "@/stores/podcastEpisodePlayerStore"
 import { SkipPlaybackButtons } from "./PlaybackControlButtons"
 import { PodcastEpisodeCover } from "./PodcastEpisodeCover"
 import { PodcastEpisodeTooltip } from "./PodcastEpisodeDetails"
@@ -29,7 +30,8 @@ export function PodcastEpisodeAudio() {
 
 	// tell the player store whether the user is signed in
 	const { data: session } = authClient().useSession()
-	useEffect(() => setIsUserSignedIn(Boolean(session)), [session])
+	const userId = session?.user.id ?? null
+	useEffect(() => setPodcastEpisodeListenAccount(userId), [userId])
 	return (
 		<>
 			{/* biome-ignore lint/a11y/useMediaCaption: each podcast episode's transcript is on its own page */}
