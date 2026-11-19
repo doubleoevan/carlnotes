@@ -11,7 +11,7 @@ import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
 import { captureFilmVisitEvent } from "@/visitAnalytics"
 import { PodcastEpisodeCard } from "./PodcastEpisodeCard"
 import { PodcastThemeSongNote } from "./PodcastThemeSongNote"
-import { UnpublishedPodcastEpisodeCard } from "./UnpublishedPodcastEpisodeCard"
+import { PodcastEpisodeProgressLine } from "./UnpublishedPodcastEpisodeCard"
 
 // the topic, and the read of its screen again while its film renders
 type TopicVideoSectionProps = {
@@ -20,7 +20,7 @@ type TopicVideoSectionProps = {
 }
 
 // the home's card cells, with the column of cards and the page buttons inside the topic screen's own side inset, the
-// film card whose play reports the topic-videos surface, and the filming card
+// film card whose play reports the topic-videos surface, and the filming line
 const TOPIC_VIDEO_SECTION_ELEMENTS: Omit<TopicVideoSectionElements, "Section"> = {
 	...CARDS_SECTION_ELEMENTS,
 	Grid: ({ children }) => <View className="gap-3 pt-2 pb-2">{children}</View>,
@@ -32,8 +32,8 @@ const TOPIC_VIDEO_SECTION_ELEMENTS: Omit<TopicVideoSectionElements, "Section"> =
 	FilmCard: ({ podcastEpisodeCard }) => (
 		<PodcastEpisodeCard podcastEpisodeCard={podcastEpisodeCard} variant="video" videoSurface="topic-videos" />
 	),
-	RenderingCard: ({ podcastEpisode }) => (
-		<UnpublishedPodcastEpisodeCard podcastEpisode={podcastEpisode} isVideoRendering />
+	RenderingLine: (progressLine) => (
+		<PodcastEpisodeProgressLine {...progressLine} className="text-sm font-semibold text-muted-foreground" />
 	),
 }
 
@@ -55,8 +55,8 @@ export function TopicVideoSection({ topic, onVideoRenderingPoll }: TopicVideoSec
 }
 
 // the collapsible section, open on every screen load and kept mounted while closed, with the theme song's credits right
-// after its title, the film count at its far right, and a divider under it while closed. the filming card sits above
-// the cards, and the page buttons under them
+// after its title, the film count at its far right, and a divider under it while closed. the filming line sits under
+// the title, above the cards, and the page buttons under them
 function TopicVideoCollapsibleSection({
 	title,
 	countLabel,

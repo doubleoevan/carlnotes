@@ -1,6 +1,6 @@
 // the topic page's film section: open, headed "Coffee Break Cinema" with the theme song's credits and the film count.
-// it holds every ready film as a card, six to a page, with every card in the html. the filming card sits above the
-// cards while the latest film renders, and alone if no film is ready. the page is read again until the film is ready,
+// it holds every ready film as a card, six to a page, with every card in the html. the filming line sits before the
+// count while the latest film renders, and alone if no film is ready. the page is read again until the film is ready,
 // and a topic with no film has no section
 import { expect, mock, test } from "bun:test"
 import type { PodcastEpisodeCard } from "@carlnotes/contracts/home"
@@ -15,7 +15,6 @@ import { focusManager } from "@tanstack/react-query"
 import { act } from "react"
 import { renderWithRouter } from "@/components/chat/renderWithRouter"
 import { renderTestHook } from "@/lib/hookTestHarness"
-import { INFO_CARD_CLASS } from "@/lib/styleClasses"
 import { TopicVideoSection } from "./TopicVideoSection"
 
 // the shared section with plain elements, for the reads while a film renders
@@ -30,7 +29,7 @@ const testElements: TopicVideoSectionElements = {
 	Cell: ({ children }) => <li>{children}</li>,
 	Pagination: () => null,
 	FilmCard: ({ podcastEpisodeCard }) => <h4>{podcastEpisodeCard.podcastEpisode.title}</h4>,
-	RenderingCard: () => <p>Rendering</p>,
+	RenderingLine: () => <p>Rendering</p>,
 }
 
 // a topic's film cards, newest first, each named for its episode number
@@ -98,19 +97,18 @@ test("a topic with no film renders no film section", async () => {
 	expect(await renderFilmSection(toFilmTopic({ filmCount: 0 }))).toBe("")
 })
 
-test("a topic whose only film is rendering renders the open section with the filming card and no cards", async () => {
+test("a topic whose only film is rendering renders the open section with the filming line and no cards", async () => {
 	// no ready film, and the latest podcast episode's film is rendering
 	const latestPodcastEpisode = toPodcastEpisodeFixture({ title: "Better beans", isVideoRendering: true })
 	const html = await renderFilmSection(toFilmTopic({ filmCount: 0, latestPodcastEpisode }))
 
-	// the section's title over the card's frame, title, and line, whose emoji a screen reader skips
+	// the section's title and the filming line, whose emoji a screen reader skips, with no filming card
 	expect(html).toContain("Coffee Break Cinema")
 	expect(html).toContain('data-state="open"')
-	expect(html).toContain(INFO_CARD_CLASS)
-	expect(html).toContain("Better beans")
 	expect(html).toMatch(
 		/<span aria-hidden="true"[^>]*>🎬<\/span><span class="shimmer-text">Carl and Vienna are filming...<\/span>/,
 	)
+	expect(html).not.toContain("Better beans")
 	expect(html).not.toContain('aria-label="Play film"')
 })
 
@@ -119,10 +117,17 @@ test("a failed film on a topic with no ready film renders no film section", asyn
 	expect(await renderFilmSection(toFilmTopic({ filmCount: 0, latestPodcastEpisode }))).toBe("")
 })
 
-test("the filming card sits above the ready films' cards while a newer film renders", async () => {
+test("the filming line sits once in the title row, after the credits and before the count, and wraps on a phone", async () => {
 	const latestPodcastEpisode = toPodcastEpisodeFixture({ id: "episode-3", title: "New beans", isVideoRendering: true })
 	const html = await renderFilmSection(toFilmTopic({ filmCount: 2, latestPodcastEpisode }))
-	expect(html.indexOf("Carl and Vienna are filming...")).toBeLessThan(html.indexOf('aria-label="Play film"'))
+
+	// one line in the wrapping title row, before the count and the cards, and no filming card
+	expect(html.match(/Carl and Vienna are filming/g)).toHaveLength(1)
+	expect(html).toContain("max-sm:flex-wrap")
+	const lineIndex = html.indexOf("Carl and Vienna are filming")
+	expect(lineIndex).toBeLessThan(html.indexOf("2 films"))
+	expect(lineIndex).toBeLessThan(html.indexOf('aria-label="Play film"'))
+	expect(html).not.toContain("New beans")
 	expect(html.match(/aria-label="Play film"/g)).toHaveLength(2)
 })
 
@@ -146,7 +151,7 @@ test("the page is read again while a film renders, and the new film joins the ca
 		expect(reload).toHaveBeenCalledTimes(1)
 		expect(harness.container.textContent).toContain("Rendering")
 
-		// the ready film's read drops the filming card, adds the film's card first, and stops the reads
+		// the ready film's read drops the filming line, adds the film's card first, and stops the reads
 		topic = toFilmTopic({ filmCount: 3, latestPodcastEpisode: { ...renderingPodcastEpisode, isVideoRendering: false } })
 		await harness.render()
 		await act(async () => {

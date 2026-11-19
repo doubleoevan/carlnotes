@@ -126,8 +126,8 @@ the film's player, and the picture returns to the player. Close it anywhere else
 podcast or another film closes it.
 
 A film takes longer to make than its episode, from about half an hour to over an hour. Until it is ready, Coffee Break
-Film on the episode's page says **Carl and Vienna are filming...**, and so does a card at the top of Coffee Break
-Cinema on the topic page. The film takes its place when it is ready, with no reload.
+Film on the episode's page says **Carl and Vienna are filming...**, and Coffee Break Cinema on the topic page
+says it in its title row. The film takes its place when it is ready, with no reload.
 
 Carl draws the film's image the first time the film is made, from what the episode covers. Until it is drawn, the film
 opens on the episode's image. A topic's editor can change it. Pick **Edit film** in the **⋮** actions menu of the

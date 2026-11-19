@@ -289,11 +289,11 @@ the browser bundle and renders pages through the server build, behind its own ro
   picture-in-picture on a page with no film player, loading the dialog's code once a film returns, and
   `TopicVideoSection.tsx` is the topic page's
   collapsible film section, the topic's films as the home's paged film cards, whose play opens the Video dialog. While
-  the topic's latest podcast episode's film is rendering, the section shows `UnpublishedPodcastEpisodeCard` with
-  `isVideoRendering` above the cards, or alone for a topic with no ready film, the recording card's frame with the line
-  "Carl and Vienna are filming...", and core's `useTopicVideoRenderingPoll` reads the page again until the film is
-  ready. `pages/PodcastEpisodePage.tsx` shows the same card in its Coffee Break
-  Film section for a podcast episode whose film is rendering, and its poll replaces the page once the film is no
+  the topic's latest podcast episode's film is rendering, the section's title row shows the shimmering line "Carl and
+  Vienna are filming..." right before the film count, wrapping to its own line if the row runs out of room, through
+  `UnpublishedPodcastEpisodeCard.tsx`'s `PodcastEpisodeProgressLine`, and core's `useTopicVideoRenderingPoll` reads the
+  page again until the film is ready. `pages/PodcastEpisodePage.tsx` shows `UnpublishedPodcastEpisodeCard` with
+  `isVideoRendering` in its Coffee Break Film section for a podcast episode whose film is rendering, and its poll replaces the page once the film is no
   longer rendering. A failed poll read of the topic page keeps the page shown.
   Both players use `PodcastEpisodeSeekBar`. Hovering a chapter shows `PodcastEpisodeChapterPreview.tsx`, a popover
   anchored to the segment. The popover stays open while hovered. On the seek bar, Enter focuses the current chapter's

@@ -410,8 +410,9 @@ autoplay. Its lifecycle tests use the web's DOM hook harness; its selection rule
 with the permitted scan control, and, with `isVideoRendering`, a published podcast episode whose film is rendering. Each
 app's `ProgressLine` element draws the shimmering line after its emoji, with the words from `lib/podcastEpisodeCopy.ts`.
 `components/TopicVideoSection` shows the topic's films, `topicPodcastEpisodeVideoCards` from the topic read, through
-`PagedCardsSection` and its `FilmCard` element, with that card through its `RenderingCard` element above them while the
-topic's latest film renders, or alone for a topic with no ready film. `hooks/useTopicVideoRenderingPoll` reads the page
+`PagedCardsSection` and its `FilmCard` element. While the topic's latest film renders, its `RenderingLine` element draws
+the filming line as the section's action, which each app puts in the title row, or alone for a topic with no ready
+film. `hooks/useTopicVideoRenderingPoll` reads the page
 again every 30 seconds while the app is focused and online, for at most four hours, and the new film's card joins the
 others once it is ready.
 

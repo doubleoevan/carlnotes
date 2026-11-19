@@ -10,7 +10,7 @@ import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
 import { captureFilmVisitEvent } from "@/lib/visitAnalytics"
 import { PodcastEpisodeCard } from "./PodcastEpisodeCard"
 import { PodcastThemeSongNote } from "./PodcastThemeSongNote"
-import { UnpublishedPodcastEpisodeCard } from "./UnpublishedPodcastEpisodeCard"
+import { PodcastEpisodeProgressLine } from "./UnpublishedPodcastEpisodeCard"
 
 // the topic, and the read of its page again while its film renders
 type TopicVideoSectionProps = {
@@ -19,14 +19,14 @@ type TopicVideoSectionProps = {
 }
 
 // the home's grid, cells, and page buttons, the film card whose play reports the topic-videos surface, and the filming
-// card
+// line at the size of the film count
 const TOPIC_VIDEO_SECTION_ELEMENTS: Omit<TopicVideoSectionElements, "Section"> = {
 	...CARDS_SECTION_ELEMENTS,
 	FilmCard: ({ podcastEpisodeCard }) => (
 		<PodcastEpisodeCard podcastEpisodeCard={podcastEpisodeCard} variant="video" videoSurface="topic-videos" />
 	),
-	RenderingCard: ({ podcastEpisode }) => (
-		<UnpublishedPodcastEpisodeCard podcastEpisode={podcastEpisode} isVideoRendering />
+	RenderingLine: (progressLine) => (
+		<PodcastEpisodeProgressLine {...progressLine} className="text-muted-foreground text-sm font-semibold" />
 	),
 }
 
@@ -49,7 +49,8 @@ export function TopicVideoSection({ topic, onVideoRenderingPoll }: TopicVideoSec
 
 // the collapsible section at the film anchor, open on every page load and kept in the html while closed, with the theme
 // song's credits right after its title, the film count at its far right, and a divider under it while closed. the
-// filming card sits above the cards, and the page buttons under them
+// filming line sits right before the count and wraps to its own line at the left if the row runs out of room. the page
+// buttons sit under the cards
 function TopicVideoCollapsibleSection({
 	value,
 	title,
@@ -63,16 +64,23 @@ function TopicVideoCollapsibleSection({
 		<CollapsibleSection
 			value={value}
 			title={title}
-			titleNote={<PodcastThemeSongNote />}
+			titleNote={
+				<>
+					<PodcastThemeSongNote />
+					{/* the spacer that takes the row's free space, so the filming line sits by the count until it wraps */}
+					<span aria-hidden="true" className="grow" />
+					{action}
+				</>
+			}
 			countLabel={countLabel}
 			onOpenChange={(isOpen) => captureFilmVisitEvent("visit_episode_video_section_toggled", { topicId, isOpen })}
+			canWrapHeader
 			isContentKept
 			hasClosedDivider
 			id={FILM_ANCHOR_ID}
 			className="mt-2"
 		>
 			<div className="flex flex-col gap-4">
-				{action}
 				{children}
 				{pageButtons}
 			</div>

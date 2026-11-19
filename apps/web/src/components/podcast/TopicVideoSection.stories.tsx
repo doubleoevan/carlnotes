@@ -28,7 +28,7 @@ type Story = StoryObj<typeof meta>
 
 // eight films as cards, six to a page
 export const Open: Story = {}
-// the filming card alone, for a topic with no ready film
+// the filming line alone, for a topic with no ready film
 export const VideoRendering: Story = { args: { topic: PODCAST_STORY_VIDEO_RENDERING_TOPIC } }
-// the filming card above the ready films' cards
+// the filming line in the title row, with the ready films' cards
 export const NewerVideoRendering: Story = { args: { topic: PODCAST_STORY_NEWER_VIDEO_RENDERING_TOPIC } }

@@ -2,11 +2,13 @@
 
 ### Requirement: The film sections say the hosts are filming while a film renders
 
-While a published Podcast Episode's film renders, the recording card's frame SHALL show "Carl and Vienna are filming..."
-after a 🎬 hidden from a screen reader: in the film player's place on the podcast episode page, and above the cards in
-the topic video section for the Topic's latest Podcast Episode. A page showing the card SHALL poll the film's status
-every 30 seconds, as the status-reads capability states, for at most four hours, and SHALL read its page once that
-status leaves rendering. A failed film SHALL show nothing, and a failed status SHALL stop the poll.
+While a published Podcast Episode's film renders, the film sections SHALL show "Carl and Vienna are filming..." after a
+🎬 hidden from a screen reader: in the recording card's frame in the film player's place on the podcast episode page, and
+as a shimmering line in the topic video section's title row for the Topic's latest Podcast Episode, right before the
+film count, which wraps to its own line at the left if the row runs out of room, with no filming card. A page showing
+the line SHALL poll the film's status every 30 seconds, as the status-reads capability states, for at most four hours,
+and SHALL read its page once that status leaves rendering. A failed film SHALL show nothing, and a failed status SHALL
+stop the poll.
 
 #### Scenario: The filming card shows while the film renders
 
@@ -19,37 +21,45 @@ status leaves rendering. A failed film SHALL show nothing, and a failed status S
 
 - **GIVEN** a Topic with no ready film, whose latest published Podcast Episode's film is rendering
 - **WHEN** a user opens the topic page
-- **THEN** an open section headed "Coffee Break Cinema" shows the filming card and no film cards
+- **THEN** an open section headed "Coffee Break Cinema" shows the filming line and no film cards
 
 #### Scenario: The ready films show under the card
 
 - **GIVEN** a Topic with two ready films, and a newer Podcast Episode whose film is rendering
 - **WHEN** a user opens the topic page
-- **THEN** the topic video section shows the filming card above the two film cards
+- **THEN** the topic video section shows the filming line right before its "2 films" count at
+  the far right, and the two film cards
+
+#### Scenario: The filming line wraps to its own line on a phone
+
+- **GIVEN** a Topic with two ready films, and a newer Podcast Episode whose film is rendering
+- **WHEN** a user opens the topic page on a phone too narrow for the title row to hold the line
+- **THEN** the filming line wraps under the title at the left, with "2 films" at the far right, above the two film
+  cards
 
 #### Scenario: The new film joins the cards without a reload
 
-- **GIVEN** a topic page showing the filming card
+- **GIVEN** a topic page showing the filming line
 - **WHEN** a poll of the film's status returns ready
-- **THEN** the page reads once, drops the card, and shows the new film as the first card, and a film playing in the
+- **THEN** the page reads once, drops the line, and shows the new film as the first card, and a film playing in the
   Video dialog plays on
 
 #### Scenario: The reads pause in the background and stop after four hours
 
-- **GIVEN** a page showing the filming card
+- **GIVEN** a page showing the filming line
 - **WHEN** the app goes to the background or offline, or four hours pass
 - **THEN** the page stops polling the film's status, and a return to the foreground within the four hours polls at once
 
 #### Scenario: A failed film shows nothing
 
 - **WHEN** a user opens the page of a Podcast Episode whose film failed or was skipped
-- **THEN** the page shows no Coffee Break Film, and its Topic's page shows no filming card and no card for it
+- **THEN** the page shows no Coffee Break Film, and its Topic's page shows no filming line and no card for it
 
 #### Scenario: The card shows on web and mobile
 
 - **WHEN** a film is rendering
-- **THEN** the web and the mobile app draw the filming card from the one shared card that draws the recording card, with
-  the same words
+- **THEN** the web and the mobile app draw the filming line from the one shared line that the recording card draws,
+  with the same words
 
 #### Scenario: The home, profile, and team cards list ready films alone
 
@@ -58,10 +68,10 @@ status leaves rendering. A failed film SHALL show nothing, and a failed status S
 
 #### Scenario: A poll reads the status and no page
 
-- **WHEN** a page shows the filming card for ten minutes
+- **WHEN** a page shows the filming line for ten minutes
 - **THEN** it sends the film's status read every 30 seconds, and no read of the page
 
 #### Scenario: A closed-out film ends the card
 
 - **WHEN** the sweep fails a film that was stuck rendering, and the next status poll returns failed
-- **THEN** the page reads once, shows no filming card, and sends no further status read
+- **THEN** the page reads once, shows no filming line, and sends no further status read
