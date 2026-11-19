@@ -52,7 +52,7 @@ export const HOW_IT_WORKS_STEPS = [
 	{ title: "Carl reads everything.", text: "Every night he scans what's new and keeps what's worth your time." },
 	{
 		title: "You get the notes.",
-		text: "Ranked topic findings with summaries, a video and a podcast with Carl and Vienna, and a chat that did all the research.",
+		text: "Ranked topic findings with summaries, films and a podcast with Carl and Vienna, and a chat that did all the research.",
 	},
 ] as const
 
