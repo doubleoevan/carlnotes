@@ -3,6 +3,7 @@ import {
 	PODCAST_STORY_FILM_EPISODE,
 	PODCAST_STORY_FILM_TOPIC,
 	PODCAST_STORY_NEWER_VIDEO_RENDERING_TOPIC,
+	PODCAST_STORY_TWO_FILM_TOPIC,
 	PODCAST_STORY_VIDEO_RENDERING_TOPIC,
 	PodcastEpisodeStory,
 } from "@carlnotes/core/lib/podcastEpisodeStories"
@@ -32,6 +33,8 @@ type Story = StoryObj<typeof meta>
 
 // eight films as cards, six to a page
 export const Open: Story = {}
+// two films, with the count at the far right
+export const TwoFilms: Story = { args: { topic: PODCAST_STORY_TWO_FILM_TOPIC } }
 // the filming line alone, for a topic with no ready film
 export const VideoRendering: Story = { args: { topic: PODCAST_STORY_VIDEO_RENDERING_TOPIC } }
 // the filming line under the title, above the ready films' cards

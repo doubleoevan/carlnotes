@@ -32,6 +32,9 @@ read, and the component contracts both apps' implementations build on. `tokens.c
 - `field.ts` — `FIELD_CLASS`, the border and the fill of a field, a select, and an outline Button in both modes: the
   `input` color as the border and the same color at 30% as the fill. Both stylesheets read the module as a Tailwind
   source, and `contrast.test.ts` checks a value and a placeholder on the fill over a card and a popover.
+- `cardGrid.ts` — `CARD_GRID_CLASS`, the web card grid of one, two, and three columns, and `toCountBesideTitleFrom`,
+  the width from which a row of that many cards ends short of the far right, so a card section's count sits right
+  after its title. The web stylesheet scans it. The mobile app's cards stack in one column, so it reads neither.
 - `pagination.ts` — the card fill, border, muted label and current-page highlight used by both apps' numbered
   pagination and table footer controls. Both stylesheets scan it; native labels read its text classes separately.
 - `components/` — the component contracts, one module per component both apps share. `topic-memories-list.ts` supplies the
@@ -79,7 +82,7 @@ read, and the component contracts both apps' implementations build on. `tokens.c
   imports, `uniwind.css`, which `apps/mobile/global.css` imports, and `figma/light.tokens.json` and
   `figma/dark.tokens.json`. Change the source, then run `bun run nightshift:write`
   (`scripts/write-nightshift-tokens.ts`), which writes all five. Never edit them by hand.
-- Importers: `apps/web`, which reads the stylesheet, `classNames.ts`, `field.ts`, `iconAction.ts`, `pagination.ts`,
+- Importers: `apps/web`, which reads the stylesheet, `cardGrid.ts`, `classNames.ts`, `field.ts`, `iconAction.ts`, `pagination.ts`,
   `coffeeMug.ts`, `oauthProviderIcons.ts`, `aiProviderIcons.ts`, `noteHtmlStyle.ts` and `theme.ts`'s `toColorCssVariable` for the note's style, and the
   contracts anywhere as far as the boundary check goes, each contract only from its implementation, a story, or a test
   by the parity check, and the rest of the TypeScript only from its tests, the stories, `.storybook/`, and

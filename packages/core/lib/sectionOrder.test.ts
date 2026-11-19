@@ -82,10 +82,10 @@ const PODCAST_EPISODE_PAGE_ELEMENT_ORDERS: Record<string, string[]> = {
 	],
 }
 
-// the theme song's credits, the credits leading a section's title note, and how many sections of each file show them:
+// the theme song's credits, the credits as a section's title note, and how many sections of each file show them:
 // the film section and the podcast section of the topic page and of the podcast episode page, on both apps
 const THEME_SONG_CREDITS = "<PodcastThemeSongNote"
-const THEME_SONG_CREDITS_TITLE_NOTE = /titleNote=\{\s*(<>\s*)?<PodcastThemeSongNote \/>/g
+const THEME_SONG_CREDITS_TITLE_NOTE = "titleNote={<PodcastThemeSongNote />}"
 const THEME_SONG_CREDITS_COUNTS: Record<string, number> = {
 	"apps/web/src/components/podcast/TopicVideoSection.tsx": 1,
 	"apps/web/src/components/podcast/PodcastEpisodePlayer.tsx": 1,
@@ -97,9 +97,9 @@ const THEME_SONG_CREDITS_COUNTS: Record<string, number> = {
 
 test("the theme song's credits sit beside the film and podcast section titles alone", async () => {
 	for (const [sectionFile, creditsCount] of Object.entries(THEME_SONG_CREDITS_COUNTS)) {
-		// every use of the credits in the file leads a section's title note
+		// every use of the credits in the file is a section's title note
 		const source = await Bun.file(new URL(`../../../${sectionFile}`, import.meta.url)).text()
-		expect(source.match(THEME_SONG_CREDITS_TITLE_NOTE)).toHaveLength(creditsCount)
+		expect(source.split(THEME_SONG_CREDITS_TITLE_NOTE)).toHaveLength(creditsCount + 1)
 		expect(source.split(THEME_SONG_CREDITS)).toHaveLength(creditsCount + 1)
 	}
 })

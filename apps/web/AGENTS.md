@@ -570,7 +570,8 @@ episodes, or Topic Posts.
 `components/topicPost/HomeTopicPostRankDialog.tsx` is the admin's Home posts list, which the home page's and a Topic
 Post page's actions menus open: it reads the featured Topic Posts and the ones an admin may feature, offers the page's post a
 place, and sends the order. `components/common/CardsSection.tsx` is the web's accordion section, grid, and page
-buttons for core's `CardsSection`, which the home's, the profile's, and the team page's card sections render, and
+buttons for core's `CardsSection`, which the home's, the profile's, and the team page's card sections render, with the
+grid and the count's place from Nightshift's `cardGrid.ts`, which the topic page's Coffee Break Cinema reads too, and
 `components/common/pageSectionsElements.tsx` is `PAGE_SECTIONS_ELEMENTS`, the sections and cards that the profile's
 and the team page's adapters spread,
 Featured Posts right below Featured Podcasts on the profile and the team page. The home writes its sections in

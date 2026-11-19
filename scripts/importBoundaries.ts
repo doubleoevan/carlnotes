@@ -37,14 +37,15 @@ export const STORY_FILE_SUFFIX = ".stories.tsx"
 // an import of a file in the mobile app's Storybook config folder
 const MOBILE_STORYBOOK_CONFIG_IMPORT_PATTERN = /(?:^|\/)\.rnstorybook(?:\/|$)/
 
-// the design system package, and the modules any web file may import: its stylesheet, shared control classes, the
-// coffee mug, the sign-in providers' icons, the note body's style, the theme's variable names, and the chart theme.
-// only the chart theme holds palette values
+// the design system package, and the modules any web file may import: its stylesheet, shared control classes, the card
+// grid, the coffee mug, the sign-in providers' icons, the note body's style, the theme's variable names, and the chart
+// theme. only the chart theme holds palette values
 const NIGHTSHIFT_PACKAGE_NAME = "@carlnotes/nightshift"
 const UNRESTRICTED_NIGHTSHIFT_IMPORT_PATHS = new Set([
 	`${NIGHTSHIFT_PACKAGE_NAME}/tokens.css`,
 	`${NIGHTSHIFT_PACKAGE_NAME}/mcpViewTokens.css`,
 	`${NIGHTSHIFT_PACKAGE_NAME}/classNames`,
+	`${NIGHTSHIFT_PACKAGE_NAME}/cardGrid`,
 	`${NIGHTSHIFT_PACKAGE_NAME}/field`,
 	`${NIGHTSHIFT_PACKAGE_NAME}/iconAction`,
 	`${NIGHTSHIFT_PACKAGE_NAME}/pagination`,

@@ -4,6 +4,7 @@ import {
 	CardsSection as SharedCardsSection,
 	PagedCardsSection as SharedPagedCardsSection,
 } from "@carlnotes/core/components/CardsSection"
+import { CARD_GRID_CLASS, toCountBesideTitleFrom } from "@carlnotes/nightshift/cardGrid"
 import { cn } from "@carlnotes/nightshift/classNames"
 import type { ComponentProps } from "react"
 import { AccordionSection } from "@/components/common/AccordionSection"
@@ -11,20 +12,16 @@ import { Pagination } from "@/components/common/Pagination"
 import { Card, CardBody } from "@/components/primitives/card"
 import { SCRIPTED_HIDDEN_CLASS, SKELETON_SHAPE_CLASS } from "@/lib/styleClasses"
 
-// the classes of a card grid: one column on a phone, two on a tablet, three on a desktop
-const CARD_GRID_CLASS = "grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
-
 // the web's elements. the section keeps its content in the html while closed, and a card off the page shown is hidden
 // only once the script runs, so a crawler and a reader without JavaScript see every card
 export const CARDS_SECTION_ELEMENTS: CardsSectionElements = {
-	// a section whose cards do not fill a row has its count right after its title: one card from the tablet's two
-	// columns up, and two cards on the desktop's three
+	// a section whose cards do not fill a row has its count right after its title
 	Section: ({ value, title, countLabel, cardCount, pageButtons, children }) => (
 		<AccordionSection
 			value={value}
 			title={title}
 			countLabel={countLabel}
-			countBesideTitleFrom={cardCount < 2 ? "sm" : cardCount < 3 ? "lg" : undefined}
+			countBesideTitleFrom={toCountBesideTitleFrom(cardCount)}
 			isContentKept
 		>
 			{children}

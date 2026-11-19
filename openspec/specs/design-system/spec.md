@@ -300,7 +300,8 @@ count SHALL hide on a narrow screen under a title too long to leave it room.
 On the web, an open section of cards whose cards do not fill one row of its grid SHALL show its count right after its
 title instead of at the far right: with one card where the grid has two columns or more, and with two cards where it
 has three. A closed section, a section whose cards fill the row, and every section on a phone's single column, SHALL
-keep the count at the far right.
+keep the count at the far right. The rule SHALL hold for every web card row, the topic page's Coffee Break Cinema
+included, and SHALL come from the one Nightshift module that also holds the card grid's columns.
 
 #### Scenario: One film on a wide screen
 
@@ -321,6 +322,13 @@ keep the count at the far right.
 
 - **WHEN** a user opens the home on a phone with one film in Featured films
 - **THEN** "1 film" sits at the far right of the title row
+
+#### Scenario: Two films on the topic page
+
+- **GIVEN** a Topic with two ready films
+- **WHEN** a user opens its topic page on a desktop, where the card grid has three columns
+- **THEN** "2 films" sits right after Coffee Break Cinema's theme song credits, and on a tablet's two columns it sits
+  at the far right
 
 ### Requirement: An empty list or table shows its line in a card
 

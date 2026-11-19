@@ -131,6 +131,12 @@ test("the filming line sits once in the title row, after the credits and before 
 	expect(html.match(/aria-label="Play film"/g)).toHaveLength(2)
 })
 
+test("two films put the count right after the title on a desktop, and eight keep it at the far right", async () => {
+	// the filler after the credits stops growing from the desktop width with two cards, and always grows with eight
+	expect(await renderFilmSection(toFilmTopic({ filmCount: 2 }))).toContain("lg:group-data-[state=open]/section:grow-0")
+	expect(await renderFilmSection(toFilmTopic({ filmCount: 8 }))).not.toContain("group-data-[state=open]/section:grow-0")
+})
+
 test("the page is read again while a film renders, and the new film joins the cards once it is ready", async () => {
 	// two ready films, and a newer podcast episode whose film is rendering
 	const renderingPodcastEpisode = toPodcastEpisodeFixture({ id: "episode-3", isVideoRendering: true })

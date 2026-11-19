@@ -94,6 +94,12 @@ export const PODCAST_STORY_FILM_TOPIC = toTestTopicResponse({
 	topicPodcastEpisodeVideoCards: PODCAST_STORY_FILM_CARDS,
 })
 
+// a topic with two films as cards, which end short of the far right of a desktop's row of three
+export const PODCAST_STORY_TWO_FILM_TOPIC = {
+	...PODCAST_STORY_FILM_TOPIC,
+	topicPodcastEpisodeVideoCards: PODCAST_STORY_FILM_CARDS.slice(0, 2),
+}
+
 // a topic with no ready film, whose latest podcast episode's film is rendering
 export const PODCAST_STORY_VIDEO_RENDERING_TOPIC = toTestTopicResponse({
 	podcast: toTopicPodcastFixture({

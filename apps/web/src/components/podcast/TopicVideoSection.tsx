@@ -4,6 +4,7 @@ import {
 	TopicVideoSection as SharedTopicVideoSection,
 	type TopicVideoSectionElements,
 } from "@carlnotes/core/components/TopicVideoSection"
+import { toCountBesideTitleFrom } from "@carlnotes/nightshift/cardGrid"
 import { type ComponentProps, useMemo } from "react"
 import { CARDS_SECTION_ELEMENTS } from "@/components/common/CardsSection"
 import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
@@ -48,13 +49,14 @@ export function TopicVideoSection({ topic, onVideoRenderingPoll }: TopicVideoSec
 }
 
 // the collapsible section at the film anchor, open on every page load and kept in the html while closed, with the theme
-// song's credits right after its title, the film count at its far right, and a divider under it while closed. the
-// filming line sits right before the count and wraps to its own line at the left if the row runs out of room. the page
-// buttons sit under the cards
+// song's credits right after its title, and a divider under it while closed. the film count sits at the far right, or
+// right after the title while the cards end short of the far right. the filming line sits right before the count and
+// wraps to its own line at the left if the row runs out of room. the page buttons sit under the cards
 function TopicVideoCollapsibleSection({
 	value,
 	title,
 	countLabel,
+	cardCount,
 	action,
 	pageButtons,
 	children,
@@ -64,15 +66,10 @@ function TopicVideoCollapsibleSection({
 		<CollapsibleSection
 			value={value}
 			title={title}
-			titleNote={
-				<>
-					<PodcastThemeSongNote />
-					{/* the spacer that takes the row's free space, so the filming line sits by the count until it wraps */}
-					<span aria-hidden="true" className="grow" />
-					{action}
-				</>
-			}
+			titleNote={<PodcastThemeSongNote />}
+			titleAside={action}
 			countLabel={countLabel}
+			countBesideTitleFrom={toCountBesideTitleFrom(cardCount)}
 			onOpenChange={(isOpen) => captureFilmVisitEvent("visit_episode_video_section_toggled", { topicId, isOpen })}
 			canWrapHeader
 			isContentKept

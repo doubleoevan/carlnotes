@@ -30,9 +30,10 @@
 	@apply bg-accent;
 }
 
-/* the Nightshift component contracts, fields, and pagination hold classes the web's implementations draw. tailwind has to
+/* the Nightshift component contracts, card grid, fields, and pagination hold classes the web's implementations draw. tailwind has to
    scan them to emit them */
 @source "../../../packages/nightshift/components";
+@source "../../../packages/nightshift/cardGrid.ts";
 @source "../../../packages/nightshift/field.ts";
 @source "../../../packages/nightshift/pagination.ts";
 

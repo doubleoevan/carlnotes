@@ -8,6 +8,13 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
  */
 export const STACKED_CLOSED_DIVIDER_CLASS = "max-lg:data-[state=closed]:last:border-b"
 
+// the classes that stop the trigger and the filler after the note from filling the title row from a screen width up
+// while the section is open, so the count sits right after the title. a closed section keeps its count at the far right
+const COUNT_BESIDE_TITLE_CLASSES = {
+	sm: { trigger: "sm:group-data-[state=open]/section:flex-none!", filler: "sm:group-data-[state=open]/section:grow-0" },
+	lg: { trigger: "lg:group-data-[state=open]/section:flex-none!", filler: "lg:group-data-[state=open]/section:grow-0" },
+}
+
 /**
  * A titled section of a page that opens by default and collapses on click, or follows a saved open state. The topic
  * page's and the podcast episode page's sections share it, so their headers share the same design.
@@ -18,6 +25,7 @@ export function CollapsibleSection({
 	titleNote,
 	titleAside,
 	countLabel,
+	countBesideTitleFrom,
 	isCountHiddenOnNarrowScreens,
 	isContentKept,
 	hasClosedDivider,
@@ -39,6 +47,9 @@ export function CollapsibleSection({
 	titleAside?: React.ReactNode
 	// the section's count at the far right, such as "6 episodes", for a section with no aside of its own
 	countLabel?: string
+	// the screen width from which the count sits right after the title instead of at the far right, for a section
+	// whose content does not reach the far right
+	countBesideTitleFrom?: keyof typeof COUNT_BESIDE_TITLE_CLASSES
 	// whether the count hides on a narrow screen, for a title too long to leave the count room there
 	isCountHiddenOnNarrowScreens?: boolean
 	// whether the content stays mounted while closed, for content that holds its own state
@@ -60,6 +71,8 @@ export function CollapsibleSection({
 	className?: string
 	children: React.ReactNode
 }) {
+	// the classes that put the count right after the title, for content that ends short of the far right
+	const countBesideTitleClasses = countBesideTitleFrom && COUNT_BESIDE_TITLE_CLASSES[countBesideTitleFrom]
 	return (
 		<Accordion
 			type="multiple"
@@ -72,13 +85,15 @@ export function CollapsibleSection({
 			<AccordionItem
 				value={value}
 				className={cn(
+					"group/section",
 					hasClosedDivider && "data-[state=closed]:last:border-b",
 					hasStackedClosedDivider && STACKED_CLOSED_DIVIDER_CLASS,
 				)}
 			>
 				{/* the note and the aside sit beside the trigger, so a click on the note or the aside never toggles the section.
 				    the trigger fills the row, which puts the aside and the count at the far right. with a note, the trigger
-				    ends at the title and the aside moves to the far right */}
+				    ends at the title and a filler after the note puts the aside at the far right, or at the left of its own
+				    line once the aside wraps */}
 				<div
 					className={cn(
 						"flex items-center gap-2",
@@ -87,11 +102,12 @@ export function CollapsibleSection({
 						canWrapHeader && "max-sm:flex-wrap max-sm:gap-y-0 max-sm:[&>:first-child]:min-w-max",
 					)}
 				>
-					<AccordionTrigger className={cn("py-2", titleNote && "flex-none")}>
+					<AccordionTrigger className={cn("py-2", titleNote && "flex-none", countBesideTitleClasses?.trigger)}>
 						<span className="font-display text-xl">{title}</span>
 					</AccordionTrigger>
 					{titleNote}
-					{titleNote ? <div className="ml-auto">{titleAside}</div> : titleAside}
+					{titleNote && <span aria-hidden="true" className={cn("grow", countBesideTitleClasses?.filler)} />}
+					{titleAside}
 					{countLabel && (
 						<span
 							className={cn("text-muted-foreground shrink-0 text-sm", isCountHiddenOnNarrowScreens && "max-sm:hidden")}
