@@ -6,7 +6,7 @@ import { FILM_ANCHOR_ID, PODCAST_NAME } from "@carlnotes/contracts/podcastEpisod
 import { isTopicSlugStale, toPodcastEpisodePath, toTopicPath } from "@carlnotes/contracts/seo"
 import { useTopicVideoRenderingPoll } from "@carlnotes/core/hooks/useTopicVideoRenderingPoll"
 import { toSectionCountLabel } from "@carlnotes/core/lib/labels"
-import { TOPIC_VIDEO_SECTION_TITLE } from "@carlnotes/core/lib/podcastEpisodeCopy"
+import { PODCAST_EPISODE_VIDEO_SECTION_TITLE } from "@carlnotes/core/lib/podcastEpisodeCopy"
 import { toPodcastEpisodeSocialProps } from "@carlnotes/core/lib/podcastEpisodeSocial"
 import { applyPodcastEpisodePageChanges, type TopicFindingChange } from "@carlnotes/core/lib/topicFindingChanges"
 import { toTopicVideoDisplay } from "@carlnotes/core/lib/topicVideoDisplay"
@@ -178,7 +178,11 @@ export function PodcastEpisodePage() {
 				onEditImage={() => setOpenDialog("edit-image")}
 			/>
 
-			{/* the podcast's section, with the theme song's credits right after its title: the player card, whose
+			{/* the film's section, for a podcast episode with a film: the film player in its card, or the card that says
+			    the film is rendering */}
+			<PodcastEpisodeTopicVideoSection podcastEpisode={podcastEpisode} onVideoRenderingPoll={pollPodcastEpisodePage} />
+
+			{/* the podcast's section, under the film's, with the theme song's credits right after its title: the player card, whose
 			    Subscribe buttons the page's own button row replaces */}
 			<CollapsibleSection
 				value="podcast"
@@ -189,10 +193,6 @@ export function PodcastEpisodePage() {
 			>
 				<PodcastEpisodePlayerCard podcastEpisode={podcastEpisode} chapterTopicFeed={chapterTopicFeed} />
 			</CollapsibleSection>
-
-			{/* the film's section, under the podcast's, for a podcast episode with a film: the film player in its card, or
-			    the card that says the film is rendering */}
-			<PodcastEpisodeTopicVideoSection podcastEpisode={podcastEpisode} onVideoRenderingPoll={pollPodcastEpisodePage} />
 
 			{/* the podcast episode's comment thread, where a comment may name a chapter and a chapter's tag plays from it */}
 			<SocialSection {...toPodcastEpisodeSocialProps(podcastEpisodePage, Boolean(session))} hasClosedDivider />
@@ -279,7 +279,7 @@ function PodcastEpisodeTopicVideoSection({
 		<div id={FILM_ANCHOR_ID} className="scroll-mt-20">
 			<CollapsibleSection
 				value="topic-video"
-				title={TOPIC_VIDEO_SECTION_TITLE}
+				title={PODCAST_EPISODE_VIDEO_SECTION_TITLE}
 				titleNote={<PodcastThemeSongNote />}
 				isContentKept
 				hasClosedDivider

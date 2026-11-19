@@ -72,17 +72,17 @@ const TOPIC_PAGE_ELEMENT_ORDERS: Record<string, string[]> = {
 	"apps/mobile/src/components/topic/TopicPageCards.tsx": [FILM_LIST, PODCAST_EPISODE_LIST],
 }
 
-// the files that place the podcast episode page's sections, from the repo root, each with the podcast's section, the
-// film's section, and the comment thread as the file writes them
+// the files that place the podcast episode page's sections, from the repo root, each with the film's section, the
+// podcast's section, and the comment thread as the file writes them
 const PODCAST_EPISODE_PAGE_ELEMENT_ORDERS: Record<string, string[]> = {
 	"apps/web/src/pages/PodcastEpisodePage.tsx": [
-		"title={PODCAST_NAME}",
 		"<PodcastEpisodeTopicVideoSection",
+		"title={PODCAST_NAME}",
 		"<SocialSection",
 	],
 	"apps/mobile/src/components/podcast/PodcastEpisodeScreen.tsx": [
+		"title={PODCAST_EPISODE_VIDEO_SECTION_TITLE}",
 		"title={PODCAST_NAME}",
-		"title={TOPIC_VIDEO_SECTION_TITLE}",
 		"<SocialSection",
 	],
 }
@@ -188,7 +188,7 @@ describe("films come right before podcasts", () => {
 
 	test("on both apps' podcast episode pages", async () => {
 		for (const [podcastEpisodePageFile, elementOrder] of Object.entries(PODCAST_EPISODE_PAGE_ELEMENT_ORDERS)) {
-			// the file writes the podcast's section, then the film's section, then the comment thread
+			// the file writes the film's section, then the podcast's section, then the comment thread
 			const source = await Bun.file(new URL(`../../../${podcastEpisodePageFile}`, import.meta.url)).text()
 			expect(toElementIndexes(source, elementOrder)).not.toContain(-1)
 		}

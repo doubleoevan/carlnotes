@@ -9,7 +9,10 @@ import { usePolledCounts } from "@carlnotes/core/hooks/usePolledCounts"
 import { useTopicFindingActions } from "@carlnotes/core/hooks/useTopicFindingActions"
 import { useTopicVideoRenderingPoll } from "@carlnotes/core/hooks/useTopicVideoRenderingPoll"
 import { toPodcastEpisodeTitleLabel, toSectionCountLabel } from "@carlnotes/core/lib/labels"
-import { PODCAST_EPISODE_LOAD_FAILED_TEXT, TOPIC_VIDEO_SECTION_TITLE } from "@carlnotes/core/lib/podcastEpisodeCopy"
+import {
+	PODCAST_EPISODE_LOAD_FAILED_TEXT,
+	PODCAST_EPISODE_VIDEO_SECTION_TITLE,
+} from "@carlnotes/core/lib/podcastEpisodeCopy"
 import {
 	isTopicVideoEditShown,
 	toPodcastEpisodeEditableImage,
@@ -200,17 +203,13 @@ function EpisodeContent({
 			}
 			contentClassName="mt-5 gap-2"
 		>
-			{/* the podcast's section, with the theme song's credits right after its title and the player card */}
-			<CollapsibleSection title={PODCAST_NAME} titleNote={<PodcastThemeSongNote />} hasClosedDivider>
-				<PodcastEpisodePlayerCard podcastEpisode={podcastEpisode} chapterTopicFeed={chapterTopicFeed} />
-			</CollapsibleSection>
-			{/* the film's section, under the podcast's, which a link opens the screen at with ?section=film, with the theme
+			{/* the film's section, which a link opens the screen at with ?section=film, with the theme
 			    song's credits right after its title: the film player in its card, which stays mounted while the section
 			    is closed, or the card that says the film is rendering */}
 			{topicVideoDisplay && (
 				<SectionAnchor name={FILM_ANCHOR_ID}>
 					<CollapsibleSection
-						title={TOPIC_VIDEO_SECTION_TITLE}
+						title={PODCAST_EPISODE_VIDEO_SECTION_TITLE}
 						titleNote={<PodcastThemeSongNote />}
 						isContentKept
 						hasClosedDivider
@@ -223,6 +222,10 @@ function EpisodeContent({
 					</CollapsibleSection>
 				</SectionAnchor>
 			)}
+			{/* the podcast's section, under the film's, with the theme song's credits right after its title and the player card */}
+			<CollapsibleSection title={PODCAST_NAME} titleNote={<PodcastThemeSongNote />} hasClosedDivider>
+				<PodcastEpisodePlayerCard podcastEpisode={podcastEpisode} chapterTopicFeed={chapterTopicFeed} />
+			</CollapsibleSection>
 			{/* the podcast episode's comment thread, where a comment may name a chapter and a chapter's tag plays from it */}
 			<SocialSection {...toPodcastEpisodeSocialProps(page, isSignedIn)} hasClosedDivider />
 			{/* wide-screen chapters */}

@@ -1,8 +1,8 @@
-// podcast episode copy tests: the topic video section's title is Coffee Break Cinema, and no web or mobile source file
-// says Topic Cinema, a rejected name for the section
+// podcast episode copy tests: the topic video section's title is Coffee Break Cinema, the podcast episode page's is
+// Coffee Break Film, and no web or mobile source file says Topic Cinema, a rejected name for the section
 import { expect, test } from "bun:test"
 import { join } from "node:path"
-import { TOPIC_VIDEO_SECTION_TITLE } from "./podcastEpisodeCopy"
+import { PODCAST_EPISODE_VIDEO_SECTION_TITLE, TOPIC_VIDEO_SECTION_TITLE } from "./podcastEpisodeCopy"
 
 // every TypeScript source file, from the repo root
 const SOURCE_FILE_GLOB = new Bun.Glob("**/*.{ts,tsx}")
@@ -38,6 +38,10 @@ async function toTopicCinemaFilePaths(sourceFolders: string[]): Promise<string[]
 
 test("the topic video section's title is Coffee Break Cinema", () => {
 	expect(TOPIC_VIDEO_SECTION_TITLE).toBe("Coffee Break Cinema")
+})
+
+test("the podcast episode page's film section title is Coffee Break Film", () => {
+	expect(PODCAST_EPISODE_VIDEO_SECTION_TITLE).toBe("Coffee Break Film")
 })
 
 test("no web source file says Topic Cinema", async () => {
