@@ -47,7 +47,7 @@ const elements: PodcastEpisodesCardElements = {
 }
 afterEach(() => mock.restore())
 
-test("both lists update before the server responds, and concurrent removals roll back independently", async () => {
+test("the list updates before the server responds, and concurrent removals roll back independently", async () => {
 	const first = Promise.withResolvers<boolean>()
 	const second = Promise.withResolvers<boolean>()
 	const remove = spyOn(client, "sendRemovePodcastEpisode")
@@ -70,7 +70,6 @@ test("both lists update before the server responds, and concurrent removals roll
 		() => null,
 		() => (
 			<PodcastEpisodeRemovalProvider>
-				<PodcastEpisodesCard {...props} filmList={{ latestFilmPodcastEpisodeId: "A", onPlayFilm: () => {} }} />
 				<PodcastEpisodesCard {...props} />
 			</PodcastEpisodeRemovalProvider>
 		),
@@ -86,9 +85,8 @@ test("both lists update before the server responds, and concurrent removals roll
 		await click("Remove A")
 		await click("Confirm removal")
 		expect(harness.container.textContent).not.toContain("Confirm removal")
-		expect(harness.container.querySelectorAll("li")).toHaveLength(2)
+		expect(harness.container.querySelectorAll("li")).toHaveLength(1)
 		expect(harness.container.textContent).toContain("1 episode")
-		expect(harness.container.textContent).toContain("1 film")
 		await click("Remove B")
 		await click("Confirm removal")
 		expect(harness.container.querySelectorAll("li")).toHaveLength(0)
@@ -97,7 +95,7 @@ test("both lists update before the server responds, and concurrent removals roll
 			second.resolve(true)
 			first.resolve(false)
 		})
-		expect(harness.container.querySelectorAll("li")).toHaveLength(2)
+		expect(harness.container.querySelectorAll("li")).toHaveLength(1)
 		expect(harness.container.textContent).toContain("Remove A")
 		expect(harness.container.textContent).not.toContain("Remove B")
 		expect(refresh).toHaveBeenCalledTimes(2)

@@ -12,7 +12,7 @@ import { loadResourcesToReview } from "@carlnotes/pipeline/review/filter"
 import { loadScan } from "@carlnotes/pipeline/scan"
 import { cosineSimilarity } from "ai"
 import { and, eq, inArray, isNotNull, like } from "drizzle-orm"
-import { finishScan, ingestForScan, reviewForScan } from "./workflows/runTopicScanActivities"
+import { finishScan, type IngestStageResult, ingestForScan, reviewForScan } from "./workflows/runTopicScanActivities"
 
 // a real feed that reliably carries more entries than the limit admits, plus a matching topic context
 const FEED_URL = "https://simonwillison.net/atom/everything/"
@@ -26,6 +26,22 @@ const EMBED_QUERY_INSTRUCTION = "Given a topic's interest description, retrieve 
 // the two knobs under test, read the same way review reads them, so the report names the run's real settings
 const REVIEW_CONCURRENCY = Number(Bun.env.REVIEW_CONCURRENCY ?? "4")
 const MAX_SCORED_RESOURCES_PER_SCAN = Number(Bun.env.MAX_SCORED_RESOURCES_PER_SCAN ?? "30")
+
+// how many times the smoke ingests the live feed before it counts a timed-out feed as a failed Scan
+const INGEST_ATTEMPTS = 3
+
+/**
+ * Ingests the smoke topic's feed, trying again while the feed fails. Ingest is safe to run again, and a live feed can
+ * time out on one read.
+ */
+async function ingestLiveFeed(scanId: string, topicId: string): Promise<IngestStageResult> {
+	let ingestResult = await ingestForScan(scanId, topicId)
+	for (let attempt = 1; attempt < INGEST_ATTEMPTS && ingestResult.status === "failed"; attempt++) {
+		console.log(`the feed failed on attempt ${attempt}, ingesting again`)
+		ingestResult = await ingestForScan(scanId, topicId)
+	}
+	return ingestResult
+}
 
 // clear every cached field on the topic feed's Resources, so the next run redoes all of its work
 async function resetFeedResources(): Promise<number> {
@@ -147,7 +163,7 @@ async function check(topicId: string, ownerId: string): Promise<boolean> {
 	}
 	// the clock spans every stage, and the limit being checked is on the whole pipeline
 	const startedAt = Date.now()
-	const ingestResult = await ingestForScan(smokeScan.id, topicId)
+	const ingestResult = await ingestLiveFeed(smokeScan.id, topicId)
 	const reviewResult = await reviewForScan(smokeScan.id, topicId, ownerId, ingestResult, ingestResult.budget)
 	await finishScan(smokeScan.id, topicId, ownerId, ingestResult, reviewResult)
 	const elapsedMs = Date.now() - startedAt
@@ -243,7 +259,7 @@ async function scanAgain(topicId: string, ownerId: string): Promise<{ scoredCoun
 		throw new Error("could not open the second scan")
 	}
 	// drive the stages in order, then read back what the closing stage wrote
-	const ingestResult = await ingestForScan(smokeScan.id, topicId)
+	const ingestResult = await ingestLiveFeed(smokeScan.id, topicId)
 	const reviewResult = await reviewForScan(smokeScan.id, topicId, ownerId, ingestResult, ingestResult.budget)
 	await finishScan(smokeScan.id, topicId, ownerId, ingestResult, reviewResult)
 	const topicScan = await loadScan(smokeScan.id)

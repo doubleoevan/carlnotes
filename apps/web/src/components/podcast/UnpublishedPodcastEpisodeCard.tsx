@@ -7,7 +7,7 @@ import { cn } from "@carlnotes/nightshift/classNames"
 import { COVER_RECORDING_CLASS, INFO_CARD_CLASS } from "@/lib/styleClasses"
 import { PodcastEpisodeCover } from "./PodcastEpisodeCover"
 
-export const UNPUBLISHED_PODCAST_EPISODE_CARD_ELEMENTS: UnpublishedPodcastEpisodeCardElements = {
+const UNPUBLISHED_PODCAST_EPISODE_CARD_ELEMENTS: UnpublishedPodcastEpisodeCardElements = {
 	Frame: ({ children }) => <div className={cn(INFO_CARD_CLASS, "flex items-center gap-4")}>{children}</div>,
 	Group: ({ children, className }) => <div className={className}>{children}</div>,
 	Text: ({ children, className }) => <div className={className}>{children}</div>,

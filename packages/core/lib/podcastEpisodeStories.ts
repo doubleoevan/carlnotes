@@ -1,3 +1,4 @@
+import type { PodcastEpisodeCard } from "@carlnotes/contracts/home"
 import type { PodcastEpisode, PodcastEpisodeTranscriptBlock } from "@carlnotes/contracts/podcast"
 import {
 	toPodcastEpisodeChapterFixture,
@@ -67,12 +68,30 @@ export const PODCAST_STORY_FILM_EPISODE: PodcastEpisode = {
 	},
 }
 
-// a topic whose latest film is the story film
+// eight films of the story topic as cards, newest first, so the topic video section shows two pages
+const PODCAST_STORY_FILM_CARDS: PodcastEpisodeCard[] = Array.from({ length: 8 }, (_, index) => ({
+	podcastEpisode: {
+		...PODCAST_STORY_FILM_EPISODE,
+		id: `story-film-${index}`,
+		episodeNumber: 8 - index,
+		title: `${PODCAST_STORY_FILM_EPISODE.title} ${8 - index}`,
+	},
+	topic: {
+		id: "story-topic",
+		name: "Home espresso",
+		path: "/topics/story-topic/home-espresso",
+		image: STORY_TOPIC_IMAGE,
+	},
+	reactionCount: index,
+}))
+
+// a topic whose latest film is the story film, with eight films as cards
 export const PODCAST_STORY_FILM_TOPIC = toTestTopicResponse({
 	podcast: toTopicPodcastFixture({
 		latestSeasonPodcastEpisodes: { podcastEpisodes: [PODCAST_STORY_FILM_EPISODE] },
 		topicPodcastEpisodeVideoSection: { podcastEpisode: PODCAST_STORY_FILM_EPISODE },
 	}),
+	topicPodcastEpisodeVideoCards: PODCAST_STORY_FILM_CARDS,
 })
 
 // a topic with no ready film, whose latest podcast episode's film is rendering
@@ -84,7 +103,7 @@ export const PODCAST_STORY_VIDEO_RENDERING_TOPIC = toTestTopicResponse({
 	latestPodcastEpisode: { ...PODCAST_STORY_EPISODE, isVideoRendering: true },
 })
 
-// a topic whose latest film plays while its newer podcast episode's film is rendering
+// a topic with eight films whose newer podcast episode's film is rendering
 export const PODCAST_STORY_NEWER_VIDEO_RENDERING_TOPIC = {
 	...PODCAST_STORY_FILM_TOPIC,
 	latestPodcastEpisode: { ...PODCAST_STORY_EPISODE, id: "story-newer-podcast-episode", isVideoRendering: true },

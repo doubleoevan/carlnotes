@@ -106,14 +106,12 @@ export type FetchedSeason = { season: number; seasonPodcastEpisodes: SeasonPodca
 export async function fetchSeasonPodcastEpisodes({
 	topicId,
 	season,
-	hasVideo,
 	...options
 }: FetchSeasonPodcastEpisodesOptions): Promise<SeasonPodcastEpisodes> {
-	// preserve the empty fallback unless the caller requests an error. the films list asks for the ones with a film
-	const filmQuery = hasVideo ? { hasVideo: "true" as const } : {}
+	// preserve the empty fallback unless the caller requests an error
 	const response = await apiClient()
 		.api.topics[":id"].episodes.$get(
-			{ param: { id: topicId }, query: { season: String(season), ...filmQuery } },
+			{ param: { id: topicId }, query: { season: String(season) } },
 			{ init: { signal: options.signal } },
 		)
 		.catch((error) => {
@@ -334,7 +332,6 @@ export type PodcastEpisodeRequestOptions = { shouldThrowOnError?: boolean; signa
 type FetchSeasonPodcastEpisodesOptions = PodcastEpisodeRequestOptions & {
 	topicId: string
 	season: number
-	hasVideo?: boolean
 }
 // one podcast episode's listen report
 type SendPodcastEpisodeListenOptions = {

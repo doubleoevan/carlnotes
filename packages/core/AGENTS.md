@@ -134,7 +134,7 @@ the in-place section fixtures. Personal sources stay outside the fetched Source 
   words shown if a podcast episode fails to load or play, the lines shown while it records and while its film renders,
   and the film section's title on the topic page and the podcast episode page), `topicVideoDisplay.ts`
   (what a film section shows for a podcast episode: the film player for a ready film, the rendering card while its film
-  renders, or nothing, and the section a topic's page shows while its only film is rendering), and
+  renders, or nothing), and
   `voiceRecordingDecisions.ts` (what the voice recorder decides from each frame, with the `SilenceThresholdSettings`
   type and the browser's default settings), `voiceRecordingRules.ts` (the mic's visibility, the recording timer, the
   reopened recording's rejection, and the meter's callback), `voiceRecorder.ts` (the recorder adapter each app supplies:
@@ -369,11 +369,12 @@ Uploads, file pickers, router destinations, and visible mutation feedback remain
 lookups leave authoritative validation to the save endpoint. Live hook tests cover delayed replies and owned names.
 
 `components/TopicSkeleton` owns the shared Topic loading section order: the film's section above the podcast's, the
-findings, the comment thread, the Topic Posts, then the info and settings beside the films' list, the podcast
-episodes' list, and the history. A Topic known to have no podcast episode leaves out the film, the player, and the
-films' list. App adapters supply the header, placeholder cards, columns, and motion/accessibility treatment. Web keeps
-its desktop grid and mobile uses a vertical column. `components/TopicVideoCardSkeleton` reserves the film title,
-frame, seek bar and control groups on the Topic and podcast episode pages in both apps.
+findings, the comment thread, the Topic Posts, then the info and settings beside the podcast episodes' list and the
+history. A Topic known to have no podcast episode leaves out the films and the player. App adapters supply the header,
+placeholder cards, columns, and motion/accessibility treatment. Web keeps its desktop grid and mobile uses a vertical
+column. The film section reserves a row of film cards.
+`components/TopicVideoCardSkeleton` reserves the film title, frame, seek bar and control groups on the podcast episode
+page in both apps.
 
 `components/PageSkeleton` owns the Profile, Teams, Activity, Account, Team, and Topic Post loading layouts, including
 shared identity, table, and budget placeholders. Browser and native adapters supply the elements each loaded page is
@@ -399,7 +400,7 @@ format. `playTopicVideo` gives the source to the film, `playPodcastEpisodeAudio`
 same second, and `playPodcastEpisode` keeps the loaded Podcast Episode's format and plays any other as audio.
 `components/TopicVideoPlayer` puts the play button over the film's frame and keeps the captions and mute choices for the
 session. Its `isCard` draws each app's `Card` element around the film, the seek bar, the controls, and its children,
-which the topic video section and the podcast episode page pass and the Video dialog leaves out. The skips and the speed
+which the podcast episode page passes and the Video dialog leaves out. The skips and the speed
 show before the film is loaded, and their presses go through `skipTopicVideoBy` and `cycleTopicVideoPlaybackRate`, which
 start a film that is not loaded. `stores/podcastEpisodePlayerState` keeps snapshots and subscriptions separate from
 playback commands. Progress ticks notify position readers; chapter changes also notify controls. The player store
@@ -408,18 +409,19 @@ autoplay. Its lifecycle tests use the web's DOM hook harness; its selection rule
 `components/UnpublishedPodcastEpisodeCard` draws three states in one frame: a recording podcast episode, a failed one
 with the permitted scan control, and, with `isVideoRendering`, a published podcast episode whose film is rendering. Each
 app's `ProgressLine` element draws the shimmering line after its emoji, with the words from `lib/podcastEpisodeCopy.ts`.
-`components/TopicVideoSection` shows that card through its `RenderingCard` element in the film player's place while the
-topic's only film renders, and `hooks/useTopicVideoRenderingPoll` reads the page again every 30 seconds while the app is
-focused and online, for at most four hours. It also polls while a newer film renders behind an older one. When the
-new film is ready, an idle card shows its poster. A viewer playing or pausing the older film can switch with New film ready.
+`components/TopicVideoSection` shows the topic's films, `topicPodcastEpisodeVideoCards` from the topic read, through
+`PagedCardsSection` and its `FilmCard` element, with that card through its `RenderingCard` element above them while the
+topic's latest film renders, or alone for a topic with no ready film. `hooks/useTopicVideoRenderingPoll` reads the page
+again every 30 seconds while the app is focused and online, for at most four hours, and the new film's card joins the
+others once it is ready.
 
 
 Podcast presentation is shared as actual React composition under `components/`: `PodcastEpisodePlayerCard`,
 `UnpublishedPodcastEpisodeCard`, `PodcastEpisodeDetails`, `PodcastEpisodePlayButton`, `PodcastEpisodePill`,
 `PlaybackControlButtons`, `PodcastEpisodeSeekBar`, `PodcastEpisodeChapters`, `PodcastEpisodeRow`, `PodcastPlayer`,
 `PodcastEpisodeTranscript`, `PodcastThemeSongCredits`, `PodcastFeedDialog`, `RemovePodcastEpisodeDialog`,
-`PodcastEpisodesCard`, `PodcastEpisodeRemovalProvider` for immediate removal from both season lists, and `PodcastEpisodeChapterTag`. `PodcastEpisodeVideoButton` is the button that opens the Video
-dialog and reports its section: a film card's play button on `PodcastEpisodeCard`'s video variant, the card's last
+`PodcastEpisodesCard`, `PodcastEpisodeRemovalProvider` for immediate removal from the season list, and
+`PodcastEpisodeChapterTag`. `PodcastEpisodeVideoButton` is the button that opens the Video dialog and reports its section: a film card's play button on `PodcastEpisodeCard`'s video variant, the card's last
 child, which each app's `PodcastEpisodePlayButton` draws centered over the card's image under the label Play film, whose
 dialog plays the film once it loads, and a Video pill beside the play pill on a `NewsList` row whose Podcast Episode has
 a film, which `lib/newsEvents`' `toNewsEventVideoButton` decides. A film card shows the film's own image from the

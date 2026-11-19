@@ -62,8 +62,8 @@ The Topic note uses the same safe Markdown subset as the diary. Long prompts and
 `TopicFeedSkeleton.tsx` and `TopicSkeleton.tsx` match Home and the Topic screen, sharing the real finding-list card.
 The Topic skeleton is laid out as the loaded screen is: the button row, the image beside the title, the byline with
 the reactions, and the details line, then each section in `CollapsibleSectionSkeleton` inside the screen's inset
-column, the film's card above the player card. It retains a known title and omits the film and podcast placeholders
-when Home reports no episode. Its film card, player card, and empty section card serve the podcast episode screen's
+column, a row of film cards above the player card. It retains a known title and omits the film and podcast placeholders
+when Home reports no episode. Its film player card, player card, and empty section card serve the podcast episode screen's
 loading state too, whose player card has no podcast feed button.
 The first actual play reports the shared opener properties. Dismissal or backgrounding unmounts the player.
 Stories beside these components name their web references. `topicFeedStories.ts` supplies inert handlers and reference paths.

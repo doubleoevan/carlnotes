@@ -366,8 +366,6 @@ function TopicViews({
 				{/* a grid item sizes to its widest content unless told not to, so long urls inside these cards
 				    would push the column past the viewport instead of truncating */}
 				<div className="min-w-0">
-					{/* Coffee Break films, then Coffee Break podcast episodes */}
-					<PodcastEpisodesCard topic={topic} format="video" />
 					<PodcastEpisodesCard topic={topic} onPodcastEpisodeRemoved={onReloadTopicPage} />
 					<TopicScanHistory
 						scans={topic.scans}

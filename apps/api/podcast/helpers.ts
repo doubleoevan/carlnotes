@@ -1,5 +1,6 @@
 // the podcast pages' reads: a topic page's podcast, a season's podcast episodes, and a podcast episode page, each limited
 // to what the user may listen to
+import type { PodcastEpisodeCard } from "@carlnotes/contracts/home"
 import type {
 	PodcastEpisode,
 	PodcastEpisodeSummary,
@@ -15,6 +16,7 @@ import { isPodcastEpisodeRecordingConfigured } from "@carlnotes/server/podcastEp
 import { and, desc, eq, ne } from "drizzle-orm"
 import { isAllowed, loadUserAccess } from "../authorization"
 import { attachPodcastEpisodeChapterFaviconPaths } from "../favicons"
+import { loadPodcastEpisodeCards } from "../home/topicCards"
 import { toTranscriptBlocks } from "../share/podcastFeed"
 import { attachReactionSummaries } from "../social/findingReactions"
 import { loadPageCommentThread } from "../social/pageCommentThread"
@@ -51,6 +53,7 @@ import { loadTopicVideoImageEdit } from "./topicVideos"
 type TopicPodcastFields = {
 	podcast: TopicPodcast | null
 	latestPodcastEpisode: PodcastEpisode | null
+	topicPodcastEpisodeVideoCards: PodcastEpisodeCard[]
 	podcastEpisodeByScanId: Map<string, TopicScan["podcastEpisode"]>
 }
 
@@ -67,7 +70,12 @@ type LoadSeasonPodcastEpisodesOptions = {
  */
 export async function loadTopicPodcast(topic: TopicRow, userId: string | null): Promise<TopicPodcastFields> {
 	if (!isPodcastEpisodeRecordingConfigured()) {
-		return { podcast: null, latestPodcastEpisode: null, podcastEpisodeByScanId: new Map() }
+		return {
+			podcast: null,
+			latestPodcastEpisode: null,
+			topicPodcastEpisodeVideoCards: [],
+			podcastEpisodeByScanId: new Map(),
+		}
 	}
 
 	// load the published podcast episodes that the user may listen to, newest first, and the newest episode that was not removed.
@@ -110,14 +118,17 @@ export async function loadTopicPodcast(topic: TopicRow, userId: string | null): 
 	const scanPodcastEpisodeRows = publishedPodcastEpisodeRows.filter((podcastEpisodeRow) => podcastEpisodeRow.scanId)
 
 	// the unpublished newest podcast episode if the user may see it, the player's podcast episodes with their chapters,
-	// the latest season's podcast episodes, and each scan's podcast episode summary
+	// the latest season's podcast episodes, each scan's podcast episode summary, and the ready films' cards
 	// ponytail: the whole latest season goes with every topic page. page the list if a season reaches the hundreds
 	const [latestSeason] = seasons
+	// ponytail: every ready film's card goes with every topic page. page the cards on the server if a topic reaches the
+	// hundreds of films
 	const [
 		accessibleUnpublishedPodcastEpisode,
 		playerPodcastEpisodes,
 		latestSeasonPodcastEpisodes,
 		scanPodcastEpisodeSummaries,
+		topicPodcastEpisodeVideoCards,
 	] = await Promise.all([
 		newestPodcastEpisodeRow && isNewestPodcastEpisodeUnpublished
 			? loadAccessiblePodcastEpisode({ userId, podcastEpisodeId: newestPodcastEpisodeRow.id })
@@ -140,18 +151,23 @@ export async function loadTopicPodcast(topic: TopicRow, userId: string | null): 
 			scanPodcastEpisodeRows.map((podcastEpisodeRow) => ({ podcastEpisodeRow, topic })),
 			topicVideos,
 		),
+		loadPodcastEpisodeCards(
+			publishedPodcastEpisodeRows.flatMap((podcastEpisodeRow) =>
+				topicVideos.readyTopicVideos.has(podcastEpisodeRow.id) ? podcastEpisodeRow.id : [],
+			),
+		),
 	])
 
-	// the latest podcast episode, and the topic video section's latest film, or null if no podcast episode has a ready
-	// film
+	// the latest podcast episode, and the latest film, or null if no podcast episode has a ready film
 	const playerPodcastEpisodeById = new Map(
 		playerPodcastEpisodes.map((podcastEpisode) => [podcastEpisode.id, podcastEpisode]),
 	)
 	const latestPodcastEpisode = playerPodcastEpisodeById.get(latestPublishedPodcastEpisodeRow?.id ?? "") ?? null
 	const latestFilmPodcastEpisode = playerPodcastEpisodeById.get(latestFilmRow?.id ?? "")
-	const topicVideoSection = latestFilmPodcastEpisode ? { podcastEpisode: latestFilmPodcastEpisode } : null
+	const topicPodcastEpisodeVideoSection = latestFilmPodcastEpisode ? { podcastEpisode: latestFilmPodcastEpisode } : null
 
-	// the podcast with its episodes and feed, the latest podcast episode, and each scan's podcast episode
+	// the podcast with its episodes and feed, the latest podcast episode, the films' cards, and each scan's podcast
+	// episode
 	return {
 		podcast: {
 			isEnabled: topic.isPodcastEnabled,
@@ -166,11 +182,13 @@ export async function loadTopicPodcast(topic: TopicRow, userId: string | null): 
 			// a public topic's podcast feed url, once the topic has a published podcast episode
 			publicFeedUrl:
 				topic.visibility === "public" && latestPublishedPodcastEpisodeRow ? toPodcastFeedPath(topic.id) : null,
-			// the topic video section, and a public topic's film feed url once the topic has a film
-			topicPodcastEpisodeVideoSection: topicVideoSection,
-			publicVideoFeedUrl: topic.visibility === "public" && topicVideoSection ? toPodcastVideoFeedPath(topic.id) : null,
+			// the latest film, and a public topic's film feed url once the topic has a film
+			topicPodcastEpisodeVideoSection: topicPodcastEpisodeVideoSection,
+			publicVideoFeedUrl:
+				topic.visibility === "public" && topicPodcastEpisodeVideoSection ? toPodcastVideoFeedPath(topic.id) : null,
 		},
 		latestPodcastEpisode,
+		topicPodcastEpisodeVideoCards,
 		podcastEpisodeByScanId: toPodcastEpisodeByScanId(scanPodcastEpisodeRows, scanPodcastEpisodeSummaries),
 	}
 }
@@ -206,7 +224,7 @@ export async function loadSeasonPodcastEpisodes({
 	const publishedPodcastEpisodeRows = await loadPublishedPodcastEpisodeRows(topic, userId)
 	const seasonPodcastEpisodes = await toSeasonPodcastEpisodes({ topic, publishedPodcastEpisodeRows, userId, season })
 
-	// the Coffee Break films list keeps the podcast episodes with a ready film
+	// a released mobile build's films list asks for the podcast episodes with a ready film
 	if (hasVideo !== "true") {
 		return seasonPodcastEpisodes
 	}

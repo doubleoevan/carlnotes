@@ -360,11 +360,11 @@ whose Video sheet opens over the Topic roast sheet. `components/podcast/TopicVid
 core's film player to an `expo-video` view with its captions track, fullscreen, and picture-in-picture, over
 `src/topicVideoAdapter.ts`, which adapts one Expo player to core's playback and keeps the authorized
 film url in memory only. `components/podcast/TopicVideoDialog.tsx` is the Video sheet, and
-`components/podcast/TopicVideoSection.tsx` the topic screen's collapsible film section, which the
-screen scrolls to each time a row asks. While a film renders, that section on a topic with no ready film and the
-podcast episode screen's film section show `components/podcast/UnpublishedPodcastEpisodeCard.tsx` with
-`isVideoRendering` in the film player's place, the recording card's frame with the line "Carl and Vienna are
-filming...", and core's `useTopicVideoRenderingPoll` reads the screen again until the film is ready.
+`components/podcast/TopicVideoSection.tsx` the topic screen's collapsible film section, the topic's films as the
+home's paged film cards, whose play opens the Video sheet. While a film renders, the topic video section shows
+`components/podcast/UnpublishedPodcastEpisodeCard.tsx` with `isVideoRendering` above its cards, or alone with no ready
+film, and the podcast episode screen's film section shows it in the player's place: the recording card's frame with the
+line "Carl and Vienna are filming...", and core's `useTopicVideoRenderingPoll` reads the screen again until the film is ready.
 `components/topic/TopicNotePopover.tsx` adapts core's
 `TopicNotePopover`, a Topic's note in a sheet under the note icon of a search row and a news row, and
 `components/social/CommentMentionBadge.tsx` core's mention badge, a count whose press opens

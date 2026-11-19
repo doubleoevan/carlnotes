@@ -23,7 +23,7 @@ export const KnownTopic: Story = { args: { topicPreview: STORY_TOPIC_PAGE } }
 export const WithoutPodcast: Story = {
 	args: { topicPreview: { name: "Better coffee at home", latestPodcastEpisode: null, tags: [] } },
 }
-// the film's card, which the topic screen and the podcast episode screen share
+// the film player's card on the podcast episode screen
 export const FilmCard: Story = { render: () => <TopicVideoCardSkeleton /> }
 // the player card as the podcast episode screen shows it, and with the podcast feed button of the topic screen's card
 export const PlayerCard: Story = { render: () => <PodcastEpisodePlayerCardSkeleton /> }

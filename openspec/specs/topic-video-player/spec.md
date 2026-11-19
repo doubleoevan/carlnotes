@@ -41,8 +41,8 @@ leaving the page SHALL pause a film outside picture-in-picture, and the docked p
 ### Requirement: A film never autoplays
 
 A film SHALL start only from a press. Until then the player SHALL show the film's own image as its poster, or the
-podcast episode image if the film has none. Opening the topic video section, the Video dialog, or a Coffee Break films
-row's target SHALL NOT start playback by itself. A film card's play button is a play press: its dialog SHALL play the
+podcast episode image if the film has none. Opening the topic video section or the Video dialog SHALL NOT
+start playback by itself. A film card's play button is a play press: its dialog SHALL play the
 film once it loads, and SHALL stay on the poster where the platform refuses the play.
 
 #### Scenario: The dialog opens on the poster
@@ -206,7 +206,7 @@ never before zero, and the speed at the next speed. On a loaded film each SHALL 
 
 #### Scenario: The controls show on the poster
 
-- **WHEN** a user opens the topic video section on a film that has not played
+- **WHEN** a user opens the podcast episode page of a film that has not played
 - **THEN** skip back, skip forward, and the speed show at the left of the control row, under the poster, with their
   labels
 
@@ -238,34 +238,6 @@ never before zero, and the speed at the next speed. On a loaded film each SHALL 
 
 - **WHEN** a user opens the Video dialog on web or the Video sheet on mobile
 - **THEN** the same three controls show before the film plays, and a press on one starts the film
-
-### Requirement: A card holds the film and its controls on a page
-
-On the topic page and the podcast episode page, web and mobile, the film's frame, its seek bar, and its control row
-SHALL sit inside one card in the podcast player card's style, and the frame SHALL keep its rounded corners. The card
-SHALL hold nothing else, for an editor too. The Video dialog and sheet SHALL keep their own frame and add no card.
-
-#### Scenario: The topic video section shows one card
-
-- **WHEN** a user opens a Topic with a film
-- **THEN** the topic video section shows the film, the seek bar, and the control row inside one card, in the style of
-  the podcast player card under it
-
-#### Scenario: The card holds no image controls
-
-- **WHEN** a Topic's editor opens the page of a Podcast Episode that has a film
-- **THEN** the film's card holds the film, the seek bar, and the control row, with no image prompt, Regenerate, or
-  Upload
-
-#### Scenario: The dialog adds no card
-
-- **WHEN** a user opens the Video dialog on web or the Video sheet on mobile
-- **THEN** the film player sits in the dialog's own frame, with no card around it
-
-#### Scenario: The card on mobile
-
-- **WHEN** a mobile user opens the topic screen or the podcast episode screen of a film
-- **THEN** the same card holds the film, the seek bar, and the control row, and nothing else
 
 ### Requirement: A film in picture-in-picture keeps playing across pages on the web
 
@@ -324,78 +296,6 @@ was closed.
 - **WHEN** the viewer presses the window's close button
 - **THEN** the film pauses, no dialog opens, and the docked player's play continues as audio
 
-### Requirement: The topic video section holds the latest film at the top of the topic page
-
-On a Topic with a film that the user may watch, the topic page SHALL show a collapsible section headed "Coffee Break
-Cinema", the title of the podcast episode page's film section, directly under the topic header, holding the player with
-the Topic's latest film. This spec calls the topic page's section the topic video section. A Topic with no ready film
-and none rendering SHALL show no section.
-
-#### Scenario: The section shows the latest film
-
-- **WHEN** a user opens a Topic whose latest two Podcast Episodes both have films
-- **THEN** a section headed "Coffee Break Cinema" shows the newer film under the topic header
-
-#### Scenario: No film, no section
-
-- **WHEN** a user opens a Topic whose Podcast Episodes have no films
-- **THEN** no topic video section renders
-
-### Requirement: The film section says the hosts are filming while a film renders
-
-While a published Podcast Episode's film renders, the film section SHALL show the recording card's frame with "Carl and
-Vienna are filming..." after a 🎬 hidden from a screen reader, in the film player's place: on the podcast episode page,
-and in the topic video section on a Topic with no ready film. A page showing the card SHALL read again until the film is
-ready, for at most four hours, and then show the film player. A failed film SHALL show nothing.
-
-#### Scenario: The filming card shows while the film renders
-
-- **GIVEN** a published Podcast Episode whose film is rendering
-- **WHEN** a user who may listen to it opens its page
-- **THEN** Coffee Break Cinema shows the Podcast Episode's cover and title with "🎬 Carl and Vienna are filming..." in
-  the recording card's frame and shimmer, and no film player
-
-#### Scenario: A Topic's first film shows the card in the topic video section
-
-- **GIVEN** a Topic with no ready film, whose latest published Podcast Episode's film is rendering
-- **WHEN** a user opens the topic page
-- **THEN** an open section headed "Coffee Break Cinema" shows the filming card under the topic header
-
-#### Scenario: An older ready film stays in the topic video section
-
-- **GIVEN** a Topic with a ready film, and a newer Podcast Episode whose film is rendering
-- **WHEN** a user opens the topic page
-- **THEN** the topic video section shows the ready film's player, and the newer Podcast Episode's page shows the filming
-  card
-
-#### Scenario: The film replaces the card without a reload
-
-- **GIVEN** a page showing the filming card
-- **WHEN** the film becomes ready
-- **THEN** the page's next read shows the film player in the card's place, on its poster, with no reload
-
-#### Scenario: The reads pause in the background and stop after four hours
-
-- **GIVEN** a page showing the filming card
-- **WHEN** the app goes to the background or offline, or four hours pass
-- **THEN** the page stops reading again, and a return to the foreground within the four hours reads at once
-
-#### Scenario: A failed film shows nothing
-
-- **WHEN** a user opens the page of a Podcast Episode whose film failed or was skipped
-- **THEN** the page shows no Coffee Break Cinema, and its Topic's page shows no filming card
-
-#### Scenario: The card shows on web and mobile
-
-- **WHEN** a film is rendering
-- **THEN** the web and the mobile app draw the filming card from the one shared card that draws the recording card, with
-  the same words
-
-#### Scenario: The home, profile, and team cards list ready films alone
-
-- **WHEN** a film is rendering
-- **THEN** no home, profile, or team card shows it, and Coffee Break films does not list it
-
 ### Requirement: The playing chapter highlights its Finding, and a Finding's pill jumps the film
 
 While a film plays, the Finding that the current chapter narrates SHALL be highlighted, as it is during the audio.
@@ -403,31 +303,9 @@ Pressing a Finding's chapter pill while the film is loaded SHALL seek the film t
 
 #### Scenario: A pill seeks the film
 
-- **GIVEN** a film playing chapter 1 in the topic video section
+- **GIVEN** a film playing chapter 1 in the Video dialog
 - **WHEN** a viewer presses the `E14 · ch 4` pill on a Finding
 - **THEN** the film jumps to chapter 4, and that Finding is highlighted
-
-### Requirement: The podcast episode page has a Coffee Break Cinema section and a Coffee Break podcast section
-
-A podcast episode page SHALL show two collapsible sections, both open at first and neither saved: "Coffee Break
-podcast", holding the audio player card, then "Coffee Break Cinema" at the anchor `#film`, holding the film player. A
-Podcast Episode with no ready film and none rendering SHALL show no Coffee Break Cinema. On the topic page the film's
-section stays first.
-
-#### Scenario: The page shows its film
-
-- **WHEN** a user opens the page of a Podcast Episode that has a film
-- **THEN** Coffee Break podcast shows the audio player card, above Coffee Break Cinema with the film player
-
-#### Scenario: No film, no Coffee Break Cinema
-
-- **WHEN** a user opens the page of a Podcast Episode without a film
-- **THEN** the page shows Coffee Break podcast and no Coffee Break Cinema
-
-#### Scenario: A closed section's divider
-
-- **WHEN** a user closes both sections
-- **THEN** each shows a divider under its title, since another section follows it
 
 ### Requirement: The theme song's credits sit right after the film and podcast section titles
 
@@ -439,7 +317,7 @@ take keyboard focus by itself. A section's count SHALL stay at the far right. Th
 #### Scenario: Both titles of a podcast episode page have the button
 
 - **WHEN** a user opens the page of a Podcast Episode that has a film
-- **THEN** a headphones button sits right after "Coffee Break Cinema" and right after "Coffee Break podcast", and none
+- **THEN** a headphones button sits right after "Coffee Break Film" and right after "Coffee Break podcast", and none
   sits beside the page's title or the title in the audio player card
 
 #### Scenario: A Topic with no film has one button
@@ -449,7 +327,7 @@ take keyboard focus by itself. A section's count SHALL stay at the far right. Th
 
 #### Scenario: A press opens the credits and leaves the section alone
 
-- **GIVEN** an open Coffee Break Cinema section
+- **GIVEN** an open Coffee Break Film section
 - **WHEN** a user presses the headphones button after its title
 - **THEN** the theme song's credits open, and the section stays open
 
@@ -573,49 +451,9 @@ the film player in the Video dialog on web and the Video sheet on mobile.
 - **WHEN** a mobile user opens the Topic roast sheet of a Topic whose latest Podcast Episode has a ready film
 - **THEN** the same part shows in the same place, and its play button opens the Video sheet over the Topic roast sheet
 
-### Requirement: Coffee Break films lists a Topic's films above Coffee Break podcast episodes
-
-On a Topic with a film, the topic page SHALL show a collapsible section headed "Coffee Break films" directly above
-Coffee Break podcast episodes. It SHALL look and page like that list, with season tabs, five rows to a page, and the
-latest mark. Each row SHALL have a play button, the episode number and title, the date, and the length. It SHALL have
-no remove button.
-
-#### Scenario: Films page five at a time
-
-- **GIVEN** a season with seven films
-- **WHEN** the list renders
-- **THEN** it shows the newest five and pages 1 and 2
-
-#### Scenario: Removal stays on the podcast episodes list
-
-- **WHEN** a Topic's owner views Coffee Break films
-- **THEN** no row offers removal, and Coffee Break podcast episodes still does
-
-#### Scenario: A Topic without films shows no list
-
-- **WHEN** a user opens a Topic with no film
-- **THEN** no Coffee Break films section renders
-
-### Requirement: A Coffee Break films row loads its film into the topic video section
-
-Pressing a Coffee Break films row's play button SHALL load that film into the topic video section, open the section,
-scroll to it, and play. A browser without JavaScript, and the page the server renders, SHALL list every film of the
-season with a link to its podcast episode page.
-
-#### Scenario: A row plays in the topic video section
-
-- **WHEN** a user presses play on an older film's row
-- **THEN** the topic video section opens with that film, scrolls into view, and plays
-
-#### Scenario: Every film without script
-
-- **GIVEN** a season with seven films
-- **WHEN** a browser without JavaScript opens the topic page
-- **THEN** Coffee Break films lists all seven, each title linked to its podcast episode page, with no page numbers
-
 ### Requirement: Mobile shows the same film surfaces and keeps the film's audio in the background
 
-The mobile topic screen SHALL show the topic video section and Coffee Break films in the web's order. The podcast
+The mobile topic screen SHALL show the topic video section with the web's film cards. The podcast
 episode screen SHALL show the web's two sections. A film card's play button, labeled "Play film", SHALL open the film in
 a full-screen sheet, and a podcast card SHALL show Play alone. The film SHALL offer native fullscreen and
 picture-in-picture. Its audio SHALL keep playing with the phone locked or the app in the background.
@@ -638,8 +476,8 @@ picture-in-picture. Its audio SHALL keep playing with the phone locked or the ap
 
 ### Requirement: Film copy never says video in a heading
 
-Headings SHALL read "Coffee Break Cinema", on the topic and podcast episode pages, and "Coffee Break films", and a
-single video SHALL be called a film in copy. The buttons SHALL read "Video", "Mute", and "Unmute", a film card's play
+Headings SHALL read "Coffee Break Cinema" on the topic page and "Coffee Break Film" on the podcast episode page, and
+a single video SHALL be called a film in copy. The buttons SHALL read "Video", "Mute", and "Unmute", a film card's play
 button SHALL be labeled "Play film", the action menu's option SHALL read "Edit film", and the MCP view's link SHALL
 read "Watch on CarlNotes". No heading SHALL contain the word video, and no film surface SHALL show a notice, a warning,
 or explanatory text.
@@ -647,13 +485,14 @@ or explanatory text.
 #### Scenario: Headings use the film names
 
 - **WHEN** a Topic with films renders
-- **THEN** its headings read "Coffee Break Cinema" and "Coffee Break films", and none contains "video"
+- **THEN** its page's film heading reads "Coffee Break Cinema", its podcast episode pages' read "Coffee Break Film",
+  and none contains "video"
 
 ### Requirement: The topic video section opens on every page load
 
 The topic video section SHALL be open each time a topic page loads, for a signed-in user and a visitor alike, whether or
 not the user played the latest film. A collapse SHALL last until the page is left, and SHALL NOT be saved. The topic
-read SHALL return the latest film alone, with no open state. The first render SHALL show the section open.
+read SHALL return the Topic's films with no open state. The first render SHALL show the section open.
 
 #### Scenario: A played film opens the section
 
@@ -667,14 +506,152 @@ read SHALL return the latest film alone, with no open state. The first render SH
 - **WHEN** they open the same Topic again, in the browser or the mobile app
 - **THEN** the topic video section is open
 
-### Requirement: Film publication updates an open Topic page
+### Requirement: The topic video section shows a Topic's films as cards
 
-The Topic page SHALL poll while a newer film renders and show its poster upon publication. A loaded film SHALL continue playing or remain paused until the viewer chooses the new film. Topic and episode loading cards SHALL reserve space for the title and controls.
+On a Topic with a ready film that the user may watch, the topic page SHALL show a collapsible section headed "Coffee
+Break Cinema" at the anchor `#film`, directly under the topic header. It SHALL hold every ready film of the Topic as a
+film card, newest first, six to a page, in the home page's Featured films grid, with the film count at the far right.
+This spec calls it the topic video section. A Topic with no ready film and none rendering SHALL show no section.
 
-#### Scenario: Publication during playback
-- **WHEN** another film finishes while the viewer has the current film loaded
-- **THEN** the page offers the new film and preserves playback until selected
+#### Scenario: The section shows every film
 
-#### Scenario: Publication on an idle page
-- **WHEN** a film finishes and there is no active film session to preserve
-- **THEN** its poster appears without autoplay
+- **GIVEN** a Topic with eight ready films across two seasons
+- **WHEN** a user opens the topic page
+- **THEN** "Coffee Break Cinema" reads "8 films" and shows the six newest as film cards, with pages 1 and 2
+
+#### Scenario: A card's play button opens the dialog
+
+- **WHEN** a user presses a film card's play button in the topic video section
+- **THEN** the Video dialog opens, and the film plays once it loads
+
+#### Scenario: No film, no section
+
+- **WHEN** a user opens a Topic whose Podcast Episodes have no films
+- **THEN** no topic video section renders
+
+#### Scenario: Every card without script
+
+- **GIVEN** a Topic with eight ready films
+- **WHEN** a browser without JavaScript opens the topic page
+- **THEN** the topic video section holds all eight cards, each linked to its podcast episode page
+
+#### Scenario: Mobile shows the same cards
+
+- **WHEN** a mobile user opens the topic screen of a Topic with films
+- **THEN** the topic video section shows the same cards and pages, and a card's "Play film" opens the Video sheet
+
+### Requirement: The topic page holds no film player
+
+The topic page SHALL show no film player of its own and no list of films by season. A film plays from a card's Video
+dialog, and the audio player card plays the latest Podcast Episode.
+
+#### Scenario: The page has one film section
+
+- **WHEN** a user opens a Topic with films
+- **THEN** the topic video section's cards are the page's only films, with no player card and no Coffee Break films
+  list
+
+### Requirement: The film sections say the hosts are filming while a film renders
+
+While a published Podcast Episode's film renders, the recording card's frame SHALL show "Carl and Vienna are filming..."
+after a 🎬 hidden from a screen reader: in the film player's place on the podcast episode page, and above the cards in
+the topic video section for the Topic's latest Podcast Episode. A page showing the card SHALL read again until the film
+is ready, for at most four hours. A failed film SHALL show nothing.
+
+#### Scenario: The filming card shows while the film renders
+
+- **GIVEN** a published Podcast Episode whose film is rendering
+- **WHEN** a user who may listen to it opens its page
+- **THEN** Coffee Break Film shows the Podcast Episode's cover and title with "🎬 Carl and Vienna are filming..." in
+  the recording card's frame and shimmer, and no film player
+
+#### Scenario: A Topic's first film shows the card in the topic video section
+
+- **GIVEN** a Topic with no ready film, whose latest published Podcast Episode's film is rendering
+- **WHEN** a user opens the topic page
+- **THEN** an open section headed "Coffee Break Cinema" shows the filming card and no film cards
+
+#### Scenario: The ready films show under the card
+
+- **GIVEN** a Topic with two ready films, and a newer Podcast Episode whose film is rendering
+- **WHEN** a user opens the topic page
+- **THEN** the topic video section shows the filming card above the two film cards
+
+#### Scenario: The new film joins the cards without a reload
+
+- **GIVEN** a topic page showing the filming card
+- **WHEN** the film becomes ready
+- **THEN** the page's next read drops the card and shows the new film as the first card, and a film playing in the
+  Video dialog plays on
+
+#### Scenario: The reads pause in the background and stop after four hours
+
+- **GIVEN** a page showing the filming card
+- **WHEN** the app goes to the background or offline, or four hours pass
+- **THEN** the page stops reading again, and a return to the foreground within the four hours reads at once
+
+#### Scenario: A failed film shows nothing
+
+- **WHEN** a user opens the page of a Podcast Episode whose film failed or was skipped
+- **THEN** the page shows no Coffee Break Film, and its Topic's page shows no filming card and no card for it
+
+#### Scenario: The card shows on web and mobile
+
+- **WHEN** a film is rendering
+- **THEN** the web and the mobile app draw the filming card from the one shared card that draws the recording card, with
+  the same words
+
+#### Scenario: The home, profile, and team cards list ready films alone
+
+- **WHEN** a film is rendering
+- **THEN** no home, profile, team, or topic page card shows it
+
+### Requirement: A card holds the film and its controls on the podcast episode page
+
+On the podcast episode page, web and mobile, the film's frame, its seek bar, and its control row SHALL sit inside one
+card in the podcast player card's style, and the frame SHALL keep its rounded corners. The card SHALL hold the film's
+title, its date, length, and chapter count, and nothing else, for an editor too. The Video dialog and sheet SHALL keep
+their own frame and add no card.
+
+#### Scenario: The podcast episode page shows one card
+
+- **WHEN** a user opens the page of a Podcast Episode that has a film
+- **THEN** Coffee Break Film shows the film, the seek bar, and the control row inside one card, with the title at the
+  top left and the date, length, and chapter count in small text at the top right
+
+#### Scenario: The card holds no image controls
+
+- **WHEN** a Topic's editor opens the page of a Podcast Episode that has a film
+- **THEN** the film's card holds the film, the seek bar, and the control row, with no image prompt, Regenerate, or
+  Upload
+
+#### Scenario: The dialog adds no card
+
+- **WHEN** a user opens the Video dialog on web or the Video sheet on mobile
+- **THEN** the film player sits in the dialog's own frame, with no card around it
+
+#### Scenario: The card on mobile
+
+- **WHEN** a mobile user opens the podcast episode screen of a film
+- **THEN** the same card holds the film, the seek bar, and the control row, and nothing else
+
+### Requirement: The podcast episode page has a Coffee Break Film section above a Coffee Break podcast section
+
+A podcast episode page SHALL show two collapsible sections, both open at first and neither saved: "Coffee Break Film"
+at the anchor `#film`, holding the film player, then "Coffee Break podcast", holding the audio player card. A Podcast
+Episode with no ready film and none rendering SHALL show no Coffee Break Film.
+
+#### Scenario: The page shows its film
+
+- **WHEN** a user opens the page of a Podcast Episode that has a film
+- **THEN** Coffee Break Film shows the film player, above Coffee Break podcast with the audio player card
+
+#### Scenario: No film, no Coffee Break Film
+
+- **WHEN** a user opens the page of a Podcast Episode without a film
+- **THEN** the page shows Coffee Break podcast and no Coffee Break Film
+
+#### Scenario: A closed section's divider
+
+- **WHEN** a user closes both sections
+- **THEN** each shows a divider under its title, because another section follows it

@@ -179,8 +179,8 @@ export const topicPodcast = z.object({
 	latestSeasonPodcastEpisodes: seasonPodcastEpisodes,
 	// the public podcast feed, for a public topic with a published episode, and null for every other topic
 	publicFeedUrl: z.string().nullable(),
-	// the topic video section: the latest film the user may watch, null with no film. an older api leaves it out, and
-	// the field's name must not change, because the frozen api contract reads it
+	// the latest film the user may watch, null with no film, which Edit film, the details line, and the film feed url
+	// read. an older api leaves it out, and the field's name must not change, because the frozen api contract reads it
 	topicPodcastEpisodeVideoSection: z.object({ podcastEpisode: podcastEpisode }).nullable().optional(),
 	// the public film feed, for a public topic with a film, and null for every other topic. an older api leaves it out
 	publicVideoFeedUrl: z.string().nullable().optional(),

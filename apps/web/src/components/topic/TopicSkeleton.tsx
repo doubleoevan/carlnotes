@@ -6,6 +6,7 @@ import {
 import { TopicVideoCardSkeleton as SharedTopicVideoCardSkeleton } from "@carlnotes/core/components/TopicVideoCardSkeleton"
 import { cn } from "@carlnotes/nightshift/classNames"
 import type * as React from "react"
+import { CardsRowSkeleton } from "@/components/common/CardsSection"
 import {
 	HEADER_TOPIC_IMAGE_CLASS,
 	PLAIN_TOPIC_HEADER_GRID_CLASS,
@@ -88,7 +89,6 @@ const SECTION_TITLE_CLASSES: Record<TopicSkeletonSection, string> = {
 	topicPosts: "w-22",
 	info: "w-28",
 	settings: "w-34",
-	films: "w-48",
 	episodes: "w-76",
 	history: "w-26",
 }
@@ -98,7 +98,7 @@ const SECTION_TITLE_CLASSES: Record<TopicSkeletonSection, string> = {
 const PLAYER_SECTION_KINDS: ReadonlySet<TopicSkeletonSection> = new Set(["film", "podcast"])
 
 // the sections whose titles end in a count at the far right
-const COUNTED_SECTION_KINDS: ReadonlySet<TopicSkeletonSection> = new Set(["findings", "films", "episodes", "history"])
+const COUNTED_SECTION_KINDS: ReadonlySet<TopicSkeletonSection> = new Set(["film", "findings", "episodes", "history"])
 
 // one section in the loaded section's title row and spacing
 function TopicSectionSkeleton({ kind, children }: { kind: TopicSkeletonSection; children: React.ReactNode }) {
@@ -134,7 +134,7 @@ const TOPIC_SKELETON_ELEMENTS: TopicSkeletonElements = {
 	Section: TopicSectionSkeleton,
 	Cards: ({ children }) => <div className="grid gap-x-8 lg:grid-cols-[32rem_minmax(0,1fr)]">{children}</div>,
 	Column: ({ children }) => <div className="min-w-0">{children}</div>,
-	Film: TopicVideoCardSkeleton,
+	Film: CardsRowSkeleton,
 	Podcast: () => <PodcastEpisodePlayerCardSkeleton hasFeedButton />,
 	Findings: FindingListSkeleton,
 	Comments: EmptySectionCardSkeleton,

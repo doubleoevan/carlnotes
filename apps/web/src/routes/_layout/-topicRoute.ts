@@ -6,21 +6,18 @@ import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { notFound, redirect } from "@tanstack/react-router"
 import { loadOnServer, loadPageOnServer, readWithDegradedFallback } from "@/lib/loadOnServer"
 
-// the page head, the topic if the topic is public, the url's season with its podcast episodes, and the url's film
-// season with its films
+// the page head, the topic if the topic is public, and the url's season with its podcast episodes
 export type TopicRouteData = {
 	head: PageHead | undefined
 	topic: TopicResponse | null
 	fetchedSeason: FetchedSeason | null
-	fetchedFilmSeason: FetchedSeason | null
 }
 
-// the topic id from the url, the slug if the url has a slug, and the seasons from the url's query
+// the topic id from the url, the slug if the url has a slug, and the season from the url's query
 type LoadTopicRouteOptions = {
 	topicId: string
 	topicSlug?: string
 	season?: unknown
-	filmSeason?: unknown
 	search?: string
 }
 
@@ -32,17 +29,15 @@ export async function loadTopicRoute({
 	topicId,
 	topicSlug,
 	season,
-	filmSeason,
 	search = "",
 }: LoadTopicRouteOptions): Promise<TopicRouteData> {
-	// read the head, the topic page, and the url's seasons on the server
-	const [[topicHead, topicPage], fetchedSeason, fetchedFilmSeason] = await Promise.all([
+	// read the head, the topic page, and the url's season on the server
+	const [[topicHead, topicPage], fetchedSeason] = await Promise.all([
 		loadPageOnServer({
 			fetchPageHead: () => fetchTopicPageHead(topicId),
 			fetchPage: () => fetchTopicPage(topicId),
 		}),
-		loadOnServer(() => fetchLinkedSeason({ topicId, season, hasVideo: false }), null),
-		loadOnServer(() => fetchLinkedSeason({ topicId, season: filmSeason, hasVideo: true }), null),
+		loadOnServer(() => fetchLinkedSeason({ topicId, season }), null),
 	])
 
 	// respond 404 for a topic the api does not know
@@ -57,9 +52,9 @@ export async function loadTopicRoute({
 		throw redirect({ href: `${currentTopicPath}${search}`, statusCode: 301 })
 	}
 
-	// return the head, the topic only if the topic is public, and the fetched seasons
+	// return the head, the topic only if the topic is public, and the fetched season
 	const topic = topicPage?.status === "visible" ? topicPage.topic : null
-	return { head: topicHead, topic, fetchedSeason, fetchedFilmSeason }
+	return { head: topicHead, topic, fetchedSeason }
 }
 
 /**
@@ -69,23 +64,19 @@ export function toLinkedSeason(search: object, seasonKey: string): unknown {
 	return seasonKey in search ? (search as Record<string, unknown>)[seasonKey] : undefined
 }
 
-// the topic, the season that the url names, and whether to read only the podcast episodes with a film
-type FetchLinkedSeasonOptions = { topicId: string; season: unknown; hasVideo: boolean }
+// the topic, and the season that the url names
+type FetchLinkedSeasonOptions = { topicId: string; season: unknown }
 
 // the season that the url names, with its podcast episodes, or null if the url names no season or the read fails,
 // which marks the render degraded
-async function fetchLinkedSeason({
-	topicId,
-	season,
-	hasVideo,
-}: FetchLinkedSeasonOptions): Promise<FetchedSeason | null> {
+async function fetchLinkedSeason({ topicId, season }: FetchLinkedSeasonOptions): Promise<FetchedSeason | null> {
 	if (typeof season !== "number" || !Number.isInteger(season)) {
 		return null
 	}
 
 	// the season's podcast episodes, or null if their read fails
 	return readWithDegradedFallback(async () => {
-		const seasonPodcastEpisodes = await fetchSeasonPodcastEpisodes({ topicId, season, hasVideo })
+		const seasonPodcastEpisodes = await fetchSeasonPodcastEpisodes({ topicId, season })
 		return { season, seasonPodcastEpisodes }
 	}, null)
 }

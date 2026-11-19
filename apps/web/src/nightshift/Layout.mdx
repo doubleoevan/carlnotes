@@ -9,23 +9,20 @@ This page states the section order rules that every page follows, on the web and
 ## Films come right before podcasts
 
 A podcast episode can have a film. Wherever a page shows films and podcasts, the film section sits right before the
-podcast section it pairs with, so the newer format leads. Four pages pair them today, six times:
+podcast section it pairs with, so the newer format leads. Five pages pair them today, six times:
 
 - Home: Featured films, then Featured podcasts
 - Home: New films this week, then New podcasts this week
 - Café: Featured Films, then Featured Podcasts
 - Team: Featured Films, then Featured Podcasts
 - Topic: Coffee Break Cinema, then the podcast player
-- Topic: Coffee Break films, then Coffee Break podcast episodes
-
-The podcast episode page is the exception: Coffee Break podcast, with the audio player, comes first, and Coffee Break
-Cinema, with the film, follows it. `sectionOrder.test.ts` checks that order on both apps too.
+- Podcast episode: Coffee Break Film, then Coffee Break podcast
 
 The home's order lives in `HOME_SECTIONS` in `packages/core/lib/homeFaces.ts`, which both apps render in order. The
 Café's lives in `PROFILE_SECTIONS` in `packages/core/lib/profileSections.ts` and in each app's profile page. The
 team page's lives in `TEAM_SECTIONS` in `packages/core/lib/cardSections.ts` and in each app's team page. The
-topic page's order lives in each app's topic page. `packages/core/lib/sectionOrder.test.ts` fails if any pair loses
-its order. A new page that shows films and podcasts adds its pair to that test.
+topic page's and the podcast episode page's orders live in each app's pages.
+`packages/core/lib/sectionOrder.test.ts` fails if any pair loses its order. A new page that shows films and podcasts adds its pair to that test.
 
 A film section with no film is hidden, so a page without films reads as it did before.
 

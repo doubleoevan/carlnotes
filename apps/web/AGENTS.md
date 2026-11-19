@@ -288,11 +288,12 @@ the browser bundle and renders pages through the server build, behind its own ro
   `ReturnedTopicVideoDialog.tsx`, which `Layout` mounts, is that dialog for a film that returned from
   picture-in-picture on a page with no film player, loading the dialog's code once a film returns, and
   `TopicVideoSection.tsx` is the topic page's
-  collapsible film section. While a topic with no ready film has a latest podcast episode whose film is rendering, the
-  section shows `UnpublishedPodcastEpisodeCard` with `isVideoRendering` in the film player's place, the recording
-  card's frame with the line "Carl and Vienna are filming...", and core's `useTopicVideoRenderingPoll`
-  reads the page again until the film is ready. `pages/PodcastEpisodePage.tsx` shows the same card in its Coffee Break
-  Cinema section for a podcast episode whose film is rendering, and its poll replaces the page once the film is no
+  collapsible film section, the topic's films as the home's paged film cards, whose play opens the Video dialog. While
+  the topic's latest podcast episode's film is rendering, the section shows `UnpublishedPodcastEpisodeCard` with
+  `isVideoRendering` above the cards, or alone for a topic with no ready film, the recording card's frame with the line
+  "Carl and Vienna are filming...", and core's `useTopicVideoRenderingPoll` reads the page again until the film is
+  ready. `pages/PodcastEpisodePage.tsx` shows the same card in its Coffee Break
+  Film section for a podcast episode whose film is rendering, and its poll replaces the page once the film is no
   longer rendering. A failed poll read of the topic page keeps the page shown.
   Both players use `PodcastEpisodeSeekBar`. Hovering a chapter shows `PodcastEpisodeChapterPreview.tsx`, a popover
   anchored to the segment. The popover stays open while hovered. On the seek bar, Enter focuses the current chapter's
@@ -300,7 +301,7 @@ the browser bundle and renders pages through the server build, behind its own ro
   favicon. `podcastEpisodeChapterImages.ts` tries the Finding's link preview image, the generated
   chapter image for an episode with a film, and the podcast card, in that order. Failed chapter images are skipped
   on the next hover.
-  `pages/PodcastEpisodePage.tsx` holds the film in its Coffee Break Cinema section and the
+  `pages/PodcastEpisodePage.tsx` holds the film in its Coffee Break Film section above the
   player card in its Coffee Break podcast section. Core `useShownPodcastEpisode` owns selection and recording polling; the web
   supplies its search parameter.
 - `components/social/` — the web's adapters of the shared reaction row and comment thread. `socialElements.tsx` is the

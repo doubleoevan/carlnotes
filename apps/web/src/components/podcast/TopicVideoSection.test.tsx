@@ -1,17 +1,16 @@
-// the topic page's film section: open or collapsed as the topic read resolved it, headed "Coffee Break Cinema" with
-// the theme song's credits right after the title, with the film player in a card and its skips and speed showing
-// before the film plays, with the rendering card in the player's place while the topic's only film renders, the
-// filming line under the controls while a newer film renders, and absent for a topic with no film
-import { expect, mock, spyOn, test } from "bun:test"
-import { toPodcastEpisodeFixture, toTopicPodcastFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
+// the topic page's film section: open, headed "Coffee Break Cinema" with the theme song's credits and the film count.
+// it holds every ready film as a card, six to a page, with every card in the html. the filming card sits above the
+// cards while the latest film renders, and alone if no film is ready. the page is read again until the film is ready,
+// and a topic with no film has no section
+import { expect, mock, test } from "bun:test"
+import type { PodcastEpisodeCard } from "@carlnotes/contracts/home"
+import { toPodcastEpisodeFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import { toTestTopicResponse } from "@carlnotes/contracts/topicFeedTestFixtures"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import {
 	TopicVideoSection as SharedTopicVideoSection,
 	type TopicVideoSectionElements,
 } from "@carlnotes/core/components/TopicVideoSection"
-import { updatePodcastEpisodePlayerState } from "@carlnotes/core/stores/podcastEpisodePlayerState"
-import * as playerStore from "@carlnotes/core/stores/podcastEpisodePlayerStore"
 import { focusManager } from "@tanstack/react-query"
 import { act } from "react"
 import { renderWithRouter } from "@/components/chat/renderWithRouter"
@@ -19,42 +18,48 @@ import { renderTestHook } from "@/lib/hookTestHarness"
 import { INFO_CARD_CLASS } from "@/lib/styleClasses"
 import { TopicVideoSection } from "./TopicVideoSection"
 
-// mount the shared section with its actual polling and player selection
+// the shared section with plain elements, for the reads while a film renders
 const testElements: TopicVideoSectionElements = {
-	Section: ({ children }) => <section>{children}</section>,
-	Player: ({ podcastEpisode, cardFooter }) => (
-		<article>
-			<h4>{podcastEpisode.title}</h4>
-			{cardFooter}
-		</article>
+	Section: ({ action, children }) => (
+		<section>
+			{action}
+			{children}
+		</section>
 	),
+	Grid: ({ children }) => <ol>{children}</ol>,
+	Cell: ({ children }) => <li>{children}</li>,
+	Pagination: () => null,
+	FilmCard: ({ podcastEpisodeCard }) => <h4>{podcastEpisodeCard.podcastEpisode.title}</h4>,
 	RenderingCard: () => <p>Rendering</p>,
-	ProgressLine: ({ text }) => <p>{text}</p>,
-	NewFilmButton: ({ label, onPress }) => (
-		<button type="button" onClick={onPress}>
-			{label}
-		</button>
-	),
 }
 
-// the latest film's podcast episode
-const filmPodcastEpisode = toPodcastEpisodeFixture({
-	title: "Better beans",
-	video: {
-		videoUrl: "/api/episodes/episode-1/video.mp4",
-		captionsUrl: "/api/episodes/episode-1/captions.vtt",
-		posterUrl: "/api/topic-podcast-episode-video-images/episode-1/hash/poster.jpg",
-	},
-})
+// a topic's film cards, newest first, each named for its episode number
+function toFilmCards(filmCount: number): PodcastEpisodeCard[] {
+	return Array.from({ length: filmCount }, (_, index) => ({
+		podcastEpisode: toPodcastEpisodeFixture({
+			id: `episode-${filmCount - index}`,
+			episodeNumber: filmCount - index,
+			title: `Film ${filmCount - index}`,
+			hasVideo: true,
+			videoPosterUrl: `/api/topic-podcast-episode-video-images/episode-${filmCount - index}/hash/poster.jpg`,
+		}),
+		topic: { id: "topic-1", name: "Coffee", path: "/topics/topic-1/coffee", image: null },
+		reactionCount: 0,
+	}))
+}
 
-// a topic whose podcast has a film, or none
-function toFilmTopic(hasFilm: boolean): TopicResponse {
+// a topic with its film cards, and its latest podcast episode
+function toFilmTopic({
+	filmCount,
+	latestPodcastEpisode = null,
+}: {
+	filmCount: number
+	latestPodcastEpisode?: TopicResponse["latestPodcastEpisode"]
+}): TopicResponse {
 	return toTestTopicResponse({
 		id: "topic-1",
-		podcast: toTopicPodcastFixture({
-			latestSeasonPodcastEpisodes: { podcastEpisodes: [filmPodcastEpisode] },
-			topicPodcastEpisodeVideoSection: hasFilm ? { podcastEpisode: filmPodcastEpisode } : null,
-		}),
+		topicPodcastEpisodeVideoCards: toFilmCards(filmCount),
+		latestPodcastEpisode,
 	})
 }
 
@@ -63,125 +68,40 @@ function renderFilmSection(topic: TopicResponse): Promise<string> {
 	return renderWithRouter(<TopicVideoSection topic={topic} onVideoRenderingPoll={() => {}} />)
 }
 
-for (const playback of ["idle", "playing", "paused", "audio", "removed"] as const) {
-	test(`publishing a newer film while the older film is ${playback} switches only an idle poster`, async () => {
-		// show the old film while the newer one renders
-		const newerFilm = {
-			...filmPodcastEpisode,
-			id: "new-film",
-			episodeNumber: playback === "removed" ? 6 : 8,
-			title: "New beans",
-		}
-		let topic = {
-			...toFilmTopic(true),
-			latestPodcastEpisode: { ...newerFilm, video: null, isVideoRendering: true },
-		} as TopicResponse
-		const reload = mock(() => {})
-		const play = spyOn(playerStore, "playTopicVideo").mockResolvedValue(true)
-		const oldState = playerStore.toPodcastEpisodePlayerState()
-		updatePodcastEpisodePlayerState({
-			format: playback === "audio" ? "audio" : "video",
-			podcastEpisode: playback === "idle" ? null : filmPodcastEpisode,
-			isPlaying: playback === "playing" || playback === "audio",
-			positionSeconds: 24,
-		})
-		const harness = await renderTestHook(
-			() => topic,
-			(shownTopic) => (
-				<SharedTopicVideoSection
-					topic={shownTopic}
-					elements={testElements}
-					onToggled={() => {}}
-					onVideoRenderingPoll={reload}
-				/>
-			),
-		)
-		try {
-			// a return to the page polls even with a playable poster still on screen
-			await act(async () => {
-				focusManager.setFocused(false)
-				focusManager.setFocused(true)
-			})
-			expect(reload).toHaveBeenCalledTimes(1)
-			expect(harness.container.querySelector("h4")?.textContent).toBe("Better beans")
-			expect(harness.container.querySelector("button")).toBeNull()
-
-			// apply the published page and verify polling stops without touching playback
-			topic = {
-				...toFilmTopic(true),
-				latestPodcastEpisode: newerFilm,
-				podcast: toTopicPodcastFixture({ topicPodcastEpisodeVideoSection: { podcastEpisode: newerFilm } }),
-			}
-			await harness.render()
-			await act(async () => {
-				focusManager.setFocused(false)
-				focusManager.setFocused(true)
-			})
-			expect(reload).toHaveBeenCalledTimes(1)
-			expect(play).not.toHaveBeenCalled()
-			expect(playerStore.toPodcastEpisodePlayerState().positionSeconds).toBe(24)
-
-			// only a viewer watching the older film gets the choice to start the new one
-			const button = harness.container.querySelector("button")
-			if (playback === "playing" || playback === "paused") {
-				expect(harness.container.querySelector("h4")?.textContent).toBe("Better beans")
-				expect(button?.textContent).toBe("New film ready")
-				await act(async () => button?.click())
-				expect(play).toHaveBeenCalledWith(newerFilm)
-			} else {
-				expect(button).toBeNull()
-			}
-			expect(harness.container.querySelector("h4")?.textContent).toBe("New beans")
-		} finally {
-			// release the page before restoring playback and focus
-			await harness.close()
-			updatePodcastEpisodePlayerState(oldState)
-			focusManager.setFocused(undefined)
-			play.mockRestore()
-		}
-	})
-}
-
-test("a film renders the section open on the film's poster, under a heading without the word video", async () => {
-	// the open section, with the poster and the play button over it
-	const html = await renderFilmSection(toFilmTopic(true))
+test("a topic's films render as cards in the open section, under a heading without the word video", async () => {
+	// the open section at the film anchor, with its count
+	const html = await renderFilmSection(toFilmTopic({ filmCount: 8 }))
 	expect(html).toContain("Coffee Break Cinema")
-	expect(html).not.toContain("Topic Cinema")
+	expect(html).toContain('id="film"')
 	expect(html).toContain('data-state="open"')
-	expect(html).toMatch(/<h4[^>]*>Better beans<\/h4>[\s\S]*?<img[^>]+poster\.jpg/)
-	expect(html).toContain('src="/api/topic-podcast-episode-video-images/episode-1/hash/poster.jpg"')
-	expect(html).toContain('aria-label="Play episode 7"')
+	expect(html).toContain("8 films")
 	expect(html).not.toMatch(/<h\d[^>]*>[^<]*video/i)
 
-	// the mute control beside captions, and no control that switches to the audio
-	expect(html).toContain('aria-label="Mute"')
-	expect(html).not.toContain('aria-label="Listen"')
+	// every film's card with its poster and play button, newest first, kept in the html for a reader without script
+	expect(html.match(/aria-label="Play film"/g)).toHaveLength(8)
+	expect(html.indexOf("Film 8")).toBeLessThan(html.indexOf("Film 1"))
+	expect(html).toContain('src="/api/topic-podcast-episode-video-images/episode-8/hash/poster.jpg"')
 
-	// the skips and the speed before the film plays, and the card around the film and its controls
-	expect(html).toContain('aria-label="Skip back 15 seconds"')
-	expect(html).toContain('aria-label="Skip forward 30 seconds"')
-	expect(html).toMatch(/aria-label="Playback speed [\d.]+x"/)
-	expect(html).toContain(INFO_CARD_CLASS)
+	// the page buttons, and no film player
+	expect(html).toContain('aria-label="Coffee Break Cinema pages"')
+	expect(html).not.toContain('aria-label="Skip back 15 seconds"')
 })
 
 test("the theme song's credits sit right after the title, outside the section's toggle", async () => {
 	// the toggle's button ends at the title, and the credits' button follows the toggle's heading
-	const html = await renderFilmSection(toFilmTopic(true))
+	const html = await renderFilmSection(toFilmTopic({ filmCount: 2 }))
 	expect(html).toMatch(/Coffee Break Cinema<\/span><\/button><\/h3><button[^>]*aria-label="Theme song credits"/)
 	expect(html.match(/aria-label="Theme song credits"/g)).toHaveLength(1)
 })
 
 test("a topic with no film renders no film section", async () => {
-	expect(await renderFilmSection(toFilmTopic(false))).toBe("")
+	expect(await renderFilmSection(toFilmTopic({ filmCount: 0 }))).toBe("")
 })
 
-test("a topic whose only film is rendering renders the open section with the rendering card and no player", async () => {
+test("a topic whose only film is rendering renders the open section with the filming card and no cards", async () => {
 	// no ready film, and the latest podcast episode's film is rendering
-	const videoRenderingTopic = {
-		...toFilmTopic(false),
-		latestPodcastEpisode: toPodcastEpisodeFixture({ title: "Better beans", isVideoRendering: true }),
-	}
-	const html = await renderFilmSection(videoRenderingTopic)
+	const latestPodcastEpisode = toPodcastEpisodeFixture({ title: "Better beans", isVideoRendering: true })
+	const html = await renderFilmSection(toFilmTopic({ filmCount: 0, latestPodcastEpisode }))
 
 	// the section's title over the card's frame, title, and line, whose emoji a screen reader skips
 	expect(html).toContain("Coffee Break Cinema")
@@ -191,27 +111,54 @@ test("a topic whose only film is rendering renders the open section with the ren
 	expect(html).toMatch(
 		/<span aria-hidden="true"[^>]*>🎬<\/span><span class="shimmer-text">Carl and Vienna are filming...<\/span>/,
 	)
-	expect(html).not.toContain("Carl and Vienna are recording...")
-	expect(html).not.toContain('aria-label="Play episode 7"')
+	expect(html).not.toContain('aria-label="Play film"')
 })
 
 test("a failed film on a topic with no ready film renders no film section", async () => {
-	const failedFilmTopic = {
-		...toFilmTopic(false),
-		latestPodcastEpisode: toPodcastEpisodeFixture({ title: "Better beans", isVideoRendering: false }),
-	}
-	expect(await renderFilmSection(failedFilmTopic)).toBe("")
+	const latestPodcastEpisode = toPodcastEpisodeFixture({ title: "Better beans", isVideoRendering: false })
+	expect(await renderFilmSection(toFilmTopic({ filmCount: 0, latestPodcastEpisode }))).toBe("")
 })
 
-test("the film card says a newer film is filming under the controls, and says nothing for the shown film", async () => {
-	// the latest film, with a newer podcast episode whose film is rendering
-	const newerPodcastEpisode = toPodcastEpisodeFixture({ id: "episode-2", isVideoRendering: true })
-	const html = await renderFilmSection({ ...toFilmTopic(true), latestPodcastEpisode: newerPodcastEpisode })
-	expect(html).toContain('src="/api/topic-podcast-episode-video-images/episode-1/hash/poster.jpg"')
-	expect(html.indexOf("Carl and Vienna are filming...")).toBeGreaterThan(html.indexOf('aria-label="Mute"'))
+test("the filming card sits above the ready films' cards while a newer film renders", async () => {
+	const latestPodcastEpisode = toPodcastEpisodeFixture({ id: "episode-3", title: "New beans", isVideoRendering: true })
+	const html = await renderFilmSection(toFilmTopic({ filmCount: 2, latestPodcastEpisode }))
+	expect(html.indexOf("Carl and Vienna are filming...")).toBeLessThan(html.indexOf('aria-label="Play film"'))
+	expect(html.match(/aria-label="Play film"/g)).toHaveLength(2)
+})
 
-	// the shown film's own podcast episode adds no line
-	const shownPodcastEpisode = { ...filmPodcastEpisode, isVideoRendering: true }
-	const shownHtml = await renderFilmSection({ ...toFilmTopic(true), latestPodcastEpisode: shownPodcastEpisode })
-	expect(shownHtml).not.toContain("Carl and Vienna are filming...")
+test("the page is read again while a film renders, and the new film joins the cards once it is ready", async () => {
+	// two ready films, and a newer podcast episode whose film is rendering
+	const renderingPodcastEpisode = toPodcastEpisodeFixture({ id: "episode-3", isVideoRendering: true })
+	let topic = toFilmTopic({ filmCount: 2, latestPodcastEpisode: renderingPodcastEpisode })
+	const reload = mock(() => {})
+	const harness = await renderTestHook(
+		() => topic,
+		(shownTopic) => (
+			<SharedTopicVideoSection topic={shownTopic} onVideoRenderingPoll={reload} elements={testElements} />
+		),
+	)
+	try {
+		// a return to the page reads it again
+		await act(async () => {
+			focusManager.setFocused(false)
+			focusManager.setFocused(true)
+		})
+		expect(reload).toHaveBeenCalledTimes(1)
+		expect(harness.container.textContent).toContain("Rendering")
+
+		// the ready film's read drops the filming card, adds the film's card first, and stops the reads
+		topic = toFilmTopic({ filmCount: 3, latestPodcastEpisode: { ...renderingPodcastEpisode, isVideoRendering: false } })
+		await harness.render()
+		await act(async () => {
+			focusManager.setFocused(false)
+			focusManager.setFocused(true)
+		})
+		expect(reload).toHaveBeenCalledTimes(1)
+		expect(harness.container.textContent).not.toContain("Rendering")
+		expect(harness.container.querySelector("h4")?.textContent).toBe("Film 3")
+	} finally {
+		// release the page before restoring focus
+		await harness.close()
+		focusManager.setFocused(undefined)
+	}
 })

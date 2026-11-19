@@ -8,7 +8,7 @@ import { ShimmerText } from "@/components/common/ShimmerText"
 import { Text } from "@/components/primitives/text"
 import { PodcastEpisodeCover } from "./PodcastEpisodeCover"
 
-export const UNPUBLISHED_PODCAST_EPISODE_CARD_ELEMENTS: UnpublishedPodcastEpisodeCardElements = {
+const UNPUBLISHED_PODCAST_EPISODE_CARD_ELEMENTS: UnpublishedPodcastEpisodeCardElements = {
 	Frame: ({ children }) => (
 		<View className="flex-row items-center gap-4 rounded-lg border border-separator bg-card p-5 shadow-raised">
 			{children}

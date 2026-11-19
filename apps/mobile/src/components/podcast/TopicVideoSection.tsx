@@ -1,112 +1,84 @@
-import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import {
 	TopicVideoSection as SharedTopicVideoSection,
 	type TopicVideoSectionElements,
 } from "@carlnotes/core/components/TopicVideoSection"
-import { type ComponentProps, type ComponentRef, type RefObject, useEffect, useMemo, useRef } from "react"
-import { type ScrollView, View } from "react-native"
-import { Button } from "@/components/primitives/button"
-import { Text } from "@/components/primitives/text"
+import { type ComponentProps, useMemo } from "react"
+import { View } from "react-native"
+import { CARDS_SECTION_ELEMENTS } from "@/components/common/CardsSection"
+import { Pagination } from "@/components/common/Pagination"
 import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
 import { captureFilmVisitEvent } from "@/visitAnalytics"
+import { PodcastEpisodeCard } from "./PodcastEpisodeCard"
 import { PodcastThemeSongNote } from "./PodcastThemeSongNote"
-import { TopicVideoPlayer } from "./TopicVideoPlayer"
-import {
-	UNPUBLISHED_PODCAST_EPISODE_CARD_ELEMENTS,
-	UnpublishedPodcastEpisodeCard,
-} from "./UnpublishedPodcastEpisodeCard"
+import { UnpublishedPodcastEpisodeCard } from "./UnpublishedPodcastEpisodeCard"
 
-// the topic screen's scroll view, which a row's play scrolls to the section
-type TopicScrollViewRef = RefObject<ComponentRef<typeof ScrollView> | null>
-
-// the space left above the section once it scrolls into view
-const SCROLL_TARGET_GAP = 12
-
-// the topic, the read of its screen again while its film renders, and the topic's scroll view
+// the topic, and the read of its screen again while its film renders
 type TopicVideoSectionProps = {
 	topic: TopicResponse
 	onVideoRenderingPoll: () => void | Promise<void>
-	scrollViewRef: TopicScrollViewRef
+}
+
+// the home's card cells, with the column of cards and the page buttons inside the topic screen's own side inset, the
+// film card whose play reports the topic-videos surface, and the filming card
+const TOPIC_VIDEO_SECTION_ELEMENTS: Omit<TopicVideoSectionElements, "Section"> = {
+	...CARDS_SECTION_ELEMENTS,
+	Grid: ({ children }) => <View className="gap-3 pt-2 pb-2">{children}</View>,
+	Pagination: ({ label, pageNumber, pageCount, onOpenPage }) => (
+		<View className="pt-1 pb-2">
+			<Pagination label={label} pageNumber={pageNumber} pageCount={pageCount} onOpenPage={onOpenPage} />
+		</View>
+	),
+	FilmCard: ({ podcastEpisodeCard }) => (
+		<PodcastEpisodeCard podcastEpisodeCard={podcastEpisodeCard} variant="video" videoSurface="topic-videos" />
+	),
+	RenderingCard: ({ podcastEpisode }) => (
+		<UnpublishedPodcastEpisodeCard podcastEpisode={podcastEpisode} isVideoRendering />
+	),
 }
 
 /**
- * Adapts the topic video section to the screen's collapsible section, which the topic's scroll view scrolls to each
- * time a row asks. A topic with no film, ready or rendering, shows nothing.
+ * Adapts the topic video section to the screen's collapsible section and the home's cards. A topic with no film, ready
+ * or rendering, shows nothing.
  */
-export function TopicVideoSection({ topic, onVideoRenderingPoll, scrollViewRef }: TopicVideoSectionProps) {
-	// keep the section renderer stable while the film plays
+export function TopicVideoSection({ topic, onVideoRenderingPoll }: TopicVideoSectionProps) {
+	// keep the section's renderer stable across the topic's reads, so its open state and page stay
 	const elements = useMemo<TopicVideoSectionElements>(
 		() => ({
-			// biome-ignore lint/correctness/noComponentHookFactories: memoized on the ref, so the player stays mounted
-			Section: (sectionProps) => <TopicVideoCollapsibleSection {...sectionProps} scrollViewRef={scrollViewRef} />,
-			Player: TopicVideoPlayer,
-			RenderingCard: TopicVideoRenderingCard,
-			ProgressLine: UNPUBLISHED_PODCAST_EPISODE_CARD_ELEMENTS.ProgressLine,
-			NewFilmButton: NewFilmReadyButton,
+			...TOPIC_VIDEO_SECTION_ELEMENTS,
+			// biome-ignore lint/correctness/noComponentHookFactories: memoized on the topic, so the section stays mounted
+			Section: (sectionProps) => <TopicVideoCollapsibleSection {...sectionProps} topicId={topic.id} />,
 		}),
-		[scrollViewRef],
+		[topic.id],
 	)
-	return (
-		<SharedTopicVideoSection
-			topic={topic}
-			onToggled={(isOpen) =>
-				captureFilmVisitEvent("visit_episode_video_section_toggled", { topicId: topic.id, isOpen })
-			}
-			onVideoRenderingPoll={onVideoRenderingPoll}
-			elements={elements}
-		/>
-	)
+	return <SharedTopicVideoSection topic={topic} onVideoRenderingPoll={onVideoRenderingPoll} elements={elements} />
 }
 
-// switch films when the viewer chooses the newly published one
-function NewFilmReadyButton({ label, onPress }: ComponentProps<TopicVideoSectionElements["NewFilmButton"]>) {
-	return (
-		<Button variant="secondary" className="self-start" accessibilityLabel={label} onPress={onPress}>
-			<Text>{label}</Text>
-		</Button>
-	)
-}
-
-// the card that says the film is rendering, in the film player's place
-function TopicVideoRenderingCard({ podcastEpisode }: { podcastEpisode: PodcastEpisode }) {
-	return <UnpublishedPodcastEpisodeCard podcastEpisode={podcastEpisode} isVideoRendering />
-}
-
-// the collapsible section, kept mounted while closed, with the theme song's credits right after its title and a
-// divider under it while closed
+// the collapsible section, open on every screen load and kept mounted while closed, with the theme song's credits right
+// after its title, the film count at its far right, and a divider under it while closed. the filming card sits above
+// the cards, and the page buttons under them
 function TopicVideoCollapsibleSection({
 	title,
-	isOpen,
-	onOpenChange,
-	scrollRequestCount,
-	scrollViewRef,
+	countLabel,
+	action,
+	pageButtons,
 	children,
-}: ComponentProps<TopicVideoSectionElements["Section"]> & { scrollViewRef: TopicScrollViewRef }) {
-	// scroll the section into view each time the count rises. Android removes a plain wrapper view from the native
-	// tree, and a removed view cannot be measured
-	const sectionRef = useRef<ComponentRef<typeof View>>(null)
-	useEffect(() => {
-		const contentView = scrollViewRef.current?.getInnerViewRef()
-		if (scrollRequestCount === 0 || !sectionRef.current || !contentView) {
-			return
-		}
-		sectionRef.current.measureLayout(contentView, (_x, y) => {
-			scrollViewRef.current?.scrollTo({ y: y - SCROLL_TARGET_GAP, animated: true })
-		})
-	}, [scrollRequestCount, scrollViewRef])
+	topicId,
+}: ComponentProps<TopicVideoSectionElements["Section"]> & { topicId: string }) {
 	return (
-		<View ref={sectionRef} collapsable={false}>
-			<CollapsibleSection
-				title={title}
-				titleNote={<PodcastThemeSongNote />}
-				isOpen={isOpen}
-				onOpenChange={onOpenChange}
-				isContentKept
-				hasClosedDivider
-			>
+		<CollapsibleSection
+			title={title}
+			titleNote={<PodcastThemeSongNote />}
+			countLabel={countLabel}
+			onOpenChange={(isOpen) => captureFilmVisitEvent("visit_episode_video_section_toggled", { topicId, isOpen })}
+			isContentKept
+			hasClosedDivider
+		>
+			<View className="gap-3">
+				{action}
 				{children}
-			</CollapsibleSection>
-		</View>
+				{pageButtons}
+			</View>
+		</CollapsibleSection>
 	)
 }

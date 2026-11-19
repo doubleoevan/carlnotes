@@ -36,20 +36,16 @@ const HOME_SECTION_PAIRS = [
 	["newestTopicPodcastEpisodeVideos", "newestPodcastEpisodes"],
 ] as const
 
-// the film section, the films list, and the podcast episodes list, as both apps write them
+// the film section and the podcast episodes list, as both apps write them
 const FILM_SECTION = "<TopicVideoSection"
-const FILM_LIST = '<PodcastEpisodesCard topic={topic} format="video"'
 const PODCAST_EPISODE_LIST = "<PodcastEpisodesCard topic={topic}"
 
-// the topic page's film element, each with the podcast element right after it
-const TOPIC_PAGE_PAIRS = [
-	[FILM_SECTION, "<PodcastEpisodePlayer"],
-	[FILM_LIST, PODCAST_EPISODE_LIST],
-] as const
+// the topic page's film element, with the podcast element right after it
+const TOPIC_PAGE_PAIRS = [[FILM_SECTION, "<PodcastEpisodePlayer"]] as const
 
 // the files that place the topic page's sections, from the repo root, each with its elements in the order the page
 // shows them: the film section, the podcast player, the comment thread, the Topic Posts section, then the cards with
-// the films list and the podcast episodes list
+// the podcast episodes list
 const TOPIC_PAGE_ELEMENT_ORDERS: Record<string, string[]> = {
 	// the web page, whose cards follow the page in the same file
 	"apps/web/src/pages/TopicPage.tsx": [
@@ -58,7 +54,6 @@ const TOPIC_PAGE_ELEMENT_ORDERS: Record<string, string[]> = {
 		"<SocialSection",
 		"<TopicPostsSection",
 		"<TopicViews",
-		FILM_LIST,
 		PODCAST_EPISODE_LIST,
 	],
 	// the mobile screen, then its cards
@@ -69,7 +64,7 @@ const TOPIC_PAGE_ELEMENT_ORDERS: Record<string, string[]> = {
 		"<TopicPostsSection",
 		"<TopicPageCards",
 	],
-	"apps/mobile/src/components/topic/TopicPageCards.tsx": [FILM_LIST, PODCAST_EPISODE_LIST],
+	"apps/mobile/src/components/topic/TopicPageCards.tsx": [PODCAST_EPISODE_LIST],
 }
 
 // the files that place the podcast episode page's sections, from the repo root, each with the film's section, the

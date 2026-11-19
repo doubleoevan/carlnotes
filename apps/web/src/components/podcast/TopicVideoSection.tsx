@@ -4,30 +4,13 @@ import {
 	TopicVideoSection as SharedTopicVideoSection,
 	type TopicVideoSectionElements,
 } from "@carlnotes/core/components/TopicVideoSection"
-import { type ComponentProps, useEffect, useRef } from "react"
-import { Button } from "@/components/primitives/button"
+import { type ComponentProps, useMemo } from "react"
+import { CARDS_SECTION_ELEMENTS } from "@/components/common/CardsSection"
 import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
 import { captureFilmVisitEvent } from "@/lib/visitAnalytics"
+import { PodcastEpisodeCard } from "./PodcastEpisodeCard"
 import { PodcastThemeSongNote } from "./PodcastThemeSongNote"
-import { TopicVideoPlayer } from "./TopicVideoPlayer"
-import {
-	UNPUBLISHED_PODCAST_EPISODE_CARD_ELEMENTS,
-	UnpublishedPodcastEpisodeCard,
-} from "./UnpublishedPodcastEpisodeCard"
-
-const elements: TopicVideoSectionElements = {
-	Section: TopicVideoCollapsibleSection,
-	Player: TopicVideoPlayer,
-	RenderingCard: ({ podcastEpisode }) => (
-		<UnpublishedPodcastEpisodeCard podcastEpisode={podcastEpisode} isVideoRendering />
-	),
-	ProgressLine: UNPUBLISHED_PODCAST_EPISODE_CARD_ELEMENTS.ProgressLine,
-	NewFilmButton: ({ label, onPress }) => (
-		<Button variant="secondary" className="self-start" onClick={onPress}>
-			{label}
-		</Button>
-	),
-}
+import { UnpublishedPodcastEpisodeCard } from "./UnpublishedPodcastEpisodeCard"
 
 // the topic, and the read of its page again while its film renders
 type TopicVideoSectionProps = {
@@ -35,53 +18,64 @@ type TopicVideoSectionProps = {
 	onVideoRenderingPoll: () => void | Promise<void>
 }
 
-/**
- * Adapts the topic video section to the page's collapsible section, which scrolls into view each time a row asks. A topic
- * with no film, ready or rendering, shows nothing.
- */
-export function TopicVideoSection({ topic, onVideoRenderingPoll }: TopicVideoSectionProps) {
-	return (
-		<SharedTopicVideoSection
-			topic={topic}
-			onToggled={(isOpen) =>
-				captureFilmVisitEvent("visit_episode_video_section_toggled", { topicId: topic.id, isOpen })
-			}
-			onVideoRenderingPoll={onVideoRenderingPoll}
-			elements={elements}
-		/>
-	)
+// the home's grid, cells, and page buttons, the film card whose play reports the topic-videos surface, and the filming
+// card
+const TOPIC_VIDEO_SECTION_ELEMENTS: Omit<TopicVideoSectionElements, "Section"> = {
+	...CARDS_SECTION_ELEMENTS,
+	FilmCard: ({ podcastEpisodeCard }) => (
+		<PodcastEpisodeCard podcastEpisodeCard={podcastEpisodeCard} variant="video" videoSurface="topic-videos" />
+	),
+	RenderingCard: ({ podcastEpisode }) => (
+		<UnpublishedPodcastEpisodeCard podcastEpisode={podcastEpisode} isVideoRendering />
+	),
 }
 
-// the collapsible section, kept mounted while closed, with the theme song's credits right after its title and a divider
-// under it while closed
+/**
+ * Adapts the topic video section to the page's collapsible section and the home's card grid. A topic with no film,
+ * ready or rendering, shows nothing.
+ */
+export function TopicVideoSection({ topic, onVideoRenderingPoll }: TopicVideoSectionProps) {
+	// keep the section's renderer stable across the topic's reads, so its open state and page stay
+	const elements = useMemo<TopicVideoSectionElements>(
+		() => ({
+			...TOPIC_VIDEO_SECTION_ELEMENTS,
+			// biome-ignore lint/correctness/noComponentHookFactories: memoized on the topic, so the section stays mounted
+			Section: (sectionProps) => <TopicVideoCollapsibleSection {...sectionProps} topicId={topic.id} />,
+		}),
+		[topic.id],
+	)
+	return <SharedTopicVideoSection topic={topic} onVideoRenderingPoll={onVideoRenderingPoll} elements={elements} />
+}
+
+// the collapsible section at the film anchor, open on every page load and kept in the html while closed, with the theme
+// song's credits right after its title, the film count at its far right, and a divider under it while closed. the
+// filming card sits above the cards, and the page buttons under them
 function TopicVideoCollapsibleSection({
+	value,
 	title,
-	isOpen,
-	onOpenChange,
-	scrollRequestCount,
+	countLabel,
+	action,
+	pageButtons,
 	children,
-}: ComponentProps<TopicVideoSectionElements["Section"]>) {
-	// scroll the section into view each time the count rises
-	const sectionRef = useRef<HTMLDivElement>(null)
-	useEffect(() => {
-		if (scrollRequestCount > 0) {
-			sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
-		}
-	}, [scrollRequestCount])
+	topicId,
+}: ComponentProps<TopicVideoSectionElements["Section"]> & { topicId: string }) {
 	return (
-		<div ref={sectionRef} id={FILM_ANCHOR_ID} className="scroll-mt-20">
-			<CollapsibleSection
-				value="topic-video"
-				title={title}
-				titleNote={<PodcastThemeSongNote />}
-				isOpen={isOpen}
-				onOpenChange={onOpenChange}
-				isContentKept
-				hasClosedDivider
-				className="mt-2"
-			>
+		<CollapsibleSection
+			value={value}
+			title={title}
+			titleNote={<PodcastThemeSongNote />}
+			countLabel={countLabel}
+			onOpenChange={(isOpen) => captureFilmVisitEvent("visit_episode_video_section_toggled", { topicId, isOpen })}
+			isContentKept
+			hasClosedDivider
+			id={FILM_ANCHOR_ID}
+			className="mt-2"
+		>
+			<div className="flex flex-col gap-4">
+				{action}
 				{children}
-			</CollapsibleSection>
-		</div>
+				{pageButtons}
+			</div>
+		</CollapsibleSection>
 	)
 }

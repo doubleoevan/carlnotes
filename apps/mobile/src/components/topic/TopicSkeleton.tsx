@@ -6,6 +6,7 @@ import {
 import { TopicVideoCardSkeleton as SharedTopicVideoCardSkeleton } from "@carlnotes/core/components/TopicVideoCardSkeleton"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Text, View } from "react-native"
+import { CardsRowSkeleton } from "@/components/common/CardsSection"
 import { SkeletonPulse } from "@/components/common/SkeletonPulse"
 import { PAGE_BUTTON_ROW_CLASS } from "@/pageButtonClasses"
 import { SKELETON_SHAPE_CLASS } from "@/sectionClasses"
@@ -97,7 +98,12 @@ const TOPIC_SKELETON_ELEMENTS: TopicSkeletonElements = {
 	Section: ({ children }) => <CollapsibleSectionSkeleton>{children}</CollapsibleSectionSkeleton>,
 	Cards: View,
 	Column: View,
-	Film: TopicVideoCardSkeleton,
+	// the film cards' column has its own side inset, so it leaves the screen's
+	Film: () => (
+		<View className="-mx-4">
+			<CardsRowSkeleton />
+		</View>
+	),
 	Podcast: () => <PodcastEpisodePlayerCardSkeleton hasFeedButton />,
 	// the findings' card has its own inset, so it leaves the column's, as the loaded list does
 	Findings: ({ hasChapterPills }) => (

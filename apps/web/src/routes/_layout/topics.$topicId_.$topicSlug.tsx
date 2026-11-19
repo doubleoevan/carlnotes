@@ -1,4 +1,4 @@
-import { FILM_SEASON_KEY, PODCAST_EPISODE_SEASON_KEY } from "@carlnotes/core/components/PodcastEpisodesCard"
+import { PODCAST_EPISODE_SEASON_KEY } from "@carlnotes/core/components/PodcastEpisodesCard"
 import { toHeadTags } from "@carlnotes/core/lib/pageHead"
 import { createFileRoute } from "@tanstack/react-router"
 import { TopicPage } from "@/pages/TopicPage"
@@ -10,7 +10,6 @@ export const Route = createFileRoute("/_layout/topics/$topicId_/$topicSlug")({
 		loadTopicRoute({
 			...params,
 			season: toLinkedSeason(location.search, PODCAST_EPISODE_SEASON_KEY),
-			filmSeason: toLinkedSeason(location.search, FILM_SEASON_KEY),
 			search: location.searchStr,
 		}),
 	head: ({ loaderData }) => toHeadTags(loaderData?.head),

@@ -1,4 +1,4 @@
-import type { PodcastEpisodeFormat, PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
+import type { PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
 import type { ComponentType, ReactNode } from "react"
 import { toPodcastEpisodeDayAndDurationLabels, toPodcastEpisodeTitleLabel } from "../lib/labels"
 import { togglePodcastEpisodePlayback } from "../stores/podcastEpisodePlayActions"
@@ -11,8 +11,6 @@ export type PodcastEpisodeRowProps = {
 	isPlayButtonMuted?: boolean
 	className?: string
 	onRemovePodcastEpisode?: () => void
-	// a Coffee Break films row plays the film through its own press
-	filmPlay?: { onPress: () => void }
 	// the row's own play control, drawn in place of the play button
 	playButton?: ReactNode
 }
@@ -41,13 +39,11 @@ export function PodcastEpisodeRow({
 	isPlayButtonMuted = false,
 	className,
 	onRemovePodcastEpisode,
-	filmPlay,
 	playButton,
 	elements: { Row, Group, Play, Title, Metadata, Remove },
 }: PodcastEpisodeRowProps & { elements: PodcastEpisodeRowElements }) {
-	// combine playback state in the row's format with the row metadata
-	const format: PodcastEpisodeFormat | undefined = filmPlay ? "video" : undefined
-	const isPlaying = useIsPodcastEpisodePlaying(podcastEpisode.id, format)
+	// combine playback state with the row metadata
+	const isPlaying = useIsPodcastEpisodePlaying(podcastEpisode.id)
 	const details = [
 		...toPodcastEpisodeDayAndDurationLabels(podcastEpisode),
 		...(isLatestPodcastEpisode ? ["latest"] : []),
@@ -59,8 +55,8 @@ export function PodcastEpisodeRow({
 					podcastEpisode={podcastEpisode}
 					isPlaying={isPlaying}
 					isMuted={isPlayButtonMuted}
-					onPress={filmPlay?.onPress ?? (() => void togglePodcastEpisodePlayback(podcastEpisode.id))}
-					label={`${isPlaying ? "Pause" : "Play"} ${filmPlay ? "film" : "episode"} ${podcastEpisode.episodeNumber}`}
+					onPress={() => void togglePodcastEpisodePlayback(podcastEpisode.id)}
+					label={`${isPlaying ? "Pause" : "Play"} episode ${podcastEpisode.episodeNumber}`}
 				/>
 			)}
 			<Group>

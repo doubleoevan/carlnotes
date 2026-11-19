@@ -28,8 +28,7 @@ export function TopicPageCards({ topic, onNoteCountChange, onTopicMemoryRemoved 
 				</View>
 			</CollapsibleSection>
 			<TopicSettingsCard topic={topic} />
-			{/* the topic's films, history, and neighboring topics follow its configuration */}
-			<PodcastEpisodesCard topic={topic} format="video" />
+			{/* the topic's podcast episodes, history, notes, and related topics follow its configuration */}
 			<PodcastEpisodesCard topic={topic} />
 			<TopicScanHistory topic={topic} onTopicMemoryRemoved={onTopicMemoryRemoved} />
 			<NotesSection topic={topic} onNoteCountChange={onNoteCountChange} />

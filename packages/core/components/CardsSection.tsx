@@ -15,6 +15,7 @@ export type CardsSectionElements = {
 		countLabel: string
 		// how many cards the section holds, which decides where a wide screen puts the count
 		cardCount: number
+		// the control or card a section may have above its cards
 		action?: ReactNode
 		// the page buttons, left out for a section of one page
 		pageButtons?: ReactNode
@@ -30,7 +31,7 @@ export type CardsSectionElements = {
 	}>
 }
 
-// a section, its cards, the control above them, and how each card is drawn
+// a section, its cards, the control or card above them, and how each card is drawn
 type PagedCardsSectionProps<Row> = {
 	section: CardSection<Row>
 	rows: Row[]

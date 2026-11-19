@@ -24,7 +24,7 @@ export const topicPageQuery = z.object({
 
 // a season or podcast episode number from a url, and the queries and params the podcast routes read
 const podcastSeasonOrEpisodeNumberParam = z.coerce.number().pipe(z.int32().positive())
-// a season read, filtered to the podcast episodes with a ready film for the Coffee Break films list
+// a season read, filtered to the podcast episodes with a ready film for a released mobile build's films list
 export const seasonPodcastEpisodesQuery = z.object({
 	season: podcastSeasonOrEpisodeNumberParam,
 	hasVideo: z.enum(["true", "false"]).optional(),

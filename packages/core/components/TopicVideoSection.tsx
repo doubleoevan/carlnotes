@@ -1,135 +1,65 @@
-// the topic video section under the topic header: the film player with the topic's latest film, or a film from Coffee
-// Break films, open on each page load until the user collapses it. a topic whose only film is rendering shows the
-// rendering card in the film player's place, and its page is read again until the film is ready
+// the topic video section under the topic header: every ready film of the topic as a film card, newest first, six to a
+// page, in the home's card section pieces. while the topic's latest film renders, the filming card sits above the cards, and the
+// topic's page is read again until the film is ready
+import type { PodcastEpisodeCard } from "@carlnotes/contracts/home"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
-import type { ComponentType, ReactNode } from "react"
+import type { ComponentType } from "react"
 import { useTopicVideoRenderingPoll } from "../hooks/useTopicVideoRenderingPoll"
-import {
-	type PodcastEpisodeProgressLine,
-	TOPIC_VIDEO_RENDERING_LINE,
-	TOPIC_VIDEO_SECTION_TITLE,
-} from "../lib/podcastEpisodeCopy"
-import { toTopicPageTopicVideoSection, toTopicVideoDisplay } from "../lib/topicVideoDisplay"
-import {
-	playInTopicVideoSection,
-	setTopicVideoSectionOpen,
-	type TopicVideoSection as TopicVideoSectionRead,
-	useTopicVideoSection,
-} from "../stores/topicVideoSectionStore"
+import { type CardSection, TOPIC_VIDEO_CARD_SECTION } from "../lib/cardSections"
+import { TOPIC_VIDEO_SECTION_TITLE } from "../lib/podcastEpisodeCopy"
+import { type CardsSectionElements, PagedCardsSection } from "./CardsSection"
 
-// each app's collapsible section, film player, and rendering card
-export type TopicVideoSectionElements = {
-	// the platform's collapsible section. it keeps its content mounted while closed, and scrolls into view each time
-	// the scroll request count rises
-	Section: ComponentType<{
-		title: string
-		isOpen: boolean
-		onOpenChange: (isOpen: boolean) => void
-		scrollRequestCount: number
-		children: ReactNode
-	}>
-	// the film player, which the section shows in a card
-	Player: ComponentType<{ podcastEpisode: PodcastEpisode; isCard?: boolean; cardFooter?: ReactNode }>
-	// the card that says the film is rendering, in the film player's place
-	RenderingCard: ComponentType<{ podcastEpisode: PodcastEpisode }>
-	// the shimmering line after its emoji
-	ProgressLine: ComponentType<PodcastEpisodeProgressLine>
-	NewFilmButton: ComponentType<{ label: string; onPress: () => void }>
+// the topic video section's accordion value, title, and what its count counts
+const TOPIC_VIDEO_SECTION: CardSection<PodcastEpisodeCard> = {
+	value: "topic-video",
+	title: TOPIC_VIDEO_SECTION_TITLE,
+	...TOPIC_VIDEO_CARD_SECTION,
 }
 
-// the topic, the report of a user's toggle, the read of the topic's page again while a film renders, and the app's
-// elements
+// each app's card section pieces with the page's own collapsible section, then the film card and the filming card
+export type TopicVideoSectionElements = CardsSectionElements & {
+	FilmCard: ComponentType<{ podcastEpisodeCard: PodcastEpisodeCard }>
+	RenderingCard: ComponentType<{ podcastEpisode: PodcastEpisode }>
+}
+
+// the topic, the read of its page again while its film renders, and the app's elements
 type TopicVideoSectionProps = {
 	topic: TopicResponse
-	onToggled: (isOpen: boolean) => void
 	onVideoRenderingPoll: () => void | Promise<void>
 	elements: TopicVideoSectionElements
 }
 
 /**
- * Composes the topic video section for a topic with a film, or with a latest film that is rendering. A topic with
- * neither shows nothing.
+ * Composes the topic video section for a topic with a ready film, or with a latest film that is rendering. A topic
+ * with neither shows nothing.
  */
-export function TopicVideoSection({ topic, onToggled, onVideoRenderingPoll, elements }: TopicVideoSectionProps) {
-	const topicVideoSection = toTopicPageTopicVideoSection(topic)
-	if (!topicVideoSection) {
-		return null
+export function TopicVideoSection({ topic, onVideoRenderingPoll, elements }: TopicVideoSectionProps) {
+	const { Section, FilmCard, RenderingCard } = elements
+
+	// the topic's film cards, and the latest podcast episode if its film is rendering
+	const topicPodcastEpisodeVideoCards = topic.topicPodcastEpisodeVideoCards ?? []
+	const renderingPodcastEpisode = topic.latestPodcastEpisode?.isVideoRendering ? topic.latestPodcastEpisode : null
+	useTopicVideoRenderingPoll({ isVideoRendering: renderingPodcastEpisode !== null, onPoll: onVideoRenderingPoll })
+	const renderingCard = renderingPodcastEpisode && <RenderingCard podcastEpisode={renderingPodcastEpisode} />
+
+	// the filming card alone for a topic with no ready film
+	if (topicPodcastEpisodeVideoCards.length === 0) {
+		return (
+			renderingCard && (
+				<Section value={TOPIC_VIDEO_SECTION.value} title={TOPIC_VIDEO_SECTION.title} countLabel="" cardCount={0}>
+					{renderingCard}
+				</Section>
+			)
+		)
 	}
 	return (
-		<TopicVideoSectionBody
-			key={topic.id}
-			topicId={topic.id}
-			latestPodcastEpisode={topic.latestPodcastEpisode}
-			topicVideoSection={topicVideoSection}
-			onToggled={onToggled}
-			onVideoRenderingPoll={onVideoRenderingPoll}
+		<PagedCardsSection
+			section={TOPIC_VIDEO_SECTION}
+			rows={topicPodcastEpisodeVideoCards}
+			action={renderingCard}
+			renderCard={(podcastEpisodeCard) => <FilmCard podcastEpisodeCard={podcastEpisodeCard} />}
 			elements={elements}
 		/>
-	)
-}
-
-// the section for a topic with a film. the player stays mounted while collapsed, so a Coffee Break films row can play
-// into it
-function TopicVideoSectionBody({
-	topicId,
-	latestPodcastEpisode,
-	topicVideoSection,
-	onToggled,
-	onVideoRenderingPoll,
-	elements: { Section, Player, RenderingCard, ProgressLine, NewFilmButton },
-}: {
-	topicId: string
-	latestPodcastEpisode: TopicResponse["latestPodcastEpisode"]
-	topicVideoSection: TopicVideoSectionRead
-	onToggled: (isOpen: boolean) => void
-	onVideoRenderingPoll: () => void | Promise<void>
-	elements: TopicVideoSectionElements
-}) {
-	// the shown film, whether the section is open, and how many times a row asked for it
-	const { podcastEpisode, isOpen, scrollRequestCount, hasNewFilmReady } = useTopicVideoSection(
-		topicId,
-		topicVideoSection,
-	)
-
-	// poll for the latest film even when the viewer has an older one open
-	const isVideoRendering = toTopicVideoDisplay(podcastEpisode) === "rendering"
-	const isNewerVideoRendering =
-		latestPodcastEpisode?.isVideoRendering === true && latestPodcastEpisode.id !== podcastEpisode.id
-	useTopicVideoRenderingPoll({
-		isVideoRendering: isVideoRendering || isNewerVideoRendering,
-		onPoll: onVideoRenderingPoll,
-	})
-	return (
-		<Section
-			title={TOPIC_VIDEO_SECTION_TITLE}
-			isOpen={isOpen}
-			onOpenChange={(isSectionOpen) => {
-				setTopicVideoSectionOpen({ topicId, isOpen: isSectionOpen })
-				onToggled(isSectionOpen)
-			}}
-			scrollRequestCount={scrollRequestCount}
-		>
-			{/* the rendering card while the film renders, and the film player once it is ready */}
-			{isVideoRendering ? (
-				<RenderingCard podcastEpisode={podcastEpisode} />
-			) : (
-				<Player
-					podcastEpisode={podcastEpisode}
-					isCard
-					cardFooter={
-						<>
-							{hasNewFilmReady && (
-								<NewFilmButton
-									label="New film ready"
-									onPress={() => playInTopicVideoSection(topicId, topicVideoSection.podcastEpisode)}
-								/>
-							)}
-							{isNewerVideoRendering && <ProgressLine {...TOPIC_VIDEO_RENDERING_LINE} />}
-						</>
-					}
-				/>
-			)}
-		</Section>
 	)
 }

@@ -40,9 +40,9 @@ supply browser files, routing, and toast feedback. Retries keep created identiti
 unsent invitation chips remain visible. Maintain native adapters when changing any of these shared concerns.
 
 `topic/TopicSkeleton` delegates section order to core and lays the Topic page's loading state out in the loaded page's
-own pieces: the header's grid, which floats the image on a phone, the film's card above the player card, each
+own pieces: the header's grid, which floats the image on a phone, a row of film cards above the player card, each
 section's title row, and the desktop grid. `TopicActionBar` holds a placeholder for each of the row's two buttons
-while the page loads. Its exported section, film card, player card, theme song note, and empty section card
+while the page loads. Its exported section, film player card, player card, theme song note, and empty section card
 skeletons also serve `podcast/PodcastEpisodeSkeleton`, whose player card has no podcast feed button. Stories cover
 unknown and known titles, the film's card, and the player card with and without the podcast feed button.
 

@@ -80,7 +80,7 @@ A chapter's title starts it from the beginning. Its numbered pill pauses or resu
 another. Tap or drag the progress bar to seek; seeking a paused episode leaves it paused. Expand the chapter list to
 see every chapter without restarting playback. The episode page has its full transcript, **Read more** and **Read
 less**, other episodes, and similar podcasts. The headphones beside **Coffee Break podcast** and **Coffee Break
-Cinema** open the theme-song credits and lyrics.
+Film** open the theme-song credits and lyrics.
 
 On reopening the app, your last authorized episode returns paused at its saved position and speed. Press play to
 continue. A sudden shutdown can lose the seconds since the last save. Signing out stops playback and clears this
@@ -96,13 +96,17 @@ When a film ends, nothing plays after it.
 
 Some pictures in a film have animated details, such as ripples on water or steam rising from Carl’s and Vienna’s mugs.
 
-![Coffee Break Cinema on a topic page, the film's opening image with its play button, the chapters along the seek
-bar, and the playback controls](../../../assets/screenshots/coffee-break-cinema.png)
+**Coffee Break Cinema** sits at the top of the topic page, right above the podcast player, and shows the topic's
+films as cards, newest first, six to a page. A card shows the film's own image, and its play button opens the film in a
+window and starts it.
 
-**Coffee Break Cinema** sits at the top of the topic page, right above the podcast player, and plays the topic's latest
-film. It opens until you play the latest film, then stays closed. Open or close it yourself, and the topic page
-remembers your choice until the next film. While the film plays, the finding on screen is highlighted in the list, and
-a finding's chapter tag jumps the film to that chapter. Nothing plays until you press play.
+An episode's own page plays its film in place, and you can close either of its two sections: **Coffee Break Film** with
+the film comes first, then **Coffee Break podcast** with the audio player. Older episodes made before films have no
+film and no Coffee Break Film, and an episode whose film could not be made keeps its audio. Nothing plays until you
+press play.
+
+![A film's player, the film's opening image with its play button, the chapters along the seek bar, and the playback
+controls](../../../assets/screenshots/coffee-break-cinema.png)
 
 The chapters sit along the seek bar. Rest the pointer on one to see its title and the image the film shows for it,
 then press it to jump there.
@@ -121,15 +125,9 @@ On the web, a film in picture-in-picture keeps playing while you browse CarlNote
 the film's player, and the picture returns to the player. Close it anywhere else, and the film pauses. Playing a
 podcast or another film closes it.
 
-**Coffee Break films**, just above the episodes list, lists every film by season, five at a time. Press a row's play
-button to play its film in Coffee Break Cinema. An episode's own page has the same two sections in the other order, and
-you can close either: **Coffee Break podcast** with the audio player, then **Coffee Break Cinema** with the film. Older
-episodes made before films have no film and no Coffee Break Cinema, and an episode whose film could not be made keeps
-its audio.
-
 A film takes longer to make than its episode, from about half an hour to over an hour. Until it is ready, Coffee Break
-Cinema on the episode's page says **Carl and Vienna are filming...**, and so does the topic page while the topic has no
-film yet. The film takes its place when it is ready, with no reload.
+Film on the episode's page says **Carl and Vienna are filming...**, and so does a card at the top of Coffee Break
+Cinema on the topic page. The film takes its place when it is ready, with no reload.
 
 Carl draws the film's image the first time the film is made, from what the episode covers. Until it is drawn, the film
 opens on the episode's image. A topic's editor can change it. Pick **Edit film** in the **⋮** actions menu of the
@@ -150,8 +148,8 @@ owner's plan like the episode, and a chapter whose image cannot be drawn shows t
 Home lists films on their own, right before the podcasts: **Featured films**, which CarlNotes picks, and **New films
 this week**. A film card shows the film's own image, and its play button opens the film in a window and starts it. A
 **Video** button on a Brews News row opens the film in the same window. The iPhone and Android apps have Coffee Break
-Cinema on the topic screen and the episode screen, Coffee Break films, the film sections on Home, and the same
-buttons, which open a sheet.
+Cinema on the topic screen, Coffee Break Film on the episode screen, the film sections on Home, and the same buttons,
+which open a sheet.
 In an AI chat with CarlNotes, the podcast player links to the film on carlnotes.com.
 
 A person's Café lists their films as well. **Featured Films** sits right before Featured Podcasts. A podcast card

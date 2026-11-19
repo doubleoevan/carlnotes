@@ -19,7 +19,7 @@ the podcast episode image.
 
 #### Scenario: A phone's film player loads a sized poster
 
-- **WHEN** a phone opens a topic page whose latest Podcast Episode has a ready film
+- **WHEN** a phone opens the page of a Podcast Episode with a ready film
 - **THEN** the film player's poster loads the film image's `page` size at the display's density, and not the 1280 by
   720 copy
 

@@ -73,7 +73,7 @@ export async function loadTopicPage(
 		topicRole,
 		canEdit,
 		canViewOwnerDetails,
-		{ podcast, latestPodcastEpisode, podcastEpisodeByScanId },
+		{ podcast, latestPodcastEpisode, topicPodcastEpisodeVideoCards, podcastEpisodeByScanId },
 		relatedTopics,
 		commentThread,
 		topicImageForUser,
@@ -191,6 +191,7 @@ export async function loadTopicPage(
 		topicMemoryCount: groupTopicMemories(scanRows[0]?.topicMemoryGroupRows ?? []).length,
 		canRateTopicMemories: canRateTopicMemories(topicRole),
 		podcast,
+		topicPodcastEpisodeVideoCards,
 		latestPodcastEpisode,
 		// the topic's image urls, null until its first render lands, and null for a user who reported this image
 		image: topicImageForUser?.isReportedByUser ? null : toTopicImageUrlsOrNull(topic.id, topic.imageHash),

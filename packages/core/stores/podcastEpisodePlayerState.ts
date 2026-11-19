@@ -1,4 +1,4 @@
-import type { PodcastEpisode, PodcastEpisodeChapter, PodcastEpisodeFormat } from "@carlnotes/contracts/podcast"
+import type { PodcastEpisode, PodcastEpisodeChapter } from "@carlnotes/contracts/podcast"
 import type { PodcastEpisodePlayerState } from "../lib/podcastEpisodeAudio"
 import { toChapterIndexAt } from "../lib/podcastEpisodePlayback"
 import { toStoreListeners } from "./storeListeners"
@@ -94,20 +94,9 @@ export function useIsPodcastPlayerShown(): boolean {
 /**
  * Reports whether the named episode is playing.
  */
-export function useIsPodcastEpisodePlaying(
-	podcastEpisodeId: string | undefined,
-	format?: PodcastEpisodeFormat,
-): boolean {
+export function useIsPodcastEpisodePlaying(podcastEpisodeId: string | undefined): boolean {
 	useStoreVersion()
-
-	// the named podcast episode playing in the asked format, or in either format if none is asked
-	const isFormatPlaying = format === undefined || playerState.format === format
-	return (
-		playerState.isPlaying &&
-		isFormatPlaying &&
-		podcastEpisodeId !== undefined &&
-		playerState.podcastEpisode?.id === podcastEpisodeId
-	)
+	return playerState.isPlaying && podcastEpisodeId !== undefined && playerState.podcastEpisode?.id === podcastEpisodeId
 }
 
 /**

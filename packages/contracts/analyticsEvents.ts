@@ -161,10 +161,9 @@ export type VisitAnalyticsEvent =
 	| "visit_share_clicked"
 	| "visit_podcast_subscribe_clicked"
 	| "visit_video_played"
-	// a film's format switch, the topic video section's toggle, a Coffee Break films page, and the Video dialog's opening
+	// a film's format switch, the topic video section's toggle, and the Video dialog's opening
 	| "visit_episode_format_switched"
 	| "visit_episode_video_section_toggled"
-	| "visit_episode_videos_page_viewed"
 	| "visit_episode_video_dialog_opened"
 	| `social_${CommentEventTarget}_hot_takes_view`
 	// a news list's window chosen, and one of its pages opened, on the home or on a profile

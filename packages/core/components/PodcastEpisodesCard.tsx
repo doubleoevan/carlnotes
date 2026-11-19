@@ -1,6 +1,6 @@
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import { isPublishedPodcastEpisode } from "@carlnotes/contracts/podcast"
-import { FILMS_NAME, PODCAST_NAME } from "@carlnotes/contracts/podcastEpisodes"
+import { PODCAST_NAME } from "@carlnotes/contracts/podcastEpisodes"
 import { toPodcastEpisodePath, toTopicPath } from "@carlnotes/contracts/seo"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { type ComponentType, type ReactNode, useContext, useState } from "react"
@@ -10,9 +10,8 @@ import { toTabClassName } from "../lib/tabClasses"
 import { PodcastEpisodeRemovalContext } from "./PodcastEpisodeRemovalProvider"
 import type { PodcastEpisodeRowProps } from "./PodcastEpisodeRow"
 
-// the url query keys that name an older season of Coffee Break podcast episodes and of Coffee Break films
+// the url query key that names an older season of Coffee Break podcast episodes
 export const PODCAST_EPISODE_SEASON_KEY = "season"
-export const FILM_SEASON_KEY = "filmSeason"
 
 // keep browser links and server-rendered overflow in the adapters
 export type PodcastEpisodesCardElements = {
@@ -44,11 +43,6 @@ export type PodcastEpisodesCardElements = {
 	Failure?: ComponentType<{ onRetry: () => void }>
 	Empty?: ComponentType
 }
-// Coffee Break films: the latest film's podcast episode id, and the press that plays a row's film
-export type PodcastEpisodesCardFilmList = {
-	latestFilmPodcastEpisodeId: string
-	onPlayFilm: (podcastEpisode: PodcastEpisode) => void
-}
 type RenderedEpisode = { row: PodcastEpisode; className: string }
 type RenderEpisodeRows = (
 	episodes: PodcastEpisode[],
@@ -56,8 +50,7 @@ type RenderEpisodeRows = (
 ) => RenderedEpisode[]
 
 /**
- * Composes season tabs, five-row pages, selected playback, and permitted episode removal for both apps. With a film
- * list it composes Coffee Break films, whose rows play the film and offer no removal.
+ * Composes season tabs, five-row pages, selected playback, and permitted episode removal for both apps.
  */
 export function PodcastEpisodesCard({
 	topic,
@@ -71,8 +64,6 @@ export function PodcastEpisodesCard({
 	onReload,
 	onRemoved,
 	renderRows = toPageRows,
-	onPageView,
-	filmList,
 	elements: { Section, Card, Tabs, Tab, Loading, List, Row, Pagination, Remove, Failure, Empty },
 }: {
 	topic: TopicResponse
@@ -86,8 +77,6 @@ export function PodcastEpisodesCard({
 	onReload: () => Promise<void>
 	onRemoved: () => Promise<void>
 	renderRows?: RenderEpisodeRows
-	onPageView?: (pageView: { season: number; page: number }) => void
-	filmList?: PodcastEpisodesCardFilmList
 	elements: PodcastEpisodesCardElements
 }) {
 	// reset the page on a season change and clamp it after an episode is removed
@@ -103,19 +92,11 @@ export function PodcastEpisodesCard({
 	const pageNumber = Math.min(requestedPage, Math.max(1, pageCount))
 	const rows = renderRows(visibleEpisodes, { pageNumber, pageSize: 5 })
 
-	// the list's words, its season query key, and its latest mark, for podcast episodes or films
-	const rowNoun = filmList ? "film" : "episode"
-	const seasonKey = filmList ? FILM_SEASON_KEY : PODCAST_EPISODE_SEASON_KEY
-	const latestPodcastEpisodeId = filmList ? filmList.latestFilmPodcastEpisodeId : topic.latestPodcastEpisode?.id
-	const canRemovePodcastEpisodes = !filmList && topic.podcast?.canRemovePodcastEpisodes
 	if (shownSeason === undefined || !seasons.length) {
 		return null
 	}
 	return (
-		<Section
-			title={filmList ? FILMS_NAME : `${PODCAST_NAME} episodes`}
-			countLabel={toSectionCountLabel(visibleEpisodes.length, rowNoun)}
-		>
+		<Section title={`${PODCAST_NAME} episodes`} countLabel={toSectionCountLabel(visibleEpisodes.length, "episode")}>
 			<Card>
 				<Tabs>
 					{seasons.map((season) => (
@@ -123,12 +104,9 @@ export function PodcastEpisodesCard({
 							key={season}
 							season={season}
 							topicPath={toTopicPath(topic)}
-							search={toSeasonSearch({ search, seasonKey, season, latestSeason: seasons[0] })}
+							search={toSeasonSearch({ search, season, latestSeason: seasons[0] })}
 							isSelected={season === shownSeason}
-							onPress={() => {
-								onOpenSeason(season)
-								onPageView?.({ season, page: 1 })
-							}}
+							onPress={() => onOpenSeason(season)}
 							className={toTabClassName(season === shownSeason)}
 						/>
 					))}
@@ -136,37 +114,33 @@ export function PodcastEpisodesCard({
 				{isLoading && <Loading />}
 				{isError && Failure && <Failure onRetry={() => void onReload()} />}
 				{!isLoading && !isError && !rows.length && Empty && <Empty />}
-				<List label={`Season ${shownSeason} ${rowNoun}s`} isLoading={isLoading}>
+				<List label={`Season ${shownSeason} episodes`} isLoading={isLoading}>
 					{rows.map(({ row: episode, className }) => (
 						<Row
 							key={episode.id}
 							podcastEpisode={episode}
 							className={className}
-							isLatestPodcastEpisode={episode.id === latestPodcastEpisodeId}
+							isLatestPodcastEpisode={episode.id === topic.latestPodcastEpisode?.id}
 							isPlayButtonMuted={episode.id !== selectedEpisodeId}
 							podcastEpisodePath={isPublishedPodcastEpisode(episode) ? toPodcastEpisodePath(topic, episode) : null}
 							onRemovePodcastEpisode={
-								canRemovePodcastEpisodes
+								topic.podcast?.canRemovePodcastEpisodes
 									? () =>
 											setEpisodesToRemove((current) =>
 												current.some((row) => row.id === episode.id) ? current : [...current, episode],
 											)
 									: undefined
 							}
-							filmPlay={filmList && { onPress: () => filmList.onPlayFilm(episode) }}
 						/>
 					))}
 				</List>
 			</Card>
 			{pageCount > 1 && (
 				<Pagination
-					label={`Season ${shownSeason} ${rowNoun} pages`}
+					label={`Season ${shownSeason} episode pages`}
 					pageNumber={pageNumber}
 					pageCount={pageCount}
-					onOpenPage={(number) => {
-						setOpenedPage({ season: shownSeason, number })
-						onPageView?.({ season: shownSeason, page: number })
-					}}
+					onOpenPage={(number) => setOpenedPage({ season: shownSeason, number })}
 				/>
 			)}
 			{episodesToRemove.map((episode) => (
@@ -213,14 +187,14 @@ type ToShownPodcastEpisodeIdOptions = {
 	loadedPodcastEpisode: PodcastEpisode | null
 	linkedPodcastEpisodeId: string | null | undefined
 }
-type ToSeasonSearchOptions = { search: string; seasonKey: string; season: number; latestSeason: number | undefined }
+type ToSeasonSearchOptions = { search: string; season: number; latestSeason: number | undefined }
 
 // preserve unrelated query parameters when selecting an older season
-function toSeasonSearch({ search, seasonKey, season, latestSeason }: ToSeasonSearchOptions): string {
+function toSeasonSearch({ search, season, latestSeason }: ToSeasonSearchOptions): string {
 	const params = new URLSearchParams(search)
-	params.delete(seasonKey)
+	params.delete(PODCAST_EPISODE_SEASON_KEY)
 	if (season !== latestSeason) {
-		params.set(seasonKey, String(season))
+		params.set(PODCAST_EPISODE_SEASON_KEY, String(season))
 	}
 	return `?${params}`
 }

@@ -1,6 +1,6 @@
 import { createContext, type ReactNode, useCallback, useMemo, useState } from "react"
 
-// A Topic page shares each removal across its film and episode lists.
+// the podcast episodes a Topic page's removals hide until the page's next read
 export const PodcastEpisodeRemovalContext = createContext({
 	hiddenEpisodeIds: new Set<string>(),
 	setEpisodeHidden: (_id: string, _isHidden: boolean): void => {},

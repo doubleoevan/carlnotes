@@ -1045,6 +1045,10 @@ Check for:
    - `packages/core/hooks/useTopicVideoEditableImage.ts` and `useTopicVideoEditableImage` (now `useEditorPage.ts` with
      `usePodcastEpisodeEditorPage` and `useTopicEditorPage`), `toTopicPageEditedPodcastEpisode` (now
      `toTopicPageEditablePodcastEpisodes`), and `toEditTopicVideoOption` in both apps (now `toEditOptions`)
+   - `packages/core/stores/topicVideoSectionStore.ts` and its test, `toTopicPageTopicVideoSection`, `FILM_SEASON_KEY`,
+     `FILMS_NAME`, `PodcastEpisodesCardFilmList`, `PodcastEpisodeRow`'s `filmPlay`, the web route's `filmSeason`, and
+     `apps/web/src/components/podcast/PodcastEpisodesCard.films.test.tsx` (now the topic read's
+     `topicPodcastEpisodeVideoCards` and `TopicVideoSection`'s `FilmCard`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

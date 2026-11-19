@@ -29,8 +29,8 @@ export default meta
 type Story = StoryObj<typeof meta>
 export const Default: Story = {}
 
-// every section in the page's order: the film section, the podcast player, the findings, the comment thread, the
-// Topic Posts, then the cards with the films list right before the podcast episodes list
+// every section in the page's order: the film cards, the podcast player, the findings, the comment thread, the Topic
+// Posts, then the cards with the podcast episodes list
 export const EverySection: Story = {
 	args: { topic: STORY_FILM_TOPIC_PAGE, findings: STORY_FILM_TOPIC_PAGE.findings },
 }

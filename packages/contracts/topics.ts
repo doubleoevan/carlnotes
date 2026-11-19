@@ -14,6 +14,7 @@ import {
 	visibilities,
 } from "./enums"
 import { topicFinding } from "./findings"
+import { podcastEpisodeCard } from "./home"
 import { invite } from "./invites"
 import { podcastEpisode, podcastEpisodeSummary, publishedPodcastEpisodeSummary, topicPodcast } from "./podcast"
 import { profileIdentity } from "./profiles"
@@ -259,6 +260,8 @@ export const topicResponse = topicDetails.extend({
 	visibility: z.enum(visibilities),
 	// the topic's podcast, null on an instance with no speech model
 	podcast: topicPodcast.nullable(),
+	// every ready film of the topic as a card, newest first. older API builds omit it
+	topicPodcastEpisodeVideoCards: z.array(podcastEpisodeCard).optional(),
 	// the scan history, latest first
 	scans: z.array(topicScan),
 	// the active topic memories this reader may open. older API builds omit the count

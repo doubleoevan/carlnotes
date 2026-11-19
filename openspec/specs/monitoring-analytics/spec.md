@@ -767,8 +767,8 @@ SHALL be sent.
 
 A started play SHALL send `episode_played` with its `format`, `audio` or `video`. The worker SHALL send
 `episode_video_render_failed` with a reason code and `episode_video_rebuilt` with the rebuild's seconds. The browser
-SHALL send `visit_episode_format_switched`, `visit_episode_video_section_toggled`, `visit_episode_videos_page_viewed`,
-and `visit_episode_video_dialog_opened` with the surface. Each SHALL hold only ids and short codes.
+SHALL send `visit_episode_format_switched`, `visit_episode_video_section_toggled`, and
+`visit_episode_video_dialog_opened` with the surface. Each SHALL hold only ids and short codes.
 
 #### Scenario: A film play names its format
 
@@ -793,11 +793,12 @@ and `visit_episode_video_dialog_opened` with the surface. Each SHALL hold only i
 
 ### Requirement: A Video dialog open names where it was opened
 
-`visit_episode_video_dialog_opened` SHALL hold the Podcast Episode's id and one of seven `surface` values. A Brews News
+`visit_episode_video_dialog_opened` SHALL hold the Podcast Episode's id and one of nine `surface` values. A Brews News
 row's Video button SHALL send `home-news` on the home and `profile-news` on a profile. The Topic roast's play button
 SHALL send `topic-info`. A film card's play button SHALL send `home-videos` in the home's Featured films,
-`newest-videos` in its New films this week, `profile-videos` in a Café's Featured Films, and `team-videos` in a team
-page's Featured Films.
+`newest-videos` in its New films this week, `profile-videos` in a Café's Featured Films, `team-videos` in a team
+page's Featured Films, and `topic-videos` in a topic page's Coffee Break Cinema. A podcast episode search result's Video
+button SHALL send `search`.
 
 #### Scenario: A news row's open names the news
 
@@ -814,9 +815,10 @@ page's Featured Films.
 
 A film card's `visit_episode_video_dialog_opened` SHALL hold the `surface` of the section that holds the card:
 `home-videos` in the home's Featured films, `newest-videos` in its New films this week, `profile-videos` in a Café's
-Featured Films, and `team-videos` in a team page's Featured Films. No film card SHALL send the other three values:
-`home-news` and `profile-news` come from a Brews News row's Video button on the home and on a profile, and `topic-info`
-from the Topic roast's play button.
+Featured Films, `team-videos` in a team page's Featured Films, and `topic-videos` in a topic page's Coffee Break
+Cinema. No film card SHALL send the other four values: `home-news` and `profile-news` come from a Brews News row's
+Video button on the home and on a profile, `topic-info` from the Topic roast's play button, and `search` from a search
+result's Video button.
 
 #### Scenario: A film card's open names its section
 

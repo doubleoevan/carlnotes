@@ -9,7 +9,6 @@ export type TopicSkeletonSection =
 	| "topicPosts"
 	| "info"
 	| "settings"
-	| "films"
 	| "episodes"
 	| "history"
 export type TopicSkeletonElements = {
@@ -31,8 +30,8 @@ export type TopicSkeletonElements = {
 }
 
 /**
- * Reserves the Topic page's shared header, film, player, Findings, comment thread, Topic Posts, information, and
- * history sections. A Topic with a podcast episode reserves its film and its list of films too.
+ * Reserves the Topic page's shared header, films, player, Findings, comment thread, Topic Posts, information, and
+ * history sections. A Topic with a podcast episode reserves its films and its player too.
  */
 export function TopicSkeleton({
 	topicTitle,
@@ -98,12 +97,6 @@ export function TopicSkeleton({
 						</Section>
 					</Column>
 					<Column>
-						{/* the films' list, right above the podcast episodes' */}
-						{hasPodcastEpisode && (
-							<Section kind="films">
-								<Episodes />
-							</Section>
-						)}
 						<Section kind="episodes">
 							<Episodes />
 						</Section>
