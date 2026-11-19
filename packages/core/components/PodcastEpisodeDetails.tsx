@@ -1,9 +1,9 @@
 import type { PodcastEpisode, PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
 import { AI_HOSTS_NOTE } from "@carlnotes/contracts/podcastEpisodes"
-import { toCountLabel, toDotSeparatedText } from "@carlnotes/contracts/text"
+import { toDotSeparatedText } from "@carlnotes/contracts/text"
 import { cn } from "@carlnotes/nightshift/classNames"
 import type { ComponentType, ReactNode } from "react"
-import { toPodcastEpisodeDayAndDurationLabels } from "../lib/labels"
+import { toPodcastEpisodeDayDurationAndChapterLabels } from "../lib/labels"
 
 type Container = ComponentType<{ children: ReactNode; className?: string }>
 export type PodcastEpisodeDetailsProps = {
@@ -36,8 +36,7 @@ export function PodcastEpisodeDetails({
 	const chapter = playerChapterIndex === null ? undefined : podcastEpisode.chapters?.[playerChapterIndex]
 	const secondaryTextClassName = isInTooltip ? "opacity-80" : "text-muted-foreground"
 	const labels = [
-		...toPodcastEpisodeDayAndDurationLabels(podcastEpisode),
-		toCountLabel(podcastEpisode.chapterCount, "chapter"),
+		...toPodcastEpisodeDayDurationAndChapterLabels(podcastEpisode),
 		...(isInTooltip ? [] : [AI_HOSTS_NOTE]),
 	]
 	return (

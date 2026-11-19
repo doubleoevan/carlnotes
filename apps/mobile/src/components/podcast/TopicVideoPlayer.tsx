@@ -72,6 +72,7 @@ const elements: TopicVideoPlayerElements = {
 			{children}
 		</Text>
 	),
+	Text: ({ children, className }) => <Text className={className}>{children}</Text>,
 	Surface: TopicVideoSurface,
 	PlayButton: ({ podcastEpisode, isPlaying, onPress }) => (
 		<SharedPodcastEpisodePlayButton

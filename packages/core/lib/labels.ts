@@ -286,6 +286,17 @@ export function toPodcastEpisodeDayAndDurationLabels(podcastEpisode: {
 }
 
 /**
+ * Returns a podcast episode's day, duration, and chapter count, such as Nov 8 · 35 min · 15 chapters as labels.
+ */
+export function toPodcastEpisodeDayDurationAndChapterLabels(podcastEpisode: {
+	publishedAt: string | null
+	durationSeconds: number | null
+	chapterCount: number
+}): string[] {
+	return [...toPodcastEpisodeDayAndDurationLabels(podcastEpisode), toCountLabel(podcastEpisode.chapterCount, "chapter")]
+}
+
+/**
  * Returns a pasted text attachment's length, such as 12,480 chars.
  */
 export function toCharacterCountLabel(text: string): string {

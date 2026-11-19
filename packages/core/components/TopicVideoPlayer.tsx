@@ -2,7 +2,9 @@
 // with the play button over it, the seek bar split by chapter, the playback controls, and the captions, mute,
 // picture-in-picture, and fullscreen controls. a page shows it in a card, and the Video dialog in its own frame
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
+import { toDotSeparatedText } from "@carlnotes/contracts/text"
 import { type ComponentType, type ReactNode, useState } from "react"
+import { toPodcastEpisodeDayDurationAndChapterLabels } from "../lib/labels"
 import { toPodcastEpisodePosterUrl } from "../lib/podcastEpisodePlayback"
 import {
 	cycleTopicVideoPlaybackRate,
@@ -29,6 +31,8 @@ export type TopicVideoPlayerElements = {
 	// the page's card around the film player, a column with the player's own gap
 	Card: ComponentType<{ children: ReactNode }>
 	Title: ComponentType<{ children: string; className: string }>
+	// the card's small details line
+	Text: ComponentType<{ children: string; className: string }>
 	// the film's frame. it shows the poster until this podcast episode's film draws, and reports the controls its
 	// platform supports
 	Surface: ComponentType<{
@@ -76,7 +80,7 @@ export function TopicVideoPlayer({
 	podcastEpisode,
 	isCard = false,
 	cardFooter,
-	elements: { Group, Card, Title, Surface, PlayButton, Controls, SeekBar, ControlButton, Feedback },
+	elements: { Group, Card, Title, Text, Surface, PlayButton, Controls, SeekBar, ControlButton, Feedback },
 }: TopicVideoPlayerProps & { elements: TopicVideoPlayerElements }) {
 	// whether this podcast episode is loaded, whether it is loaded as the film, and the controls the frame supports
 	const player = usePodcastEpisodePlayer()
@@ -171,10 +175,15 @@ export function TopicVideoPlayer({
 	if (isCard) {
 		return (
 			<Card>
-				{/* the film title stays above the picture during playback */}
-				{podcastEpisode.title && (
-					<Title className="font-sans text-lg leading-snug font-bold">{podcastEpisode.title}</Title>
-				)}
+				{/* the film title stays above the picture during playback, with the film's details in the top right */}
+				<Group className="flex flex-row items-baseline justify-between gap-3">
+					{podcastEpisode.title && (
+						<Title className="min-w-0 flex-1 font-sans text-lg leading-snug font-bold">{podcastEpisode.title}</Title>
+					)}
+					<Text className="ml-auto shrink-0 text-xs text-muted-foreground sm:text-[0.8125rem]">
+						{toDotSeparatedText(toPodcastEpisodeDayDurationAndChapterLabels(podcastEpisode))}
+					</Text>
+				</Group>
 				{topicVideoPlayer}
 				{cardFooter}
 			</Card>
