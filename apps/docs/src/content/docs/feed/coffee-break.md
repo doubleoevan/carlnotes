@@ -100,13 +100,13 @@ Some pictures in a film have animated details, such as ripples on water or steam
 films as cards, newest first, six to a page. A card shows the film's own image, and its play button opens the film in a
 window and starts it.
 
+![Coffee Break Cinema on a topic page, six film cards in two rows, each with the film's image, its play button, its
+title, and its topic, season, and episode](../../../assets/screenshots/coffee-break-cinema.png)
+
 An episode's own page plays its film in place, and you can close either of its two sections: **Coffee Break Film** with
 the film comes first, then **Coffee Break podcast** with the audio player. Older episodes made before films have no
 film and no Coffee Break Film, and an episode whose film could not be made keeps its audio. Nothing plays until you
 press play.
-
-![A film's player, the film's opening image with its play button, the chapters along the seek bar, and the playback
-controls](../../../assets/screenshots/coffee-break-cinema.png)
 
 The chapters sit along the seek bar. Rest the pointer on one to see its title and the image the film shows for it,
 then press it to jump there.
