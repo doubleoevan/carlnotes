@@ -10,7 +10,6 @@ import * as edgePurge from "@carlnotes/server/edgePurge"
 import sharp from "sharp"
 import * as podcastEpisodeImageRenders from "../podcast/podcastEpisodeImageRenders"
 import { toTestImageBytes } from "../resourceImages/resourceImageTestFixtures"
-import * as temporalClient from "../temporalClient"
 import * as topicImageOriginals from "../topicImages/renderTopicImageOriginal"
 import { type TopicImageOriginal, toTopicImageHash, toTopicImageOriginal } from "../topicImages/topicImageFiles"
 import * as topicImageScenes from "../topicImages/writeTopicImageScene"
@@ -21,6 +20,7 @@ import {
 	TOPIC_VIDEO_IMAGE_FORMAT,
 } from "./topicVideoImage"
 import { loadShownImageStill, loadTopicVideoPodcastEpisode, toShownImage } from "./topicVideoInputs"
+import * as topicVideoWorkflowClient from "./topicVideoWorkflowClient"
 import * as videoFrames from "./videoFrames"
 
 // an original at the film's frame size, and the key its hash names under the film's folder
@@ -47,6 +47,7 @@ function spyImageGeneration(): {
 		findingTitles: [],
 	})
 	spyOn(litellm, "loadOrProvisionUserLiteLLMKey").mockResolvedValue("sk-owner")
+	spyOn(topicImageOriginals, "deleteDrawnImage").mockResolvedValue(undefined)
 	return {
 		writeScene: spyOn(topicImageScenes, "writeTopicImageScene").mockResolvedValue("A harbor at dusk."),
 		renderOriginal: spyOn(topicImageOriginals, "renderTopicImageOriginal").mockResolvedValue(ORIGINAL),
@@ -244,6 +245,11 @@ test("a platform-billed image generation runs on the master key and costs the fi
 	await generateTopicVideoImage({ podcastEpisodeId: "episode-1", isPlatformBilled: true })
 	expect(writeScene.mock.calls[0]?.[0].litellmApiKey).toBeUndefined()
 	expect(toTopicVideoRowUpdate(sentQueries)?.values).toContain("0.000000")
+
+	// the image's cost is the platform's: a spends row for the film, with no user
+	const platformSpend = sentQueries.find((sentQuery) => sentQuery.text.startsWith('insert into "spends"'))
+	expect(platformSpend?.values).toEqual(expect.arrayContaining(["topicVideoImage", "episode-1"]))
+	expect(platformSpend?.values).not.toContain("owner-1")
 })
 
 test("a film that has its image generates nothing", async () => {
@@ -259,7 +265,7 @@ test("a replaced image stores the new file, schedules the old one for deletion, 
 	// the film of episode-1, which shows the image hash-old on a private topic
 	const upload = spyOn(storage, "uploadAttachment").mockResolvedValue(undefined)
 	const pendingDeletions = spyOn(storage, "recordPendingObjectDeletions").mockResolvedValue(undefined)
-	const rebuild = spyOn(temporalClient, "startTopicVideoRebuild").mockResolvedValue(undefined)
+	const rebuild = spyOn(topicVideoWorkflowClient, "startTopicVideoRebuild").mockResolvedValue(undefined)
 	const sentQueries = stubConnectionPool(({ text }) => {
 		if (text.startsWith('select "episode_id"')) {
 			return [["episode-1"]]
@@ -293,7 +299,7 @@ test("a replaced image stores the new file, schedules the old one for deletion, 
 test("a regenerated or uploaded image with a larger original stores both files", async () => {
 	// the film of episode-1, which had no image of its own
 	const upload = spyOn(storage, "uploadAttachment").mockResolvedValue(undefined)
-	spyOn(temporalClient, "startTopicVideoRebuild").mockResolvedValue(undefined)
+	spyOn(topicVideoWorkflowClient, "startTopicVideoRebuild").mockResolvedValue(undefined)
 	stubConnectionPool(({ text }) => {
 		if (text.startsWith('select "episode_id"')) {
 			return [["episode-1"]]

@@ -181,6 +181,9 @@ export const topicAttachmentsRoute = new Hono<AppEnv>()
 				// the ingest's own reason names the url, and anything else is internal
 				case "invalid":
 					return context.json({ error: addTopicAttachmentResult.reason }, 400)
+				// the same response a chat turn gets once the month's budget is spent
+				case "budgetSpent":
+					return context.json({ error: "budget exhausted" }, 402)
 				case "failed":
 					return context.json({ error: "Carl couldn't process that link. Try again in a moment." }, 502)
 			}

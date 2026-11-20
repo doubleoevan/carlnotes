@@ -1,5 +1,6 @@
 // group similar Findings and validate the model's topic memory drafts
 import { CONTROL_CHARACTER_PATTERN } from "@carlnotes/contracts/socialText"
+import { toOneLineText } from "@carlnotes/contracts/text"
 import {
 	TOPIC_MEMORY_TEXT_LIMIT,
 	type TopicMemoryPerson,
@@ -151,6 +152,7 @@ export function toTopicMemoryPersonMatchKey(person: TopicMemoryPerson | null): s
 		.toLowerCase()
 		.replace(/[^\p{L}\p{N}]+/gu, " ")
 		.trim()
+	// the identifying detail keeps its plus and hash signs
 	const detail = person.identifyingDetail
 		.normalize("NFKC")
 		.toLowerCase()
@@ -170,14 +172,28 @@ export function toTopicMemoryDraft(proposal: ModelTopicMemoryDraft): TopicMemory
 		!fact.success ||
 		CONTROL_CHARACTER_PATTERN.test(fact.data.text) ||
 		(fact.data.person && !toTopicMemoryPersonMatchKey(fact.data.person)) ||
+		// text about a reader's activity, a no-op, or a note about dates or Scans
 		READER_ACTIVITY_PATTERN.test(fact.data.text) ||
 		/^no[\s\p{Dash_Punctuation}]*op[.!]?$/iu.test(fact.data.text) ||
 		/\b(?:no (?:event |announcement )?date in evidence|scans? \d{4}-\d{2}-\d{2})\b/i.test(fact.data.text)
 	) {
 		return null
 	}
-	const { sourceFindingIndexes: _sourceFindingIndexes, ...write } = fact.data
-	return { ...write, factDate: toTopicMemoryFactDate(write.text, write.factDate), operation: "add" }
+	// a line break in a stored field would start a second row where a prompt lists topic memories line by line
+	const { sourceFindingIndexes: _sourceFindingIndexes, person, ...write } = fact.data
+	const text = toOneLineText(write.text)
+	return {
+		...write,
+		text,
+		subject: toOneLineText(write.subject),
+		value: toOneLineText(write.value),
+		person: person && {
+			name: toOneLineText(person.name),
+			identifyingDetail: toOneLineText(person.identifyingDetail),
+		},
+		factDate: toTopicMemoryFactDate(text, write.factDate),
+		operation: "add",
+	}
 }
 
 /** Accepts a brief standalone statement after validation or a source-grounded rewrite. */

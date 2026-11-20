@@ -56,8 +56,10 @@ credits, and a turn's transcript text; the speech model setting and the cover ke
 `@carlnotes/server/podcastEpisodeSettings`. `spokenText.ts` writes markdown as its plain words for the meta description
 and as the text Carl speaks, with fenced code and bare urls removed, a reply split into spoken parts on blank lines, and
 a streaming reply's spoken parts returned as they finish. `time.ts` holds a minute, an hour, and a day in milliseconds,
-`isUtcWeekend`, which says whether a moment falls on a weekend in UTC, and `withTimeLimit`, which fails work that
-outlasts a time limit with the caller's error. `profiles.ts` also holds `toSessionProfileIdentity`, the signed-in user's
+`isUtcWeekend`, which says whether a moment falls on a weekend in UTC, `withTimeLimit`, which fails work that
+outlasts a time limit with the caller's error, `isDoneWithin`, which says whether work finished within a time
+limit, for the api's drain, and `toJitteredBackoffMs`, the doubling retry wait scaled by a random 50 to 100 percent
+that the scrape, the model calls, and the stream reconnect share. `profiles.ts` also holds `toSessionProfileIdentity`, the signed-in user's
 identity for a profile link, read from the session user. `reportedPath.ts` names a page by its route's shape, for
 PostHog's page views and Sentry's page renders alike. `youtube.ts` builds a YouTube video's watch page url and its
 player url, and holds `TOPIC_TUTORIAL_VIDEO`, the video on making a topic that the homepage, the menus, and the docs
@@ -195,7 +197,9 @@ responses take an optional `isImageUnchecked`.
 and each window's empty line. `commentMentions.ts` holds a signed-in user's unseen Comment Mentions, the payload that
 marks them seen, and the places a mention badge sits. `topicVideoWork.ts` holds the task queues, the
 workflow names, and the workflow ids of a film's render, its rebuild, and the film backfill, with the backfill's
-summary, for the worker, its workflows, and the Temporal client.
+summary, for the worker, its workflows, and the Temporal client. `podcastEpisodeWork.ts` holds the same for a podcast
+episode's recording: its task queue, its workflow name, and `toPodcastEpisodeWorkflowId`, which the Scan workflow and
+the sweep's reaper both name a recording by.
 
 `dashboards.ts` holds a Dashboard, which the page copy calls "Specials": the three kinds and their page names and paths,
 with `toDashboardPageLinks` for a person's three pages and `toDashboardLinks` for a viewer count line's links, the items

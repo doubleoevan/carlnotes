@@ -1,12 +1,13 @@
 // scheduled topic limit tests: the owners whose budget is spent, the daily Topics that run weekly past the daily scans
 // cutoff and the cutoff cached in Redis, the limit loads' one read of each owner's access row, and the free owners past
 // the scheduled scans cutoff
-import { afterEach, expect, type Mock, mock, spyOn, test } from "bun:test"
+import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import { PLUS_USER_ACCESS_ROW, restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import { toDailySpendCutoffState } from "@carlnotes/db/dailySpendCutoffTestFixtures"
 import * as monthlyBudgetCutoffs from "@carlnotes/db/monthlyBudgetCutoffs"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
 import * as litellm from "@carlnotes/models/litellm"
+import { stubUnreachableProxy } from "@carlnotes/models/litellmTestFixtures"
 import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import {
@@ -17,22 +18,14 @@ import {
 } from "./scheduledTopicLimits"
 import { toScheduledTopic } from "./scheduledTopicTestFixtures"
 
-// stub a proxy that cannot be reached, with the proxy settings that a budget read needs, and return the fetch mock
-function stubUnreachableProxy(): Mock<() => Promise<Response>> {
-	Bun.env.LITELLM_BASE_URL = "http://litellm.test"
-	Bun.env.LITELLM_MASTER_KEY = "master"
-
-	// a fetch that throws an error for every request
-	const fetchMock = mock(async (): Promise<Response> => {
-		throw new TypeError("fetch failed")
-	})
-	globalThis.fetch = fetchMock as unknown as typeof fetch
-	return fetchMock
-}
-
 // the real fetch and the proxy settings, kept before any test replaces them
 const originalFetch = globalThis.fetch
 const restoreEnvSettings = saveEnvSettings(["LITELLM_BASE_URL", "LITELLM_MASTER_KEY"])
+
+// every test starts on an empty in-memory Redis, because an owner's key budget is read through its cache
+beforeEach(() => {
+	stubRedisClient()
+})
 
 // put each spied function, the connection pool's own query, the Redis client, the real fetch, and the proxy settings
 // back after each test, whether its assertions pass or not
@@ -42,6 +35,19 @@ afterEach(() => {
 	globalThis.fetch = originalFetch
 	mock.restore()
 	restoreEnvSettings()
+})
+
+// a sweep reads its Topics a page at a time, and an owner's Topics can be on several pages
+test("an owner's key budget is read from the proxy once a minute, across pages", async () => {
+	// two pages with owner-1's Topics, and a budget read that finds owner-1's budget spent
+	const storedValueByKey = stubRedisClient()
+	const budgetReadSpy = spyOn(litellm, "isUserLiteLLMKeyBudgetExhausted").mockResolvedValue(true)
+	expect(await loadBudgetExhaustedOwnerIds([toScheduledTopic("a", "owner-1")])).toEqual(new Set(["owner-1"]))
+	expect(await loadBudgetExhaustedOwnerIds([toScheduledTopic("b", "owner-1")])).toEqual(new Set(["owner-1"]))
+
+	// the second page read the first page's result from Redis
+	expect(budgetReadSpy).toHaveBeenCalledTimes(1)
+	expect(storedValueByKey.get("key-budget-exhausted:owner-1")).toBe("true")
 })
 
 // each owner's budget is read once, no matter how many of that owner's Topics are scheduled.

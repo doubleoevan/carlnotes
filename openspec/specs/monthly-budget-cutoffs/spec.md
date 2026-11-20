@@ -18,8 +18,10 @@ the user's monthly budget, so the daily Scans the plan allows are paid for last:
 | Manual Scans | 90% | 90% | 90% |
 
 A cutoff SHALL be passed once the month's spend is at or past its share of the budget. Every check SHALL read the same
-monthly spend sum that the spend meter and every other budget check read. An admin with no budget override SHALL have
-no cutoffs. An admin with an override SHALL have the cutoffs of their plan, since the override is a deliberate limit.
+monthly spend sum that the spend meter and every other budget check read. That sum SHALL include the user's own rows in
+the `spends` table, and SHALL never include a row with no user, which is the platform's. An admin with no budget
+override SHALL have no cutoffs. An admin with an override SHALL have the cutoffs of their plan, since the override is a
+deliberate limit.
 
 #### Scenario: A plus user's spoken questions pause at 40 percent
 - **GIVEN** a plus user with no daily Topics whose spend this month is $5.99 of a $15 budget
@@ -30,6 +32,11 @@ no cutoffs. An admin with an override SHALL have the cutoffs of their plan, sinc
 - **GIVEN** an admin with no budget override whose spend this month is $950
 - **WHEN** any cutoff is checked
 - **THEN** none is passed
+
+#### Scenario: The platform's film cost passes no cutoff
+- **GIVEN** a plus user whose films the backfill re-rendered this month on the platform's bill
+- **WHEN** any cutoff is checked
+- **THEN** the re-renders' cost is not in the user's spend
 
 ### Requirement: Spoken questions pause at the spoken questions cutoff
 Past the spoken questions cutoff, the transcription route SHALL reject a recording with a 402 and the error `spoken
@@ -292,3 +299,61 @@ another user's account SHALL show the plan with no plan button.
 
 - **WHEN** an admin opens another user's account page
 - **THEN** the header row shows that user's plan with no plan button
+
+### Requirement: A paid call with no row of its own is recorded in the spends table
+
+A `spends` table SHALL hold each paid call that no other row records: a kind, a nullable user, a nullable Topic and
+Podcast Episode, a cost, and the time the cost was incurred. A row with a user SHALL bill that user: a url
+attachment's fetch, a url Source's screen fetch, and a source suggestion's search. A row with no user SHALL be the
+platform's: what a film costs the platform, the topic memory backfill's model calls, and text moderation.
+
+#### Scenario: A url attachment's fetch is the user's spend
+
+- **WHEN** a user adds a url attachment and its page is fetched
+- **THEN** a `spends` row holds the fetch's cost, the user, and the Topic
+
+#### Scenario: Text moderation is the platform's spend
+
+- **WHEN** a Comment's text is classified
+- **THEN** a `spends` row with no user holds the call's cost, and the day's total spend includes it
+
+#### Scenario: A user's spend row cannot be written
+
+- **WHEN** a user's paid call runs and its `spends` row cannot be written
+- **THEN** the failed write is reported, and the call's result still reaches the caller
+
+### Requirement: A url fetch and a source suggestion search check the budget first
+
+Before a url attachment's fetch, a url Source's screen fetch, and a source suggestion's search, the app SHALL check
+the user's monthly budget, as a chat turn does, and SHALL NOT make the call if the budget is spent. A url attachment
+SHALL then be rejected as a spent budget, a url Source SHALL be failed with that reason, and a suggestion SHALL be
+made from the Topic's words alone. A call that runs SHALL count in that user's monthly spend.
+
+#### Scenario: A spent budget rejects a url attachment
+
+- **GIVEN** a user whose monthly budget is spent
+- **WHEN** they add a url attachment
+- **THEN** the request is rejected as a spent budget, and no page is fetched
+
+#### Scenario: A spent budget fails a url Source's check
+
+- **GIVEN** a Topic owner whose monthly budget is spent
+- **WHEN** they save a url Source
+- **THEN** its page is not fetched, and the Source is failed with the reason that the budget is spent
+
+### Requirement: The routes that start a paid fetch or search share the tool caller limit
+
+The route that adds a url attachment, the routes that save a Topic and its url Sources, and the route that suggests
+sources SHALL each count against the tool caller limit, so a burst from one account is rejected before a page is
+fetched or a search runs.
+
+#### Scenario: A burst of url attachments is limited
+
+- **WHEN** one user adds more url attachments in a minute than the tool caller limit allows
+- **THEN** the calls past the limit are rejected, and no page is fetched for them
+
+#### Scenario: A source suggestion's search counts in the month
+
+- **GIVEN** a plus user with budget left
+- **WHEN** they ask for source suggestions and the search runs
+- **THEN** their monthly spend rises by the search's cost

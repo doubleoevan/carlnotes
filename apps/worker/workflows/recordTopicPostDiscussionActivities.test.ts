@@ -1,10 +1,14 @@
-// Topic Post Discussion activity tests: which failures are final and which another attempt may fix
+// Topic Post Discussion activity tests: which failures are final and which another attempt may fix, and the
+// recording's heartbeat and cancellation signal
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import * as models from "@carlnotes/models/models"
 import { SpeechFailedError } from "@carlnotes/pipeline/podcast/podcastEpisodeAudio"
 import { RejectedScriptError } from "@carlnotes/pipeline/podcast/podcastEpisodeScript"
+import * as topicPostDiscussionAudio from "@carlnotes/pipeline/topicPosts/topicPostDiscussionAudio"
 import * as topicPostDiscussions from "@carlnotes/pipeline/topicPosts/topicPostDiscussions"
 import { ApplicationFailure } from "@temporalio/activity"
+import { MockActivityEnvironment } from "@temporalio/testing"
+import { DefaultLogger } from "@temporalio/worker"
 import {
 	recordTopicPostDiscussionAudioActivity,
 	writeTopicPostDiscussionScriptActivity,
@@ -46,17 +50,59 @@ test("a model error is thrown as it is, and the note reaches the script's write"
 	expect(writeSpy).toHaveBeenCalledWith("discussion-1", "the pancake part")
 })
 
+// run the recording's activity in a mock activity context, and return what it threw. the environment logs errors
+// alone, so a failed attempt's warning stays out of the test output
+function runRecordingActivity(
+	activityEnvironment = new MockActivityEnvironment({}, { logger: new DefaultLogger("ERROR") }),
+): Promise<unknown> {
+	return activityEnvironment.run(recordTopicPostDiscussionAudioActivity, "discussion-1").then(
+		() => undefined,
+		(error: unknown) => error,
+	)
+}
+
 test("a speech failure retries only if another attempt can help", async () => {
-	const recordSpy = spyOn(topicPostDiscussions, "recordTopicPostDiscussionAudio")
+	const recordSpy = spyOn(topicPostDiscussionAudio, "recordTopicPostDiscussionAudio")
 
 	// a failure the speech model may not repeat
 	recordSpy.mockRejectedValue(new SpeechFailedError("no audio came back", true))
-	const retryableFailure = await recordTopicPostDiscussionAudioActivity("discussion-1").catch((error: unknown) => error)
+	const retryableFailure = await runRecordingActivity()
 	expect(retryableFailure).toBeInstanceOf(ApplicationFailure)
 	expect(retryableFailure).toMatchObject({ nonRetryable: false, type: "SpeechFailed" })
 
 	// a failure every attempt would repeat
 	recordSpy.mockRejectedValue(new SpeechFailedError("the script was refused", false))
-	const finalFailure = await recordTopicPostDiscussionAudioActivity("discussion-1").catch((error: unknown) => error)
+	const finalFailure = await runRecordingActivity()
 	expect(finalFailure).toMatchObject({ nonRetryable: true, type: "SpeechFailed" })
+})
+
+// a recording whose worker was killed must be tried again after two minutes, not after its ten-minute timeout
+test("the recording heartbeats while it runs, and gets the signal that a cancelled attempt aborts", async () => {
+	// a recording that lets one heartbeat interval pass, and keeps the signal it was given
+	let fireHeartbeat = (): void => {}
+	spyOn(globalThis, "setInterval").mockImplementation(((onInterval: () => void) => {
+		fireHeartbeat = onInterval
+		return 7
+	}) as unknown as typeof setInterval)
+
+	// the stubbed recording fires the captured heartbeat once
+	const recordingSignals: (AbortSignal | undefined)[] = []
+	spyOn(topicPostDiscussionAudio, "recordTopicPostDiscussionAudio").mockImplementation(
+		async (_discussionId, signal) => {
+			recordingSignals.push(signal)
+			fireHeartbeat()
+		},
+	)
+
+	// one heartbeat reached Temporal, and cancelling the attempt aborts the recording's signal
+	const activityEnvironment = new MockActivityEnvironment()
+	let heartbeatCount = 0
+	activityEnvironment.on("heartbeat", () => {
+		heartbeatCount += 1
+	})
+	await runRecordingActivity(activityEnvironment)
+	expect(heartbeatCount).toBe(1)
+	// a cancel reaches the recording
+	activityEnvironment.cancel()
+	expect(recordingSignals[0]?.aborted).toBe(true)
 })

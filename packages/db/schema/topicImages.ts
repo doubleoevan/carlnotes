@@ -58,12 +58,16 @@ export const topicImageRenders = pgTable(
 		error: text("error"),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		finishedAt: timestamp("finished_at", { withTimezone: true }),
+		// when the reaper started the render again after its workflow was gone, null if it never did
+		restartedAt: timestamp("restarted_at", { withTimezone: true }),
 	},
 	// covers the regeneration count and the monthly spend sum, a topic's render history, and the renders that a
 	// Topic Post's delete and a film's delete take with them
 	(table) => [
 		index("topic_image_renders_user_kind_created_idx").on(table.userId, table.kind, table.createdAt),
 		index("topic_image_renders_topic_created_idx").on(table.topicId, table.createdAt),
+		// the day's spend sums every user's renders by their time
+		index("topic_image_renders_created_idx").on(table.createdAt),
 		index("topic_image_renders_topic_post_id_idx").on(table.topicPostId).where(sql`${table.topicPostId} is not null`),
 		index("topic_image_renders_topic_video_id_idx")
 			.on(table.topicVideoId)

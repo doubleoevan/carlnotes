@@ -28,7 +28,7 @@ import {
 	type TopicVideoPodcastEpisode,
 } from "./topicVideoInputs"
 import { toTopicVideoCostDollars, uploadTopicVideoFile } from "./topicVideoRows"
-import { withTopicVideoSlot } from "./topicVideoSlot"
+import { withTopicVideoRebuildSlot } from "./topicVideoSlot"
 import { loadVideoAudio } from "./videoAudio"
 import { prepareChapterImages } from "./videoChapterImages"
 import { rewriteVideoFilm } from "./videoFilm"
@@ -71,7 +71,7 @@ export async function rebuildTopicVideo(
 	podcastEpisodeId: string,
 	signal?: AbortSignal,
 ): Promise<RebuildTopicVideoResult> {
-	return withTopicVideoSlot(signal, (activeSignal) => rebuildFilm(podcastEpisodeId, activeSignal))
+	return withTopicVideoRebuildSlot(signal, (activeSignal) => rebuildFilm(podcastEpisodeId, activeSignal))
 }
 async function rebuildFilm(podcastEpisodeId: string, signal: AbortSignal): Promise<RebuildTopicVideoResult> {
 	// the podcast episode and its ready film, or why it is not rebuilt
@@ -159,6 +159,7 @@ async function loadRebuildInputs(podcastEpisodeId: string): Promise<RebuildInput
 		readyTopicVideo.renderedImageHash === topicVideoPodcastEpisode.imageHash &&
 		(isFilmPlaying || readyTopicVideo.renderVersion < 4)
 	) {
+		// a film marked rendering plays again
 		if (!isFilmPlaying) {
 			await saveCurrentFilmReady(topicVideoPodcastEpisode, readyTopicVideo)
 		}

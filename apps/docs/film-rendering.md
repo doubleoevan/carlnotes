@@ -22,12 +22,17 @@ These settings apply as of November 18, 2026. When changing a limit, update its 
 
 ## Worker operation
 
-Use `TOPIC_VIDEO_ANIMATED_CHAPTERS=true` on the recording worker to admit new episodes after the isolation and
-playback checks pass. The workflow records the version at dispatch. To pause new version 4 admissions, remove the
-setting and restart the recording worker. Keep compatible film workers polling until the admitted attempts drain.
+New episodes render at version 4, with animated chapters, unless `TOPIC_VIDEO_ANIMATED_CHAPTERS` is `false`. The
+workflow records the version at dispatch. To pause new version 4 admissions, set `TOPIC_VIDEO_ANIMATED_CHAPTERS=false`
+in Doppler and restart the recording worker. Keep compatible film workers polling until the admitted attempts drain.
 The existing backfill continues to target montage versions below 3. Each animated attempt uploads distinct keys.
-The current ready film serves until the replacement and captions are ready together. To resume, restore the setting
-on the recording worker after verifying the captured frames and queue latency in QA. A dedicated film worker with zero concurrency stays idle until restarted with a positive value.
+The current ready film serves until the replacement and captions are ready together. To resume, remove the setting
+and restart the recording worker after verifying the captured frames and queue latency in QA. A dedicated film worker
+with zero concurrency stays idle until restarted with a positive value.
+
+The sweep's reaper starts a film's render again once if its workflow is lost, at the version that the sweep's own
+environment names. Set the setting in Doppler, where the recording worker and the sweep's job both read it, so a
+paused worker and the sweep agree.
 
 A poster rebuild checks that the published chapter video came from the same scene plans and approved artwork it
 can read now. If the record is missing, the artwork changed, or the previous poster appeared in a chapter, the worker
@@ -44,11 +49,14 @@ per 720-hour month at this rate, including idle time. Film length, shot count an
 
 New film renders and poster rebuilds check resident memory across the worker process tree and allocated space in the attempt directory every second, and again before upload. The defaults are 6 GiB of memory and 1 GiB of temporary disk. Set `TOPIC_VIDEO_MEMORY_LIMIT_MIB` or `TOPIC_VIDEO_DISK_LIMIT_MIB` to lower either limit. An exhausted attempt aborts its downloads and encodes and removes its workspace before Temporal retries.
 
-Provision `temporal-films` on `nf-compute-400` with one replica, 2 GB of temporary disk, 64 MiB of shared
-memory and a 180-second termination grace period. Both the film benchmark and the graphics check ran with these
-disk and memory settings. Use the same image, production configuration and Temporal namespace
-as the main worker. Start it with `bun run temporal:films`. Confirm both film queues show its poller before switching
-`temporal-worker` to `bun run temporal:main` and registering the updated release pipeline. Each release brings up
+Provision `temporal-films` on `nf-compute-400` with 4 GB of temporary disk, 64 MiB of shared memory and a
+180-second termination grace period. Both the film benchmark and the graphics check ran on this plan with 2 GB of
+disk and one render at a time. Set `TOPIC_VIDEO_CONCURRENCY=2` on the service: a render is about two cores wide, so
+two fill the four cores, and the disk holds three attempts at once at 1 GiB each, two renders and a rebuild. Scale
+the service from 1 to 4 replicas on `carlnotes_film_demand` at a target of 2, which each replica serves at `/metrics`
+on `WORKER_METRICS_PORT`, 9464 by default. Use the same image, production configuration and Temporal namespace
+as the main worker. Start it with `bun run temporal:films`. Confirm the film, rebuild, and backfill queues show its
+poller before switching `temporal-worker` to `bun run temporal:main` and registering the updated release pipeline. Each release brings up
 the compatible film worker before the main worker can dispatch the new version. Keep the compatible image
 available until outstanding version 4 tasks have drained. Removing the admission setting rolls new episodes
 back to the montage. Ready films continue playing.
@@ -56,5 +64,12 @@ back to the montage. Ready films continue playing.
 After checking new-film demand, `bun run films:backfill --episode <published-episode-uuid>` requests one ready
 episode upgrade. An occupied live queue, a missing episode or a film already at version 4 yields a skip.
 The backfill has no automatic list of animation upgrades. Recheck the long-film and scan/audio tests at any new
-worker size before enabling admissions there. Launch-hardening row 67.6 retains autoscaling, broader scheduling,
-general shot checkpoints and platform spend accounting.
+worker size before enabling admissions there.
+
+A render holds one of the replica's render slots only while it encodes. It gives the slot back while it waits on a
+provider for an image, a chapter's plan, or a clip, and its 3.8-hour deadline starts once it holds the slot. Each
+encoded shot is stored until the render ends, so an attempt that a deploy, a scale-down, or a kill interrupts costs the
+shot in progress: the next attempt downloads the stored shots and encodes the rest. A worker shutdown uses none of a
+render's three attempts. A film's row is written on the `episode-video-writes` queue as soon as its render is queued,
+by a `temporal-worker` replica, so a film that waits for a slot already shows as rendering. The backfill starts no
+render while a new film waits for a film Worker.

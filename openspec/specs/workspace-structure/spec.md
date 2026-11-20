@@ -96,13 +96,23 @@ check SHALL enforce each rule in preflight.
 Every process Northflank starts SHALL have a root script that keeps its name across the move: `temporal` for the
 Temporal worker, `schedule` for the scan sweep, `reset:monthly-budgets` for the budget reset, `db:migrate` for the
 migrate job, `edge:purge` for the edge purge, and `docs:embed` for the docs embed, each running the process under
-`doppler run`. Every existing root script SHALL keep its name, and every GitHub Actions job SHALL
-keep its name. The Dockerfile's `CMD` SHALL keep starting the api under `doppler run`.
+`doppler run`. The `web` service SHALL start through the root script `web`, which starts the api's entry under the
+process name `web`. The worker's two queue groups SHALL start through the root scripts `temporal:main` and `temporal:films`,
+which set `WORKER_QUEUE_GROUP` in the command after `doppler run --`, because a Doppler value would override one set on the
+service. Every existing root script SHALL keep its name, and every GitHub Actions job SHALL keep its name. The
+Dockerfile's `CMD` SHALL keep starting the api under `doppler run`.
 
 #### Scenario: The scripts survive the move
 
 - **WHEN** the move ships and each Northflank process starts by its root script
 - **THEN** every process starts without a command change in Northflank
+
+#### Scenario: The web service and the worker queue groups start by script
+
+- **WHEN** Northflank starts the `web` service with `bun run web`, the main worker with `bun run temporal:main`, and
+  the film service with `bun run temporal:films`
+- **THEN** the first starts the api's entry as `web`, the other two start the worker in their queue groups, and
+  `bun run temporal` still starts a worker that hosts every Worker
 
 ### Requirement: One Bun version is pinned everywhere, and the lockfile is written by it
 
@@ -323,7 +333,7 @@ output, `openspec/`, the vendored skills under `.agents/`, and `.opencode/` are 
 
 #### Scenario: A file loaded by path passes
 
-- **WHEN** `apps/worker/temporal.ts` loads a workflow file through `new URL(...)` instead of an import
+- **WHEN** `apps/worker/temporalWorkers.ts` loads a workflow file through `new URL(...)` instead of an import
 - **THEN** the dead-code check reports nothing for that workflow file
 
 ### Requirement: A dead-code exception names one item and where it is used

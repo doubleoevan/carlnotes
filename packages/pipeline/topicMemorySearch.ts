@@ -2,7 +2,7 @@ import { TOPIC_MEMORY_NOTE_LIMIT } from "@carlnotes/contracts/topicMemories"
 import { db } from "@carlnotes/db"
 import { findings, resources } from "@carlnotes/db/schema/scans"
 import { topicMemories, topicMemoryFeedback } from "@carlnotes/db/schema/topicMemories"
-import { toActiveTopicMemories, topicMemoryIsSaved } from "@carlnotes/db/topicMemories"
+import { toActiveTopicMemories, topicMemoryIsSaved, topicMemoryRaterCanRate } from "@carlnotes/db/topicMemories"
 import { and, desc, eq, isNotNull, isNull, notExists, sql } from "drizzle-orm"
 import { toTopicMemoryFindingFilter } from "./topicMemoryEvidence"
 import { readTopicMemorySubjectName } from "./topicMemorySubjects"
@@ -28,7 +28,13 @@ export async function loadTopicMemorySearchFindings(
 	const downRating = db
 		.select({ id: topicMemoryFeedback.topicMemoryId })
 		.from(topicMemoryFeedback)
-		.where(and(eq(topicMemoryFeedback.topicMemoryId, topicMemories.id), eq(topicMemoryFeedback.rating, "down")))
+		.where(
+			and(
+				eq(topicMemoryFeedback.topicMemoryId, topicMemories.id),
+				eq(topicMemoryFeedback.rating, "down"),
+				topicMemoryRaterCanRate,
+			),
+		)
 	const scanOrder = sql<string>`md5(${topicMemories.id} || ${scanId})`
 	const memoriesToCheck = db.$with("search_memories").as(
 		db
@@ -87,6 +93,7 @@ export function toTopicMemorySearchQueries(queries: string[], citedFindings: Top
 		if (!subject || !value || subject.length > 80 || value.length > 80 || ` ${subject} `.includes(` ${value} `)) {
 			continue
 		}
+		// both parts have to be whole words of the Finding's title or snippet
 		const excerpts = [row.title, row.snippet].map((text) => ` ${searchWords(text ?? "")} `)
 		if (![subject, value].every((part) => excerpts.some((excerpt) => excerpt.includes(` ${part} `)))) {
 			continue
@@ -113,7 +120,7 @@ export async function loadTopicMemoryRatingNotes(
 		})
 		.from(topicMemories)
 		.innerJoin(topicMemoryFeedback, eq(topicMemoryFeedback.topicMemoryId, topicMemories.id))
-		.where(and(toActiveTopicMemories(topicId), isNotNull(topicMemoryFeedback.note)))
+		.where(and(toActiveTopicMemories(topicId), isNotNull(topicMemoryFeedback.note), topicMemoryRaterCanRate))
 		.orderBy(desc(topicMemoryFeedback.updatedAt), topicMemoryFeedback.topicMemoryId, topicMemoryFeedback.userId)
 		.limit(TOPIC_MEMORY_SEARCH_NOTE_LIMIT)
 }

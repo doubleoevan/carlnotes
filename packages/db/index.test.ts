@@ -24,17 +24,33 @@ afterEach(() => {
 	restoreEnvSettings()
 })
 
-// 0.9 times 209 is 188, which split across eight pools is 23
+// 0.9 times 209 is 188, and one of the default fourteen pool shares of it is 13
 test("the pool is sized from the database's max_connections and the pool count", async () => {
 	// a database that reports 209, with the log captured
 	stubConnectionPool(() => [{ max_connections: "209" }])
 	const consoleLogSpy = spyOn(console, "log").mockImplementation(() => {})
 
 	// the size is set on the pool and logged
-	expect(await sizeConnectionPool()).toBe(23)
-	expect(connectionPool.options.max).toBe(23)
+	expect(await sizeConnectionPool()).toBe(13)
+	expect(connectionPool.options.max).toBe(13)
 	expect(consoleLogSpy.mock.calls[0]?.[0]).toBe(
-		"database pool sized to 23 connections from max_connections 209 and 8 pools",
+		"database pool sized to 13 connections, 1 of 14 pool shares, from max_connections 209",
+	)
+})
+
+// a worker that runs Scans takes two pool shares, twice what an api replica, a web replica, or a film replica takes
+test("a process with two pool shares gets twice one pool share", async () => {
+	// at 209 a pool share is 13, and at 901 it is 57
+	const consoleLogSpy = spyOn(console, "log").mockImplementation(() => {})
+	stubConnectionPool(() => [{ max_connections: "209" }])
+	expect(await sizeConnectionPool(2)).toBe(26)
+	stubConnectionPool(() => [{ max_connections: "901" }])
+	expect(await sizeConnectionPool(1)).toBe(57)
+	expect(await sizeConnectionPool(2)).toBe(114)
+
+	// the startup line names the size, the process's pool shares, the pool count, and what the database reported
+	expect(consoleLogSpy.mock.calls.at(-1)?.[0]).toBe(
+		"database pool sized to 114 connections, 2 of 14 pool shares, from max_connections 901",
 	)
 })
 

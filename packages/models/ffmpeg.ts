@@ -5,11 +5,11 @@
 const PROBE_TIMEOUT_MS = 60_000
 
 // one run. ffmpeg's arguments after the quiet flags, the bytes for its input pipe if the run reads one, how long the
-// run may take before it is killed, with no limit by default, and a signal that kills the run once it aborts
+// run may take before it is killed, which is required, and a signal that kills the run once it aborts
 export type RunFfmpegOptions = {
 	ffmpegArguments: string[]
 	inputBytes?: Uint8Array
-	timeoutMs?: number
+	timeoutMs: number
 	signal?: AbortSignal
 }
 

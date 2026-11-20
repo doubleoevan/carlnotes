@@ -304,6 +304,8 @@ export const personalSourcesSummarySpends = pgTable(
 	},
 	(table) => [
 		index("personal_source_distillation_spends_user_created_idx").on(table.userId, table.createdAt),
+		// the day's spend sums every user's rows by their time
+		index("personal_source_distillation_spends_created_idx").on(table.createdAt),
 		check("personal_source_distillation_spends_nonnegative", sql`${table.cost} >= 0`),
 	],
 )

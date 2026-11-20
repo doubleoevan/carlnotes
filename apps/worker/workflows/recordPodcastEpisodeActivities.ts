@@ -1,6 +1,7 @@
 // the activities that record a Scan's Podcast Episode.
 // a script or speech failure that another attempt cannot fix is marked non-retryable
 
+import type { TopicVideoRenderVersion } from "@carlnotes/contracts/topicVideoWork"
 import { loadSpendControlSettings } from "@carlnotes/db/dailySpendCutoffs"
 import { isBudgetRejection } from "@carlnotes/models/models"
 import * as podcastEpisodeAudio from "@carlnotes/pipeline/podcast/podcastEpisodeAudio"
@@ -11,13 +12,28 @@ import {
 import type { PodcastEpisodeOutline } from "@carlnotes/pipeline/podcast/podcastEpisodeOutline"
 import { type PodcastEpisodeSegment, RejectedScriptError } from "@carlnotes/pipeline/podcast/podcastEpisodeScript"
 import * as writePodcastEpisodeScript from "@carlnotes/pipeline/podcast/writePodcastEpisodeScript"
+import { storePodcastEpisodeCovers } from "@carlnotes/pipeline/podcastCover"
+import { reportError } from "@carlnotes/server/monitoring"
 import { newTopicVideoRenderVersion, topicVideoConcurrency } from "@carlnotes/server/podcastEpisodeSettings"
 import { ApplicationFailure, activityInfo } from "@temporalio/activity"
+import { runWithHeartbeat } from "../activityHeartbeat"
 
-// the plan, the encode, the publish, and the failure are exported as they are. each throws only on an unexpected error
+// the plan, the publish, and the failure are exported as they are. each throws only on an unexpected error
 export { planPodcastEpisode } from "@carlnotes/pipeline/podcast/planPodcastEpisode"
-export { encodePodcastEpisode } from "@carlnotes/pipeline/podcast/podcastEpisodeAudio"
 export { failPodcastEpisode, publishPodcastEpisode } from "@carlnotes/pipeline/podcast/publishPodcastEpisode"
+
+/**
+ * Joins the recorded chapters into the podcast episode's audio and stores it, heartbeating every 30 seconds, and stops
+ * the downloads, the join, and the upload once the attempt is cancelled.
+ */
+export function encodePodcastEpisode(
+	podcastEpisodeId: string,
+	recordedChapters: podcastEpisodeAudio.RecordedChapter[],
+): ReturnType<typeof podcastEpisodeAudio.encodePodcastEpisode> {
+	return runWithHeartbeat((signal) =>
+		podcastEpisodeAudio.encodePodcastEpisode(podcastEpisodeId, recordedChapters, signal),
+	)
+}
 
 // the Topic Post Discussion's activities run on the same queue
 export * from "./recordTopicPostDiscussionActivities"
@@ -100,17 +116,31 @@ async function withNonRetryableScriptFailures<Result>(runScriptCall: () => Promi
 }
 
 /**
- * Draws a published podcast episode's own image. Fails for good on a spent budget or a rejected render.
+ * Draws a published podcast episode's own image, then draws its cover once and stores the cover at both sizes, so
+ * no request for the cover draws it. Fails for good on a spent budget or a rejected render.
  */
 export async function drawPodcastEpisodeImageActivity(podcastEpisodeId: string): Promise<void> {
 	try {
 		await drawPodcastEpisodeImage({ podcastEpisodeId })
 	} catch (error) {
-		// a spent budget and a rejection are final, and anything else is worth another attempt
+		// a spent budget and a rejection are final, so the cover is stored over the image the podcast episode is left
+		// with. anything else is worth another attempt, which stores the cover
 		if (error instanceof PodcastEpisodeImageRejectedError || isBudgetRejection(error)) {
+			await storePodcastEpisodeCoversOrReport(podcastEpisodeId)
 			throw ApplicationFailure.nonRetryable(error instanceof Error ? error.message : String(error), "ImageRejected")
 		}
 		throw error
+	}
+	await storePodcastEpisodeCoversOrReport(podcastEpisodeId)
+}
+
+// store the podcast episode's cover at both sizes. a failed draw or store is reported and never fails the image step
+async function storePodcastEpisodeCoversOrReport(podcastEpisodeId: string): Promise<void> {
+	try {
+		await storePodcastEpisodeCovers(podcastEpisodeId)
+	} catch (error) {
+		console.error(`could not store the cover of podcast episode ${podcastEpisodeId}`, error)
+		reportError(error, "podcast-episode", { podcastEpisodeId, step: "cover" })
 	}
 }
 
@@ -128,6 +158,6 @@ export async function isTopicPodcastEpisodeVideoEnabled(): Promise<boolean> {
 }
 
 /** Records the admitted render version in workflow history, so a retry survives a rollout or rollback. */
-export async function selectNewTopicVideoRenderVersion(): Promise<3 | 4 | false> {
+export async function selectNewTopicVideoRenderVersion(): Promise<TopicVideoRenderVersion | false> {
 	return (await isTopicPodcastEpisodeVideoEnabled()) ? newTopicVideoRenderVersion() : false
 }

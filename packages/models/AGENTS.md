@@ -20,8 +20,9 @@ worker, and the evals all start. It imports `@carlnotes/db`, `@carlnotes/server`
   read, and reset on the first of the month by the reset job (`apps/worker/resetMonthlyBudgets.ts`), and
   `isUserLiteLLMKeyBudgetStale` tells billing whether a key's max budget still matches its user's budget. Every proxy
   admin call times out after five seconds. A Scan creates its owner's missing key before any Source runs.
-  `litellmTestFixtures.ts` is the stub proxy, the connection pool stub that keeps the call order, the user row, and the
-  setup and restore that each LiteLLM test file runs around every test.
+  `litellmTestFixtures.ts` is the stub proxy, the proxy that cannot be reached (`stubUnreachableProxy`, which the api's
+  scan route tests and the worker's scheduled topic limit tests share), the connection pool stub that keeps the call
+  order, the user row, and the setup and restore that each LiteLLM test file runs around every test.
 - `modelCallRetry.ts` — `runModelCall`, the runner a Scan's scoring, embedding, and scan report calls go through. A
   rate limit, a 408, a 5xx, or a timeout waits what the response's `Retry-After` names, read in its plain and
   `llm_provider-` forms, or a jittered backoff, and tries again: at most 5 attempts, 30 seconds a wait, 60 seconds in
@@ -62,26 +63,34 @@ worker, and the evals all start. It imports `@carlnotes/db`, `@carlnotes/server`
   model for a create, a backfill, and an admin render and the better one for an editor's Regenerate, and prices each
   by its image tokens. Fireworks has no serverless image model on the platform's key.
 - `ffmpeg.ts` runs one ffmpeg process through its pipes, for the chapter join, the api's cover encode, a chat
-  recording's transcode, and a spoken chat reply's MP3. `transcription.ts` transcodes a chat recording to 16 kHz mono
-  WAV, reading only the containers and codecs a browser records, and transcribes it through Google's Interactions API on
-  LiteLLM's Gemini pass-through on the user's key with store set to false, so Google keeps no recording. A WAV with no
-  samples is silent and makes no call. The proxy charges the key for a transcription from its own price table, as it
-  charges speech, and the api's spend row, priced by `transcriptionCost` in `budget.ts`, agrees with it. The app's
-  monthly budget reads the api's spend rows.
+  recording's transcode, and a spoken chat reply's MP3. `runFfmpeg` takes a required `timeoutMs`, so no caller runs
+  ffmpeg without a time limit, and a `signal` that kills the process once it aborts. `transcription.ts` transcodes a
+  chat recording to 16 kHz mono WAV, reading only the containers and codecs a browser records, and transcribes it
+  through Google's Interactions API on LiteLLM's Gemini pass-through on the user's key with store set to false, so
+  Google keeps no recording. A WAV with no samples is silent and makes no call. The proxy charges the key for a
+  transcription from its own price table, as it charges speech, and the api's spend row, priced by `transcriptionCost`
+  in `budget.ts`, agrees with it. The app's monthly budget reads the api's spend rows.
 -  No scanner reads untrusted text. Injection defense is the nonce fence in `prompts/write.ts`, schema-locked outputs,
   and model calls with no tools, as the README's "Content safety and injection defense" describes.
+- `userPaidCalls.ts` — `runUserPaidCall`, the gate and the record of a user's paid call that has no row of its own:
+  a url attachment's page fetch, a url Source's screening fetch, and a source suggestion's web search. It reserves the
+  call's largest cost against the user's monthly budget, returns `budgetSpent` with no call made if the budget is
+  spent, and records what the call cost as the user's `spends` row.
 -  `moderation.ts` — `classifyUserText`, the check of one text a user wrote for other users: one cheap-tier call on the
   master key, through `prompts/moderate-user-text.md` with the text fenced as data, that returns the shared
-  `moderationVerdict`. It records no input or output in its trace, returns skipped with `LITELLM_BASE_URL` unset, and
-  returns failed instead of throwing on a timeout, an error, or a verdict outside the schema, so every caller fails
-  open. `classifyImage` checks an image others see on the operator's key through LiteLLM's `image-moderation` alias
-  for OpenAI's `omni-moderation-latest`. The proxy uses `OPENAI_API_KEY`. The function maps flags onto the same
-  categories through `toImageModerationCategory` in `@carlnotes/contracts/moderation`. It returns skipped with no key,
-  unreadable for invalid image input, or failed for an unavailable provider.
+  `moderationVerdict`. A text's verdict is kept in Redis for a day under a hash of the text and its kind, so a text
+  saved again is classified once, and each call that runs is recorded as a `spends` row with no user, the platform's. It
+  records no input or output in its trace, returns skipped with `LITELLM_BASE_URL` unset, and returns failed instead of
+  throwing on a timeout, an error, or a verdict outside the schema, so every caller fails open. `classifyImage` checks
+  an image others see on the operator's key through LiteLLM's `image-moderation` alias for OpenAI's
+  `omni-moderation-latest`. The proxy uses `OPENAI_API_KEY`. The function maps flags onto the same categories through
+  `toImageModerationCategory` in `@carlnotes/contracts/moderation`. It returns skipped with no key, unreadable for
+  invalid image input, or failed for an unavailable provider.
 - `prompts/` — the model-facing Markdown templates, each with YAML frontmatter and a `{{variable}}` body, loaded by
-  thin builders: `write.ts` fills a template, `fetch.ts` loads a prompt from the Langfuse registry first and falls back
-  to the bundled Markdown, with `promptTelemetry` naming the version that served it, and `sync.ts` (`bun run
-  prompts:sync`, or `prompts:sync:prd` for production) pushes each bundled template up to Langfuse. `markdown.d.ts`
+  thin builders: `write.ts` fills a template, `fragment.ts` writes a prompt fragment with no variables, `fetch.ts`
+  loads a prompt from the Langfuse registry first and falls back to the bundled Markdown, with `promptTelemetry`
+  naming the version that served it, and `sync.ts` (`bun run prompts:sync`, or `prompts:sync:prd` for production)
+  pushes each bundled template up to Langfuse. `markdown.d.ts`
   types the `.md` imports, and `untrustedFenceTestFixtures.ts` serves the tests that read a prompt's untrusted fences.
   The prompt-authoring skill owns the conventions.
 - Imports: `@carlnotes/db`, `@carlnotes/server`, and `@carlnotes/contracts`; `@carlnotes/emails` comes before it in the
@@ -101,7 +110,10 @@ names alone, built by `packages/pipeline/dashboardParagraph.ts` and evaluated th
 `prompts/propose-topic-memories.md` proposes up to eight facts or corrections for a cluster of public Findings.
 `prompts/check-topic-memory-claims.md` checks atomic wording and extracts structured fields during dev repair.
 `prompts/judge-topic-memory-duplicates.md` independently labels pairs for the eval in `evals/topic-memories/`.
-The shared `topic-memory-background.md` fragment fences ranked topic memories and corrections. `current-day-context.md`
-distinguishes event dates from Scan dates and compares them against the current UTC day.
+The shared `topic-memory-background.md` fragment fences ranked topic memories and corrections.
+`topic-memory-claim-context.md`, `topic-memory-claim-dates.md`, `topic-memory-claim-rules.md`, and
+`topic-memory-as-of-claims.md` hold the claim wording those prompts share, and `topicMemoryClaimBlocks.ts` loads
+the three that the propose and split prompts splice.
+`current-day-context.md` distinguishes event dates from Scan dates and compares them against the current UTC day.
 
 `chapterPictureVideo.ts` sends one approved illustration through LiteLLM’s Gemini Interactions route with message redaction and provider storage disabled. `prompts/animate-chapter-picture.md` describes the motion selected for that illustration.

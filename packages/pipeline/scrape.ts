@@ -2,18 +2,63 @@
 // or any other page as Markdown through Firecrawl. a conditional GET checks whether stored content changed
 import type { resourceKinds } from "@carlnotes/contracts/enums"
 import { isSameSiteUrl } from "@carlnotes/contracts/sources"
-import { DAY_MS } from "@carlnotes/contracts/time"
+import { DAY_MS, toJitteredBackoffMs } from "@carlnotes/contracts/time"
 import { FIRECRAWL_COST_PER_FETCH } from "@carlnotes/models/budget"
 import { toPositiveInteger } from "@carlnotes/server/envSettings"
-import { FetchStatusError, fetchPublicUrl } from "@carlnotes/server/publicFetch"
+import { fetchPublicUrl } from "@carlnotes/server/publicFetch"
+import { runWithRetries } from "@carlnotes/server/retry"
 import { fetchRedditThread, toRedditPostId } from "./ingest/reddit"
 import { CAPTION_HOSTS, fetchDeclaredTranscript } from "./transcripts"
 
 // the Firecrawl endpoint that scrapes a page to Markdown
 const FIRECRAWL_ENDPOINT = "https://api.firecrawl.dev/v2/scrape"
 
-// Firecrawl's own statuses for a bad key, billing, and its rate limit
-const FIRECRAWL_FAULT_STATUSES = new Set([401, 402, 429])
+// Firecrawl's own statuses for a bad key, a spent credit, its scrape timeout, and its rate limit. a server error is its
+// fault too
+const FIRECRAWL_UNAUTHORIZED_STATUS = 401
+const FIRECRAWL_CREDIT_SPENT_STATUS = 402
+const FIRECRAWL_TIMEOUT_STATUS = 408
+const FIRECRAWL_RATE_LIMIT_STATUS = 429
+
+// a timeout, a rate limit, or a server error is tried again: four attempts, with a wait that starts near two seconds and doubles,
+// or the wait that the response names, up to 30 seconds
+const SCRAPE_ATTEMPTS = 4
+const SCRAPE_BACKOFF_MS = 2000
+const MAX_SCRAPE_WAIT_MS = 30_000
+
+/**
+ * A scrape that failed on Firecrawl's side: a bad key, a spent credit, a timeout, a rate limit, or a server error. It
+ * says nothing about the page, which a later fetch may read.
+ */
+export class FirecrawlFaultError extends Error {
+	readonly status: number
+	readonly retryAfterMs: number | null
+
+	constructor(url: string, status: number, retryAfterMs: number | null = null) {
+		super(`firecrawl scrape ${url} failed on firecrawl's side: ${status}`)
+		this.name = "FirecrawlFaultError"
+		this.status = status
+		this.retryAfterMs = retryAfterMs
+	}
+}
+
+/**
+ * Firecrawl's report that it could not read a page: a failed status that is no fault on its side, or a page with no
+ * content. Another fetch of the same page would fail the same way.
+ */
+export class UnreadablePageError extends Error {
+	constructor(url: string, reason: string) {
+		super(`firecrawl scrape ${url} ${reason}`)
+		this.name = "UnreadablePageError"
+	}
+}
+
+/**
+ * Returns whether a failed scrape found Firecrawl's credit spent, which no later attempt fixes.
+ */
+export function isFirecrawlCreditSpent(error: unknown): boolean {
+	return error instanceof FirecrawlFaultError && error.status === FIRECRAWL_CREDIT_SPENT_STATUS
+}
 
 // how long a Firecrawl scrape may run before it aborts
 const SCRAPE_TIMEOUT_MS = 30_000
@@ -55,13 +100,15 @@ export type FetchValidators = { etag: string | null; lastModified: string | null
 type ResourceKind = (typeof resourceKinds)[number]
 
 /**
- * Fetch one Resource's content by the path its kind and url select. A transcript or caption path that produces no text throws an error.
- * An episode that declares no transcript returns empty text at no cost.
+ * Fetch one Resource's content by the path its kind and url select. A transcript or caption path that produces no text
+ * throws an error. A listen Resource that declares no transcript returns empty text at no cost. A scrape that Firecrawl
+ * rate limits waits and tries again, and starts no wait that would end after the wait deadline.
  */
 export async function fetchContent(
 	url: string,
 	resourceKind: ResourceKind,
 	transcriptUrl: string | null = null,
+	waitDeadlineAt: number | null = null,
 ): Promise<FetchResult> {
 	// a transcript that the publisher declared is the page's words without the page, whatever kind of Resource it is
 	if (transcriptUrl) {
@@ -82,7 +129,7 @@ export async function fetchContent(
 
 	// only a video publishes captions worth reading, so anything else is scraped
 	if (resourceKind !== "watch") {
-		return fetchFirecrawlMarkdown(url)
+		return fetchFirecrawlMarkdown(url, waitDeadlineAt)
 	}
 
 	// a video's words are published as its caption track, so the url selects which host to ask for it
@@ -92,39 +139,33 @@ export async function fetchContent(
 			return captionHost.fetchTranscript(videoId)
 		}
 	}
-	return fetchFirecrawlMarkdown(url)
+	return fetchFirecrawlMarkdown(url, waitDeadlineAt)
 }
 
+// what Firecrawl returns for a scraped page: its Markdown and its metadata
+type FirecrawlScrape = { data?: { markdown?: string; metadata?: Record<string, unknown> } }
+
 // scrape one url to Markdown via Firecrawl
-async function fetchFirecrawlMarkdown(url: string): Promise<FetchResult> {
+async function fetchFirecrawlMarkdown(url: string, waitDeadlineAt: number | null): Promise<FetchResult> {
 	// Firecrawl requires a key. throw an error when it isn't set so the review can fall back to the snippet
 	const apiKey = Bun.env.FIRECRAWL_API_KEY
 	if (!apiKey) {
 		throw new Error("FIRECRAWL_API_KEY is not set")
 	}
 
-	// request only the main-content Markdown of the page, bounded by the fetch timeout
-	const response = await fetch(FIRECRAWL_ENDPOINT, {
-		method: "POST",
-		headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
-		body: JSON.stringify({ url, formats: ["markdown"], onlyMainContent: true }),
-		signal: AbortSignal.timeout(SCRAPE_TIMEOUT_MS),
+	// a timeout, a rate limit, or a server error waits and tries again. a failed scrape throws an error, which the review catches to
+	// score the snippet instead
+	const payload = await runWithRetries({
+		attempts: SCRAPE_ATTEMPTS,
+		runAttempt: () => requestFirecrawlScrape(url, apiKey),
+		isRetryable: isRetryableFirecrawlFault,
+		toDelayMs: (error, attempt) => toScrapeDelayMs({ error, attempt, waitDeadlineAt }),
 	})
 
-	// a failed scrape throws an error. review catches the error and scores the snippet instead. Firecrawl's own
-	// unauthorized, payment required, and rate limit statuses are faults on Firecrawl's side
-	if (FIRECRAWL_FAULT_STATUSES.has(response.status)) {
-		throw new Error(`firecrawl scrape ${url} failed on firecrawl's side: ${response.status}`)
-	}
-	if (!response.ok) {
-		throw new FetchStatusError(`firecrawl scrape ${url}`, response.status)
-	}
-
 	// Firecrawl wraps the page under data.markdown. an empty or whitespace body means the scrape failed, so throw an error
-	const payload = (await response.json()) as { data?: { markdown?: string; metadata?: Record<string, unknown> } }
 	const markdown = payload.data?.markdown ?? ""
 	if (!markdown.trim()) {
-		throw new Error(`firecrawl scrape ${url} returned no content`)
+		throw new UnreadablePageError(url, "returned no content")
 	}
 
 	// read the etag, last-modified, the page's own title, and its favicon from Firecrawl's page metadata when present
@@ -134,6 +175,77 @@ async function fetchFirecrawlMarkdown(url: string): Promise<FetchResult> {
 	const title = typeof metadata.title === "string" ? metadata.title.trim() || null : null
 	const faviconUrl = toPageFaviconUrl(metadata, url)
 	return { text: markdown, cost: FIRECRAWL_COST_PER_FETCH, etag, lastModified, title, faviconUrl }
+}
+
+// ask Firecrawl for the main-content Markdown of one page, bounded by the fetch timeout
+async function requestFirecrawlScrape(url: string, apiKey: string): Promise<FirecrawlScrape> {
+	const response = await fetch(FIRECRAWL_ENDPOINT, {
+		method: "POST",
+		headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
+		body: JSON.stringify({ url, formats: ["markdown"], onlyMainContent: true }),
+		signal: AbortSignal.timeout(SCRAPE_TIMEOUT_MS),
+	})
+
+	// Firecrawl's unauthorized, payment required, timeout, rate limit, and server error statuses are faults on its
+	// side, and any other failed status is its report about the page
+	if (isFirecrawlFaultStatus(response.status)) {
+		throw new FirecrawlFaultError(url, response.status, toRetryAfterMs(response.headers.get("retry-after")))
+	}
+	if (!response.ok) {
+		throw new UnreadablePageError(url, `returned ${response.status}`)
+	}
+	return (await response.json()) as FirecrawlScrape
+}
+
+// whether a status is a fault on Firecrawl's side
+function isFirecrawlFaultStatus(status: number): boolean {
+	const isKeyOrCreditFault = status === FIRECRAWL_UNAUTHORIZED_STATUS || status === FIRECRAWL_CREDIT_SPENT_STATUS
+	return isKeyOrCreditFault || isRetryableFirecrawlStatus(status)
+}
+
+// whether another attempt can fix a failed scrape: a timeout, a rate limit, or a server error, and never a bad key or a
+// spent credit
+function isRetryableFirecrawlFault(error: unknown): boolean {
+	return error instanceof FirecrawlFaultError && isRetryableFirecrawlStatus(error.status)
+}
+
+// whether a status is one of Firecrawl's that the next attempt may pass: its timeout, its rate limit, or a server error
+function isRetryableFirecrawlStatus(status: number): boolean {
+	return status === FIRECRAWL_TIMEOUT_STATUS || status === FIRECRAWL_RATE_LIMIT_STATUS || status >= 500
+}
+
+// the wait that a retry-after header names in seconds, or null if the header is missing or names no wait
+function toRetryAfterMs(retryAfter: string | null): number | null {
+	const retryAfterSeconds = Number(retryAfter)
+	return retryAfter && Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0 ? retryAfterSeconds * 1000 : null
+}
+
+// a failed scrape, the number of the attempt that failed, the moment after which no wait may end, and the clock and
+// the random source
+type ScrapeDelayOptions = {
+	error: unknown
+	attempt: number
+	waitDeadlineAt: number | null
+	now?: number
+	random?: () => number
+}
+
+/**
+ * Returns the wait before the scrape's next attempt: the wait that the response named, or a backoff that doubles from
+ * two seconds, scaled by a random 50 to 100 percent so scrapes that one rate limit failed together spread apart.
+ * Returns null if the wait would end after the wait deadline, which ends the scrape with its failure.
+ */
+export function toScrapeDelayMs({
+	error,
+	attempt,
+	waitDeadlineAt,
+	now = Date.now(),
+	random = Math.random,
+}: ScrapeDelayOptions): number | null {
+	const backoffMs = toJitteredBackoffMs({ firstWaitMs: SCRAPE_BACKOFF_MS, doublingCount: attempt - 1, random })
+	const retryAfterMs = error instanceof FirecrawlFaultError ? error.retryAfterMs : null
+	const delayMs = Math.min(retryAfterMs ?? backoffMs, MAX_SCRAPE_WAIT_MS)
+	return waitDeadlineAt !== null && now + delayMs > waitDeadlineAt ? null : delayMs
 }
 
 // the icon the fetched page names, or null when the fetch landed on another site, whose icon is not this host's.

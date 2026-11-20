@@ -11,8 +11,16 @@ export function runFakeDailyCountCommand(
 	command: string,
 	commandArguments: string[],
 ): unknown {
-	const [script = "", , ...scriptValues] = commandArguments
+	// a plain INCR counts the sweeps in a row that could not save a batch
+	if (command === "INCR") {
+		const [countKey = ""] = commandArguments
+		const count = Number(storedValueByKey.get(countKey) ?? "0") + 1
+		storedValueByKey.set(countKey, String(count))
+		return count
+	}
+
 	// the daily count scripts are the ones that read or write a hash
+	const [script = "", , ...scriptValues] = commandArguments
 	if (command !== "EVAL" || !(script.includes("HINCRBY") || script.includes("HGETALL"))) {
 		return undefined
 	}

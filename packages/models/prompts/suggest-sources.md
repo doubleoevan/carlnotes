@@ -1,9 +1,9 @@
 ---
 title: Source suggestions
-version: 5
+version: 6
 model tier: cheap
 description: Reads a topic's title and prompt and what a web search for it found, and proposes Sources it could follow, preferring feeds that keep producing.
-updated: 2026-10-04
+updated: 2026-11-20
 ---
 
 You know where things get published. Given the topic below, propose up to {{maxSuggestions}} sources it could follow. Return only the sources.
@@ -23,16 +23,23 @@ Use the web search for leads. The publications, blogs, channels, subreddits, sho
 
 Select sources about this topic itself. Before you propose a source, ask whether most of what it publishes is about this topic. A broad source fails that test even if it sometimes covers the topic: a general journal, a subreddit or a blog for a whole science or a whole field like machine learning, or a source for a whole sport or industry when the topic is one part of it. A neighboring field or discipline is a different topic. Propose a broad source only if the topic is that broad. A few sources that pass this test beat a full list that does not.
 
-Select sources that keep producing, so the topic keeps finding new material:
+Select sources that keep producing, so the topic keeps finding new material. Each source is one of these options, written as the value its option takes:
 
-- **rss** — a feed url, the feed's whole address starting with https://. A blog, a publication, a release feed, a changelog. Prefer this whenever you know the feed's own address. A bare domain like `example.com` is not a feed url.
-- **googleNews** — a news publisher's domain, like `techcrunch.com`. This follows everything Google News has from that publisher, so propose it for a newspaper, a magazine, or a news site that covers this topic, instead of guessing at a feed url they may not publish. Propose it only for a site whose main work is publishing news or magazine articles. Never a shop, a brand's own site, a code host like GitHub, a documentation site, a forum, or a personal blog: Google News has little from those sites. A blog with a feed is an rss source.
-- **youtube** — a channel handle like `@veritasium`, which is what a channel is actually known by. A channel or playlist url works too, as does a raw channel id starting with UC or playlist id starting with PL. Prefer the handle: a channel id is twenty-four characters of nothing, and one you half-remember reads as a channel that does not exist. Never write a channel's display name, like Veritasium. Write its handle, like `@veritasium`, and leave out a channel whose handle or url you do not know.
-- **reddit** — a subreddit name, without the leading r/.
-- **podcast** — a show by the name it is published under, spelled as a listener would search for it. Name the show, never a feed url and never a number. The name is looked up on iTunes, and the first show of that name that publishes a feed is the one followed.
-- **bluesky** — an account handle, which is a domain name like `theverge.com` or `alice.bsky.social`. What gets read is the articles that account links to, not its posts, so propose an account that mostly shares links: a publication, a beat reporter, a lab. An account that mostly talks is worth nothing here.
-- **x** — one X account's handle, without the leading @. Propose a person or an organization that posts about this topic themselves, not a news aggregator that reposts links. Only propose a handle you are confident is that account's real one, since a near-miss reads someone else's posts entirely.
-- **url** — one page, re-read on every scan. Propose this only for a page that collects material and offers no feed to follow: an awesome-list, a hand-picked directory, a trending page. Never propose a single article, since it will not change, and never propose a page that the web search found, since each one is a single article.
+{{sourceValueLines}}
+
+Prefer an rss feed whenever you know the feed's own address: a blog, a publication, a release feed, a changelog. Write the feed's whole address starting with https://. A bare domain like `example.com` is not a feed url.
+
+A googleNews source follows everything Google News has from one news publisher, named by its domain like `techcrunch.com`, so propose it for a newspaper, a magazine, or a news site that covers this topic, instead of guessing at a feed url they may not publish. Propose it only for a site whose main work is publishing news or magazine articles. Never a shop, a brand's own site, a code host like GitHub, a documentation site, a forum, or a personal blog: Google News has little from those sites. A blog with a feed is an rss source.
+
+Name a YouTube channel by its handle like `@veritasium`, which is what a channel is actually known by. A channel or playlist url works too, as does a raw channel id starting with UC or playlist id starting with PL. Prefer the handle: a channel id is twenty-four characters of nothing, and one you half-remember reads as a channel that does not exist. Never write a channel's display name, like Veritasium, and leave out a channel whose handle or url you do not know.
+
+Name a podcast by the name it is published under, spelled as a listener would search for it, never a feed url and never a number. The name is looked up on iTunes, and the first show of that name that publishes a feed is the one followed.
+
+A Bluesky handle is a domain name like `theverge.com` or `alice.bsky.social`. What gets read is the articles that account links to, not its posts, so propose an account that mostly shares links: a publication, a beat reporter, a lab. An account that mostly talks is worth nothing here.
+
+An X source is one account. Propose a person or an organization that posts about this topic themselves, not a news aggregator that reposts links. Only propose a handle you are confident is that account's real one, since a near-miss reads someone else's posts entirely.
+
+A url source is one page, re-read on every scan. Propose it only for a page that collects material and offers no feed to follow: an awesome-list, a hand-picked directory, a trending page. Never propose a single article, since it will not change, and never propose a page that the web search found, since each one is a single article.
 
 Give each source its own option, and write its value alone, never prefixed with its option's name and a colon such as `reddit:` or `googleNews:`. A subreddit is a `reddit` source named by its name alone, a YouTube channel is a `youtube` source named by its handle, a podcast is a `podcast` source named by its show name, and an X account is an `x` source named by its handle alone — proposing any of them as an `rss` feed url fails, because the reader that fetches an rss feed is not the one that knows how to read those. A `googleNews` source is named by the publisher's bare domain, never by a full article address and never by the publisher's name.
 

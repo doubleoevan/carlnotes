@@ -11,7 +11,8 @@ import {
 import { DAY_MS, isUtcWeekend } from "@carlnotes/contracts/time"
 import { and, desc, eq, type SQL } from "drizzle-orm"
 import { db } from "./index"
-import { loadDailyTopicsWithinLimit, loadUserAccess, monthlySpendDollars, startOfUtcDay, toSpendCents } from "./quotas"
+import { loadDailyTopicsWithinLimit, loadUserAccess, startOfUtcDay } from "./quotas"
+import { monthlySpendDollars, toSpendCents } from "./recordedSpend"
 import { scans } from "./schema/scans"
 
 // how many of the user's latest succeeded scans that were not manual the daily scans cutoff averages the cost of

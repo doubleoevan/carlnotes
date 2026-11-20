@@ -11,7 +11,6 @@ import {
 	mergeTakenDailyCountSketches,
 	returnDailyCountEntries,
 	takeDailyCountEntries,
-	toPlaceKey,
 } from "./dailyCountBuffer"
 import { restoreRedisClient, stubRedisClient } from "./redisClientStub"
 
@@ -125,10 +124,4 @@ test("each group counts the distinct people its sketches hold together, and an e
 		["u:b", "u:c"],
 	].map((members) => new TextEncoder().encode(JSON.stringify(members)))
 	expect(await countSketchGroups(sketches, [[0, 1], [1], []])).toEqual([3, 2, 0])
-})
-
-test("a place key is the same for the same place and unknown for none", () => {
-	expect(toPlaceKey(ZURICH_PLACE)).toBe(toPlaceKey({ ...ZURICH_PLACE }))
-	expect(toPlaceKey({ ...ZURICH_PLACE, city: "Winterthur" })).not.toBe(toPlaceKey(ZURICH_PLACE))
-	expect(toPlaceKey(null)).toBe("unknown")
 })

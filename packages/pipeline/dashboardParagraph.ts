@@ -19,6 +19,7 @@ import { countRateLimitHit } from "@carlnotes/db/redisRateLimits"
 import { CHEAP_COST_PER_MILLION_TOKENS, tokenCost } from "@carlnotes/models/budget"
 import { cheapModel, LOW_REASONING_PROVIDER_OPTIONS } from "@carlnotes/models/models"
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "@carlnotes/models/prompts/fetch"
+import { loadPromptFragment } from "@carlnotes/models/prompts/fragment"
 import { writePrompt } from "@carlnotes/models/prompts/write"
 import { generateText } from "ai"
 
@@ -81,7 +82,10 @@ export async function buildDashboardParagraphPrompt({
 	series,
 }: DashboardParagraphInput): Promise<BuiltPrompt> {
 	// the template, and the numbers and places it is written from
-	const { template, registryPrompt } = await fetchPromptTemplate("write-dashboard-paragraph")
+	const [{ template, registryPrompt }, carlWrittenVoiceBlock] = await Promise.all([
+		fetchPromptTemplate("write-dashboard-paragraph"),
+		loadPromptFragment("carl-written-voice"),
+	])
 	const { numberLines, placeLines } = toDashboardParagraphLines({ summary, series })
 	const prompt = writePrompt(
 		template,
@@ -92,6 +96,7 @@ export async function buildDashboardParagraphPrompt({
 			maxChars: String(DASHBOARD_PARAGRAPH_MAX_CHARS),
 			numbersBlock: numberLines.join("\n"),
 			placesBlock: placeLines.join("\n"),
+			carlWrittenVoiceBlock,
 		},
 	)
 
@@ -200,6 +205,7 @@ function sumCounts(counts: number[]): number {
 // the places of the map's pins, the most people first: a city with its region and country, or a country alone for a
 // pin with no city. a city's postal codes count as one place
 function toPlaceNames(series: DashboardSeries | null): string[] {
+	// each place's people, summed over its pins
 	const peopleByPlaceName = new Map<string, number>()
 	for (const pin of series?.pins ?? []) {
 		const placeName = toPlaceName(pin)
@@ -207,6 +213,8 @@ function toPlaceNames(series: DashboardSeries | null): string[] {
 			peopleByPlaceName.set(placeName, (peopleByPlaceName.get(placeName) ?? 0) + pin.peopleCount)
 		}
 	}
+
+	// the places with the most people first, up to the paragraph's limit
 	return [...peopleByPlaceName]
 		.sort((first, second) => second[1] - first[1])
 		.map(([placeName]) => placeName)

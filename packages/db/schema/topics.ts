@@ -125,6 +125,8 @@ export const sources = pgTable(
 	// the feed build and the topic page read a topic's sources by its id
 	(table) => [
 		index("sources_topic_id_idx").on(table.topicId),
+		// the few Sources still waiting on their screen, which the sweep reads across every Topic and a Scan by its own
+		index("sources_pending_topic_idx").on(table.topicId).where(sql`${table.status} = 'pending'`),
 		uniqueIndex("sources_id_topic_unique").on(table.id, table.topicId),
 		unique("sources_id_topic_sender_unique").on(table.id, table.topicId, table.personalSourcesUserId),
 		uniqueIndex("sources_personal_source_sender_identity_unique").on(
@@ -162,6 +164,8 @@ export const attachments = pgTable(
 		chunkCount: integer("chunk_count"),
 		// origin URL for a URL-ingested attachment. null for file uploads
 		sourceUrl: text("source_url"),
+		// when the reaper started the processing again after its workflow was gone, null if it never did
+		restartedAt: timestamp("restarted_at", { withTimezone: true }),
 		// created and updated timestamps
 		...timestamps(),
 	},

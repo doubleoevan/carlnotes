@@ -223,6 +223,14 @@ export async function attachmentExists(attachmentKey: string): Promise<boolean> 
 	return bucket().exists(attachmentKey)
 }
 
+/**
+ * Returns a stored object's byte size, or null if no object is stored under the key.
+ */
+export async function loadStoredObjectByteSize(objectKey: string): Promise<number | null> {
+	const storedObject = bucket().file(objectKey)
+	return (await storedObject.exists()) ? (await storedObject.stat()).size : null
+}
+
 // read a stored attachment as a byte stream, so the whole file doesn't sit in memory
 export function attachmentStream(attachmentKey: string): ReadableStream {
 	return bucket().file(attachmentKey).stream()
@@ -325,6 +333,14 @@ export function toPodcastEpisodeAudioKey(podcastEpisodeId: string): string {
  */
 export function toTopicPostDiscussionAudioKey(topicPostId: string, discussionId: string): string {
 	return `topic-post-discussions/${topicPostId}/${discussionId}.mp3`
+}
+
+/**
+ * Returns the object key of one Topic Post Discussion's recorded speech, which exists only while the discussion is
+ * recording.
+ */
+export function toTopicPostDiscussionSpeechKey(topicPostId: string, discussionId: string): string {
+	return `topic-post-discussions/${topicPostId}/${discussionId}.wav`
 }
 
 // the object key for one chapter's audio, which exists only while its Podcast Episode is recording

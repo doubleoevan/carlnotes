@@ -66,6 +66,8 @@ export const podcastEpisodes = pgTable(
 		// the script that passed its checks, and when the podcast episode published
 		script: jsonb("script").$type<PodcastEpisodeScript>(),
 		publishedAt: timestamp("published_at", { withTimezone: true }),
+		// when the reaper started the recording again after its workflow was gone, null if it never did
+		restartedAt: timestamp("restarted_at", { withTimezone: true }),
 		// created and updated timestamps
 		...timestamps(),
 	},
@@ -73,6 +75,8 @@ export const podcastEpisodes = pgTable(
 	// covers the topic's episode list and the monthly spend sum
 	(table) => [
 		uniqueIndex("episodes_scan_unique").on(table.scanId),
+		// the few podcast episodes still recording, which the reaper reads by when each began
+		index("episodes_recording_created_idx").on(table.createdAt).where(sql`${table.status} = 'recording'`),
 		uniqueIndex("episodes_topic_season_number_unique").on(table.topicId, table.season, table.episodeNumber),
 		index("episodes_topic_published_idx").on(table.topicId, table.publishedAt),
 		// the few featured podcast episodes, which the home's home topic and podcast cards and the admin console read
@@ -80,6 +84,8 @@ export const podcastEpisodes = pgTable(
 		// the few podcast episodes featured on a profile page
 		index("episodes_profile_order_idx").on(table.profileOrder).where(sql`${table.profileOrder} is not null`),
 		index("episodes_owner_created_idx").on(table.ownerId, table.createdAt),
+		// the day's spend sums every owner's podcast episodes by their time
+		index("episodes_created_idx").on(table.createdAt),
 		// the trigram indexes behind the episode search, which matches anywhere in the lowercased title or description
 		index("episodes_title_lower_trgm").using("gin", sql`lower(${table.title}) gin_trgm_ops`),
 		index("episodes_description_lower_trgm").using("gin", sql`lower(${table.description}) gin_trgm_ops`),
@@ -215,13 +221,17 @@ export const topicVideos = pgTable(
 		homeOrder: integer("home_order"),
 		// the Topic's owner can feature this film in their Café's Featured Films and set its order
 		profileOrder: integer("profile_order"),
+		// when the reaper started the render again after its workflow was gone, null if it never did
+		restartedAt: timestamp("restarted_at", { withTimezone: true }),
 		// created and updated timestamps
 		...timestamps(),
 	},
-	// one film per podcast episode. the partial index covers the few films featured on the home
+	// one film per podcast episode. the partial index covers the few films featured on the home, and the day's spend
+	// sums every film by its time
 	(table) => [
 		uniqueIndex("topic_videos_episode_unique").on(table.podcastEpisodeId),
 		index("topic_videos_home_order_idx").on(table.homeOrder).where(sql`${table.homeOrder} is not null`),
+		index("topic_videos_created_idx").on(table.createdAt),
 	],
 )
 

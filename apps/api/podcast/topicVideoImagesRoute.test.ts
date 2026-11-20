@@ -13,9 +13,9 @@ import {
 import * as storage from "@carlnotes/db/store"
 import * as uncheckedImagesDb from "@carlnotes/db/uncheckedImages"
 import * as moderationModels from "@carlnotes/models/moderation"
-import * as temporalClient from "@carlnotes/pipeline/temporalClient"
 import * as topicImageRenders from "@carlnotes/pipeline/topicImages/topicImageRenders"
 import * as topicVideoImage from "@carlnotes/pipeline/topicVideo/topicVideoImage"
+import * as topicVideoWorkflowClient from "@carlnotes/pipeline/topicVideo/topicVideoWorkflowClient"
 import * as uncheckedImages from "@carlnotes/pipeline/uncheckedImages"
 import * as authorization from "../authorization"
 import * as moderation from "../moderation"
@@ -223,7 +223,7 @@ test("an unchecked upload on a public topic writes the unchecked image's row alo
 	spyOn(moderation, "toObjectionableImageCategory").mockResolvedValue("unchecked")
 	spyOn(storage, "deleteStoredObjects").mockResolvedValue(undefined)
 	const { publishImageSpy } = spyTopicVideoImageWrites()
-	const rebuildSpy = spyOn(temporalClient, "startTopicVideoRebuild").mockResolvedValue(undefined)
+	const rebuildSpy = spyOn(topicVideoWorkflowClient, "startTopicVideoRebuild").mockResolvedValue(undefined)
 
 	// the upload responds as a success in its released shape, marked unchecked
 	const uploaderApp = toSignedInApp(topicVideoImagesRoute, "unchecked-film-image-uploader")

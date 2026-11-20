@@ -27,6 +27,19 @@ test("a review names only the columns a re-score decides", () => {
 	}
 })
 
+// a review that could not read the page records no context hash, which is what sends the page back to the next Scan
+test("a review with no context hash writes none", () => {
+	const review = toFindingReviewFields({
+		scanId: "scan-1",
+		score: 0.4,
+		relevanceExplanation: "scored on its snippet",
+		topicContextHash: null,
+		contentHash: "def456",
+	})
+	expect(review.reviewedContextHash).toBeNull()
+	expect(review.reviewedContentHash).toBe("def456")
+})
+
 // the scan that first found a finding is written with the insert alone. a re-score moves scan_id to the re-scoring scan
 // and leaves found_scan_id, so a re-scored finding is not new to the topic scan email or the podcast episode's plan again
 test("upsertFinding writes the found scan on the insert and never on the re-score", async () => {

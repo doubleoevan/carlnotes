@@ -1,6 +1,17 @@
-// scrape tests for the conditional-refetch helpers, the episode skip, the page scrape, and the page favicon
+// scrape tests for the conditional-refetch helpers, the episode skip, the page scrape, its retries after a fault on
+// Firecrawl's side, and the page favicon
 import { expect, spyOn, test } from "bun:test"
-import { conditionalHeaders, fetchContent, revalidationOutcome, toPageFaviconUrl } from "./scrape"
+import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
+import {
+	conditionalHeaders,
+	FirecrawlFaultError,
+	fetchContent,
+	isFirecrawlCreditSpent,
+	revalidationOutcome,
+	toPageFaviconUrl,
+	toScrapeDelayMs,
+	UnreadablePageError,
+} from "./scrape"
 
 // conditionalHeaders sends only the validators that are stored, omitting an absent one
 test("conditionalHeaders builds from whichever validators are stored", () => {
@@ -95,4 +106,102 @@ test("toPageFaviconUrl keeps an icon only for a page that stayed on the requeste
 	// no landing url reported means the fetch stayed put, and a page naming no icon has none
 	expect(toPageFaviconUrl({ favicon: "/icon.png" }, "https://news.example/story")).toBe("https://news.example/icon.png")
 	expect(toPageFaviconUrl({ url: "https://news.example/story" }, "https://news.example/story")).toBeNull()
+})
+
+// scrape a page against the given Firecrawl replies, with instant waits, and return the scrape's result or its error
+// with how many requests and waits it made
+async function scrapeWithReplies(
+	replies: Response[],
+	waitDeadlineAt: number | null = null,
+): Promise<{ scrapeResult: unknown; requestCount: number; waitCount: number }> {
+	// the key, the replies in order with the last one repeated, and waits that end at once
+	const restoreEnvSettings = saveEnvSettings(["FIRECRAWL_API_KEY"])
+	Bun.env.FIRECRAWL_API_KEY = "test-key"
+	const fetchSpy = spyOn(globalThis, "fetch").mockImplementation(
+		(async () => (replies.length > 1 ? replies.shift() : replies[0]?.clone()) as Response) as unknown as typeof fetch,
+	)
+	const sleepSpy = spyOn(Bun, "sleep").mockResolvedValue(undefined)
+	try {
+		const scrapeResult = await fetchContent("https://example.com/page", "read", null, waitDeadlineAt).catch(
+			(error: unknown) => error,
+		)
+		return { scrapeResult, requestCount: fetchSpy.mock.calls.length, waitCount: sleepSpy.mock.calls.length }
+	} finally {
+		// restore the request, the waits, and the key for the tests that follow
+		fetchSpy.mockRestore()
+		sleepSpy.mockRestore()
+		restoreEnvSettings()
+	}
+}
+
+// a scraped page as Firecrawl returns it
+function toScrapedPage(): Response {
+	return Response.json({ success: true, data: { markdown: "# A page", metadata: {} } })
+}
+
+test("a rate-limited scrape and a server error are tried again until the page is read", async () => {
+	const replies = [new Response("", { status: 429 }), new Response("", { status: 503 }), toScrapedPage()]
+	const { scrapeResult, requestCount, waitCount } = await scrapeWithReplies(replies)
+	expect(scrapeResult).toMatchObject({ text: "# A page", cost: 0.001 })
+	expect({ requestCount, waitCount }).toEqual({ requestCount: 3, waitCount: 2 })
+})
+
+test("a rate limit that outlasts four attempts fails as a fault on Firecrawl's side", async () => {
+	const { scrapeResult, requestCount, waitCount } = await scrapeWithReplies([new Response("", { status: 429 })])
+	expect(scrapeResult).toBeInstanceOf(FirecrawlFaultError)
+	expect((scrapeResult as FirecrawlFaultError).status).toBe(429)
+	expect({ requestCount, waitCount }).toEqual({ requestCount: 4, waitCount: 3 })
+})
+
+test("a spent credit, a bad key, and a page that Firecrawl could not read are not tried again", async () => {
+	// a spent credit is a fault on Firecrawl's side that no attempt fixes
+	const spentCredit = await scrapeWithReplies([new Response("", { status: 402 })])
+	expect(isFirecrawlCreditSpent(spentCredit.scrapeResult)).toBe(true)
+	expect(spentCredit).toMatchObject({ requestCount: 1, waitCount: 0 })
+
+	// a bad key is a fault too, and not a spent credit
+	const badKey = await scrapeWithReplies([new Response("", { status: 401 })])
+	expect(badKey.scrapeResult).toBeInstanceOf(FirecrawlFaultError)
+	expect(isFirecrawlCreditSpent(badKey.scrapeResult)).toBe(false)
+	expect(badKey).toMatchObject({ requestCount: 1, waitCount: 0 })
+
+	// any other failed status is Firecrawl's report about the page
+	const unreadPage = await scrapeWithReplies([new Response("", { status: 404 })])
+	expect(unreadPage.scrapeResult).toBeInstanceOf(UnreadablePageError)
+	expect(unreadPage).toMatchObject({ requestCount: 1, waitCount: 0 })
+
+	// Firecrawl's own scrape timeout is a fault that the next attempt may pass
+	const timedOut = await scrapeWithReplies([new Response("", { status: 408 }), new Response("", { status: 408 })])
+	expect(timedOut.scrapeResult).toBeInstanceOf(FirecrawlFaultError)
+	expect(timedOut.requestCount).toBeGreaterThan(1)
+})
+
+test("a scrape starts no wait that would end after the wait deadline", async () => {
+	// the deadline has passed, so the first rate limit ends the scrape
+	const { scrapeResult, requestCount, waitCount } = await scrapeWithReplies(
+		[new Response("", { status: 429 })],
+		Date.now() - 1,
+	)
+	expect(scrapeResult).toBeInstanceOf(FirecrawlFaultError)
+	expect({ requestCount, waitCount }).toEqual({ requestCount: 1, waitCount: 0 })
+})
+
+test("the wait before a scrape's next attempt doubles, follows the response, and stops at the deadline", () => {
+	// the backoff doubles from two seconds, scaled by the random share
+	const rateLimit = new FirecrawlFaultError("https://example.com/page", 429)
+	const toDelayMs = (attempt: number, random: number): number | null =>
+		toScrapeDelayMs({ error: rateLimit, attempt, waitDeadlineAt: null, random: () => random })
+	expect([toDelayMs(1, 1), toDelayMs(2, 1), toDelayMs(3, 1)]).toEqual([2000, 4000, 8000])
+	expect(toDelayMs(1, 0)).toBe(1000)
+
+	// a wait that the response named replaces the backoff, up to 30 seconds
+	const namedWait = new FirecrawlFaultError("https://example.com/page", 429, 7000)
+	expect(toScrapeDelayMs({ error: namedWait, attempt: 1, waitDeadlineAt: null })).toBe(7000)
+	const longWait = new FirecrawlFaultError("https://example.com/page", 429, 120_000)
+	expect(toScrapeDelayMs({ error: longWait, attempt: 1, waitDeadlineAt: null })).toBe(30_000)
+
+	// a wait that ends at the deadline is taken, and one that ends after it is not
+	const deadlineOptions = { error: namedWait, attempt: 1, now: 1000 }
+	expect(toScrapeDelayMs({ ...deadlineOptions, waitDeadlineAt: 8000 })).toBe(7000)
+	expect(toScrapeDelayMs({ ...deadlineOptions, waitDeadlineAt: 7999 })).toBeNull()
 })

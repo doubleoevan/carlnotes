@@ -1,9 +1,6 @@
 // a Topic Post Discussion's recording: the row that bills for it, the script written from the post and its shared
-// Comments, the one speech call, the encode with no theme, and the write that publishes or fails the row
+// Comments, and the write that fails the row
 
-import { mkdtemp, rm } from "node:fs/promises"
-import { tmpdir } from "node:os"
-import { join } from "node:path"
 import type { TopicPostDiscussionKind } from "@carlnotes/contracts/enums"
 import { toHtmlText } from "@carlnotes/contracts/text"
 import { db } from "@carlnotes/db"
@@ -13,26 +10,17 @@ import { topicPostDiscussions, topicPosts } from "@carlnotes/db/schema/topicPost
 import { topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
 import { loadTopicPostSharedCommentTexts } from "@carlnotes/db/sharedComments"
-import {
-	deleteStoredObjects,
-	recordPendingObjectDeletions,
-	toTopicPostDiscussionAudioKey,
-	uploadPodcastEpisodeFile,
-} from "@carlnotes/db/store"
-import { EMBED_COST_PER_MILLION_TOKENS, speechCost, toEstimatedTokens, tokenCost } from "@carlnotes/models/budget"
+import { deleteStoredObjects, toTopicPostDiscussionSpeechKey } from "@carlnotes/db/store"
+import { EMBED_COST_PER_MILLION_TOKENS, toEstimatedTokens, tokenCost } from "@carlnotes/models/budget"
 import { loadOrProvisionUserLiteLLMKey } from "@carlnotes/models/litellm"
 import { embedVector } from "@carlnotes/models/models"
-import { recordSpeech, SPEECH_BYTES_PER_SECOND, WAV_HEADER_BYTES } from "@carlnotes/models/speech"
+import { reportError } from "@carlnotes/server/monitoring"
 import { podcastEpisodeSpeechModel } from "@carlnotes/server/podcastEpisodeSettings"
-import { and, eq, isNotNull, ne, sql } from "drizzle-orm"
-import { joinChapterFiles, SpeechFailedError } from "../podcast/podcastEpisodeAudio"
+import { and, eq, isNotNull, sql } from "drizzle-orm"
 import { isSharedCommentSpeakable, isUsernameSpeakable } from "../podcast/podcastEpisodeSharedComments"
 import { startTopicPostDiscussionWorkflow } from "../temporalClient"
 import { loadTopicMemoryPrompt } from "../topicMemoryPrompt"
 import { type DiscussionComment, MAX_DISCUSSION_COMMENTS, writeTopicPostDiscussion } from "./topicPostDiscussionScript"
-
-// a discussion is one speech call on the standard tier
-const DISCUSSION_SPEECH_TIER = "standard"
 
 // a discussion that cannot be recorded, with whether its user's budget is why
 export class TopicPostDiscussionError extends Error {
@@ -204,140 +192,26 @@ async function loadSpeakableComments(topicPostId: string): Promise<DiscussionCom
 }
 
 /**
- * Records a discussion's script as one speech call on its user's key, encodes it with no theme, stores the audio under
- * its Topic Post, and publishes the row. The audio of the post's earlier discussions is scheduled for deletion. Throws
- * a SpeechFailedError if the call recorded no audio.
- */
-export async function recordTopicPostDiscussionAudio(discussionId: string): Promise<void> {
-	// the recording row with its script. a published row, on a retried activity, has nothing left to do
-	const [discussion] = await db.select().from(topicPostDiscussions).where(eq(topicPostDiscussions.id, discussionId))
-	if (!discussion || discussion.status === "published") {
-		return
-	}
-	if (!discussion.script || !discussion.userId) {
-		throw new SpeechFailedError(`discussion ${discussionId} has no script to record`, false)
-	}
-
-	// record the speech on the user's key. only a retryable failure is worth another attempt
-	const recordSpeechResult = await recordSpeech({
-		turns: discussion.script,
-		speechTier: DISCUSSION_SPEECH_TIER,
-		litellmApiKey: await loadOrProvisionUserLiteLLMKey(discussion.userId),
-	})
-	if (recordSpeechResult.outcome !== "recorded") {
-		const isRetryable = recordSpeechResult.outcome === "retryable"
-		throw new SpeechFailedError(`the speech call failed: ${recordSpeechResult.reason}`, isRetryable)
-	}
-
-	// record what the call cost before the audio is stored, so a failed upload still counts the paid call
-	const { inputTokens, audioTokens, audioBytes } = recordSpeechResult
-	const speechDollars = speechCost({ speechTier: DISCUSSION_SPEECH_TIER, inputTokens, audioTokens })
-	await db
-		.update(topicPostDiscussions)
-		.set({ cost: sql`${topicPostDiscussions.cost} + ${speechDollars}` })
-		.where(eq(topicPostDiscussions.id, discussionId))
-
-	// encode the talk alone to one normalized MP3 on temporary files, and store it under the post
-	const audioKey = toTopicPostDiscussionAudioKey(discussion.topicPostId, discussionId)
-	const audioByteSize = await encodeAndStoreDiscussion(audioBytes, audioKey)
-	const durationSeconds = Math.round(Math.max(0, audioBytes.byteLength - WAV_HEADER_BYTES) / SPEECH_BYTES_PER_SECOND)
-
-	// publish the row, and let the audio of the post's earlier discussions go
-	const isPublished = await publishTopicPostDiscussion({
-		discussionId,
-		topicPostId: discussion.topicPostId,
-		audioKey,
-		audioByteSize,
-		durationSeconds,
-	})
-
-	// a post deleted during the recording took the row with it, so its audio has nothing to belong to
-	if (!isPublished) {
-		await deleteStoredObjects([audioKey])
-	}
-}
-
-// write the speech to a temporary WAV, join it with the theme mix off, upload the MP3, and return its byte size
-async function encodeAndStoreDiscussion(wavBytes: Uint8Array, audioKey: string): Promise<number> {
-	const temporaryDirectory = await mkdtemp(join(tmpdir(), "discussion-"))
-	try {
-		// the one recording is the join's one chapter
-		const wavPath = join(temporaryDirectory, "0.wav")
-		const audioPath = join(temporaryDirectory, "audio.mp3")
-		await Bun.write(wavPath, wavBytes)
-		await joinChapterFiles({
-			temporaryDirectory,
-			chapterPaths: [wavPath],
-			audioPath,
-			themeClips: { intro: null, outro: null },
-			speechSeconds: 0,
-			hasThemeMix: false,
-		})
-
-		// store the finished file
-		await uploadPodcastEpisodeFile({ key: audioKey, filePath: audioPath, contentType: "audio/mpeg" })
-		return Bun.file(audioPath).size
-	} finally {
-		await rm(temporaryDirectory, { recursive: true, force: true })
-	}
-}
-
-// the stored audio of a discussion to publish: its row, its post, its key, its byte size, and its length
-type PublishTopicPostDiscussionOptions = {
-	discussionId: string
-	topicPostId: string
-	audioKey: string
-	audioByteSize: number
-	durationSeconds: number
-}
-
-// publish the row, and schedule the audio of the post's earlier published discussions for deletion. returns whether
-// the row was still there to publish
-async function publishTopicPostDiscussion({
-	discussionId,
-	topicPostId,
-	audioKey,
-	audioByteSize,
-	durationSeconds,
-}: PublishTopicPostDiscussionOptions): Promise<boolean> {
-	return db.transaction(async (transaction) => {
-		// the row publishes only while it is still recording
-		const publishedRows = await transaction
-			.update(topicPostDiscussions)
-			.set({ status: "published", audioKey, audioByteSize, durationSeconds, publishedAt: new Date() })
-			.where(and(eq(topicPostDiscussions.id, discussionId), eq(topicPostDiscussions.status, "recording")))
-			.returning({ id: topicPostDiscussions.id })
-		if (publishedRows.length === 0) {
-			return false
-		}
-
-		// the earlier discussions keep their rows, which the month's spend sums, and lose their audio
-		const replacedRows = await transaction
-			.update(topicPostDiscussions)
-			.set({ audioKey: null, audioByteSize: null })
-			.where(
-				and(
-					eq(topicPostDiscussions.topicPostId, topicPostId),
-					ne(topicPostDiscussions.id, discussionId),
-					isNotNull(topicPostDiscussions.audioKey),
-				),
-			)
-			.returning({ id: topicPostDiscussions.id })
-		await recordPendingObjectDeletions({
-			handle: transaction,
-			objectKeys: replacedRows.map((replacedRow) => toTopicPostDiscussionAudioKey(topicPostId, replacedRow.id)),
-			nextTryAt: new Date(),
-		})
-		return true
-	})
-}
-
-/**
- * Closes a recording discussion as failed with its reason. A row that already published, or is gone, stays as it is.
+ * Closes a recording discussion as failed with its reason, reports it, and deletes the speech that an attempt stored.
+ * A row that already published, or is gone, stays as it is.
  */
 export async function failTopicPostDiscussion(discussionId: string, reason: string): Promise<void> {
-	await db
+	// the row closes only while it is still recording
+	const [failedRow] = await db
 		.update(topicPostDiscussions)
 		.set({ status: "failed", error: reason })
 		.where(and(eq(topicPostDiscussions.id, discussionId), eq(topicPostDiscussions.status, "recording")))
+		.returning({ topicPostId: topicPostDiscussions.topicPostId })
+	if (!failedRow) {
+		return
+	}
+
+	// the post keeps its earlier discussion and nobody is told, so the failure is reported
+	reportError(new Error("a topic post discussion failed to record"), "podcast-episode", {
+		discussionId,
+		reason: reason.slice(0, 200),
+	})
+
+	// a failed recording is never encoded, so its stored speech goes
+	await deleteStoredObjects([toTopicPostDiscussionSpeechKey(failedRow.topicPostId, discussionId)])
 }

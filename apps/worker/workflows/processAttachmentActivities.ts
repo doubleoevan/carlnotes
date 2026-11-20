@@ -16,7 +16,7 @@ import {
 } from "@carlnotes/pipeline/attachExtraction"
 import { toDataUrl } from "@carlnotes/server/dataUrl"
 import { ApplicationFailure } from "@temporalio/activity"
-import { eq } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 
 // how long one attempt may take to read and extract a file, waiting for a child process included. it is under the
 // five minutes the workflow gives each attempt, so a child process never outlives its attempt
@@ -112,21 +112,22 @@ async function markAttachmentReady(
 		.where(eq(attachments.id, attachmentId))
 }
 
-// mark an attachment failed with the reason and delete its stored object
-export async function failAttachment(attachmentId: string, message: string): Promise<void> {
+// mark an attachment failed with the reason and delete its stored object. the workflow fails its attachment whatever
+// its status, and the reaper fails one only while it is still pending, so a row that finished meanwhile keeps its file
+export async function failAttachment(attachmentId: string, message: string, isPendingOnly = false): Promise<void> {
 	// record the failure and the object's key as pending in one transaction
 	const objectKey = await db.transaction(async (transaction) => {
-		// the attachment's key, and the failure on its row
+		// the failure on the attachment's row, which returns its key
+		const isFailable = isPendingOnly
+			? and(eq(attachments.id, attachmentId), eq(attachments.status, "pending"))
+			: eq(attachments.id, attachmentId)
 		const [attachment] = await transaction
-			.select({ objectKey: attachments.objectKey })
-			.from(attachments)
-			.where(eq(attachments.id, attachmentId))
-		await transaction
 			.update(attachments)
 			.set({ status: "failed", error: message })
-			.where(eq(attachments.id, attachmentId))
+			.where(isFailable)
+			.returning({ objectKey: attachments.objectKey })
 
-		// the key as pending, if the attachment exists
+		// the key as pending, if a row was failed
 		if (attachment) {
 			await recordPendingObjectDeletions({ handle: transaction, objectKeys: [attachment.objectKey] })
 		}

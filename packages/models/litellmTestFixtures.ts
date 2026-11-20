@@ -1,6 +1,6 @@
-// the LiteLLM test fixtures: the stub proxy, the connection pool stub that keeps the call order, the user row, and the
+// the LiteLLM test fixtures: the stub proxies, the connection pool stub that keeps the call order, the user row, and the
 // setup and restore that each LiteLLM test file runs around every test
-import { mock } from "bun:test"
+import { type Mock, mock } from "bun:test"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
@@ -67,6 +67,21 @@ export function stubProxy(toResponse: (path: string) => Response): ProxyRequest[
 export function stubFailingProxy(): ProxyRequest[] {
 	quietErrorReports()
 	return stubProxy(() => new Response("proxy error", { status: 500 }))
+}
+
+/**
+ * Sets the proxy settings that a budget read needs, swaps fetch for a proxy that cannot be reached, and returns the
+ * fetch mock.
+ */
+export function stubUnreachableProxy(): Mock<() => Promise<Response>> {
+	setUpLiteLLMTest()
+
+	// a fetch that throws an error for every request
+	const fetchMock = mock(async (): Promise<Response> => {
+		throw new TypeError("fetch failed")
+	})
+	globalThis.fetch = fetchMock as unknown as typeof fetch
+	return fetchMock
 }
 
 /**

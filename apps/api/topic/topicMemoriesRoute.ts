@@ -6,11 +6,10 @@ import {
 	topicMemoryFeedbackPayload,
 } from "@carlnotes/contracts/topicMemories"
 import { db } from "@carlnotes/db"
-import { canRateTopicMemories } from "@carlnotes/db/findingPermissions"
 import { topics } from "@carlnotes/db/schema/topics"
 import { loadMemberTopicMemoriesPage, loadTopicMemoriesPage } from "@carlnotes/db/topicMemories"
 import { saveTopicMemoryFeedback } from "@carlnotes/db/topicMemoryFeedback"
-import { gatedTopicColumns, toTopicRole } from "@carlnotes/db/topicPermissions"
+import { gatedTopicColumns } from "@carlnotes/db/topicPermissions"
 import { zValidator } from "@hono/zod-validator"
 import { eq } from "drizzle-orm"
 import { Hono } from "hono"
@@ -85,11 +84,11 @@ export async function readTopicMemories({
 	if (!topic) {
 		return null
 	}
-	const [result, role] = await Promise.all([
+	const [result, canRate] = await Promise.all([
 		loadTopicMemoriesPage({ topicId, userId, page, visibility: topic.visibility }),
-		toTopicRole(userId, topic),
+		isAllowed(userId, "topicMemory:rate", topic),
 	])
-	return { ...result, canRate: canRateTopicMemories(role) }
+	return { ...result, canRate }
 }
 
 // the app inherits its Topic entitlement

@@ -1,86 +1,94 @@
-// a user's update count, the sum the apps badge their icon with: unseen chat mentions, unread note edits and comments,
-// and the topic invitations waiting for an answer
-import { toNoteCount } from "@carlnotes/contracts/notes"
+// the update count that a push sets as the app icon badge: a user's unseen chat mentions, unread note edits and
+// comments, and the topic invitations waiting for an answer, counted for many users at once
 import { and, count, countDistinct, eq, inArray, isNull, or, type SQL } from "drizzle-orm"
 import { toNotUserBlockedAuthorFilter, toTeamHoldsTopicFilter, toUnreportedFilter } from "./contentFilters"
 import { db } from "./index"
-import { loadUserEmail, toPendingTopicInviteFilter } from "./inviteFilters"
-import { type BadgedPages, loadBadgedPages, loadPageNoteBadges } from "./noteBadges"
+import { JOINED_USER_INVITE_ADDRESS, toPendingTopicInviteFilter } from "./inviteFilters"
+import { loadNoteCounts } from "./noteBadges"
 import { chatRoomMentions, chatRoomMessages } from "./schema/chat"
 import { invites } from "./schema/invites"
+import { teamMembers } from "./schema/teams"
 import { topics } from "./schema/topics"
+import { users } from "./schema/users"
 
 /**
- * The filter for a user's unseen chat mentions, leaving out a mention by a person they blocked and one in a chat
- * message they reported.
+ * Returns the filter for the unseen chat mentions of one user, or of each of several users, leaving out a mention by a
+ * person the mentioned user blocked and one in a chat message that user reported.
  */
-export function toUnseenChatMentionFilter(userId: string): SQL | undefined {
+export function toUnseenChatMentionFilter(userIds: string | string[]): SQL | undefined {
+	// one user's blocks and reports are read by their id, and several users' by each mention's own user
+	const mentionedUserId = typeof userIds === "string" ? userIds : chatRoomMentions.userId
 	return and(
-		eq(chatRoomMentions.userId, userId),
+		typeof userIds === "string" ? eq(chatRoomMentions.userId, userIds) : inArray(chatRoomMentions.userId, userIds),
 		isNull(chatRoomMentions.seenAt),
-		toNotUserBlockedAuthorFilter(userId, chatRoomMessages.authorUserId),
-		toUnreportedFilter(userId, "chatMessage", chatRoomMessages.id),
+		toNotUserBlockedAuthorFilter(mentionedUserId, chatRoomMessages.authorUserId),
+		toUnreportedFilter(mentionedUserId, "chatMessage", chatRoomMessages.id),
 	)
 }
 
 /**
- * Loads a user's update count: the chat mentions in the chat rooms of their teams, the note badges, and the pending
- * topic invitations, one per topic.
+ * Loads the update count of each given user in three grouped reads: the unseen chat mentions in the chat rooms of their
+ * teams, their unread note edits and comments, and their pending topic invitations, one per topic. A user with nothing
+ * waiting counts 0.
  */
-export async function loadUpdateCount(userId: string): Promise<number> {
-	// load the user's pages once for the chat and note counts, then the three parts together, and sum them
-	const badgedPages = await loadBadgedPages(userId)
-	const [chatMentionCount, noteBadges, topicInviteCount] = await Promise.all([
-		loadChatMentionCount(userId, badgedPages),
-		loadPageNoteBadges(userId, badgedPages),
-		loadTopicInviteCount(userId),
-	])
-	return chatMentionCount + toNoteCount(noteBadges) + topicInviteCount
-}
-
-// the unseen chat mentions in a team's own chat room and in the chat rooms of the topics the user's teams hold
-async function loadChatMentionCount(userId: string, { topicIds, teamIds }: BadgedPages): Promise<number> {
-	// a user on no team has no chat rooms
-	if (teamIds.length === 0) {
-		return 0
+export async function loadUpdateCounts(userIds: string[]): Promise<Map<string, number>> {
+	// no user reads nothing
+	if (userIds.length === 0) {
+		return new Map()
 	}
 
-	// count the mentions in those teams' chat rooms: each team's own, and its room of each topic that the same team
-	// still owns or holds a share of
-	const chatRoomFilter = and(
-		inArray(chatRoomMessages.teamId, teamIds),
-		or(
-			isNull(chatRoomMessages.topicId),
-			topicIds.length > 0
-				? and(
-						inArray(chatRoomMessages.topicId, topicIds),
-						toTeamHoldsTopicFilter(chatRoomMessages.teamId, chatRoomMessages.topicId),
-					)
-				: undefined,
-		),
+	// the three parts together, each grouped by user
+	const [chatMentionCounts, noteCounts, topicInviteCounts] = await Promise.all([
+		loadChatMentionCounts(userIds),
+		loadNoteCounts(userIds),
+		loadTopicInviteCounts(userIds),
+	])
+
+	// sum each user's parts
+	const toUpdateCount = (userId: string): number =>
+		(chatMentionCounts.get(userId) ?? 0) + (noteCounts.get(userId) ?? 0) + (topicInviteCounts.get(userId) ?? 0)
+	return new Map(userIds.map((userId) => [userId, toUpdateCount(userId)]))
+}
+
+// each user's unseen chat mentions in the chat rooms of the teams they are an active member of: a team's own chat
+// room, and its room of each topic that the same team still owns or holds a share of
+async function loadChatMentionCounts(userIds: string[]): Promise<Map<string, number>> {
+	// a mention counts only in a chat room of a team that its user is still an active member of
+	const isActiveMember = and(
+		eq(teamMembers.userId, chatRoomMentions.userId),
+		eq(teamMembers.teamId, chatRoomMessages.teamId),
+		eq(teamMembers.isActive, true),
 	)
-	const [chatMentionRow] = await db
-		.select({ chatMentionCount: count() })
+	const chatRoomFilter = or(
+		isNull(chatRoomMessages.topicId),
+		toTeamHoldsTopicFilter(chatRoomMessages.teamId, chatRoomMessages.topicId),
+	)
+
+	// count the mentions by their user
+	const chatMentionRows = await db
+		.select({ userId: chatRoomMentions.userId, chatMentionCount: count() })
 		.from(chatRoomMentions)
 		.innerJoin(chatRoomMessages, eq(chatRoomMentions.messageId, chatRoomMessages.id))
-		.where(and(toUnseenChatMentionFilter(userId), chatRoomFilter))
-	return chatMentionRow?.chatMentionCount ?? 0
+		.innerJoin(teamMembers, isActiveMember)
+		.where(and(toUnseenChatMentionFilter(userIds), chatRoomFilter))
+		.groupBy(chatRoomMentions.userId)
+
+	// each user's count under their id
+	return new Map(chatMentionRows.map((chatMentionRow) => [chatMentionRow.userId, chatMentionRow.chatMentionCount]))
 }
 
-// the topics with an invitation waiting for the user's answer. an email and a username invitation to one topic count
-// once, as the Activity page shows one row
-async function loadTopicInviteCount(userId: string): Promise<number> {
-	// a missing user has no invitations
-	const userEmail = await loadUserEmail(userId)
-	if (!userEmail) {
-		return 0
-	}
-
-	// count each topic with a pending invitation once
-	const [topicInviteRow] = await db
-		.select({ topicInviteCount: countDistinct(invites.topicId) })
+// each user's topics with an invitation waiting for their answer. an email and a username invitation to one topic
+// count once, as the Activity page shows one row
+async function loadTopicInviteCounts(userIds: string[]): Promise<Map<string, number>> {
+	// join each waiting invitation to the user it addresses, and count that user's topics once each
+	const topicInviteRows = await db
+		.select({ userId: users.id, topicInviteCount: countDistinct(invites.topicId) })
 		.from(invites)
 		.innerJoin(topics, eq(topics.id, invites.topicId))
-		.where(toPendingTopicInviteFilter({ userId, ...userEmail }))
-	return topicInviteRow?.topicInviteCount ?? 0
+		.innerJoin(users, inArray(users.id, userIds))
+		.where(toPendingTopicInviteFilter(JOINED_USER_INVITE_ADDRESS))
+		.groupBy(users.id)
+
+	// each user's count under their id
+	return new Map(topicInviteRows.map((topicInviteRow) => [topicInviteRow.userId, topicInviteRow.topicInviteCount]))
 }

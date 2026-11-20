@@ -1,13 +1,9 @@
 // the unpaid stages that decide: the Resources worth scoring, the topic context they are measured against, and the
 // relevance gate over their embeddings
 
-import {
-	AUTOMATIC_PERSONAL_SOURCE_SCORE_BONUS,
-	PERSONAL_SOURCE_SCORE_BONUS,
-	type PersonalSourceScoreBonus,
-} from "@carlnotes/contracts/sourceScoring"
+import type { PersonalSourceScoreBonus } from "@carlnotes/contracts/sourceScoring"
 import { db } from "@carlnotes/db"
-import { EMBED_MODEL_NAME, findings, resources } from "@carlnotes/db/schema/scans"
+import { EMBED_MODEL_NAME, filteredFindings, findings, resources } from "@carlnotes/db/schema/scans"
 import { sources } from "@carlnotes/db/schema/topics"
 import {
 	type Budget,
@@ -24,6 +20,8 @@ import { cosineSimilarity } from "ai"
 import { and, eq, inArray, notInArray, or, sql } from "drizzle-orm"
 import type { NewResource } from "../ingest/ingester"
 import { toCanonicalUrl } from "../ingest/normalize"
+import { loadFilteredResources, toCurrentFilteredFindingFilter, toRequiredBonusSql } from "./filteredFindings"
+import { loadFilteredResourcesInsideLimit } from "./maxTopicFindings"
 import type { TopicContext } from "./topicContext"
 import { type ResourceOutcome, type ReviewOutcome, trackOutcomes } from "./track"
 
@@ -50,7 +48,10 @@ const EMBED_BATCH_SIZE = 100
 
 /**
  * The stored Resource rows this Scan discovered that are worth scoring. A Resource already scored for this Topic is excluded,
- * so a re-scan never pays to score the same article twice. The pages a url Source names are the exception. its content is pulled for every Scan.
+ * so a re-scan never pays to score the same article twice, and so is a page whose Finding the Topic's limit removed, while
+ * its filtered finding still holds. A page that a url Source names is the exception. Its content is pulled for every Scan.
+ * A page with a current filtered finding that ranks inside the Topic's limit among its Findings is worth scoring again
+ * too, which fills an open place.
  */
 export async function loadResourcesToReview({
 	topicId,
@@ -59,7 +60,7 @@ export async function loadResourcesToReview({
 	personalSourceScoreBonuses = new Map(),
 }: {
 	topicId: string
-	discoveredResources: NewResource[]
+	discoveredResources: Pick<NewResource, "url">[]
 	topicContextHash: string
 	personalSourceScoreBonuses?: ReadonlyMap<string, PersonalSourceScoreBonus>
 }): Promise<Resource[]> {
@@ -70,13 +71,8 @@ export async function loadResourcesToReview({
 	const urlSourcePageUrls = await loadUrlSourcePageUrls(topicId)
 
 	// a stronger personal contribution earns a fresh review even when content and context match
-	const fullBonusUrls = [...personalSourceScoreBonuses]
-		.filter(([, bonus]) => bonus === PERSONAL_SOURCE_SCORE_BONUS)
-		.map(([url]) => url)
-	const halfBonusUrls = [...personalSourceScoreBonuses]
-		.filter(([, bonus]) => bonus === AUTOMATIC_PERSONAL_SOURCE_SCORE_BONUS)
-		.map(([url]) => url)
-	const requiredBonus = sql`case when ${inArray(resources.url, fullBonusUrls)} then ${PERSONAL_SOURCE_SCORE_BONUS}::real when ${inArray(resources.url, halfBonusUrls)} then ${AUTOMATIC_PERSONAL_SOURCE_SCORE_BONUS}::real else 0::real end`
+	const requiredBonus = toRequiredBonusSql(personalSourceScoreBonuses)
+	const storedReviewMatch = { topicId, topicContextHash, requiredBonus }
 
 	// the Resources already reviewed against this context and content, and the Resources rated thumbs down.
 	// a Resource rated thumbs down never scores again
@@ -98,9 +94,19 @@ export async function loadResourcesToReview({
 			),
 		)
 
-	// a Resource is worth scoring when no Finding has reviewed it against this context and content.
-	// a url Source's own page is re-read every Scan, whatever it scored last time
-	const needsScoring = or(notInArray(resources.id, reviewedResourceIds), inArray(resources.url, urlSourcePageUrls))
+	// the Resources whose Finding the Topic's limit removed, while their filtered findings still hold
+	const filteredResourceIds = db
+		.select({ id: filteredFindings.resourceId })
+		.from(filteredFindings)
+		.innerJoin(resources, eq(filteredFindings.resourceId, resources.id))
+		.where(toCurrentFilteredFindingFilter(storedReviewMatch))
+
+	// a Resource is worth scoring when no Finding has reviewed it against this context and content, and no filtered
+	// finding holds for it. a url Source's own page is re-read every Scan, whatever it scored last time
+	const needsScoring = or(
+		and(notInArray(resources.id, reviewedResourceIds), notInArray(resources.id, filteredResourceIds)),
+		inArray(resources.url, urlSourcePageUrls),
+	)
 
 	// the Resources this Scan may score: the ones it discovered, plus every Resource the Topic already
 	// holds a Finding for, since a bookmarked or rated Finding outlives the feed it came from
@@ -110,8 +116,19 @@ export async function loadResourcesToReview({
 			? or(inArray(resources.url, urls), inArray(resources.id, topicResourceIds))
 			: inArray(resources.id, topicResourceIds)
 
-	// the rows worth paying to score
-	return db.select().from(resources).where(and(isTopicResource, needsScoring))
+	// the rows worth paying to score, and the filtered pages that rank inside the Topic's limit, which fill its open places
+	const [resourcesToScore, filteredResources] = await Promise.all([
+		db.select().from(resources).where(and(isTopicResource, needsScoring)),
+		loadFilteredResources(urls, storedReviewMatch),
+	])
+	const filteredResourcesInsideLimit = await loadFilteredResourcesInsideLimit(topicId, filteredResources)
+
+	// a url Source's own page with a filtered row is already among the rows
+	const resourceIdsToScore = new Set(resourcesToScore.map((resource) => resource.id))
+	return [
+		...resourcesToScore,
+		...filteredResourcesInsideLimit.filter((resource) => !resourceIdsToScore.has(resource.id)),
+	]
 }
 
 /**

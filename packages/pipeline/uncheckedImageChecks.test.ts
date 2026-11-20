@@ -5,10 +5,10 @@ import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import * as avatars from "@carlnotes/db/avatars"
 import { restoreConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as sessions from "@carlnotes/db/sessions"
-import * as temporalClient from "./temporalClient"
 import { toTopicImageObjectKeys } from "./topicImages/topicImageFiles"
 import * as topicImageRenders from "./topicImages/topicImageRenders"
 import { toTopicVideoImageObjectKeys } from "./topicVideo/topicVideoImage"
+import * as topicVideoWorkflowClient from "./topicVideo/topicVideoWorkflowClient"
 import { checkUncheckedImages } from "./uncheckedImageChecks"
 import {
 	CLEAN,
@@ -169,7 +169,7 @@ test("a clean published image keeps the topic's image and drops its unchecked im
 		CLEAN,
 	)
 	const replaceTopicImageSpy = spyOn(topicImageRenders, "replaceTopicImage").mockResolvedValue(undefined)
-	const startRebuildSpy = spyOn(temporalClient, "startTopicVideoRebuild").mockResolvedValue(undefined)
+	const startRebuildSpy = spyOn(topicVideoWorkflowClient, "startTopicVideoRebuild").mockResolvedValue(undefined)
 	await checkUncheckedImages()
 	expect(toUncheckedImageDeletes(sentQueries)).toHaveLength(1)
 	expect(replaceTopicImageSpy).not.toHaveBeenCalled()
@@ -243,7 +243,7 @@ test("a flagged published image that was replaced since is only dropped", async 
 // an unchecked film image stores its file alone, so a check that still cannot run starts no rebuild
 test("an unchecked film image whose check could not run stays unchecked and starts no rebuild", async () => {
 	const { sentQueries } = stubUncheckedImageCheck({ uncheckedImageRows: [toUncheckedTopicVideoImageRow()] }, FAILED)
-	const rebuildSpy = spyOn(temporalClient, "startTopicVideoRebuild").mockResolvedValue(undefined)
+	const rebuildSpy = spyOn(topicVideoWorkflowClient, "startTopicVideoRebuild").mockResolvedValue(undefined)
 	expect(await checkUncheckedImages()).toEqual({ publishedCount: 0, deletedCount: 0, isCheckUnavailable: true })
 	expect(rebuildSpy).not.toHaveBeenCalled()
 	expect(sentQueries.some(({ text }) => text.startsWith('update "topic_videos"'))).toBe(false)
@@ -253,7 +253,7 @@ test("an unchecked film image whose check could not run stays unchecked and star
 // an unchecked film image that passes becomes the film's image, which rebuilds the intro and the sign-off
 test("a clean unchecked film image becomes the film's image and starts the rebuild", async () => {
 	const { sentQueries } = stubUncheckedImageCheck({ uncheckedImageRows: [toUncheckedTopicVideoImageRow()] }, CLEAN)
-	const rebuildSpy = spyOn(temporalClient, "startTopicVideoRebuild").mockResolvedValue(undefined)
+	const rebuildSpy = spyOn(topicVideoWorkflowClient, "startTopicVideoRebuild").mockResolvedValue(undefined)
 	expect(await checkUncheckedImages()).toEqual({ publishedCount: 1, deletedCount: 0, isCheckUnavailable: false })
 
 	// the film's row names the upload, the rebuild starts for its podcast episode, and the unchecked image goes
@@ -269,7 +269,7 @@ test("a flagged unchecked film image is deleted, and the film is neither written
 		{ uncheckedImageRows: [toUncheckedTopicVideoImageRow()] },
 		FLAGGED,
 	)
-	const rebuildSpy = spyOn(temporalClient, "startTopicVideoRebuild").mockResolvedValue(undefined)
+	const rebuildSpy = spyOn(topicVideoWorkflowClient, "startTopicVideoRebuild").mockResolvedValue(undefined)
 	expect(await checkUncheckedImages()).toEqual({ publishedCount: 0, deletedCount: 1, isCheckUnavailable: false })
 
 	// the film's row stays, no rebuild starts, and the unchecked image's two jpegs are recorded as pending, then deleted

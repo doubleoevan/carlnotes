@@ -14,11 +14,17 @@ import { reportError } from "@carlnotes/server/monitoring"
 import { runWithRetries } from "@carlnotes/server/retry"
 import { and, eq, isNull, sql } from "drizzle-orm"
 import { loadPodcastEpisodeImageSceneInput, purgePublicImageFiles } from "../podcast/podcastEpisodeImageRenders"
-import { startTopicVideoRebuild } from "../temporalClient"
-import { renderTopicImageOriginal, TopicImageRenderFailure } from "../topicImages/renderTopicImageOriginal"
+import {
+	deleteDrawnImage,
+	renderTopicImageOriginal,
+	TopicImageRenderFailure,
+	toDrawnImageKey,
+} from "../topicImages/renderTopicImageOriginal"
 import { type TopicImageFormat, type TopicImageOriginal, toTopicImageHash } from "../topicImages/topicImageFiles"
 import { recordReplacedImageDeletions, succeedTopicImageRender } from "../topicImages/topicImageRenders"
 import { type TopicImageSceneInput, writeTopicImageScene } from "../topicImages/writeTopicImageScene"
+import { recordPlatformTopicVideoSpend } from "./topicVideoRows"
+import { startTopicVideoRebuild } from "./topicVideoWorkflowClient"
 import { VIDEO_HEIGHT, VIDEO_WIDTH } from "./videoFrames"
 
 // the format of a chapter's generated image: the film house style, generated wide, at the film's frame size
@@ -72,15 +78,24 @@ export async function generateTopicVideoImage({
 	}
 
 	// the original from a scene of the podcast episode's own words, on the owner's key or the master key for the
-	// platform, on the model that generates at the film image's size
+	// platform, on the model that generates at the film image's size. the drawn bytes are kept under the film's key,
+	// so a render's next attempt after a failed store draws nothing
 	const litellmApiKey = isPlatformBilled ? undefined : await loadOrProvisionUserLiteLLMKey(topicVideo.ownerId)
 	const model = topicImageRegenerateModel()
-	const original = await generateTopicVideoImageOriginal({ sceneInput, model, litellmApiKey })
+	const drawnImageKey = toDrawnImageKey("topic-video", podcastEpisodeId)
+	const original = await generateTopicVideoImageOriginal({ sceneInput, model, litellmApiKey, drawnImageKey })
 
 	// the files, then the image's hash on the film row with the cost. a film that got its image meanwhile keeps it
 	const imageHash = await storeTopicVideoImage(podcastEpisodeId, original)
+	// the platform's image is a row of its own, and the film row's cost takes an owner's image alone
 	const { drawSize } = TOPIC_VIDEO_IMAGE_FORMAT
-	const imageCostDollars = isPlatformBilled ? 0 : topicImageCostDollars(model, drawSize)
+	const dollars = topicImageCostDollars(model, drawSize)
+	if (isPlatformBilled) {
+		await recordPlatformTopicVideoSpend({ podcastEpisodeId, kind: "topicVideoImage", dollars })
+	}
+
+	// the image's hash on the film row, with an owner's cost. a film that got its image meanwhile keeps it
+	const imageCostDollars = isPlatformBilled ? 0 : dollars
 	const updatedRows = await db
 		.update(topicVideos)
 		.set({
@@ -91,7 +106,8 @@ export async function generateTopicVideoImage({
 		.where(and(eq(topicVideos.podcastEpisodeId, podcastEpisodeId), isNull(topicVideos.imageHash)))
 		.returning({ id: topicVideos.id })
 
-	// no row changed, so this image generation's files go
+	// the film has its image either way, so the kept bytes go. no row changed, so this image generation's files go too
+	await deleteDrawnImage(drawnImageKey)
 	if (updatedRows.length === 0) {
 		await deleteStoredObjects(toTopicVideoImageObjectKeys(podcastEpisodeId, imageHash))
 		return null
@@ -100,14 +116,15 @@ export async function generateTopicVideoImage({
 }
 
 // what one image generation reads: the scene's words, the framing its scene takes, which is the film image's if none is
-// given, the format, which is the film image's if none is given, the model, and the key it bills, or the master key if
-// no key is given
+// given, the format, which is the film image's if none is given, the model, the key it bills, or the master key if
+// no key is given, and the key its drawn bytes are kept under, if a later attempt should draw nothing
 type GenerateImageOriginalOptions = {
 	sceneInput: TopicImageSceneInput
 	framing?: string
 	format?: TopicImageFormat
 	model: string
 	litellmApiKey?: string
+	drawnImageKey?: string
 }
 
 /**
@@ -132,9 +149,10 @@ async function generateImageOriginal({
 	format = TOPIC_VIDEO_IMAGE_FORMAT,
 	model,
 	litellmApiKey,
+	drawnImageKey,
 }: GenerateImageOriginalOptions): Promise<TopicImageOriginal> {
 	const scene = await writeTopicImageScene({ ...sceneInput, framing, litellmApiKey })
-	return renderTopicImageOriginal({ scene, isHouseStyle: true, model, format, litellmApiKey })
+	return renderTopicImageOriginal({ scene, isHouseStyle: true, model, format, litellmApiKey, drawnImageKey })
 }
 
 /**

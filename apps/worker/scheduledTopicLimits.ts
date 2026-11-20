@@ -2,11 +2,12 @@
 // Topics that run weekly past the daily scans cutoff, the owners whose key budget is spent, and the free owners past the
 // scheduled scans cutoff
 import { isDailyFrequency } from "@carlnotes/contracts/enums"
-import { HOUR_MS, toUtcMonth } from "@carlnotes/contracts/time"
+import { HOUR_MS, MINUTE_MS, toUtcMonth } from "@carlnotes/contracts/time"
 import { db } from "@carlnotes/db"
 import { type DailySpendCutoffState, isDailySpendCutoffPassed } from "@carlnotes/db/dailySpendCutoffs"
 import { isMonthlyBudgetCutoffPassed } from "@carlnotes/db/monthlyBudgetCutoffs"
-import { dailyTopicIdsWithinLimit, toPlanUserIdQuery } from "@carlnotes/db/quotas"
+import { dailyTopicIdsWithinLimit } from "@carlnotes/db/quotas"
+import { toPlanUserIdQuery } from "@carlnotes/db/recordedSpend"
 import { cacheJson } from "@carlnotes/db/redis"
 import { runWithRequestMemo } from "@carlnotes/db/requestMemo"
 import { scans } from "@carlnotes/db/schema/scans"
@@ -15,8 +16,8 @@ import { isUserLiteLLMKeyBudgetExhausted } from "@carlnotes/models/litellm"
 import { runWithConcurrency } from "@carlnotes/server/concurrency"
 import { reportError } from "@carlnotes/server/monitoring"
 import { and, eq, gte, inArray, sql } from "drizzle-orm"
-import type { StartScheduledTopicScansOptions, Topic } from "./schedule"
 import { frequencyWindowMs } from "./scheduledTopicFilter"
+import type { StartScheduledTopicPageOptions, Topic } from "./scheduledTopicScans"
 
 // how many owners' daily topic allowances the sweep reads at once, and how many owners' key budgets or daily scans
 // cutoffs
@@ -27,13 +28,15 @@ const OWNER_BUDGET_READ_CONCURRENCY = 8
 // once an hour instead of on every sweep
 const DAILY_SCANS_CUTOFF_TTL_MS = HOUR_MS
 
+// how long an owner's key budget result stays in Redis, so an owner whose Topics are on several of a sweep's pages,
+// or in a sweep that follows within the minute, has the proxy asked once
+const KEY_BUDGET_TTL_MS = MINUTE_MS
+
 // the daily Topics that each owner's plan still runs, the daily Topics that run weekly and scanned in the past seven
 // days, and the owners whose key budget is spent
-export type ScheduledTopicLimits = Required<
-	Pick<
-		StartScheduledTopicScansOptions,
-		"dailyTopicIdsByOwner" | "dailyTopicOnWeeklyScanIds" | "budgetExhaustedOwnerIds"
-	>
+export type ScheduledTopicLimits = Pick<
+	StartScheduledTopicPageOptions,
+	"dailyTopicIdsByOwner" | "dailyTopicOnWeeklyScanIds" | "budgetExhaustedOwnerIds"
 >
 
 /**
@@ -75,8 +78,8 @@ async function loadDailyTopicIdsByOwner(scheduledTopics: Topic[]): Promise<Map<s
 }
 
 /**
- * Returns the ids of the scheduled Topics' owners whose key budget is spent, reading each owner's budget once.
- * An owner who has no key, or whose budget read fails, is left out.
+ * Returns the ids of the scheduled Topics' owners whose key budget is spent, reading each owner's budget once, and
+ * from Redis if it was read in the past minute. An owner who has no key, or whose budget read fails, is left out.
  */
 export async function loadBudgetExhaustedOwnerIds(scheduledTopics: Pick<Topic, "ownerId">[]): Promise<Set<string>> {
 	// read each distinct owner's budget.
@@ -84,7 +87,16 @@ export async function loadBudgetExhaustedOwnerIds(scheduledTopics: Pick<Topic, "
 	return loadMatchingOwnerIds({
 		ownerIds: [...new Set(scheduledTopics.map((topic) => topic.ownerId))],
 		readDescription: "the key budget",
-		isOwnerMatching: isUserLiteLLMKeyBudgetExhausted,
+		isOwnerMatching: isKeyBudgetExhausted,
+	})
+}
+
+// whether the owner's key budget is spent, cached in Redis for a minute under the owner
+function isKeyBudgetExhausted(ownerId: string): Promise<boolean> {
+	return cacheJson({
+		key: `key-budget-exhausted:${ownerId}`,
+		ttlMs: KEY_BUDGET_TTL_MS,
+		load: () => isUserLiteLLMKeyBudgetExhausted(ownerId),
 	})
 }
 

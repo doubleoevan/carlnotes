@@ -2,7 +2,7 @@
 // the page's access check before any count without any spend sum, and the spoken events limiter
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { VOICE_RECORDING_MAX_SECONDS } from "@carlnotes/contracts/payloads"
-import * as quotas from "@carlnotes/db/quotas"
+import * as recordedSpend from "@carlnotes/db/recordedSpend"
 import { restoreRedisClient } from "@carlnotes/db/redisClientStub"
 import * as analytics from "@carlnotes/server/analytics"
 import * as authorization from "../authorization"
@@ -126,7 +126,7 @@ test("a spoken event checks the page's access and never runs the spend sums", as
 	const trackEventSpy = spyOn(analytics, "trackEvent").mockImplementation(() => {})
 	const authorizeVoiceChatPageSpy = spyOn(voiceAuthorization, "authorizeVoiceChatPage")
 	const isMonthlySpendExhaustedSpy = spyOn(authorization, "isMonthlySpendExhausted")
-	const monthlySpendDollarsSpy = spyOn(quotas, "monthlySpendDollars")
+	const monthlySpendDollarsSpy = spyOn(recordedSpend, "monthlySpendDollars")
 	const loadChatRoomSpy = spyOn(roomAccess, "loadChatRoom").mockResolvedValue(null)
 	const signedInApp = toSignedInVoiceApp()
 	const playTapRequest = toJsonRequest({ page: ROOM_PAGE, event: { kind: "answer_played" } })

@@ -2,13 +2,13 @@
 import { extname } from "node:path"
 import { oauthProviderAuthServerMetadata } from "@better-auth/oauth-provider"
 import { withTimeLimit } from "@carlnotes/contracts/time"
-import { db, readPoolGauges, sizeConnectionPool } from "@carlnotes/db"
+import { connectionPool, db, readPoolGauges, sizeConnectionPool } from "@carlnotes/db"
 import { PersonalSourcesConversionError } from "@carlnotes/db/personalSourcesLocks"
-import { readRedisExtraGauges } from "@carlnotes/db/redisGauges"
 import { runWithRequestMemo } from "@carlnotes/db/requestMemo"
 import { FetchedSourceLimitError } from "@carlnotes/db/topicSourceCapacity"
-import { startTelemetry } from "@carlnotes/models/telemetry"
-import { reportError, startMonitoring } from "@carlnotes/server/monitoring"
+import { shutdownTelemetry, startTelemetry } from "@carlnotes/models/telemetry"
+import { shutdownAnalytics } from "@carlnotes/server/analytics"
+import { reportError, shutdownMonitoring, startMonitoring } from "@carlnotes/server/monitoring"
 import { validatePersonalSourcesEmailSettings } from "@carlnotes/server/personalSourcesSettings"
 import { startRuntimeGauges } from "@carlnotes/server/runtimeGauges"
 import { sql } from "drizzle-orm"
@@ -17,6 +17,7 @@ import { Hono } from "hono"
 import { serveStatic } from "hono/bun"
 import { HTTPException } from "hono/http-exception"
 import { apiRoute } from "./api"
+import { readApiExtraGauges } from "./apiGauges"
 import { appVersionGate } from "./appVersionGate"
 import { auth } from "./auth"
 import { PROVIDER_PHOTO_ORIGINS } from "./avatars"
@@ -27,6 +28,7 @@ import { BLOG_INDEX_PATH, BLOG_PAGE_PATH, contentRoute } from "./content"
 import { FRAME_SOURCE_DIRECTIVE, toContentSecurityPolicy } from "./contentSecurityPolicy"
 import type { AppEnv } from "./currentUser"
 import { documentsRoute } from "./documents"
+import { drain, isDraining, readDrainSettings, rememberListeningServer } from "./drain"
 import {
 	IMMUTABLE_CACHE_CONTROL,
 	NO_STORE_CACHE_CONTROL,
@@ -39,6 +41,7 @@ import { validateMcpOrigin } from "./mcp/origins"
 import { mcpRoute } from "./mcp/server"
 import { resolveToolCaller } from "./mcp/toolCaller"
 import { nightshiftRoute } from "./nightshift"
+import { readApiProcessName } from "./processName"
 import { pageRenderRateLimiter, toolCallerRateLimiter } from "./rateLimit"
 import { RELEASE_PATH, RELEASES_PATH, releasesRoute } from "./releases"
 import { traceRequest } from "./requestTracing"
@@ -80,8 +83,11 @@ const API_PAGE_ROUTE_PATHS = [BLOG_INDEX_PATH, BLOG_PAGE_PATH, RELEASES_PATH, RE
 // the ui builds its typed api client from this definition
 export type AppType = typeof apiRoute
 
+// the name this process runs under: api for the app service, and web for the web service, which starts this same entry
+const processName = readApiProcessName()
+
 // start monitoring, then tracing for model calls, in that order so Langfuse keeps its own provider beside Sentry's.
-// then size the connection pool from the database
+// then size the connection pool from the database, at the one pool share an api or a web replica takes
 startMonitoring()
 startTelemetry()
 validatePersonalSourcesEmailSettings()
@@ -90,8 +96,9 @@ await sizeConnectionPool()
 // load the ui's server build before serving. a production boot that cannot load it exits here
 await importUiServerAtStartup()
 
-// log the process's connection pool, event loop delay, and Redis gauges once a minute
-startRuntimeGauges({ processName: "api", readPoolGauges, readExtraGauges: readRedisExtraGauges })
+// log the process's connection pool, event loop delay, Redis gauges, and page render counts once a minute, under its
+// own name
+startRuntimeGauges({ processName, readPoolGauges, readExtraGauges: readApiExtraGauges })
 
 // the hosts the Specials map loads its images from
 const GOOGLE_MAPS_IMAGE_ORIGINS =
@@ -145,8 +152,9 @@ const server = new Hono<AppEnv>()
 		checkTrustedProxies(context.req.raw)
 		await next()
 	})
-	// the platform health check. it sits ahead of the api tree, so it never runs the session lookup
-	.get("/api/health", (context) => context.json({ status: "ok" }))
+	// the platform health check. it sits ahead of the api tree, so it never runs the session lookup. its body names
+	// the process, which says whether the app service or the web service served a path
+	.get("/api/health", (context) => context.json({ status: "ok", process: processName }))
 	// the deep health check a monitor polls, with one trivial query and no session lookup either
 	.get("/api/health/deep", checkDatabaseHealth)
 	// the readiness check the platform polls to route traffic to a replica. it renders a page with no database
@@ -290,9 +298,13 @@ async function checkDatabaseHealth(context: Context): Promise<Response> {
 	return context.json({ status: "ok", databaseLatencyMs, pool: readPoolGauges() })
 }
 
-// respond 200 if the ui's server renders a page, or 503 with the reason. the response is never cached
+// respond 200 if the ui's server renders a page, or 503 with the reason. a draining replica responds 503 at once, so
+// the platform routes no new request to it. the response is never cached
 async function checkReadiness(context: Context): Promise<Response> {
 	context.header("Cache-Control", NO_STORE_CACHE_CONTROL)
+	if (isDraining()) {
+		return context.json({ status: "draining" }, 503)
+	}
 	const renderReadiness = await checkRenderReadiness()
 	return context.json(renderReadiness, renderReadiness.status === "ok" ? 200 : 503)
 }
@@ -330,6 +342,33 @@ function setBundleCacheControl(_path: string, context: Context): void {
 	}
 }
 
+// send the reports, events, and spans the process has buffered, then close the pool. each flush settles by itself, so
+// one that fails never keeps the others from sending
+async function flushProcess(): Promise<void> {
+	await Promise.allSettled([shutdownTelemetry(), shutdownAnalytics(), shutdownMonitoring()])
+	await connectionPool.end().catch(() => undefined)
+}
+
+// the platform stops a replica with SIGTERM on every deploy. drain it, so a request in flight finishes and a stream's
+// client reconnects elsewhere, then exit. the api and the web service both start this entry, and a test that imports
+// it installs no handler
+if (import.meta.main) {
+	process.once("SIGTERM", () => {
+		void drain({ ...readDrainSettings(), flush: flushProcess }).finally(() => process.exit(0))
+	})
+}
+
+// the server Bun passes with each request, as far as the entry reads it
+type BunServer = Parameters<typeof rememberListeningServer>[0]
+
 // Bun serves on the port in PORT, or on 3000 if PORT is unset, and rejects a body past the largest a route accepts.
-// in dev, vite forwards /api, /mcp, and the api's own pages and documents to port 3000
-export default { fetch: server.fetch, idleTimeout: 120, maxRequestBodySize: MAX_REQUEST_BODY_BYTES }
+// in dev, vite forwards /api, /mcp, and the api's own pages and documents to port 3000. each request names the server
+// that listens, which a drain stops
+export default {
+	fetch: (request: Request, bunServer?: BunServer): Response | Promise<Response> => {
+		rememberListeningServer(bunServer)
+		return server.fetch(request, bunServer)
+	},
+	idleTimeout: 120,
+	maxRequestBodySize: MAX_REQUEST_BODY_BYTES,
+}

@@ -1,4 +1,4 @@
-// Read Journal pages and ranked prompt context.
+// the Journal page reads, the topic memory feedback SQL, the grouping columns, and the active topic memory filter
 import {
 	TOPIC_MEMORY_CALENDAR_DATE_PATTERN,
 	TOPIC_MEMORY_INCOMPLETE_CONTEXT_PATTERN,
@@ -10,32 +10,54 @@ import {
 	toNamedTopicMemoryText,
 	toTopicMemoryPageNumber,
 } from "@carlnotes/contracts/topicMemories"
-import {
-	TOPIC_MEMORY_GROUP_CANDIDATE_LIMIT,
-	TOPIC_MEMORY_PROMPT_LIMIT,
-	toMostPreciseTopicMemoryDate,
-} from "@carlnotes/contracts/topicMemoryWork"
-import { and, cosineDistance, desc, eq, ne, or, type SQL, sql } from "drizzle-orm"
+import { TOPIC_MEMORY_GROUP_CANDIDATE_LIMIT, toMostPreciseTopicMemoryDate } from "@carlnotes/contracts/topicMemoryWork"
+import { and, eq, ne, or, type SQL, sql } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core"
 import { toActivatedScanFilter, toPlatformAdminFilter, toTopicRoleFilter } from "./contentFilters"
 import { db } from "./index"
 import { podcastEpisodes } from "./schema/podcast"
 import { scans } from "./schema/scans"
+import { teamMembers } from "./schema/teams"
 import { TOPIC_MEMORY_EMBEDDING_MODEL, topicMemories, topicMemoryFeedback } from "./schema/topicMemories"
 import { topics } from "./schema/topics"
 import { groupTopicMemories, preferTopicMemoryRepresentative } from "./topicMemoryGroups"
 import { gatedTopicColumns, toTopicAccessFilter } from "./topicPermissions"
 
-// the latest correction wins when several authorized raters have supplied notes
+// the rater leads the team that owns the rated Topic
+const raterLeadsOwningTeam = sql`exists (
+	select 1 from ${teamMembers} as rater_membership
+	where rater_membership.team_id = rated_topic.team_id
+	and rater_membership.user_id = ${topicMemoryFeedback.userId}
+	and rater_membership.is_active and rater_membership.role = 'leader'
+)`
+
+// the rated Topic's owner is an active member of that team
+const ownerIsOnOwningTeam = sql`exists (
+	select 1 from ${teamMembers} as owner_membership
+	where owner_membership.team_id = rated_topic.team_id
+	and owner_membership.user_id = rated_topic.owner_id and owner_membership.is_active
+)`
+
+// a rating counts only while its rater may still rate: the Topic's owner, or a leader of the owning team while the
+// owner is an active member of it. the SQL form of canRateTopicMemories
+export const topicMemoryRaterCanRate = sql<boolean>`exists (
+	select 1 from ${topics} as rated_topic
+	where rated_topic.id = ${topicMemories.topicId}
+	and (rated_topic.owner_id = ${topicMemoryFeedback.userId} or (${raterLeadsOwningTeam} and ${ownerIsOnOwningTeam}))
+)`
+
+// the latest correction wins if several raters have supplied notes
 export const topicMemoryCorrection = sql<string | null>`(
 	select ${topicMemoryFeedback.note} from ${topicMemoryFeedback}
 	where ${topicMemoryFeedback.topicMemoryId} = ${topicMemories.id}
 	and ${topicMemoryFeedback.rating} = 'down' and ${topicMemoryFeedback.note} is not null
+	and ${topicMemoryRaterCanRate}
 	order by ${topicMemoryFeedback.updatedAt} desc, ${topicMemoryFeedback.userId} limit 1
 )`
 
+// one rater's feedback as a prompt reads it, and how many a prompt keeps for one topic memory
 export type TopicMemoryPromptFeedback = { rating: "up" | "down"; note: string }
-const TOPIC_MEMORY_FEEDBACK_PER_PROMPT = 6
+export const TOPIC_MEMORY_FEEDBACK_PER_PROMPT = 6
 
 // both thumbs can attach material for Carl. keep the most recent bounded notes without identifying the raters
 export const topicMemoryPromptFeedback = sql<TopicMemoryPromptFeedback[]>`coalesce((
@@ -43,6 +65,7 @@ export const topicMemoryPromptFeedback = sql<TopicMemoryPromptFeedback[]>`coales
 		order by journal_feedback.updated_at desc, journal_feedback.user_id)
 	from (select rating, note, updated_at, user_id from ${topicMemoryFeedback}
 		where ${topicMemoryFeedback.topicMemoryId} = ${topicMemories.id} and ${topicMemoryFeedback.note} is not null
+		and ${topicMemoryRaterCanRate}
 		order by updated_at desc, user_id limit ${TOPIC_MEMORY_FEEDBACK_PER_PROMPT}) as journal_feedback
 ), '[]'::jsonb)`
 
@@ -50,15 +73,16 @@ export const topicMemoryPromptFeedback = sql<TopicMemoryPromptFeedback[]>`coales
 export const topicMemoryIsSaved = sql<boolean>`exists (
 	select 1 from ${topicMemoryFeedback}
 	where ${topicMemoryFeedback.topicMemoryId} = ${topicMemories.id} and ${topicMemoryFeedback.rating} = 'up'
+	and ${topicMemoryRaterCanRate}
 )`
 
-const feedbackPriority = sql`case when ${topicMemoryIsSaved} then 0 when ${topicMemoryCorrection} is not null then 1 else 2 end`
-
+// a Journal page before the caller's own canRate, and a row that the page groups
 type JournalPage = Omit<TopicMemoriesPage, "canRate">
 type JournalRow = Omit<TopicMemory, "firstScanAt" | "factDate"> & {
 	rank?: number
 	factDate: string | null
 	firstScanAt: Date
+	// the columns that group duplicate rows
 	subject: (typeof topicMemories.$inferSelect)["subject"]
 	claimType: (typeof topicMemories.$inferSelect)["claimType"]
 	value: (typeof topicMemories.$inferSelect)["value"]
@@ -172,7 +196,10 @@ function selectTopicMemoryRows(options: VisibleTopicMemoriesOptions) {
 		.orderBy(addedOrder)
 }
 
-/** Fetches vectors only for comparable rows in the bounded grouping buckets. */
+/**
+ * Fetches vectors only for comparable rows in the bounded grouping buckets. A row with no claim type or with another
+ * embedding model stands alone in groupTopicMemories, so its vector is never read.
+ */
 export function topicMemoryGroupingColumns() {
 	return {
 		subject: topicMemories.subject,
@@ -180,7 +207,9 @@ export function topicMemoryGroupingColumns() {
 		value: topicMemories.value,
 		embeddingModel: topicMemories.embeddingModel,
 		embedding: sql<number[] | null>`case when ${topicMemories.subject} is not null
+			and ${topicMemories.claimType} is not null
 			and ${topicMemories.value} is not null
+			and ${topicMemories.embeddingModel} = ${TOPIC_MEMORY_EMBEDDING_MODEL}
 			and count(*) over (partition by ${topicMemories.subject}, ${topicMemories.claimType}, ${topicMemories.value}) > 1
 			and row_number() over (partition by ${topicMemories.subject}, ${topicMemories.claimType}, ${topicMemories.value} order by ${topicMemories.id}) <= ${TOPIC_MEMORY_GROUP_CANDIDATE_LIMIT}
 			then ${topicMemories.embedding} end`
@@ -201,6 +230,7 @@ function toTopicMemoryPage(rows: JournalRow[], page: number): JournalPage {
 			if (!first) {
 				return []
 			}
+			// a page item has no grouping column
 			const {
 				subject: _subject,
 				claimType: _claimType,
@@ -214,7 +244,12 @@ function toTopicMemoryPage(rows: JournalRow[], page: number): JournalPage {
 			const text = toNamedTopicMemoryText(row.text, row.person) ?? row.text
 			// a newer statement with no date must not hide compatible evidence of the event day
 			const factDate = group.reduce((date, member) => toMostPreciseTopicMemoryDate(date, member.factDate), row.factDate)
-			return [{ ...row, text, factDate, firstScanAt: row.firstScanAt.toISOString() }]
+			// the caller's own rating and note come from the statement that they rated, with its id, so a newer
+			// statement of the fact never hides them and their next rating edits the same row. a correction on any
+			// statement marks the fact
+			const { id, rating, note } = group.find((member) => member.rating !== null) ?? first
+			const kind = group.some((member) => member.kind === "correction") ? "correction" : row.kind
+			return [{ ...row, id, rating, note, kind, text, factDate, firstScanAt: row.firstScanAt.toISOString() }]
 		}),
 		pageCount,
 	}
@@ -235,17 +270,35 @@ function selectVisibleTopicMemoryGroupRows(options: VisibleTopicMemoriesOptions)
 		.where(toVisibleTopicMemories(options))
 }
 
-export type VisibleTopicMemoryGroupRow = Awaited<ReturnType<typeof selectVisibleTopicMemoryGroupRows>>[number]
+type VisibleTopicMemoryGroupRow = Awaited<ReturnType<typeof selectVisibleTopicMemoryGroupRows>>[number]
 
-/** Projects authorized group inputs into the existing Topic Scan query. */
-export function toVisibleTopicMemoryGroupRows(options: VisibleTopicMemoriesOptions): SQL<VisibleTopicMemoryGroupRow[]> {
+// what a count of a Topic's Journal groups reads: how many visible rows can join no group, and the rows that can
+export type VisibleTopicMemoryGroups = { ungroupedCount: number; groupRows: VisibleTopicMemoryGroupRow[] }
+
+/**
+ * Projects the authorized inputs of a Journal group count into the existing Topic Scan query. A row with no vector
+ * read for it can join no group, so it is counted in SQL, and only the rows that share a subject, a claim type, and a
+ * value with another row are returned for grouping.
+ */
+export function toVisibleTopicMemoryGroups(options: VisibleTopicMemoriesOptions): SQL<VisibleTopicMemoryGroups> {
 	// decode only the candidate vectors rather than exposing any text or feedback
 	const rows = selectVisibleTopicMemoryGroupRows(options).as("visible_topic_memory_groups")
-	return sql<VisibleTopicMemoryGroupRow[]>`(select coalesce(json_agg(json_build_object(
+	const groupRow = sql`json_build_object(
 		'id', ${rows.id}, 'subject', ${rows.subject}, 'claimType', ${rows.claimType}, 'value', ${rows.value},
 		'factDate', ${rows.factDate}, 'embeddingModel', ${rows.embeddingModel},
 		'embedding', ${rows.embedding}::text::json
-	)), '[]'::json) from ${rows})`
+	)`
+	return sql<VisibleTopicMemoryGroups>`(select json_build_object(
+		'ungroupedCount', count(*) filter (where ${rows.embedding} is null),
+		'groupRows', coalesce(json_agg(${groupRow}) filter (where ${rows.embedding} is not null), '[]'::json)
+	) from ${rows})`
+}
+
+/**
+ * Returns how many groups a Topic's Journal shows the user whose grouping inputs these are.
+ */
+export function toTopicMemoryGroupCount(groups: VisibleTopicMemoryGroups | null | undefined): number {
+	return groups ? groups.ungroupedCount + groupTopicMemories(groups.groupRows).length : 0
 }
 
 function toVisibleTopicMemories({ topicId, userId, visibility }: VisibleTopicMemoriesOptions): SQL | undefined {
@@ -259,81 +312,6 @@ function toVisibleTopicMemories({ topicId, userId, visibility }: VisibleTopicMem
 			: undefined,
 		toActivatedScanFilter(userId),
 	)
-}
-
-/** Selects a bounded prompt slice. Cosine distance is exact over this Topic's active set. */
-export async function loadRankedTopicMemories({
-	topicId,
-	embeddings = [],
-	isPublicOnly,
-}: {
-	topicId: string
-	embeddings?: number[][]
-	isPublicOnly?: boolean
-}): Promise<
-	{
-		text: string
-		correction: string | null
-		factDate: string | null
-		feedback: TopicMemoryPromptFeedback[]
-		findingIds: string[]
-		lastSeenAt: Date
-	}[]
-> {
-	// the best match to any chapter leads within its feedback tier
-	const distances = embeddings.map((embedding) => cosineDistance(topicMemories.embedding, embedding))
-	const relevance =
-		distances.length > 0
-			? [
-					sql`case when ${topicMemories.embeddingModel} = ${TOPIC_MEMORY_EMBEDDING_MODEL}
-			then least(${sql.join(distances, sql`, `)}) end asc nulls last`,
-				]
-			: []
-	const publicOnly = isPublicOnly
-		? sql`exists (select 1 from ${topics} where ${topics.id} = ${topicMemories.topicId} and ${topics.visibility} = 'public')`
-		: undefined
-	const rows = await db
-		.select({
-			id: topicMemories.id,
-			text: topicMemories.text,
-			...topicMemoryGroupingColumns(),
-			correction: topicMemoryCorrection,
-			factDate: topicMemories.factDate,
-			person: topicMemories.person,
-			feedback: topicMemoryPromptFeedback.as("prompt_feedback"),
-			findingIds: sql<string[]>`${topicMemories.findingIds}[1:30]`,
-			lastSeenAt: scans.startedAt,
-		})
-		.from(topicMemories)
-		.innerJoin(scans, eq(scans.id, topicMemories.lastSeenScanId))
-		.where(and(toActiveTopicMemories(topicId), eq(topicMemories.needsReview, false), publicOnly))
-		.orderBy(
-			feedbackPriority,
-			...relevance,
-			desc(topicMemories.importance),
-			desc(topicMemories.updatedAt),
-			topicMemories.id,
-		)
-	// use the Journal grouping and retain each group's bounded feedback and source links
-	return groupTopicMemories(rows, preferTopicMemoryRepresentative)
-		.slice(0, TOPIC_MEMORY_PROMPT_LIMIT)
-		.flatMap((group) => {
-			const [first] = group
-			if (!first) {
-				return []
-			}
-			return [
-				{
-					text: toNamedTopicMemoryText(first.text, first.person) ?? first.text,
-					correction: first.correction,
-					factDate: first.factDate,
-					person: first.person,
-					lastSeenAt: first.lastSeenAt,
-					feedback: group.flatMap(({ feedback }) => feedback).slice(0, TOPIC_MEMORY_FEEDBACK_PER_PROMPT),
-					findingIds: [...new Set(group.flatMap(({ findingIds }) => findingIds))].slice(0, 30),
-				},
-			]
-		})
 }
 
 export function toActiveTopicMemories(topicId: string): SQL | undefined {

@@ -5,9 +5,10 @@
 import { join } from "node:path"
 import { reportError } from "@carlnotes/server/monitoring"
 import type { PictureAnimation } from "./pictureAnimation"
-import { encodeVideoShot, joinVideo, type VideoShotEncode, type VideoShotPicture, writeConcatList } from "./videoEncode"
+import { joinVideo, type VideoShotEncode, type VideoShotPicture, writeConcatList } from "./videoEncode"
 import { type LowerThirdText, loadPodcastCardStillPng, PODCAST_CARD_ZOOM_LIMIT, toLowerThirdPng } from "./videoFrames"
 import { HOT_TAKES_LOWER_THIRD_TEXT } from "./videoHotTakes"
+import { encodeVideoShots } from "./videoShotStore"
 import { toCaptionBreakFrames, toShotScreenFrameCount, toVideoShots, type VideoShot } from "./videoShots"
 import { LOWER_THIRD_OUT_SECONDS, toSegmentSeconds, VIDEO_FRAMES_PER_SECOND, type VideoSegment } from "./videoTimeline"
 
@@ -71,6 +72,8 @@ export async function renderVideoChaptersPart({
 		if (segment.kind === "chapter" && !chapter) {
 			throw new Error(`the film has no chapter at position ${segment.position}`)
 		}
+
+		// a chapter with a renderer of its own is rendered by it, as one file
 		if (segment.kind === "chapter" && chapter && renderChapter) {
 			shotPaths.push(await renderChapter(segment, chapter))
 			continue
@@ -247,7 +250,7 @@ type EncodeSegmentShotsOptions = {
 
 /**
  * Encodes a segment's shots one run each, each with the shot before it for its crossfade, and returns their files in
- * order.
+ * order. A render that keeps its shots downloads the ones an earlier attempt stored instead of encoding them.
  */
 export async function encodeSegmentShots({
 	shots,
@@ -262,16 +265,13 @@ export async function encodeSegmentShots({
 		toShotPicture({ shot, segmentStills, isLastShot: i === shots.length - 1 }),
 	)
 
-	// encode each shot in order
-	const shotPaths: string[] = []
-	for (const [i, shot] of shots.entries()) {
-		const shotPath = `${filePrefix}-shot-${i}.mp4`
-		const lowerThird = { lowerThirdPath, isLowerThirdShownThroughout }
-		await encodeVideoShot(toShotEncode({ shot, shotPictures, shotIndex: i, ...lowerThird, shotPath }), signal)
-		shotPaths.push(shotPath)
-	}
-
-	return shotPaths
+	// each shot's run, then the encodes in order
+	const lowerThird = { lowerThirdPath, isLowerThirdShownThroughout }
+	const shotEncodes = shots.map((shot, i) =>
+		toShotEncode({ shot, shotPictures, shotIndex: i, ...lowerThird, shotPath: `${filePrefix}-shot-${i}.mp4` }),
+	)
+	await encodeVideoShots(shotEncodes, signal)
+	return shotEncodes.map((shotEncode) => shotEncode.shotPath)
 }
 
 // a part's shots' files in order, the concat list to write, the part's file, and the signal that stops the join

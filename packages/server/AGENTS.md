@@ -17,41 +17,53 @@ built-in, or a server SDK, and the package every server package imports. `@carln
 deletion, or a visibility change, and the worker after a public topic's image changes. A missing zone id or token skips
 it, and a failed purge is reported and never fails the write.
 
-`monitoring.ts` starts Sentry in the api and the worker and defines what tracing reads and writes: the traces sampler, a
-request's transaction name and measurements, the stage and query spans, and the threshold warnings. The send-time redaction
-every outgoing event passes is `redactEvent` and `redactTransaction` in `monitoringRedaction.ts`. `reportError` sends one
-stage's one error ten times an hour and skips the rest, and the next hour's first report says how many were skipped.
-`exitOnFatalError` logs and reports an error that stops a process, waits for the report to send, and exits with code
-1. Every report is tagged with the release `toSentryRelease` reads, the deployed commit.
-`cronMonitoring.ts` sends a scheduled job's check-ins to its Sentry cron monitor: `startCronCheckIn` when the job
-starts and `finishCronCheckIn` with its result and duration.
-`runtimeGauges.ts` logs a long-running process's connection pool and event loop delay once a minute, reading the delay
-from the histogram in `eventLoopDelay.ts`. Each line's `instance` field names the replica by its host name, so the
-replicas' lines can be told apart. `analytics.ts` holds the PostHog clients: `trackEvent` for the user events keyed to
-a user, `trackBotEvent` for the bot events keyed to a bot's or an app's name, and `toBotCapture`; the event types are
-`@carlnotes/contracts/analyticsEvents`. `appUrl.ts` reads the app's base url from `BETTER_AUTH_URL`: `appUrl()` falls
-back to the local dev server, and `appBaseUrl()` is undefined if unset, for the emails and notifications that skip
-without a link. `envSettings.ts` reads a number that a setting holds: `toPositiveInteger` for a count or a duration,
-and `readDollarSetting` for an amount in dollars. `savedEnvSettings.ts` saves the environment settings a test changes
-and returns the call that puts them back, for every workspace's tests. `monitoringTestFixtures.ts` quiets the console
-and the error report for the api, worker, and database tests. `hmac.ts` signs a value with HMAC-SHA256 for the signup
-gate, the release webhook, the unsubscribe links, the podcast cover keys, and the viewer counts. `viewerElements.ts`
-turns a counted person into the element their count adds: `u:<userId>` for a user, and for a visitor a keyed hash of
-the address and the user agent through `hmac.ts`, never stored. `voiceChat.ts` reads the transcription
-model from `CHAT_TRANSCRIPTION_MODEL` and says whether voice chat is on, which needs that model and the podcast speech
-model. `podcastEpisodeSettings.ts` reads `PODCAST_SPEECH_MODEL`, which defaults to `gemini-3.8-flash-tts`, and Podcast
-Episodes are off if it is set empty. It also reads the film settings: `TOPIC_VIDEO_CONCURRENCY` and
-`TOPIC_VIDEO_BACKFILL_CONCURRENCY`, both 1 by default. A film concurrency of 0 turns films off, and
-a backfill concurrency of 0 turns the backfill off, which `isTopicVideoBackfillEnabled` returns. The
-generated image setting, `TOPIC_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT`, is the default of the spend
-control settings' limit: the 40 generated images one film draws at most, where 0 turns them off. `scanSettings.ts`
-reads `SCAN_DISPATCH_LIMIT`, the 100 Scans one sweep may hand to Temporal, where 0 starts none.
-`podcastCoverPaths.ts` signs a cover's key through `hmac.ts` with
-`toPodcastCoverKey` and builds its path with `toPodcastCoverPath`, over the sizes and the `PodcastCover` shape in
-`@carlnotes/contracts/podcastEpisodes`. `toLatestPodcastCoverPath` signs the kind and id alone, so the summary email's
-cover keeps loading after the podcast episode publishes. `docsContent.ts` names the docs markdown folder that the api's documents and
-the worker's docs embed read, and `sourceFileTestFixtures.ts` lists the source files under repo folders for the tests
-that scan them.
+`monitoring.ts` starts Sentry in the api and the worker and sends the error reports and the threshold warnings.
+`monitoringTracing.ts` defines what tracing reads and writes: the traces sampler, a request's transaction name and
+measurements, and the stage and query spans. The send-time redaction every outgoing event passes is `redactEvent` and
+`redactTransaction` in `monitoringRedaction.ts`.
+`reportError` sends one stage's one error ten times an hour and skips the rest, and the next hour's first report says
+how many were skipped. `limitReportsBySlot` makes each report and threshold warning of a process take a slot before it
+is sent, which the sweep's cron run sets because its hourly counts start from zero on every run, and
+`shutdownMonitoring` waits for a report still asking for its slot before it flushes. `clearReportHistory` forgets what a
+process has reported, for a test that runs as two processes. `exitOnFatalError` logs and reports an error that stops a
+process, waits for the report to send, and exits with code `1`. Every report is tagged with the release
+`toSentryRelease` reads, the deployed commit. `cronMonitoring.ts` sends a
+scheduled job's check-ins to its Sentry cron monitor: `startCronCheckIn` when the job starts and `finishCronCheckIn`
+with its result and duration. `runtimeGauges.ts` logs a long-running process's connection pool and event loop delay once
+a minute under its name, `api`, `web`, or `worker`, reading the delay from the histogram in `eventLoopDelay.ts`. A
+stalled event loop warns from the api and the web service alone. Each line's `instance` field names the replica by
+its host name, so the replicas' lines can be told apart. `analytics.ts` holds the PostHog clients: `trackEvent` for the
+user events keyed to a user, `trackBotEvent` for the bot events keyed to a bot's or an app's name, and `toBotCapture`;
+the event types are `@carlnotes/contracts/analyticsEvents`. `appUrl.ts` reads the app's base url from `BETTER_AUTH_URL`:
+`appUrl()` falls back to the local dev server, and `appBaseUrl()` is undefined if unset, for the emails and
+notifications that skip without a link. `envSettings.ts` reads a number that a setting holds: `toPositiveInteger` for a
+count or a duration, and `readDollarSetting` for an amount in dollars. Its `readEnumSetting` reads one of a setting's
+allowed values, for the api's `PROCESS_NAME` and the worker's `WORKER_QUEUE_GROUP`. `savedEnvSettings.ts` saves the environment
+settings a test changes and returns the call that puts them back, for every workspace's tests.
+`monitoringTestFixtures.ts` quiets the console and the error report for the api, worker, and database tests. `hmac.ts`
+signs a value with HMAC-SHA256 for the signup gate, the release webhook, the unsubscribe links, the podcast cover keys,
+and the viewer counts. `viewerElements.ts` turns a counted person into the element their count adds: `u:<userId>` for a
+user, and for a visitor a keyed hash of the address and the user agent through `hmac.ts`, never stored. `voiceChat.ts`
+reads the transcription model from `CHAT_TRANSCRIPTION_MODEL` and says whether voice chat is on, which needs that model
+and the podcast speech model. `podcastEpisodeSettings.ts` reads `PODCAST_SPEECH_MODEL`, which defaults to
+`gemini-3.8-flash-tts`, and Podcast Episodes are off if it is set empty. It also reads the film settings:
+`TOPIC_VIDEO_CONCURRENCY` and `TOPIC_VIDEO_BACKFILL_CONCURRENCY`, both 1 by default. The film concurrency is how many
+films a replica renders at once, and production's film service sets 2. A film concurrency of 0 turns films
+off, and a backfill concurrency of 0 turns the backfill off, which `isTopicVideoBackfillEnabled` returns. The generated
+image setting, `TOPIC_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT`, is the default of the spend control settings' limit: the 40
+generated images one film draws at most, where 0 turns them off. `scanSettings.ts` reads `SCAN_DISPATCH_LIMIT`, the 100
+Scans one sweep may hand to Temporal, where 0 starts none. `topicMemorySettings.ts` reads `TOPIC_MEMORY_CONCURRENCY`,
+the 2 topic memory updates one worker replica runs at once, where 0 reads as 2. `podcastCoverPaths.ts` signs a cover's
+key through `hmac.ts` with `toPodcastCoverKey` and builds its path with `toPodcastCoverPath`, over the sizes and the
+`PodcastCover` shape in `@carlnotes/contracts/podcastEpisodes`. `toLatestPodcastCoverPath` signs the kind and id alone,
+so the summary email's cover keeps loading after the podcast episode publishes. `docsContent.ts` names the docs markdown
+folder that the api's documents and the worker's docs embed read, and `sourceFileTestFixtures.ts` lists the source files
+under repo folders for the tests that scan them.
+
+`childProcessRequest.ts` sends one request to a Bun child process of its own and stops it once it replies, passes its
+time limit, or exits: `runChildProcessRequest` runs the attachment extraction and the card element draw in the
+pipeline. `toChildProcessEnvironment` builds a child process's environment from its temporary folder and the settings
+it names, for the attachment extraction and a film's offline capture.
 
 `dataUrl.ts` returns bytes as a base64 data url of their content type, which the image moderation, an attachment's
 image context, and the cards and covers read.

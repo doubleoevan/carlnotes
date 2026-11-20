@@ -1,14 +1,23 @@
 // the film switch a new podcast episode reads before it starts its film: the film concurrency, the pause on new films,
-// and a spend control settings read that fails
+// and a spend control settings read that fails, the encode's heartbeat, and the image step, which stores the podcast
+// episode's cover once its image is settled
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as dailySpendCutoffs from "@carlnotes/db/dailySpendCutoffs"
 import { DEFAULT_SPEND_CONTROL_SETTINGS } from "@carlnotes/db/dailySpendCutoffTestFixtures"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
+import * as podcastEpisodeAudio from "@carlnotes/pipeline/podcast/podcastEpisodeAudio"
+import * as podcastEpisodeImage from "@carlnotes/pipeline/podcast/podcastEpisodeImage"
+import * as podcastCover from "@carlnotes/pipeline/podcastCover"
 import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
 import { isTopicVideoBackfillEnabled } from "@carlnotes/server/podcastEpisodeSettings"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
-import { isTopicPodcastEpisodeVideoEnabled } from "./recordPodcastEpisodeActivities"
+import { MockActivityEnvironment } from "@temporalio/testing"
+import {
+	drawPodcastEpisodeImageActivity,
+	encodePodcastEpisode,
+	isTopicPodcastEpisodeVideoEnabled,
+} from "./recordPodcastEpisodeActivities"
 
 // the film settings the tests change
 const TOPIC_VIDEO_SETTINGS = ["TOPIC_VIDEO_CONCURRENCY", "TOPIC_VIDEO_BACKFILL_CONCURRENCY"]
@@ -88,4 +97,75 @@ test("a film backfill concurrency of zero starts no backfill, and a new podcast 
 	Bun.env.TOPIC_VIDEO_BACKFILL_CONCURRENCY = "0"
 	expect(isTopicVideoBackfillEnabled()).toBe(false)
 	expect(await isTopicPodcastEpisodeVideoEnabled()).toBe(true)
+})
+
+// an encode whose worker was killed must be tried again after two minutes, not after its ten-minute timeout
+test("the encode heartbeats while it runs, and gets the signal that a cancelled attempt aborts", async () => {
+	// an encode that lets one heartbeat interval pass, and keeps the signal it was given
+	let fireHeartbeat = (): void => {}
+	spyOn(globalThis, "setInterval").mockImplementation(((onInterval: () => void) => {
+		fireHeartbeat = onInterval
+		return 7
+	}) as unknown as typeof setInterval)
+
+	// the stubbed encode fires the captured heartbeat once
+	const encodeSignals: (AbortSignal | undefined)[] = []
+	const encodedPodcastEpisode = { audioKey: "audio", audioByteSize: 1, durationSeconds: 1, chapterTimes: [] }
+	spyOn(podcastEpisodeAudio, "encodePodcastEpisode").mockImplementation(async (_id, _chapters, signal) => {
+		encodeSignals.push(signal)
+		fireHeartbeat()
+		return encodedPodcastEpisode
+	})
+
+	// the activity returns the encode's result after one heartbeat, and a cancelled attempt aborts the encode's signal
+	const activityEnvironment = new MockActivityEnvironment()
+	let heartbeatCount = 0
+	activityEnvironment.on("heartbeat", () => {
+		heartbeatCount += 1
+	})
+	expect(await activityEnvironment.run(encodePodcastEpisode, "episode-1", [])).toEqual(encodedPodcastEpisode)
+	expect(heartbeatCount).toBe(1)
+
+	// a cancel reaches the encode
+	activityEnvironment.cancel()
+	expect(encodeSignals[0]?.aborted).toBe(true)
+})
+
+// the image step stores the cover, so no request draws it
+test("the image step stores the podcast episode's cover after its image, and after a rejected image too", async () => {
+	// an image that draws, then one that is rejected for good
+	const steps: string[] = []
+	const drawImageSpy = spyOn(podcastEpisodeImage, "drawPodcastEpisodeImage").mockImplementation(async () => {
+		steps.push("image")
+	})
+	spyOn(podcastCover, "storePodcastEpisodeCovers").mockImplementation(async (podcastEpisodeId) => {
+		steps.push(`cover ${podcastEpisodeId}`)
+		return true
+	})
+
+	// the cover follows the image
+	await drawPodcastEpisodeImageActivity("episode-1")
+	expect(steps).toEqual(["image", "cover episode-1"])
+
+	// a rejected image fails the step for good, with the cover stored over the image the podcast episode is left with
+	drawImageSpy.mockRejectedValue(new podcastEpisodeImage.PodcastEpisodeImageRejectedError("the image was rejected"))
+	await expect(drawPodcastEpisodeImageActivity("episode-2")).rejects.toMatchObject({ nonRetryable: true })
+	expect(steps).toEqual(["image", "cover episode-1", "cover episode-2"])
+})
+
+test("an image that may be drawn again stores no cover yet, and a cover that cannot be stored never fails the step", async () => {
+	// a failure that another attempt can fix leaves the cover to that attempt
+	const drawImageSpy = spyOn(podcastEpisodeImage, "drawPodcastEpisodeImage").mockRejectedValue(new Error("timed out"))
+	const storeCoversSpy = spyOn(podcastCover, "storePodcastEpisodeCovers").mockResolvedValue(true)
+	await expect(drawPodcastEpisodeImageActivity("episode-1")).rejects.toThrow("timed out")
+	expect(storeCoversSpy).not.toHaveBeenCalled()
+
+	// a cover whose draw fails is reported, and the step still ends
+	drawImageSpy.mockResolvedValue(undefined)
+	storeCoversSpy.mockRejectedValue(new Error("ffmpeg exited with code 1"))
+	const reportErrorSpy = quietErrorReports()
+	await drawPodcastEpisodeImageActivity("episode-1")
+	expect(reportErrorSpy.mock.calls.map((reportCall) => reportCall.slice(1))).toEqual([
+		["podcast-episode", { podcastEpisodeId: "episode-1", step: "cover" }],
+	])
 })

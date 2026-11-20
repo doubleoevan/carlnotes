@@ -1,5 +1,5 @@
 // the dedupe pass over the relevant Resources: a content hash catches a copy and a near-duplicate embedding catches
-// a rewrite, against what this Scan let through and what an earlier Scan stored
+// a rewrite, against what this Scan let through and what the Topic judged in an earlier Scan
 import { toOneLineText } from "@carlnotes/contracts/text"
 import { db } from "@carlnotes/db"
 import { resources } from "@carlnotes/db/schema/scans"
@@ -7,6 +7,7 @@ import { cosineSimilarity } from "ai"
 import { and, cosineDistance, eq, isNotNull, lt, notInArray } from "drizzle-orm"
 import { toFallbackTitle } from "../ingest/normalize"
 import type { RelevantResource, Resource } from "./filter"
+import { toJudgedResourceFilter } from "./filteredFindings"
 import { type ResourceOutcome, type ReviewOutcome, trackOutcomes } from "./track"
 
 // how close two embeddings must be for the later Resource to count as a duplicate of the earlier one
@@ -15,21 +16,27 @@ const NEAR_DUPLICATE_DISTANCE = 0.05
 // the content hashes and embeddings this Scan dedupes each new Resource against
 export type DedupeKeys = { contentHashes: Set<string>; embeddings: number[][] }
 
-// the Resources the dedupe walks in ranked order, the Scan's candidates, its running totals, and the url Sources'
-// own pages, which it passes through
+// the Topic, the Resources the dedupe walks in ranked order, the Scan's candidates, its running totals, and the url
+// Sources' own pages, which it passes through
 type DedupeResourcesOptions = {
+	topicId: string
 	relevantResources: RelevantResource[]
 	candidateIds: string[]
 	reviewOutcome: ReviewOutcome
 	urlSourcePageIds: Set<string>
 }
 
+// the stored Resources a candidate is compared with: the ones the Topic has judged, without this Scan's candidates
+type StoredDedupeScope = { topicId: string; candidateIds: string[] }
+
 /**
- * Drop the relevant Resources that duplicate one this Scan already let through, returning the rest in ranked order.
+ * Drops the relevant Resources that duplicate one this Scan already let through or one the Topic judged in an earlier
+ * Scan, returning the rest in ranked order. A Resource that only another Topic's Scan stored drops nothing.
  * This walk stays sequential, so the highest-ranked member of a duplicate set is the one that wins the slot.
  * A url Source's own page is never dropped.
  */
 export async function dedupeResources({
+	topicId,
 	relevantResources,
 	candidateIds,
 	reviewOutcome,
@@ -47,7 +54,7 @@ export async function dedupeResources({
 		}
 
 		// any other Resource is dropped if it duplicates one before it, and kept otherwise
-		const dedupeOutcome = await dedupeResource(relevantResource, candidateIds, dedupeKeys)
+		const dedupeOutcome = await dedupeResource(relevantResource, { topicId, candidateIds }, dedupeKeys)
 		if (dedupeOutcome) {
 			trackOutcomes(reviewOutcome, dedupeOutcome)
 			await reviewOutcome.onResourceConsidered?.(relevantResource.resource.url, {
@@ -66,24 +73,29 @@ export async function dedupeResources({
 // run one relevant Resource through both dedupe stages, returning a filtered outcome or null when it is no duplicate
 async function dedupeResource(
 	relevantResource: RelevantResource,
-	candidateIds: string[],
+	storedDedupeScope: StoredDedupeScope,
 	dedupeKeys: DedupeKeys,
 ): Promise<Extract<ResourceOutcome, { status: "filtered" }> | null> {
 	const { resource, embedding } = relevantResource
 	// the content hash over the native text, only when the Resource has content. empty rows must not collapse to one hash
 	const contentHash = hasNativeText(resource) ? toContentHash(resource.title, resource.snippet) : null
 
-	// stage 1 checks for a content-level duplicate, of a candidate this Scan let through or of a Resource an earlier
+	// stage 1 checks for a content-level duplicate, of a candidate this Scan let through or of a Resource that the Topic
+	// judged in an earlier Scan
 	if (contentHash !== null) {
 		const isHashDuplicate =
-			dedupeKeys.contentHashes.has(contentHash) || (await hasStoredHash(contentHash, candidateIds))
+			dedupeKeys.contentHashes.has(contentHash) || (await hasStoredHash(contentHash, storedDedupeScope))
 		if (isHashDuplicate) {
 			return { status: "filtered", reason: "duplicate content" }
 		}
 	}
 
-	// stage 2 checks for a near-duplicate, of a candidate this Scan let through or of a Resource an earlier Scan stored
-	if (embedding && (hasNearDuplicateKey(dedupeKeys, embedding) || (await hasNearDuplicate(embedding, candidateIds)))) {
+	// stage 2 checks for a near-duplicate, of a candidate this Scan let through or of a Resource that the Topic judged
+	// in an earlier Scan
+	const isNearDuplicateResource =
+		embedding !== null &&
+		(hasNearDuplicateKey(dedupeKeys, embedding) || (await hasNearDuplicate(embedding, storedDedupeScope)))
+	if (isNearDuplicateResource) {
 		return { status: "filtered", reason: "near-duplicate" }
 	}
 
@@ -92,6 +104,8 @@ async function dedupeResource(
 		dedupeKeys.contentHashes.add(contentHash)
 		await db.update(resources).set({ contentHash }).where(eq(resources.id, resource.id))
 	}
+
+	// the vector that a lower-ranked candidate is measured against
 	if (embedding) {
 		dedupeKeys.embeddings.push(embedding)
 	}
@@ -108,30 +122,36 @@ function toResourceWithContentHash(resource: Resource): Resource {
 	}
 }
 
-// a Resource outside this Scan that already has this content hash makes this a content-level duplicate
-async function hasStoredHash(hash: string, candidateIds: string[]): Promise<boolean> {
-	// look for a stored Resource with the same hash
+// a Resource outside this Scan that the Topic judged and that has this content hash makes this a content-level
+// duplicate
+async function hasStoredHash(hash: string, { topicId, candidateIds }: StoredDedupeScope): Promise<boolean> {
+	// look for a judged Resource with the same hash
 	const [duplicate] = await db
 		.select({ id: resources.id })
 		.from(resources)
-		.where(and(eq(resources.contentHash, hash), notInArray(resources.id, candidateIds)))
+		.where(
+			and(eq(resources.contentHash, hash), notInArray(resources.id, candidateIds), toJudgedResourceFilter(topicId)),
+		)
 		.limit(1)
 	return duplicate !== undefined
 }
 
-// whether this embedding has a resource outside of these resource ids close enough to be considered a duplicate
-async function hasNearDuplicate(embedding: number[], resourceIds: string[]): Promise<boolean> {
-	// get resource neighbors within the embedding's duplicate range
-	const distanceExpression = cosineDistance(resources.embedding, embedding)
-	const nearestResourceNeighbors = await db
+// whether the Topic judged a Resource outside this Scan whose embedding is close enough to this one to be a duplicate.
+// the distance is measured exactly, over the Topic's judged Resources alone, with no order for an index to walk
+async function hasNearDuplicate(embedding: number[], { topicId, candidateIds }: StoredDedupeScope): Promise<boolean> {
+	const [nearDuplicate] = await db
 		.select({ id: resources.id })
 		.from(resources)
-		.where(and(isNotNull(resources.embedding), lt(distanceExpression, NEAR_DUPLICATE_DISTANCE)))
-		.orderBy(distanceExpression)
-		.limit(resourceIds.length + 1)
-
-	const resourceIdSet = new Set(resourceIds)
-	return nearestResourceNeighbors.some((nearestNeighbor) => !resourceIdSet.has(nearestNeighbor.id))
+		.where(
+			and(
+				toJudgedResourceFilter(topicId),
+				notInArray(resources.id, candidateIds),
+				isNotNull(resources.embedding),
+				lt(cosineDistance(resources.embedding, embedding), NEAR_DUPLICATE_DISTANCE),
+			),
+		)
+		.limit(1)
+	return nearDuplicate !== undefined
 }
 
 /**
@@ -144,6 +164,7 @@ export function hasNearDuplicateKey(dedupeKeys: DedupeKeys, embedding: number[])
 
 // whether a Resource includes any ingester-native text to hash and embed like a title or a snippet
 function hasNativeText(resource: Resource): boolean {
+	// a personal link whose title was read off its url has no text of its own
 	if (
 		resource.personalSourceScoreBonus &&
 		!resource.snippet?.trim() &&
@@ -151,6 +172,8 @@ function hasNativeText(resource: Resource): boolean {
 	) {
 		return false
 	}
+
+	// any other Resource has text if it has a title or a snippet
 	return Boolean(resource.title?.trim() || resource.snippet?.trim())
 }
 

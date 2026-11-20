@@ -1,7 +1,9 @@
 // the add_topic_attachment tool: the owner's url reads the page, the owner's pasted text is stored as a plain-text
 // file, and a user who does not own the topic adds nothing
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
+import { SPENT_BUDGET_REJECTION } from "@carlnotes/models/models"
 import * as attach from "@carlnotes/pipeline/attach"
+import { AttachmentBudgetSpentError } from "@carlnotes/pipeline/attachContentType"
 import * as analytics from "@carlnotes/server/analytics"
 import * as permissions from "../topic/permissions"
 import { type RegisteredToolHandler, toRegisteredTools, toResultText, USER } from "./toolTestFixtures"
@@ -38,8 +40,15 @@ function toAddAttachmentHandler(isOwner: boolean): RegisteredToolHandler {
 test("the owner's url reads the page as an attachment", async () => {
 	const toolResult = await toAddAttachmentHandler(true)({ topic_id: "topic-1", url: "https://example.com/burrs" })
 	expect(toolResult.isError).toBe(false)
-	expect(ingestUrlSpy).toHaveBeenCalledWith("topic-1", "https://example.com/burrs")
+	expect(ingestUrlSpy.mock.calls[0]?.[0]).toMatchObject({ topicId: "topic-1", url: "https://example.com/burrs" })
 	expect(ingestSpy).not.toHaveBeenCalled()
+})
+
+// the page's fetch is the owner's spend, so a spent budget reads as it does in chat
+test("a url whose owner's budget is spent adds nothing and says so", async () => {
+	ingestUrlSpy.mockRejectedValue(new AttachmentBudgetSpentError())
+	const toolResult = await toAddAttachmentHandler(true)({ topic_id: "topic-1", url: "https://example.com/burrs" })
+	expect(toResultText(toolResult)).toBe(SPENT_BUDGET_REJECTION)
 })
 
 test("the owner's pasted text is stored as a plain-text file named by its title", async () => {

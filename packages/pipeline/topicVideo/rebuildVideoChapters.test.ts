@@ -16,6 +16,7 @@ test.skipIf(!Bun.which("ffmpeg"))(
 		// the published chapters show a red poster after the first shot, and the approved replacement is green
 		const episode = "episode-1"
 		const segments: VideoSegment[] = [{ kind: "hot-takes", position: 0, startSeconds: 0, frameCount: 240 }]
+		// a poster of one color at the film's frame size
 		const solid = (background: string): Promise<Buffer> =>
 			sharp({ create: { width: 1280, height: 720, channels: 3, background } })
 				.png()
@@ -51,6 +52,7 @@ test.skipIf(!Bun.which("ffmpeg"))(
 
 			// sample the displayed second shot away from the lower third and the closing fade
 			const pixel = await runFfmpeg({
+				timeoutMs: 60_000,
 				ffmpegArguments: [
 					"-ss",
 					"9",

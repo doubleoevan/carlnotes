@@ -87,20 +87,61 @@ bun run smoke:image carlnotes-smoke:local
 
 Migrations are a deploy job, not a start-up step. A push to `main` starts Northflank's `release-main` workflow through
 its GitHub push trigger, without waiting for CI, so a failing or slow check never holds a release back. The workflow
-builds the newest commit on `main` once and runs the migration job against it. Only then does it deploy `app`, purge
-the edge, deploy `temporal-worker`, and finish with the docs embed. So new code never meets an old schema. Each deploy
+builds the newest commit on `main` once and runs the migration job against it. Only then does it deploy `app`, then
+`web`, purge the edge, deploy `temporal-films` and `temporal-worker`, and finish with the docs embed. So new code never
+meets an old schema. Each deploy
 step waits up to ten minutes for its replicas to run, and a rollout that never runs fails the workflow before the next
 step. The workflow's definition is
 [infra/northflank/release-main.json](../../infra/northflank/release-main.json). To redeploy `main` by hand, run
 `release-main` from the Northflank console.
 
-The `app` service's startup, readiness, and liveness checks are
+The `app` and `web` services share one set of startup, readiness, and liveness checks,
 [infra/northflank/app-health-checks.json](../../infra/northflank/app-health-checks.json), the `healthChecks` body of
-Northflank's `PATCH /v1/projects/carlnotes-prd/services/deployment/app`. Startup polls `/api/health` every 10 seconds
-for up to two minutes. Readiness polls `/api/health/ready` every 10 seconds and takes a replica out of traffic after
-three misses. Liveness restarts a replica after six missed `/api/health` polls. Both Northflank files are applied by
-hand, with the Northflank CLI or console. Apply `release-main.json` with `northflank create workflow`, which upserts
-(`update workflow` returns HTTP 500).
+Northflank's `PATCH /v1/projects/carlnotes-prd/services/deployment/app` and of the same call for `web`. Startup polls
+`/api/health` every 10 seconds for up to two minutes. Readiness polls `/api/health/ready` every 10 seconds and takes a
+replica out of traffic after three misses. Liveness restarts a replica after six missed `/api/health` polls. Both
+Northflank files are applied by hand, with the Northflank CLI or console. Apply `release-main.json` with `northflank
+create workflow`, which upserts (`update workflow` returns HTTP 500). A deploy step that names a service that does not
+exist fails every release, so create a service before applying a workflow that deploys it.
+
+### Services and path routes
+
+One image runs every service, each with its own command. `app` and `web` start the same entry, `apps/api/index.ts`,
+and either serves every path. The public domain's path routes decide which one answers.
+
+| Service | Command | Size and replicas | Public paths | Health checks |
+|---|---|---|---|---|
+| `app` | the image's command, the same as `bun run api` | 1 vCPU and 2,048 MB, 2 to 4 replicas autoscaled at 70% CPU | `/api`, `/mcp`, `/.well-known/oauth-authorization-server`, `/.well-known/oauth-protected-resource` | `app-health-checks.json` |
+| `web` | `bun run web` | the same plan and autoscaling as `app` | the base path, and the higher-priority routes below | `app-health-checks.json` |
+| `temporal-worker` | `bun run temporal:main` | 2 vCPU and 4,096 MB, 2 replicas | none | none |
+| `temporal-films` | `bun run temporal:films` | 4 vCPU and 8 GB, 1 replica, 2 GB disk. **Owner:** 4 GB disk, `TOPIC_VIDEO_CONCURRENCY=2`, and 1 to 4 replicas autoscaled on `carlnotes_film_demand` at 2 | none | none |
+| `scan-sweep` cron job | `bun run schedule` | 1 vCPU and 1,024 MB | none | the `scan-sweep` cron monitor |
+| `reset-monthly-budgets` cron job | `bun run reset:monthly-budgets` | **Owner** | none | the `reset-monthly-budgets` cron monitor |
+
+The routes of a higher priority than `/api`, all to `web`, so no public image streams through the process that holds
+the chat streams:
+
+- every `preview.png` after `/api`: a Topic's, a profile's, a Team's, an invite's, a podcast episode's, and a Topic
+  Post's
+- the prefixes `/api/podcast-covers`, `/api/favicons`, `/api/avatars`, and `/api/team-avatars`
+- the stored image prefixes `/api/topic-images`, `/api/podcast-episode-images`,
+  `/api/topic-podcast-episode-video-images`, `/api/topic-post-images`, and `/api/topic-post-body-images`
+- the one exact path `/api/health/ready`, so the external monitor watches the service that renders pages
+
+`/api/podcast-feeds` stays on `app`, because its one route counts a play with its place. Northflank's own probes reach
+each service by its port, whatever the public routes say. `GET /api/health` names the process that answered, `api` or
+`web`, so one request on the public domain shows where a route sends a path.
+
+A page render on `web` reads the api of its own process, because `API_ORIGIN` is unset. The page reads' queries then
+run off the process that holds the chat streams, and a render never meets another build's api in the middle of a
+release. To try renders that read `app` instead, set `API_ORIGIN` in the `web` service's own Northflank variables,
+never in Doppler, where `app` would read it too and call itself over the network.
+
+**Owner:** create `web` by hand before applying `release-main.json`: from the build image, with the command
+`bun run web`, the health checks in `app-health-checks.json`, the plan `app` has, and 2 to 4 replicas autoscaled at
+70% CPU. Then raise `DATABASE_POOL_COUNT` as [How to add capacity](#how-to-add-capacity) says, restart every process,
+apply the workflow, and add the routes. To roll back, point the base path back at `app` and remove the other routes.
+No deploy is needed.
 
 The migration job runs:
 
@@ -108,6 +149,37 @@ The migration job runs:
 doppler run -- bun packages/db/migrate.ts
 # or
 bun run db:migrate
+```
+
+#### An index on a table that already has rows
+
+Build it by hand in production before the push that holds its migration. Every pending migration runs in one
+transaction, where Postgres rejects `CREATE INDEX CONCURRENTLY`, so a migration's plain `CREATE INDEX` would block
+every write to its table while it builds, and the role's 30-second statement timeout would cancel a long build and
+fail the release. A new table's indexes are created with the table and need none of this.
+
+1. Connect to production with `psql` and turn the statement timeout off for the session: `SET statement_timeout = 0;`.
+2. Run each `CREATE INDEX CONCURRENTLY IF NOT EXISTS` statement by itself, outside a transaction.
+3. Check that every build finished: `SELECT indexrelid::regclass FROM pg_index WHERE NOT indisvalid;` returns no row.
+   A build that failed leaves an invalid index under its name, which the migration's `IF NOT EXISTS` would skip for
+   good. Drop it with `DROP INDEX CONCURRENTLY "<name>";` and build it again.
+4. Push. The migration opens with a 3-second lock timeout and declares each index with `IF NOT EXISTS`, so it finds
+   them built and adds nothing.
+
+The launch hardening release holds eleven, in `0187_launch_hardening.sql`:
+
+```sql
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "episodes_recording_created_idx" ON "episodes" USING btree ("created_at") WHERE "episodes"."status" = 'recording';
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "chat_turns_created_idx" ON "chat_turns" USING btree ("created_at");
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "personal_source_distillation_spends_created_idx" ON "personal_source_distillation_spends" USING btree ("created_at");
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "episodes_created_idx" ON "episodes" USING btree ("created_at");
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "topic_videos_created_idx" ON "topic_videos" USING btree ("created_at");
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "scans_started_idx" ON "scans" USING btree ("started_at");
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "scans_running_started_idx" ON "scans" USING btree ("started_at","id") WHERE "scans"."status" = 'running';
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "topic_image_renders_created_idx" ON "topic_image_renders" USING btree ("created_at");
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "topic_post_discussions_created_idx" ON "topic_post_discussions" USING btree ("created_at");
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "sources_pending_topic_idx" ON "sources" USING btree ("topic_id") WHERE "sources"."status" = 'pending';
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "users_created_idx" ON "users" USING btree ("created_at");
 ```
 
 Prompts are a deploy job too, uploaded as candidates instead of promoted. The registry keeps serving the `production`
@@ -132,8 +204,8 @@ doppler run -- bun apps/worker/docsSync.ts
 bun run docs:embed
 ```
 
-The edge purge is a deploy job too. It runs right after `app` deploys and clears the pages and the signed-out feed that
-Cloudflare shares, so no cached page names assets the old build had. It needs `CLOUDFLARE_ZONE_ID` and
+The edge purge is a deploy job too. It runs right after `app` and `web` deploy and clears the pages and the signed-out
+feed that Cloudflare shares, so no cached page names assets the old build had. It needs `CLOUDFLARE_ZONE_ID` and
 `CLOUDFLARE_API_TOKEN`. Without them, or if Cloudflare rejects the purge, the job logs why and the release goes on.
 Those pages leave the edge within two minutes without a purge:
 
@@ -143,10 +215,11 @@ doppler run -- bun apps/api/edgeCache.purge.ts
 bun run edge:purge
 ```
 
-The temporal worker is its own service and the scan sweep a cron job, both built from this same image with the command
-overridden. They pick up new code on every deploy, as the api does. `schedule` decides what to scan and `temporal` does
-the scan work. Each starts through a root script, so the command Northflank runs never names a file path and survives a
-file move.
+The temporal workers are their own services and the scan sweep a cron job, all built from this same image with the
+command overridden. They pick up new code on every deploy, as the api does. `schedule` decides what to scan and
+`temporal` does the scan work. Each starts through a root script, so the command Northflank runs never names a file
+path and survives a file move. `temporal-worker` runs `bun run temporal:main` and `temporal-films` runs
+`bun run temporal:films`. With no queue group set, one process hosts every Worker, as in development:
 
 ```bash
 doppler run -- bun apps/worker/temporal.ts
@@ -199,6 +272,12 @@ Four permissions have no Doppler setting. Each is on by default in the console. 
 - **Allow new films.** A podcast episode that publishes gets no film.
 - **Allow unfeatured items on the home page.** The home's sections list their featured items alone.
 
+The free-plan spend that the three cutoffs read sums what bills a free user who is not an admin, the user's own rows
+in the `spends` table among them: a url attachment's fetch, a url Source's check, and a source suggestion's search.
+A `spends` row with no user is the platform's own cost: a backfilled film's render minutes and images, a Free
+owner's first animated picture of the month, the topic memory backfill's model calls, and text moderation. No cutoff
+and no user's monthly budget reads the platform's spend. The day's spend line and its alert do.
+
 The `spend_control_settings` row stores the numeric overrides and the restrictions behind the permission switches.
 The [Launch runbook](#launch-runbook) lists what each restriction stops and when it takes effect.
 
@@ -237,6 +316,25 @@ the check-in creates or updates the monitor from the schedule in that file.
 A run that never starts its command, such as one whose Doppler token is revoked, sends no check-in. Its monitor reports
 the run as missed. A change to a job's Northflank cron schedule or time limit changes its monitor in the same commit.
 
+A sweep run counts as failed if any of its stages threw. Each stage runs in its own try, so the stages after a failed
+one still run: one failure never skips the viewer counts, the daily counts, the deletion retries, the emails, or the
+day's spend. The run then exits with code 1 once its reports are sent. A sweep that stops running and a sweep that
+keeps failing a stage both reach the owner through `scan-sweep`, after two runs in a row.
+
+Every sweep run is a new process, so the hourly limits that a long-running process keeps in memory would start from
+zero on each run. Each error report and threshold warning from the sweep first takes a one-hour slot in Redis, under
+`sweep-report:` and the report's stage and message or the warning's condition. One sweep in the hour sends it and the
+others send nothing. If Redis cannot say, the report is sent. The sweep reports:
+
+- **A scan queue it could not read**, in the `scheduled-scan` stage with the queue's name. That run starts no scheduled
+  Scan, and every Topic stays scheduled for the next one.
+- **A start that could not reach Temporal**, once. It is that run's last start, for the scheduled Scans, the rows that
+  were never dispatched, and the pending Source screens, because each later start would wait out its own deadline.
+- **A daily count batch that could not be saved**, in the `database` stage, with how many sweeps in a row have failed
+  one. A take that found Redis down is reported too, and so is a failed batch that Redis could not put back, which is
+  lost.
+- **A stage that threw**, under its own stage, with the stage's name in `sweepStage`.
+
 The release jobs, `migrate`, `docs-sync`, and `edge-purge`, have no schedule for a monitor to miss. A release job that
 exits non-zero is reported as an error under the `job` stage. One that fails before its secrets load fails the
 `release-main` workflow. Only a Northflank notification for a failed workflow run reports that. **Owner:** turn it on in
@@ -259,13 +357,16 @@ Each step says where to look and what value is wanted. A fact that only a dashbo
 filled in by hand.
 
 1. **Size the cutoffs for the wave.** The three daily spend cutoffs are thresholds in force at their defaults ($65,
-   $100, and $150). A new free user costs about $0.56 on their first day (a Scan $0.098, a short podcast episode
-   $0.218, and a film $0.240, measured 2026-11-13), so 3,000 signups spend about $1,670 and the $100 cutoff passes
-   after 180 to 1,000 signups. Past it every free user's first and manual Scan waits, and past $150 chat pauses for
-   every free user until midnight UTC. In the admin console's **Limits** section, set the three cutoffs to the
-   expected signups times $0.56 with the margin you choose, and set **First scan limit** to the waiting Scans you
-   want started each sweep. Production's sweep runs every 15 minutes, so a limit of 5 starts 20 waiting Scans an
-   hour.
+   $100, and $150). A new free user costs about $0.66 on their first day against the cutoffs: a Scan $0.098, a short
+   podcast episode $0.218, and a film $0.240, measured 2026-11-13, and about 10 cents for the animation plans of a
+   version 4 film, estimated 2026-11-19. So 3,000 signups spend about $1,980 and the $100 cutoff passes after 150 to
+   1,000 signups. Past it every free user's first and manual Scan waits, and past $150 chat pauses for every free
+   user until midnight UTC. In the admin console's **Limits** section, set the three cutoffs to the expected signups
+   times $0.66 with the margin you choose, and set **First scan limit** to the waiting Scans you want started each
+   sweep. Production's sweep runs every 15 minutes, so a limit of 5 starts 20 waiting Scans an hour. The platform
+   also pays about 36 cents for each Free owner's first animated picture of the month, about $1,080 for 3,000
+   signups. No cutoff reads the platform's own spend. The day's spend line shows it as `platformDollars`, inside
+   `totalDollars`, so size `GLOBAL_DAILY_SPEND_ALERT_USD` in step 3 with it.
 2. **Add three Sentry rules.** The four Deploy alerts above miss a threshold warning and a repeating error. In
    Sentry, **Alerts → Create Alert → Issues**, for the `prd` environment, each notifying the owner:
    - Every threshold warning: when "The issue is seen more than 0 times in one hour", if "The event's tags match
@@ -273,8 +374,10 @@ filled in by hand.
      created" fires only the first time a condition is ever crossed.
    - A repeating error: when "The issue is seen more than 5 times in 15 minutes". One repeating error sends at most
      20 events an hour, which never reaches the error rate alert's 50 in 5 minutes.
-   - No Temporal worker: when "The issue is seen more than 0 times in one hour", if the event's message contains
-     `no temporal worker is polling the scan queue`.
+   - No Temporal worker, or a Temporal server that cannot be read: when "The issue is seen more than 0 times in one
+     hour", if the event's message contains any of `no temporal worker is polling the scan queue`,
+     `no temporal worker is polling the film queue`, `could not read the scan task queue`, and
+     `could not read a task queue`.
 3. **Set the spend alert.** Set `GLOBAL_DAILY_SPEND_ALERT_USD` in Doppler to the day's spend that should warn you.
    Unset, the sweep logs the day's spend and warns nobody. The sweep reads it at its next run, with no restart.
 4. **Close the origin to everything but the edge.** **Owner:** in Northflank, add an IP policy on the `app` service's
@@ -283,17 +386,40 @@ filled in by hand.
 5. **Send the visitors' places.** **Owner:** in Cloudflare, **Rules → Transform Rules → Managed Transforms**, turn on
    **Add visitor location headers**. Without it Cloudflare sends only `cf-ipcountry`, so the Specials maps and the
    paragraph's places stop at the country. A view counted before the switch keeps its country alone.
-6. **Read each service's termination grace.** **Owner:** in Northflank, each service's advanced deployment settings.
-   The worker gives a running activity two minutes to finish on a stop (`SHUTDOWN_GRACE_MS` in
-   `apps/worker/temporal.ts`), so `temporal-worker` needs a grace period longer than two minutes. Record each value
-   in the Services table below.
-7. **Read each plan and quota.** **Owner**, each in its own dashboard. The wanted value is room for the wave: a
+6. **Read each service's termination grace.** **Owner:** in Northflank, each service's advanced deployment settings. The
+   worker gives a running activity two minutes to finish on a stop (`SHUTDOWN_GRACE_MS` in
+   `apps/worker/temporalWorkers.ts`), so `temporal-worker` needs a grace period longer than two minutes. `app` and `web`
+   drain for up to 125 seconds on a stop: 5 seconds of answering while the platform stops routing to the replica
+   (`API_DRAIN_ROUTING_GRACE_MS`), then up to 120 seconds for the requests in flight (`API_DRAIN_LIMIT_MS`), so each
+   needs a grace period of 150 seconds, which also covers the flush's 10 seconds. A drain ends as soon as its last
+   request does, so a quiet replica stops in seconds. A chat reply that streams past the limit is cut. To let a longer
+   reply finish across a deploy, raise the service's grace period and `API_DRAIN_LIMIT_MS` together, and to stop sooner,
+   lower both. Record each value in the Services table below.
+7. **Give the film service its two slots and its autoscaling.** **Owner:** in Northflank, on `temporal-films`: set
+   `TOPIC_VIDEO_CONCURRENCY=2` in the service's own environment, raise its disk from 2 GB to 4 GB, and turn on
+   autoscaling from 1 to 4 replicas on the custom metric `carlnotes_film_demand` at a target of 2, read from
+   `/metrics` on port 9464. If the plan has no custom metric autoscaling, scale on cpu at 70%. Then raise
+   `DATABASE_POOL_COUNT` for the replicas the autoscaler may add, as How to add capacity says. With the release that
+   adds them, `temporal-worker` polls `episode-video-writes`, which every new film's first step waits on, and
+   `temporal-films` polls `episode-video-rebuilds`: check both in the Temporal UI after that release.
+8. **Give the main worker its autoscaling and check its new queues.** **Owner:** in Northflank, on
+   `temporal-worker`: turn on autoscaling from 2 to 4 replicas on the custom metric `carlnotes_scan_demand` at a
+   target of 16, read from `/metrics` on port 9464, or on cpu at 70% if the plan has no custom metric autoscaling.
+   Count four `temporal-worker` replicas in `DATABASE_POOL_COUNT`, two pool shares each. After the release that
+   adds them, check in the Temporal UI that `topic-scans-scheduled` and `episode-encodes` each have a poller: a
+   scheduled Scan starts on the first, and every podcast episode's encode waits on the second. The release also
+   adds the settings `SCHEDULED_SCAN_CONCURRENCY` (8) and `PODCAST_ENCODE_CONCURRENCY` (2), which need no value in
+   Doppler at their defaults, and raises `SCAN_CONCURRENCY`'s default from 8 to 16. If Doppler sets
+   `SCAN_CONCURRENCY=8`, remove it to take the new default.
+9. **Read each plan and quota.** **Owner**, each in its own dashboard. The wanted value is room for the wave: a
    quota that runs out fails quietly.
    - Sentry: the plan's monthly errors and spans. Past the quota Sentry drops errors and the alerts stop with them.
    - PostHog and Langfuse: the plan's monthly events and traces.
    - Resend: the plan's daily and monthly emails, and its requests a second. The app sends at most nine a second.
    - Fireworks, and Gemini speech and images: the spend limit and the requests a minute on each key.
-   - Exa and Firecrawl: the plan's monthly searches and scrapes.
+   - Exa and Firecrawl: the plan's monthly searches and scrapes. A spent Firecrawl credit warns once an hour as
+     `firecrawl-credit-spent`, and until it is topped up every new page is scored on its snippet and read again by
+     the next Scan that finds it.
    - YouTube: the Data API's daily units, 10,000 by default.
    - Google Maps: the daily map loads on the Dashboard map's key.
    - The moderation endpoint: the requests a minute on `OPENAI_API_KEY`. Its limit is recorded nowhere.
@@ -302,8 +428,8 @@ filled in by hand.
      at 332 MB on 2026-11-13.
    - Neon: the compute's maximum size. The pools were sized from `max_connections` 901 on 2026-11-13.
    - Temporal: the free disk on the `temporal-db` addon, 20 GB on 2026-11-13.
-8. **Freeze deploys if you want none during the wave.** See Rollback below. A docs commit deploys too.
-9. **Check the store links.** The docs' Get the app page (`apps/docs/src/content/docs/get-the-app.md`) links to the
+10. **Freeze deploys if you want none during the wave.** See Rollback below. A docs commit deploys too.
+11. **Check the store links.** The docs' Get the app page (`apps/docs/src/content/docs/get-the-app.md`) links to the
    live App Store and Google Play listings. Its App Store line was still a placeholder on 2026-11-13.
 
 Three things stay unguarded after this work:
@@ -316,15 +442,17 @@ Three things stay unguarded after this work:
 
 ### What to watch
 
-Each process logs one line a minute, and the sweep logs the day's spend every run. Filter the service's logs in
-Northflank on `"gauges":"runtime"` or `"gauges":"daily-spend"`. A crossed threshold also sends one Sentry warning an
-hour for each condition, tagged `alert: performance`.
+Each process logs one line a minute, and the sweep logs the day's spend every run. The spend is summed at most once in
+five minutes, so a sweep that runs more often logs the same figures until then. Filter the service's logs in Northflank
+on `"gauges":"runtime"` or `"gauges":"daily-spend"`. A crossed threshold also sends one Sentry warning an hour for each
+condition, tagged `alert: performance`.
 
 The normal ranges below are the median, the 99th percentile, and the largest value in the lines of 2026-11-06 18:00
 UTC to 2026-11-13 18:00 UTC: 20,100 from `app`, 20,088 from `temporal-worker`, and 672 from the sweep. That was a
 quiet week before launch, so a wave reads above them. Read them again after the wave.
 
-The api's minute line, from each `app` replica:
+The api's minute line, from each `app` replica. Each `web` replica writes the same line with `"process":"web"`, and
+its event loop warns at the same two readings:
 
 | Field | Normal range | Warning | Add capacity if |
 |---|---|---|---|
@@ -336,45 +464,70 @@ The api's minute line, from each `app` replica:
 | `redis.errorCount` | 0, 0, 0 | `redis-errors` at 10 in a minute | never: read the Redis addon's own logs |
 | `redis.cacheHitCount`, `redis.cacheMissCount` | 0, 7, 745 and 0, 6, 86 | none | misses stay above hits during a wave, which means the cache is not holding |
 | `redis.usedMemoryBytes` of `redis.maxMemoryBytes` | 2.4 MB, 3.9 MB, 6.3 MB of 332 MB | `redis-memory` at 80% | it passes 50%: raise the addon's plan |
+| `renders.shedCount` of `renders.startedCount` | no lines before this release | `render-shed` above 0 | it is above 0 for more than a minute: add a replica of the service that renders pages |
+| `residentMemoryMb` | 550 to 595 in the built image under 16 visitors' renders, 2026-11-20 | none | on `app` it passes 700 MB: two attachment reads may take 512 MB each beside it on a 2,048 MB replica, so raise the plan's memory |
+| `coverChainLength` | no lines before this release | none | it stays above 2: podcast covers are being drawn by requests, one a second, in a child process of 340 MB |
 
-The worker's minute line, from each `temporal-worker` replica, adds the scan queue:
+The worker's minute line, from each `temporal-worker` replica, adds the queues it gauges:
 
 | Field | Normal range | Warning | Add capacity if |
 |---|---|---|---|
 | `scanQueue.backlogCount` | 0, 0, 0 | none | it grows from one minute to the next |
 | `scanQueue.oldestBacklogAgeMs` | 0, 0, 0 | `scan-backlog` past 15 minutes | it passes 5 minutes |
-| `scanQueue.pollerCount` | 2, 4, 6: two for each replica, more while a deploy overlaps | the sweep's "no temporal worker" error at 0 | never: at 0 the worker is down |
+| `scanQueue.pollerCount` | 2, 4, 6: one for each replica, more while a deploy overlaps | the sweep's "no temporal worker" error at 0 | never: at 0 the worker is down |
+| `scheduledScanQueue.backlogCount` | no lines before this release | none: the sweep's dispatch limit bounds it | it stays near `SCAN_DISPATCH_LIMIT` from one sweep to the next: add a replica |
+| `scheduledChapterQueue.oldestBacklogAgeMs` | no lines before this release | `scheduled-chapter-backlog` past an hour | it passes 15 minutes: raise `PODCAST_SCHEDULED_CHAPTER_CONCURRENCY` or add a replica |
+| `podcastEncodeQueue.oldestBacklogAgeMs` | no lines before this release | `podcast-encode-backlog` past 15 minutes | it passes 5 minutes: add a replica, and keep `PODCAST_ENCODE_CONCURRENCY` at the replica's cores |
+| `topicMemoryQueue.oldestBacklogAgeMs` | no lines before this release | `topic-memory-backlog` past 15 minutes | it passes 5 minutes: raise `TOPIC_MEMORY_CONCURRENCY` |
+| a queue's field reads `null` | never | the worker's "could not read a task queue" error | never: the worker cannot reach Temporal |
 | `pool.waitingCount` | 0, 0, 16: one minute of the week, with the pool full at 81 | `pool-waiting` above 0 | it is above 0 for more than a minute |
 | `eventLoopDelayMs.p99Ms`, `maxMs` | 0, 21, 50 and 10, 76, 2,393 | none for the worker | never by itself |
 
-Only the `topic-scans` queue is in the minute line. Read every other queue's backlog in the Temporal UI, or with
-`temporal task-queue describe --task-queue <name>`.
+Each line names its replica's queue group in `queueGroup`. A `temporal-films` replica's line has the film queues in
+place of the scan queues:
+
+| Field | Normal range | Warning | Add capacity if |
+|---|---|---|---|
+| `topicVideoQueue.oldestBacklogAgeMs` | no lines before this release | `topic-video-backlog` past an hour | it passes 15 minutes: add a `temporal-films` replica |
+| `topicVideoQueue.pollerCount` | one for each film replica | the sweep's "no temporal worker is polling the film queue" error at 0 | never: at 0 no film replica runs |
+| `topicVideoWriteQueue.oldestBacklogAgeMs` | no lines before this release | `topic-video-write-backlog` past 15 minutes | never: no `temporal-worker` replica polls `episode-video-writes`, and every new film waits at its first step |
+| `topicVideosLeftCount` | no lines before this release | none | never: it is the backfill's work left, each Topic's latest podcast episode with no film and each ready film below the current render version |
+
+The minute lines have the `topic-scans`, `episode-scheduled-chapters`, `topic-memories`, `episode-videos`, and
+`episode-video-writes` queues. Read every other queue's backlog in the Temporal UI, or with `temporal task-queue
+describe --task-queue <name>`.
 
 The sweep's lines, every 15 minutes:
 
 | Line | Normal range | Warning | What it means |
 |---|---|---|---|
 | `"gauges":"daily-spend"` `totalDollars` | a day's largest total ran from $1.11 to $22.73 | `daily-spend` at `GLOBAL_DAILY_SPEND_ALERT_USD` | compare it with the cutoffs you set in step 1 |
+| the same line's `platformDollars` and `otherDollars` | no lines before this release | none | the platform's own spend, which no cutoff reads, and the users' paid fetches and searches, both inside `totalDollars` |
 | the same line's `newUserCount` | 0 to 2 a day | `hourly-signups` at the hourly signup alert, 50 by default | the wave has started |
-| `scheduled scan sweep: ...` | 0 started on most runs | none | "left for the next sweep" above 0 means the scan dispatch limit held Scans back |
+| `scheduled scan sweep: ...` | 0 started on most runs | none | "left for the next sweep behind the backlog" above 0 means the scan dispatch limit held Scans back, and "because Temporal could not be reached" above 0 means the sweep could not read the queue or start a Scan |
 | `dispatching ... waiting scans` | not logged while nothing waits | none | Scans are waiting on a cutoff or on the unverified accounts switch |
 
 ### How to add capacity
 
 Every process holds a database pool, so the pool count comes first.
 
-1. **Raise the pool count, then restart.** Each process sizes its pool to the connection pooler's share of
-   `max_connections` divided by `DATABASE_POOL_COUNT`, 10 in production on 2026-11-13 (81 connections a pool). Count
-   the processes that can hold a pool at once after the change: every `app` replica, every `temporal-worker` replica,
-   the sweep, the monthly budget reset, the replicas a rolling deploy overlaps with, and the release jobs. Set
-   `DATABASE_POOL_COUNT` in Doppler to that number and restart `app` and `temporal-worker` before adding a replica. A
-   process reads the setting only at its start.
+1. **Raise the pool count, then restart.** One pool share is the connection pooler's share of `max_connections`
+   divided by `DATABASE_POOL_COUNT`, 10 in production on 2026-11-13 (81 connections a share). An `app` replica, a `web`
+   replica, a `temporal-films` replica, the sweep, and the monthly budget reset each hold one pool share, and a
+   `temporal-worker` replica holds two, because a worker replica peaked at 78 open connections where an `app` replica
+   peaked at 28. Count the pool shares that can be held at once after the change, with every service at its
+   autoscaling maximum, and add three for the replicas a rolling deploy overlaps with and the release jobs: 25 with
+   `app`, `web`, `temporal-worker`, and `temporal-films` at four replicas each. Set `DATABASE_POOL_COUNT` in Doppler
+   to that number and restart every service before adding a replica. A process reads the setting only at its start,
+   and its startup line reads `database pool sized to 64 connections, 2 of 25 pool shares, from max_connections 901`.
 2. **Add the replicas or the size**, in Northflank, from the table below.
 
 | Service | What it runs | Size and replicas on 2026-11-13 | Termination grace | Health checks | To add capacity |
 |---|---|---|---|---|---|
-| `app` | the api and every page render | 1 vCPU and 2,048 MB, 2 to 4 replicas autoscaled at 70% CPU | **Owner** | startup and liveness on `/api/health`, readiness on `/api/health/ready` | raise the autoscaler's maximum, then the plan |
-| `temporal-worker` | every Temporal queue | 2 vCPU and 4,096 MB, 2 replicas, no autoscaling, 2 GB disk | **Owner**, longer than two minutes | none | add replicas |
+| `app` | the api, the MCP server, and every stream | 1 vCPU and 2,048 MB, 2 to 4 replicas autoscaled at 70% CPU | **Owner** | startup and liveness on `/api/health`, readiness on `/api/health/ready` | raise the autoscaler's maximum, then the plan |
+| `web` | every page render, document, and public image, once its routes are added | the same as `app` | **Owner** | the same as `app` | raise the autoscaler's maximum, then the plan |
+| `temporal-worker` | every Temporal queue but the three that render films, with the films' short writes | 2 vCPU and 4,096 MB, 2 replicas, no autoscaling, 2 GB disk | **Owner**, longer than two minutes | none | add replicas |
+| `temporal-films` | the film queue, the rebuild queue, and the backfill's queue | 4 vCPU and 8 GB, 1 replica, no autoscaling, 2 GB disk | 180 seconds | none | raise the autoscaler's maximum, or add replicas by hand |
 | `temporal` | the Temporal server | 1 vCPU and 1,024 MB, 1 replica | **Owner** | TCP liveness on 7233 | raise the plan |
 | `litellm` | the proxy in front of every model call | 1 vCPU and 4,096 MB, 2 replicas | **Owner** | liveness on `/health/liveliness` | add replicas |
 | `redis` addon | Redis 8 | 0.2 vCPU and 512 MB, 1 replica, 6 GB disk | not applicable | the platform's | raise the plan |
@@ -382,29 +535,61 @@ Every process holds a database pool, so the pool count comes first.
 | `scan-sweep` cron job | the sweep, every 15 minutes, one at a time, 10 minutes at most | 1 vCPU and 1,024 MB | not applicable | none | raise the plan |
 
 A visitor's page render past `RENDER_CONCURRENCY`, 16 on a replica by default, gets "the site is busy, try again in
-a moment" with a two-second retry. That is the reading that `app` needs another replica. Raising the setting needs a
-restart of `app` and gives a replica more renders than its one vCPU serves well.
+a moment" with a two-second retry. That is the reading that the service rendering pages, `web` once its routes are
+added and `app` before, needs another replica. Raising the setting needs a restart of that service and gives a replica
+more renders than its one vCPU serves well.
 
 A chat post over 3.25 MB waits its turn among 104 MB of large chat bodies on a replica, one at a time for each user.
 A post that waits 20 seconds gets "Carl is busy reading other files" and the api logs "a large body waited 20000 ms
 for its turn and got the busy response". That line is the reading that `app` needs another replica.
 
 A Worker's slots are fixed when the worker starts, so during a wave the way to add scan or recording capacity is to
-add `temporal-worker` replicas. Each replica adds the slots below on every queue. Changing a setting means a
-restart, and a worker restart costs each film render in progress one of its three attempts and up to four hours of
-work, and a review one of its two attempts. Two restarts inside one review fail that Scan.
+add `temporal-worker` replicas, and the way to add film capacity is to add `temporal-films` replicas. Each replica
+adds the slots below on each of its service's queues. Changing a setting means a restart. A restart costs a film
+render the shot in progress and none of its three attempts: the render is scheduled again and downloads the shots it
+had stored. It costs a review one of its three attempts, and the next attempt skips the pages already scored. Three
+restarts inside one review fail that Scan.
 
-| Queue | Slots on a replica | Setting |
-|---|---|---|
-| `topic-scans` | 8 | `SCAN_CONCURRENCY` |
-| `scan-closing` | 8 | fixed |
-| `scan-emails`, `personal-sources-email` | 4 each | fixed |
-| `push-notifications` | 4 | fixed |
-| `source-screening`, `attachment-processing`, `personal-sources`, `topic-images`, `topic-posts` | 8 each | `SCREEN_CONCURRENCY` |
-| `episode-recordings` | 16 | `PODCAST_RECORDING_CONCURRENCY` |
-| `dashboard-snapshots` | 2 | fixed |
-| `episode-videos` | 1 | `TOPIC_VIDEO_CONCURRENCY` |
-| `episode-video-backfill` | 1 | `TOPIC_VIDEO_BACKFILL_CONCURRENCY` |
+| Queue | Service | Slots on a replica | Setting |
+|---|---|---|---|
+| `topic-scans` | `temporal-worker` | 16 | `SCAN_CONCURRENCY` |
+| `topic-scans-scheduled` | `temporal-worker` | 8 | `SCHEDULED_SCAN_CONCURRENCY` |
+| `scan-closing` | `temporal-worker` | 8 | fixed |
+| `scan-emails`, `personal-sources-email` | `temporal-worker` | 4 each | fixed |
+| `push-notifications` | `temporal-worker` | 4 | fixed |
+| `source-screening`, `attachment-processing`, `personal-sources`, `topic-images`, `topic-posts` | `temporal-worker` | 8 each | `SCREEN_CONCURRENCY` |
+| `episode-recordings` | `temporal-worker` | 16 | `PODCAST_RECORDING_CONCURRENCY` |
+| `episode-scheduled-chapters` | `temporal-worker` | 32 | `PODCAST_SCHEDULED_CHAPTER_CONCURRENCY` |
+| `episode-encodes` | `temporal-worker` | 2, one for each of the replica's cores | `PODCAST_ENCODE_CONCURRENCY` |
+| `topic-memories` | `temporal-worker` | 2 | `TOPIC_MEMORY_CONCURRENCY` |
+| `dashboard-snapshots` | `temporal-worker` | 2 | fixed |
+| `episode-video-writes` | `temporal-worker` | 8 | fixed |
+| `episode-videos` | `temporal-films` | 1, and 2 once `TOPIC_VIDEO_CONCURRENCY=2` is set | `TOPIC_VIDEO_CONCURRENCY` |
+| `episode-video-rebuilds` | `temporal-films` | 1 | fixed |
+| `episode-video-backfill` | `temporal-films` | 1 | `TOPIC_VIDEO_BACKFILL_CONCURRENCY` |
+
+A film replica renders `TOPIC_VIDEO_CONCURRENCY` films at once, and a new film's render and a backfill's render wait
+in one line for those slots. A render is about two cores wide, so two fill the service's four cores. A render gives
+its slot back while it waits on a provider for an image, a chapter's plan, or a clip. The backfill starts no render
+while a new film waits in `episode-videos` for a film Worker, so the first step for a film backlog is to leave the
+backfill alone, and the second is another `temporal-films` replica. Each attempt may use 1 GiB of the replica's
+disk, and a replica holds three attempts at once, two renders and a rebuild.
+
+Each worker replica serves its demand for the platform's autoscaling at `/metrics` on `WORKER_METRICS_PORT`, 9464 by
+default. A film replica serves `carlnotes_film_demand`: the renders its film Workers have taken plus the film queue's
+backlog divided by its pollers. Each replica takes an equal share of the backlog, so the replicas' average is the
+whole demand divided by the replicas, and a target of 2 is one replica's render slots in use and nothing waiting. A
+main worker serves `carlnotes_scan_demand` the same way over both scan queues. Its target is 16, the slots of a
+person's Scans, not 24, all the replica's scan slots. At 24, a replica with its 8 scheduled slots idle reads at most
+26 while 10 of a person's Scans wait, which is under the 26.4 that a 10% tolerance needs to add a replica. At 16, a
+person's Scans that fill their slots scale the service as soon as more wait, and scheduled Scans running beside them
+add replicas sooner. A replica that cannot read its queue answers 503 with no number.
+
+A person's first Scan and a Scan started by hand run on `topic-scans`, and the sweep's scheduled Scans on
+`topic-scans-scheduled`, so a wave of scheduled Scans never holds a slot that a person waits for. The sweep sizes
+its scheduled starts from the scheduled queue's backlog. A podcast episode's audio is joined on `episode-encodes`,
+where encodes that arrive together wait for a core. A container reports its host's cores, so the worker cannot count
+its own: if `temporal-worker` moves to a plan with another vCPU count, set `PODCAST_ENCODE_CONCURRENCY` to it.
 
 ### Switches, as a last resort
 
@@ -441,6 +626,10 @@ To stop new podcast episodes, turn off **Allow new podcast episodes**.
 - **Never roll the worker back past a `patched` workflow change.** `patched` lets an old workflow history replay on
   new code, never a new history on old code. A workflow that recorded the patch would no longer replay on the older
   worker, and it would stay stuck until the worker moves forward again. Fix the worker forward.
+- **A worker from before a queue was added does not poll it.** The api and the sweep start a scheduled Scan on
+  `topic-scans-scheduled`, and a recording schedules its encode on `episode-encodes`. Both wait there with no error
+  until a worker that polls the queue runs again, so a worker rolled back past this release leaves them waiting.
+  The sweep reports a scan queue with no poller as "no temporal worker is polling the scan queue".
 - **A migration adds in one release and removes in a later one.** That keeps the previous build running against the
   schema. A test in `packages/db/schema.test.ts` fails a migration that holds `DROP COLUMN`, `DROP TABLE`, or
   `RENAME` unless its first comment says the previous release no longer reads what it removes.
@@ -541,10 +730,13 @@ A lost workflow leaves its row behind. The sweep handles these:
   after 24 hours and 15 minutes. A Scan that was opened and never started is started again on the next sweep.
 - **A Source's screen** starts again on every sweep.
 - **Personal sources work** is recovered by the sweep.
+- **A podcast episode at `recording`, a film at `rendering`, a Topic Post Discussion at `recording`, a Topic image
+  render at `pending`, and an attachment at `pending`** are each started again once on the same row, after the
+  workflow's longest run and 15 minutes: 9 hours 9 minutes for a podcast episode. A row that was already started
+  again is marked failed.
 
-Nothing closes these out, so each stays as it is until someone acts on it by hand: a podcast episode at
-`recording`, a film at `rendering`, a Topic Post Discussion at `recording`, a Topic image render at `pending`, an
-attachment at `pending`, and a Topic Post's steps after its publish (its summary, image, and first discussion).
+Nothing closes out a Topic Post's steps after its publish (its summary, image, and first discussion), so each stays
+as it is until someone acts on it by hand.
 
 ### LiteLLM's database
 

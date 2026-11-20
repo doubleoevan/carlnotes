@@ -7,8 +7,9 @@ TBD - created by archiving change cache-at-the-edge. Update Purpose after archiv
 
 ### Requirement: A signed-out page and the signed-out feed are shared at the edge for a minute
 
-The api SHALL send a page the ui's server renders, a blog page, a release page, and `/api/topic-feed` with
-`Cache-Control: no-cache`, `CDN-Cache-Control: max-age=60, stale-while-revalidate=60, stale-if-error=120`, and
+The api, started as the `app` service or the `web` service, SHALL send a page the ui's server renders, a blog page, a
+release page, and `/api/topic-feed` with `Cache-Control: no-cache`,
+`CDN-Cache-Control: max-age=60, stale-while-revalidate=60, stale-if-error=120`, and
 `Cache-Tag: rendered` if the response is a 200 or a permanent redirect (301 or 308), the request has no Better Auth
 session cookie and no `Authorization` header, and the response sets no cookie. Every other response from those routes
 SHALL be sent with `Cache-Control: private, no-cache` and no `CDN-Cache-Control`. The browser always revalidates, and
@@ -48,6 +49,12 @@ copy.
 
 - **WHEN** a request without a session cookie reaches a topic's old slug and is redirected permanently
 - **THEN** the redirect is sent with the shared `CDN-Cache-Control`
+
+#### Scenario: The web service sends the same headers
+
+- **WHEN** path routing sends a public topic page to the `web` service and a request without a session cookie renders
+  it
+- **THEN** the response has the headers and the `rendered` tag that the `app` service sends for the same request
 
 ### Requirement: The edge caches by the origin's headers and bypasses a signed-in request
 
@@ -146,14 +153,14 @@ The ui SHALL draw the signed-in user's own avatar at the session's version, what
 
 ### Requirement: Each release purges the rendered responses from the edge
 
-The release pipeline SHALL purge every edge response tagged `rendered` right after the new app is running, with
-Cloudflare's purge by tag, which includes the unhashed public files. A purge request SHALL give up after ten seconds. A
-missing Cloudflare setting SHALL be logged, and a failed purge SHALL be logged and reported to Sentry, and neither SHALL
-fail the release.
+The release pipeline SHALL purge every edge response tagged `rendered` right after the new `web` service is running,
+which the release deploys after the new app, with Cloudflare's purge by tag, which includes the unhashed public files.
+A purge request SHALL give up after ten seconds. A missing Cloudflare setting SHALL be logged, and a failed purge SHALL
+be logged and reported to Sentry, and neither SHALL fail the release.
 
 #### Scenario: A release purges the pages
 
-- **WHEN** a release has deployed the app
+- **WHEN** a release has deployed the app and then the `web` service
 - **THEN** the purge job clears the `rendered` tag before the worker deploys
 
 #### Scenario: Images and assets survive the purge
@@ -172,6 +179,11 @@ fail the release.
 - **WHEN** the Cloudflare settings are unset
 - **THEN** the job logs that the purge was skipped, reports nothing, and exits successfully, and the worker still
   deploys
+
+#### Scenario: The purge never runs ahead of the web service
+
+- **WHEN** the new `web` replicas are still rolling out
+- **THEN** the purge has not run, so the edge never refills from a replica of the previous build
 
 ### Requirement: Compression happens only at the edge
 

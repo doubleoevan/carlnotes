@@ -56,6 +56,7 @@ function configureTranscription(): void {
 // a recording as Safari writes it: 16 kHz mono silence for the seconds, as aac in a fragmented mp4
 async function toSafariRecording(seconds: number): Promise<Uint8Array> {
 	return runFfmpeg({
+		timeoutMs: 60_000,
 		ffmpegArguments: [
 			...["-f", "s16le", "-ar", "16000", "-ac", "1", "-i", "pipe:0"],
 			...["-c:a", "aac", "-movflags", "frag_keyframe+empty_moov", "-f", "mp4", "pipe:1"],

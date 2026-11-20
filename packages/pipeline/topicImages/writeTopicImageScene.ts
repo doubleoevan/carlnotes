@@ -9,6 +9,7 @@ import {
 	type PromptName,
 	promptTelemetry,
 } from "@carlnotes/models/prompts/fetch"
+import { loadPromptFragment } from "@carlnotes/models/prompts/fragment"
 import { writePrompt } from "@carlnotes/models/prompts/write"
 import { generateText } from "ai"
 
@@ -102,8 +103,12 @@ export async function toTopicImagePrompt(
 	scene: string,
 	stylePromptName: PromptName = "topic-image-style",
 ): Promise<string> {
-	const { template } = await fetchPromptTemplate(stylePromptName)
-	return `${scene}\n\n${writePrompt(template, {})}`
+	// the style prompt and the limits both image styles share
+	const [{ template }, topicImageLimitsBlock] = await Promise.all([
+		fetchPromptTemplate(stylePromptName),
+		loadPromptFragment("topic-image-limits"),
+	])
+	return `${scene}\n\n${writePrompt(template, {}, { topicImageLimitsBlock })}`
 }
 
 // one framing at random

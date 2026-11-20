@@ -84,6 +84,11 @@ Every topic page has a **Brew diary**: one summary per brew, with "read N · kep
 diary answers one question: did the prompt rewrite help? Rewrite the prompt, press **Brew**, and compare the new entry's
 kept count and findings against the entries before it. Over a few brews, the entries show whether the rewrite helped.
 
+Carl judges a page once for your topic. A brew that finds only pages he already judged reviews nothing: its entry
+reads "kept 0" and has no recap, and your topic's notes keep the last recap he wrote. He reads a page again if you
+edit the prompt or the attachments, if the page changed, if you add it as a URL source, or if you rate the podcast
+chapter about it.
+
 ## When you want to talk
 
 The topic feed gives you one finding at a time. When the question is "what changed this month" or "where do these

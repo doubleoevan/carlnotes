@@ -48,7 +48,7 @@ import type { TopicContext } from "./topicContext"
 import { type ResourceOutcome, type ReviewOutcome, trackOutcomes } from "./track"
 
 // how many resources the paid fetch-and-scoring section works concurrently
-const REVIEW_CONCURRENCY = toPositiveInteger(Bun.env.REVIEW_CONCURRENCY, 4)
+export const REVIEW_CONCURRENCY = toPositiveInteger(Bun.env.REVIEW_CONCURRENCY, 4)
 
 // the text limit that bounds scoring tokens and spend
 const MAX_SCORE_CHARS = 8000
@@ -173,7 +173,7 @@ async function fetchAndScoreResource(
 	let reviewStage: "fetch" | "score" | "save" = "fetch"
 	try {
 		// get the content by reuse, revalidation, or a paid fetch, then increment the FetchOutcome
-		const { content, fetchOutcome } = await fetchResourceContent(resource, budget)
+		const { content, fetchOutcome, isPageReadAgain } = await fetchResourceContent(resource, budget)
 		budget.fetchCounts[toFetchCountField(fetchOutcome)]++
 
 		// a Resource that resolved to no text at all, an episode with no transcript and no show notes, is dropped here
@@ -207,7 +207,7 @@ async function fetchAndScoreResource(
 			resource,
 			score: scoredResource.score,
 			relevanceExplanation: scoredResource.relevanceExplanation,
-			topicContextHash: topicContext.contextHash,
+			topicContextHash: toReviewedContextHash(topicContext, isPageReadAgain),
 			isFromCustomSource: customSourceUrls.has(resource.url),
 			personalSourceScoreBonus: resource.personalSourceScoreBonus,
 			personalSources: topicContext.personalSources,
@@ -245,6 +245,12 @@ async function fetchAndScoreResource(
 		// what the Resource spent was charged as it ran, so its reservation ends however the paid section ended
 		releaseScanSpend(budget, reservedDollars)
 	}
+}
+
+// the context hash that a Finding records: none for a Finding scored on its snippet after a fetch that failed for a
+// reason other than the page itself, so the next Scan that finds the page reads it again
+function toReviewedContextHash(topicContext: TopicContext, isPageReadAgain: boolean): string | null {
+	return isPageReadAgain ? null : topicContext.contextHash
 }
 
 /**

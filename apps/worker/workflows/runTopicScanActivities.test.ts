@@ -1,27 +1,24 @@
-// scan activity tests: each review attempt gets its own model call wait deadline, the ingest stage runs no Source for
-// a Scan that is already marked failed and passes on only what the later stages read, a finished, a stopped, and a
-// failed scan each save their topic's vectors, while a scan with no topic saves none, and the finish write counts each
-// Source's kept findings
+// scan stage activity tests: the ingest stage runs no Source for a Scan that is already marked failed and passes on
+// only what the later stages read, each review attempt gets its own model call wait deadline, and a review that its
+// worker's shutdown cancelled fails for a retry while a stopped one returns
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import type { StoredSourceResult } from "@carlnotes/contracts/topics"
-import { restoreConnectionPool, type SentQuery, stubConnectionPool, toTableRow } from "@carlnotes/db/connectionPoolStub"
+import { restoreConnectionPool, stubConnectionPool, toTableRow } from "@carlnotes/db/connectionPoolStub"
 import { scans } from "@carlnotes/db/schema/scans"
-import { topics } from "@carlnotes/db/schema/topics"
 import { newBudget, toCheckpointBudget, toResumedBudget } from "@carlnotes/models/budget"
 import * as litellm from "@carlnotes/models/litellm"
 import * as ingest from "@carlnotes/pipeline/ingest/index"
-import type { DiscoveredResource } from "@carlnotes/pipeline/ingest/ingester"
-import { REVIEW_MODEL_CALL_WAIT_DEADLINE_MS } from "@carlnotes/pipeline/stageTimeouts"
-import * as analytics from "@carlnotes/server/analytics"
+import * as review from "@carlnotes/pipeline/review/index"
+import { emptyReviewSummary } from "@carlnotes/pipeline/review/track"
+import { REVIEW_ATTEMPTS, REVIEW_MODEL_CALL_WAIT_DEADLINE_MS } from "@carlnotes/pipeline/stageTimeouts"
 import { ApplicationFailure } from "@temporalio/activity"
+import { MockActivityEnvironment } from "@temporalio/testing"
+import { DefaultLogger } from "@temporalio/worker"
 import {
-	failScan,
-	finishScan,
 	type IngestStageResult,
 	ingestForScan,
-	stopScan,
+	reviewForScan,
 	toModelCallWaitDeadlineBudget,
-	toScanSourceResults,
 } from "./runTopicScanActivities"
 
 // the connection pool's own query, put back after each test along with the spies
@@ -29,16 +26,6 @@ afterEach(() => {
 	restoreConnectionPool()
 	mock.restore()
 })
-
-// the scan update returns its topic, and every other query returns no rows
-function toScanUpdateRows(sentQuery: SentQuery): unknown[] {
-	return sentQuery.text.startsWith('update "scans"') ? [["topic-1"]] : []
-}
-
-// the topic vector upsert among the sent queries
-function findTopicVectorUpsert(sentQueries: SentQuery[]): SentQuery | undefined {
-	return sentQueries.find((sentQuery) => sentQuery.text.startsWith('insert into "topic_vectors"'))
-}
 
 // the ingest stage throws the Scan's own failure reason as a failure that Temporal does not retry
 test("a Scan that is already marked failed runs no Source and keeps its failure reason", async () => {
@@ -56,221 +43,6 @@ test("a Scan that is already marked failed runs no Source and keeps its failure 
 	expect(thrownFailure).toMatchObject({ message: "the reason", nonRetryable: true })
 	expect(loadOrProvisionUserLiteLLMKeySpy).not.toHaveBeenCalled()
 	expect(ingestFromTopicSourcesSpy).not.toHaveBeenCalled()
-})
-
-// a review that kept nothing, for a finish that reads its kept findings from the stubbed rows
-const EMPTY_REVIEW = {
-	keptCount: 0,
-	filteredCount: 0,
-	earlierFoundCount: 0,
-	addedOrFilteredFindingCount: 0,
-	scanSummary: "",
-	resourceIdsToScore: [],
-	scoredResourceIds: [],
-}
-
-// an ingest stage result with no Resources, Sources, or results, for each test to override
-function toIngestStageResult(overrides: Partial<IngestStageResult> = {}): IngestStageResult {
-	return {
-		resources: [],
-		foundCount: 0,
-		status: "succeeded",
-		problemSources: [],
-		sourceOutcomes: [],
-		budget: newBudget(),
-		...overrides,
-	}
-}
-
-// the value an update sent for one column, found by the parameter number its sql names
-function toSetValue(sentQuery: SentQuery | undefined, columnName: string): unknown {
-	const parameterNumber = sentQuery?.text.match(new RegExp(`"${columnName}" = \\$(\\d+)`))?.[1]
-	return parameterNumber === undefined ? undefined : sentQuery?.values[Number(parameterNumber) - 1]
-}
-
-// the scan update among the sent queries
-function findScanUpdate(sentQueries: SentQuery[]): SentQuery | undefined {
-	return sentQueries.find((sentQuery) => sentQuery.text.startsWith('update "scans"'))
-}
-
-// one Source's stored result before its kept count is filled in
-function toIngestSourceResult(sourceId: string, foundCount: number): StoredSourceResult {
-	return {
-		sourceId,
-		sourceKind: "rss",
-		label: sourceId,
-		foundCount,
-		keptCount: 0,
-		costDollars: 0,
-		durationMs: 500,
-		status: "ok",
-	}
-}
-
-// one discovered Resource credited to a Source
-function toDiscoveredResource(url: string, sourceId: string): DiscoveredResource {
-	return { url, kind: "read", isFromCustomSource: true, sourceId }
-}
-
-test("a finished scan saves its topic's vectors, whatever its status", async () => {
-	// the finished scan row, and no topic row, so the finish stops after the vectors
-	const finishedScanRow = toTableRow(scans, { id: "scan-1", topicId: "topic-1", ownerId: "owner-1", status: "failed" })
-	const sentQueries = stubConnectionPool(({ text }) => (text.startsWith('update "scans"') ? [finishedScanRow] : []))
-
-	// a scan whose ingest failed and whose review kept nothing
-	const budget = newBudget()
-	const ingestResult = toIngestStageResult({ status: "failed", budget })
-	await finishScan("scan-1", "topic-1", "owner-1", ingestResult, { review: EMPTY_REVIEW, budget })
-	expect(findTopicVectorUpsert(sentQueries)?.values).toContain("topic-1")
-})
-
-// a prompt edit re-scores the topic's findings into this scan, so the kept findings no Source returned count as earlier
-test("each Source's kept count plus the earlier count equals the kept count", () => {
-	// two Sources that found 6 and 4 Resources, and a scan that kept 3 and 2 of them and 30 findings from earlier scans
-	const discoveredResources = [
-		...Array.from({ length: 6 }, (_, i) => toDiscoveredResource(`https://a.test/${i}`, "source-a")),
-		...Array.from({ length: 4 }, (_, i) => toDiscoveredResource(`https://b.test/${i}`, "source-b")),
-	]
-	const keptFindingUrls = [
-		...["https://a.test/0", "https://a.test/1", "https://a.test/2", "https://b.test/0", "https://b.test/3"],
-		...Array.from({ length: 30 }, (_, i) => `https://earlier.test/${i}`),
-	]
-	const scanSourceResults = toScanSourceResults({
-		ingestSourceResults: [toIngestSourceResult("source-a", 6), toIngestSourceResult("source-b", 4)],
-		discoveredResources,
-		keptFindingUrls,
-		earlierFoundCount: 30,
-	})
-
-	// the Sources kept 3 and 2, the other 30 are earlier, and the parts add up to the kept count
-	const sourceKeptCounts = scanSourceResults.sources.map((sourceResult) => sourceResult.keptCount)
-	const keptCountSum = sourceKeptCounts.reduce((sum, keptCount) => sum + keptCount, 0)
-	expect(sourceKeptCounts).toEqual([3, 2])
-	expect(scanSourceResults.earlierKeptCount).toBe(30)
-	expect(keptCountSum + scanSourceResults.earlierKeptCount).toBe(keptFindingUrls.length)
-	expect(scanSourceResults.earlierFoundCount).toBe(30)
-
-	// a credited url is one of its Source's Resources, so no Source keeps more than it found
-	for (const sourceResult of scanSourceResults.sources) {
-		expect(sourceResult.keptCount).toBeLessThanOrEqual(sourceResult.foundCount)
-	}
-})
-
-// the finish reads the kept findings' urls once and writes the kept count and each Source's result in the same update
-test("the finish update writes the source results beside the kept count", async () => {
-	// the scan kept two findings, one per Source, and has no topic row, so the finish stops after the vectors
-	const finishedScanRow = toTableRow(scans, { id: "scan-1", topicId: "topic-1", ownerId: "owner-1" })
-	const sentQueries = stubConnectionPool(({ text }) => {
-		if (text.includes('from "findings" inner join "resources"')) {
-			return [["https://a.test/0"], ["https://b.test/0"]]
-		}
-		return text.startsWith('update "scans"') ? [finishedScanRow] : []
-	})
-
-	// a payload with two Sources, each credited one of the kept urls
-	const ingestResult = toIngestStageResult({
-		resources: [
-			toDiscoveredResource("https://a.test/0", "source-a"),
-			toDiscoveredResource("https://b.test/0", "source-b"),
-		],
-		foundCount: 2,
-		sourceResults: [toIngestSourceResult("source-a", 1), toIngestSourceResult("source-b", 1)],
-	})
-	await finishScan("scan-1", "topic-1", "owner-1", ingestResult, { review: EMPTY_REVIEW, budget: newBudget() })
-
-	// the one update writes the kept count and each Source's kept count
-	const scanUpdate = findScanUpdate(sentQueries)
-	expect(toSetValue(scanUpdate, "kept_count")).toBe(2)
-	expect(JSON.parse(String(toSetValue(scanUpdate, "source_results")))).toEqual({
-		sources: [
-			{ ...toIngestSourceResult("source-a", 1), keptCount: 1 },
-			{ ...toIngestSourceResult("source-b", 1), keptCount: 1 },
-		],
-		earlierKeptCount: 0,
-		earlierFoundCount: 0,
-	})
-})
-
-// Personal sources links reach the Scan as Findings with a score bonus, and each sender's annotation on them is private
-test("a finished scan reports its Personal sources Findings and private annotations", async () => {
-	const finishedScanRow = toTableRow(scans, { id: "scan-1", topicId: "topic-1", ownerId: "owner-1", keptCount: 2 })
-	const topicRow = toTableRow(topics, { id: "topic-1", visibility: "private" })
-	stubConnectionPool(({ text }) => {
-		// one kept Finding with a score bonus, and one without
-		if (text.includes('from "findings" inner join "resources"')) {
-			return [
-				["https://a.test/0", 0.1],
-				["https://b.test/0", 0],
-			]
-		}
-		// the private annotations that the Scan saved
-		if (text.includes('from "finding_personal_annotations"')) {
-			return [[3]]
-		}
-
-		// the Topic, and the Scan's finished row
-		if (text.startsWith("select") && text.includes('from "topics"')) {
-			return [topicRow]
-		}
-		return text.startsWith('update "scans"') ? [finishedScanRow] : []
-	})
-
-	// the finish reports the Scan's counts
-	const trackEventSpy = spyOn(analytics, "trackEvent")
-	await finishScan("scan-1", "topic-1", "owner-1", toIngestStageResult({ foundCount: 2 }), {
-		review: EMPTY_REVIEW,
-		budget: newBudget(),
-	})
-	const scanCompleted = trackEventSpy.mock.calls.find(([event]) => event === "scan_completed")
-	expect(scanCompleted?.[2]).toMatchObject({ personalFindingsKept: 1, privateAnnotationsSaved: 3 })
-})
-
-// the read count is what the Sources returned plus the earlier findings the review read again
-test("the finish adds the earlier findings the review read again to the read count", async () => {
-	const sentQueries = stubConnectionPool(toScanUpdateRows)
-	const ingestResult = toIngestStageResult({
-		foundCount: 2,
-		sourceResults: [toIngestSourceResult("source-a", 2)],
-	})
-	await finishScan("scan-1", "topic-1", "owner-1", ingestResult, {
-		review: { ...EMPTY_REVIEW, earlierFoundCount: 3 },
-		budget: newBudget(),
-	})
-
-	// the scan reads 5, and its source results record the 3 earlier reads
-	const scanUpdate = findScanUpdate(sentQueries)
-	expect(toSetValue(scanUpdate, "found_count")).toBe(5)
-	expect(JSON.parse(String(toSetValue(scanUpdate, "source_results"))).earlierFoundCount).toBe(3)
-})
-
-// a review from a worker before the earlier read count leaves the read count at what the Sources returned
-test("a review payload without the earlier read count reads none", async () => {
-	const sentQueries = stubConnectionPool(toScanUpdateRows)
-	const { earlierFoundCount: _, ...reviewWithoutEarlierFoundCount } = EMPTY_REVIEW
-	await finishScan("scan-1", "topic-1", "owner-1", toIngestStageResult({ foundCount: 2 }), {
-		review: reviewWithoutEarlierFoundCount as typeof EMPTY_REVIEW,
-		budget: newBudget(),
-	})
-	expect(toSetValue(findScanUpdate(sentQueries), "found_count")).toBe(2)
-})
-
-// a payload from a worker before source results has none to count, so the scan saves with no results
-test("a payload without source results writes null", async () => {
-	const sentQueries = stubConnectionPool(toScanUpdateRows)
-	await finishScan("scan-1", "topic-1", "owner-1", toIngestStageResult(), {
-		review: EMPTY_REVIEW,
-		budget: newBudget(),
-	})
-	expect(findScanUpdate(sentQueries)?.text).toContain('"source_results" = $')
-	expect(toSetValue(findScanUpdate(sentQueries), "source_results")).toBeNull()
-})
-
-// a stopped scan saves its status and times only, so it never writes a kept count or results
-test("a stop writes neither the kept count nor the source results", async () => {
-	const sentQueries = stubConnectionPool(toScanUpdateRows)
-	await stopScan("scan-1")
-	expect(findScanUpdate(sentQueries)?.text).not.toContain('"kept_count"')
-	expect(findScanUpdate(sentQueries)?.text).not.toContain('"source_results"')
 })
 
 // the ingest payload is stored in the scan's history three times, so it holds only what the later stages read
@@ -334,27 +106,10 @@ test("the ingest stage passes on each Source's outcome as only the four fields t
 		"source-c",
 		"source-d",
 	])
+	// a Resource crosses as its url, its Source, and the flag that is set, with no title, snippet, or body
 	expect(ingestStageResult.resources).toEqual([
-		{ url: "https://a.test/page", kind: "read", title: "The page", isFromCustomSource: true, sourceId: "source-a" },
+		{ url: "https://a.test/page", isFromCustomSource: true, sourceId: "source-a" },
 	])
-})
-
-test("a stopped scan saves its topic's vectors", async () => {
-	const sentQueries = stubConnectionPool(toScanUpdateRows)
-	await stopScan("scan-1")
-	expect(findTopicVectorUpsert(sentQueries)?.values).toContain("topic-1")
-})
-
-test("a failed scan saves its topic's vectors", async () => {
-	const sentQueries = stubConnectionPool(toScanUpdateRows)
-	await failScan("scan-1", "the review stage threw an error")
-	expect(findTopicVectorUpsert(sentQueries)?.values).toContain("topic-1")
-})
-
-test("a scan whose topic was deleted saves no vectors", async () => {
-	const sentQueries = stubConnectionPool((sentQuery) => (sentQuery.text.startsWith('update "scans"') ? [[null]] : []))
-	await stopScan("scan-1")
-	expect(findTopicVectorUpsert(sentQueries)).toBeUndefined()
 })
 
 test("each review attempt gets a fresh model call wait deadline", () => {
@@ -371,4 +126,61 @@ test("each review attempt gets a fresh model call wait deadline", () => {
 	expect(secondAttemptBudget.modelCallWaitDeadlineAt).toBe(Date.now() + REVIEW_MODEL_CALL_WAIT_DEADLINE_MS)
 	expect(secondAttemptBudget.modelCallWaitDeadlineAt).toBeGreaterThan(firstAttemptBudget.modelCallWaitDeadlineAt ?? 0)
 	nowSpy.mockRestore()
+})
+
+// what cancels a review in the middle: Temporal's reason, and the details that say whether the worker is shutting down
+type ReviewCancellation = Parameters<MockActivityEnvironment["cancel"]>
+
+// a review activity's run, and what the attempt checkpointed for the next one
+type CancelledReview = { reviewRun: ReturnType<typeof reviewForScan>; heartbeats: unknown[] }
+
+// run the review activity for a Scan whose review is cancelled while it scores, and return the run with its heartbeats
+function runCancelledReview(...reviewCancellation: ReviewCancellation): CancelledReview {
+	// the Scan's row for every read of it, and no Finding
+	stubConnectionPool(({ text }) =>
+		text.includes('from "scans"') ? [toTableRow(scans, { id: "scan-1", topicId: "topic-1", ownerId: "owner-1" })] : [],
+	)
+	spyOn(litellm, "loadOrProvisionUserLiteLLMKey").mockResolvedValue("a-key")
+
+	// a review that is cancelled in the middle, has spent ten cents, and returns what it has, as the real one does.
+	// the environment logs errors alone, so a failed attempt's warning stays out of the test output
+	const activityEnvironment = new MockActivityEnvironment({}, { logger: new DefaultLogger("ERROR") })
+	spyOn(review, "reviewScan").mockImplementation(async (_scan, _topicId, _resources, _sources, budget) => {
+		activityEnvironment.cancel(...reviewCancellation)
+		budget.spentDollars = 0.1
+		return emptyReviewSummary()
+	})
+
+	// collect what the attempt checkpoints for the next one
+	const heartbeats: unknown[] = []
+	activityEnvironment.on("heartbeat", (heartbeatDetails) => heartbeats.push(heartbeatDetails))
+	const ingestResult = { resources: [], sourceOutcomes: [] } as unknown as IngestStageResult
+	const reviewRun = activityEnvironment.run(reviewForScan, "scan-1", "topic-1", "owner-1", ingestResult, newBudget())
+	return { reviewRun: reviewRun as CancelledReview["reviewRun"], heartbeats }
+}
+
+// a deploy shuts the worker down, which aborts the same signal a person's stop does
+test("a review that its worker's shutdown cancelled fails for a retry, after it checkpoints its spend", async () => {
+	const workerShutdown = { workerShutdown: true } as ReviewCancellation[1]
+	const { reviewRun, heartbeats } = runCancelledReview("WORKER_SHUTDOWN", workerShutdown)
+
+	// the attempt fails instead of returning part of its pages, with a failure that Temporal retries
+	const failure = await reviewRun.then(
+		() => null,
+		(error: unknown) => error as ApplicationFailure,
+	)
+	expect(failure).toBeInstanceOf(ApplicationFailure)
+	expect(failure?.message).toBe("the worker shut down during the review")
+	expect([failure?.type, failure?.nonRetryable]).toEqual(["WorkerShutdown", false])
+
+	// the next attempt resumes from the ten cents this one spent, and two shutdowns still leave an attempt
+	expect(heartbeats.at(-1)).toMatchObject({ spentDollars: 0.1 })
+	expect(REVIEW_ATTEMPTS).toBe(3)
+})
+
+test("a review that a person's stop cancelled still returns what it scored", async () => {
+	const { reviewRun } = runCancelledReview("CANCELLED")
+	const reviewResult = await reviewRun
+	expect(reviewResult.review).toEqual(emptyReviewSummary())
+	expect(reviewResult.budget.spentDollars).toBe(0.1)
 })

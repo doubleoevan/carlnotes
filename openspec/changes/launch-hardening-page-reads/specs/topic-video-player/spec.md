@@ -71,7 +71,7 @@ stop the poll.
 - **WHEN** a page shows the filming line for ten minutes
 - **THEN** it sends the film's status read every 30 seconds, and no read of the page
 
-#### Scenario: A closed-out film ends the card
+#### Scenario: A reaped film ends the card
 
 - **WHEN** the sweep fails a film that was stuck rendering, and the next status poll returns failed
 - **THEN** the page reads once, shows no filming line, and sends no further status read

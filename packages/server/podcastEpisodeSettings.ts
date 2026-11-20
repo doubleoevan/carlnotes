@@ -1,8 +1,9 @@
-// the podcast episode settings that read the environment: the speech model that records podcast episodes, how many
-// films render at once, whether the film backfill runs, how many generated images a film draws by default, and
-// whether an MCP view plays a film
+// the podcast episode settings that read the environment: the speech model that records podcast episodes, how many of
+// a scheduled Scan's chapters record at once, how many films render at once, whether the film backfill runs, how many
+// generated images a film draws by default, and whether an MCP view plays a film
 
-import { toWholeNumber } from "./envSettings"
+import type { TopicVideoRenderVersion } from "@carlnotes/contracts/topicVideoWork"
+import { toPositiveInteger, toWholeNumber } from "./envSettings"
 
 // the Gemini speech model that records episodes.
 // PODCAST_SPEECH_MODEL names another model, and an empty value turns podcast episodes off
@@ -20,6 +21,30 @@ export function podcastEpisodeSpeechModel(): string | null {
  */
 export function isPodcastEpisodeRecordingConfigured(): boolean {
 	return podcastEpisodeSpeechModel() !== null
+}
+
+// how many of a scheduled Scan's chapters record at once on a worker replica by default. a chapter holds an open speech
+// request while it waits for capacity, and little else, so the limit is the speech provider's and not the worker's
+const DEFAULT_PODCAST_SCHEDULED_CHAPTER_CONCURRENCY = 32
+
+/**
+ * Returns how many of a scheduled Scan's chapters record at once on a worker replica, from
+ * PODCAST_SCHEDULED_CHAPTER_CONCURRENCY. Unset, zero, and anything but a whole number above zero read as 32.
+ */
+export function podcastScheduledChapterConcurrency(): number {
+	return toPositiveInteger(Bun.env.PODCAST_SCHEDULED_CHAPTER_CONCURRENCY, DEFAULT_PODCAST_SCHEDULED_CHAPTER_CONCURRENCY)
+}
+
+// how many podcast episodes encode at once on a worker replica by default, which is the main worker's two cores. a
+// container reports its host's cores and not its own, so the count is a setting
+const DEFAULT_PODCAST_ENCODE_CONCURRENCY = 2
+
+/**
+ * Returns how many podcast episodes encode at once on a worker replica, from PODCAST_ENCODE_CONCURRENCY, which is set
+ * to the replica's cores. Unset, zero, and anything but a whole number above zero read as 2.
+ */
+export function podcastEncodeConcurrency(): number {
+	return toPositiveInteger(Bun.env.PODCAST_ENCODE_CONCURRENCY, DEFAULT_PODCAST_ENCODE_CONCURRENCY)
 }
 
 // one film renders at a time on a worker replica by default, so long renders never take slots from recordings
@@ -67,7 +92,10 @@ export function isMcpViewFilmPlaybackEnabled(): boolean {
 	return Bun.env.MCP_VIEW_FILM_PLAYBACK === "true"
 }
 
-/** Selects the render version once, when a newly published episode starts its film. */
-export function newTopicVideoRenderVersion(): 3 | 4 {
-	return Bun.env.TOPIC_VIDEO_ANIMATED_CHAPTERS === "true" ? 4 : 3
+/**
+ * Selects the render version once, when a newly published podcast episode starts its film: version 4, with animated
+ * chapters, unless TOPIC_VIDEO_ANIMATED_CHAPTERS is "false".
+ */
+export function newTopicVideoRenderVersion(): TopicVideoRenderVersion {
+	return Bun.env.TOPIC_VIDEO_ANIMATED_CHAPTERS === "false" ? 3 : 4
 }

@@ -2,38 +2,36 @@
 // discussion's row alone, and the Topic Post stays as it is
 
 import { toWorkflowFailureReason } from "@carlnotes/contracts/scanFailure"
+import {
+	DISCUSSION_RECORDING_RETRY_POLICY,
+	DISCUSSION_RECORDING_TIMEOUT_MS,
+	DISCUSSION_SCRIPT_ATTEMPTS,
+	DISCUSSION_SCRIPT_TIMEOUT_MS,
+	HEARTBEAT_TIMEOUT_MS,
+	SHORT_WRITE_ATTEMPTS,
+	SHORT_WRITE_TIMEOUT_MS,
+} from "@carlnotes/pipeline/stageTimeouts"
 import { proxyActivities } from "@temporalio/workflow"
 import type * as activities from "./recordTopicPostDiscussionActivities"
 
-// the script is up to three drafts of one model call each
-const SCRIPT_TIMEOUT_MS = 5 * 60 * 1000
-const SCRIPT_ATTEMPTS = 2
-
-// the recording is one speech call, an ffmpeg pass, and an upload. its retries back off from 30 seconds
-const RECORDING_TIMEOUT_MS = 10 * 60 * 1000
-const RECORDING_RETRY_POLICY = { initialInterval: 30 * 1000, backoffCoefficient: 2, maximumInterval: 5 * 60 * 1000 }
-const RECORDING_ATTEMPTS = 3
-
-// the failure write is short and idempotent
-const WRITE_TIMEOUT_MS = 60 * 1000
-const WRITE_ATTEMPTS = 3
-
 // the script writer fails for good on a spent budget, a post that is gone, and a rejected script
 const { writeTopicPostDiscussionScriptActivity } = proxyActivities<typeof activities>({
-	startToCloseTimeout: SCRIPT_TIMEOUT_MS,
-	retry: { maximumAttempts: SCRIPT_ATTEMPTS },
+	startToCloseTimeout: DISCUSSION_SCRIPT_TIMEOUT_MS,
+	retry: { maximumAttempts: DISCUSSION_SCRIPT_ATTEMPTS },
 })
 
-// the recording fails for good on a speech failure another attempt cannot fix
+// the recording fails for good on a speech failure another attempt cannot fix. it heartbeats, so a recording whose
+// worker was killed is tried again after two minutes instead of ten
 const { recordTopicPostDiscussionAudioActivity } = proxyActivities<typeof activities>({
-	startToCloseTimeout: RECORDING_TIMEOUT_MS,
-	retry: { ...RECORDING_RETRY_POLICY, maximumAttempts: RECORDING_ATTEMPTS },
+	startToCloseTimeout: DISCUSSION_RECORDING_TIMEOUT_MS,
+	heartbeatTimeout: HEARTBEAT_TIMEOUT_MS,
+	retry: DISCUSSION_RECORDING_RETRY_POLICY,
 })
 
 // the failure write may retry
 const { failTopicPostDiscussionActivity } = proxyActivities<typeof activities>({
-	startToCloseTimeout: WRITE_TIMEOUT_MS,
-	retry: { maximumAttempts: WRITE_ATTEMPTS },
+	startToCloseTimeout: SHORT_WRITE_TIMEOUT_MS,
+	retry: { maximumAttempts: SHORT_WRITE_ATTEMPTS },
 })
 
 // the discussion's row, and the starter's note for the hosts

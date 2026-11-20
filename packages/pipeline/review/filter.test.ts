@@ -143,6 +143,27 @@ test("loadTopicContext scores past the embedding limit and hashes the text that 
 	expect(shortTopicContext.contextHash).toBe(toTopicContextHash("Grinders\n\nBurr grinders under $200."))
 })
 
+// a Scan's topic memories are background for the score prompt alone: a new one changes no hash, so no Finding and no
+// filtered finding stops matching, and no page goes back to the model for it
+test("a changed topic memory changes no context hash", async () => {
+	spyOn(models, "embedVector").mockResolvedValue([1])
+	const loadContextHash = async (topicMemoryPrompt: string): Promise<string> => {
+		const topicContext = await loadTopicContext({
+			topicScanContext: { name: "Grinders", context: "Burr grinders under $200." },
+			scoreExamplePages: { likedOrBookmarkedPages: [], ratedDownPages: [] },
+			topicMemoryPrompt,
+			budget: newBudget(),
+		})
+		return topicContext.contextHash
+	}
+
+	// the hash covers the Topic's own text, whatever the topic memories say
+	const contextHash = await loadContextHash("")
+	expect(await loadContextHash("The Baratza Encore launched in 2012.")).toBe(contextHash)
+	expect(await loadContextHash("The Encore ESP replaced it in 2023.")).toBe(contextHash)
+	expect(contextHash).toBe(toTopicContextHash("Grinders\n\nBurr grinders under $200."))
+})
+
 // a queued link has already passed Topic matching and needs no global embedding to reach scoring
 test("personal links skip embedding work and the similarity floor, including missing vectors", async () => {
 	const embed = spyOn(models, "embedVectors").mockRejectedValue(new Error("Embedding must not run"))

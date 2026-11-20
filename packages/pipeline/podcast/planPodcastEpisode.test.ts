@@ -298,7 +298,7 @@ test("one plan sums the billed user's month spend once", async () => {
 
 	// the plan creates a full podcast episode's row, and its two cutoff checks sent one set of month sums
 	expect(await planPodcastEpisode(RECORDABLE_PLAN_OPTIONS)).toEqual(RECORDED_PODCAST_EPISODE_PLAN)
-	expect(sentQueries.filter((sentQuery) => sentQuery.text.includes("sum("))).toHaveLength(7)
+	expect(sentQueries.filter((sentQuery) => sentQuery.text.includes("sum("))).toHaveLength(8)
 
 	// the Scan's own Findings are the ones it first found, so the read selects the found scan, never the latest review's
 	const findingsQuery = sentQueries.find((sentQuery) => sentQuery.text.includes('from "findings"'))
@@ -345,6 +345,41 @@ test("a podcast episode that is already recording goes on while new podcast epis
 		podcastEpisodeId: "podcast-episode-0",
 	})
 	expect(sentQueries.some((sentQuery) => sentQuery.text.startsWith("insert"))).toBe(false)
+})
+
+// a recording that the reaper starts again plans from the script that its first run saved, whatever the Topic's
+// Findings are by then, because its stored chapters were recorded from that script
+test("a recording that saved its script plans the script's Findings in the script's order", async () => {
+	// the Scan's row still recording, with a script of two chapters whose Findings the Topic lists in the other order
+	Bun.env.PODCAST_SPEECH_MODEL = "speech-model"
+	const toChapter = (findingId: string): unknown => ({ findingId, title: findingId, turns: [] })
+	const script = {
+		coldOpen: [],
+		segments: [{ transition: [], chapters: [toChapter("finding-2"), toChapter("finding-1")] }],
+		signOff: [],
+	}
+	const findingRows = [
+		["finding-1", "resource-1", "https://a.com/1"],
+		["finding-2", "resource-2", "https://a.com/2"],
+	]
+	const sentQueries = stubConnectionPool(({ text }) => {
+		if (text.includes('from "episodes"')) {
+			return [["podcast-episode-0", "recording", false, script]]
+		}
+		return text.includes('from "findings"') ? findingRows : toRecordablePlanQueryRows(text)
+	})
+
+	// the plan is the recording row with the script's two Findings, and no other Finding of the Topic is read
+	expect(await planPodcastEpisode(RECORDABLE_PLAN_OPTIONS)).toEqual({
+		podcastEpisodeId: "podcast-episode-0",
+		plannedFindings: [
+			{ findingId: "finding-2", resourceId: "resource-2", sourceUrl: "https://a.com/2" },
+			{ findingId: "finding-1", resourceId: "resource-1", sourceUrl: "https://a.com/1" },
+		],
+	})
+	const findingQueries = sentQueries.filter((sentQuery) => sentQuery.text.includes('from "findings"'))
+	expect(findingQueries).toHaveLength(1)
+	expect(findingQueries[0]?.values).toEqual(["finding-2", "finding-1"])
 })
 
 // the plan reads the pause on every Scan, so a pause turned off is off for the next Scan in the same process

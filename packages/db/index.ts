@@ -26,6 +26,7 @@ import * as reports from "./schema/reports"
 import * as scans from "./schema/scans"
 import * as social from "./schema/social"
 import * as spendControlSettings from "./schema/spendControlSettings"
+import * as spends from "./schema/spends"
 import * as storage from "./schema/storage"
 import * as teams from "./schema/teams"
 import * as teamTopics from "./schema/teamTopics"
@@ -45,9 +46,14 @@ import * as viewerCounts from "./schema/viewerCounts"
 const DEFAULT_POOL_MAX = 15
 const DEFAULT_CONNECT_TIMEOUT_MS = 10_000
 
-// how many processes can hold a pool at once: two api replicas, two worker replicas, the sweep, the budget reset,
-// and two more for the replicas a rolling deploy overlaps with and the release jobs. DATABASE_POOL_COUNT overrides it
-const DEFAULT_POOL_COUNT = 8
+// how many pool shares the processes that can hold a pool at once take together: two api replicas, two web replicas,
+// two main worker replicas at two pool shares each, one film replica, the sweep, the budget reset, and three more for
+// the replicas a rolling deploy overlaps with and the release jobs. DATABASE_POOL_COUNT overrides it, and production
+// sets it to the sum with every service at its autoscaling maximum
+const DEFAULT_POOL_COUNT = 14
+
+// the pool shares one process takes: two for a Temporal worker that runs Scans, and one for every other process
+export type PoolShares = 1 | 2
 
 // the share of max_connections that Neon's connection pooler holds on its server side for one user and database
 const POOLER_SERVER_SHARE = 0.9
@@ -92,6 +98,7 @@ export const schema = {
 	...scans,
 	...social,
 	...spendControlSettings,
+	...spends,
 	...storage,
 	...teams,
 	...teamTopics,
@@ -112,6 +119,11 @@ export type DbHandle = typeof db | DbTransaction
 
 // a finding is shown unless a user rated the finding thumbs down
 export const isFindingShown = sql<boolean>`${schema.findings.rating} is distinct from 'down'`
+
+// a Scan still running, and a Source still waiting on its screen. each status is written into the SQL, because a plan
+// made without a bound status's value cannot prove the predicate of the partial index that holds those rows
+export const isScanRunning = sql<boolean>`${schema.scans.status} = 'running'`
+export const isSourcePending = sql<boolean>`${schema.sources.status} = 'pending'`
 
 // a resource that the current embedding model embedded
 export const isCurrentModelEmbedding = and(
@@ -189,10 +201,12 @@ export function configureWebSocketProxy(webSocketProxy: string | undefined): voi
 }
 
 /**
- * Sizes the pool from the database: the pooler's share of its max_connections divided by the pool count, unless
- * DATABASE_POOL_MAX sets the size. A failed read keeps the default and reports the failure. Logs the size it sets.
+ * Sizes the pool from the database, unless DATABASE_POOL_MAX sets the size. One pool share is the connection
+ * pooler's share of the database's max_connections divided by the pool count, and the pool holds the process's own
+ * pool shares of it: one, or two for a Temporal worker that runs Scans. A failed read keeps the default and reports the
+ * failure. Logs the size it sets.
  */
-export async function sizeConnectionPool(): Promise<number> {
+export async function sizeConnectionPool(poolShares: PoolShares = 1): Promise<number> {
 	// keep a size that configuration sets
 	const poolMaxOverride = toPositiveInteger(process.env.DATABASE_POOL_MAX, 0)
 	if (poolMaxOverride > 0) {
@@ -206,7 +220,8 @@ export async function sizeConnectionPool(): Promise<number> {
 		return DEFAULT_POOL_MAX
 	}
 
-	// read max_connections, then size the pool to the pooler's share of it split across the pools that can be open at once
+	// read max_connections, then size the pool to its shares of the connection pooler's share of it, split across
+	// the pool shares that can be held at once
 	const poolCount = toPositiveInteger(process.env.DATABASE_POOL_COUNT, DEFAULT_POOL_COUNT)
 	try {
 		const { rows: maxConnectionsRows } = await connectionPool.query<{ max_connections: string }>("show max_connections")
@@ -216,10 +231,10 @@ export async function sizeConnectionPool(): Promise<number> {
 		}
 
 		// set the size for the pool's next checkout and log it
-		const poolMax = Math.max(1, Math.floor((POOLER_SERVER_SHARE * maxConnections) / poolCount))
+		const poolMax = poolShares * Math.max(1, Math.floor((POOLER_SERVER_SHARE * maxConnections) / poolCount))
 		connectionPool.options.max = poolMax
 		console.log(
-			`database pool sized to ${poolMax} connections from max_connections ${maxConnections} and ${poolCount} pools`,
+			`database pool sized to ${poolMax} connections, ${poolShares} of ${poolCount} pool shares, from max_connections ${maxConnections}`,
 		)
 		return poolMax
 	} catch (error) {

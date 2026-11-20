@@ -77,6 +77,8 @@ export const chatTurns = pgTable(
 		index("chat_turns_topic_created_idx").on(table.topicId, table.createdAt),
 		index("chat_turns_team_created_idx").on(table.teamId, table.createdAt),
 		index("chat_turns_user_created_idx").on(table.userId, table.createdAt),
+		// the day's spend sums every user's chat turns by their time
+		index("chat_turns_created_idx").on(table.createdAt),
 		// only podcast chat turns name a podcast episode, so the index leaves out every other row
 		index("chat_turns_episode_id_idx").on(table.podcastEpisodeId).where(sql`${table.podcastEpisodeId} is not null`),
 		// a chat room turn always names the chat room message it answered, keeps no text, and is the only kind that names

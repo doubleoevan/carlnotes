@@ -65,7 +65,7 @@ released app that polls a whole page SHALL keep working on the routes it reads.
 - **WHEN** a status poll returns ready
 - **THEN** the page reads its page once and shows the film player in the card's place, with no reload
 
-#### Scenario: A closed-out row stops the poll
+#### Scenario: A reaped row stops the poll
 
 - **WHEN** the sweep fails a film stuck rendering, and the next status poll returns failed
 - **THEN** the page reads its page once, shows no filming card, and sends no further status read

@@ -214,7 +214,7 @@ test("a Scan the tool starts takes the page's start, with no scan option in the 
 	})
 	spyOn(authorization, "loadMonthlyBudgetCutoffStatus").mockResolvedValue("allowed")
 	spyOn(litellm, "isUserLiteLLMKeyBudgetExhausted").mockResolvedValue(false)
-	spyOn(staleScans, "failStaleScans").mockResolvedValue(0)
+	spyOn(staleScans, "reapStaleScans").mockResolvedValue(0)
 	spyOn(scan, "loadScan").mockResolvedValue(undefined)
 	const startTopicScanSpy = spyOn(scan, "startTopicScan").mockResolvedValue({
 		status: "started",

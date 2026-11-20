@@ -11,7 +11,7 @@ import {
 } from "@carlnotes/db/personalSourcesContext"
 import { deletePersonalSourceEntry } from "@carlnotes/db/personalSourcesLifecycle"
 import { receivePersonalSourceEntry } from "@carlnotes/db/personalSourcesReceive"
-import { monthlySpendDollars, toSpendCents } from "@carlnotes/db/quotas"
+import { monthlySpendDollars, toSpendCents } from "@carlnotes/db/recordedSpend"
 import {
 	personalSourceEntries,
 	personalSourcesSummarySpends,
@@ -117,6 +117,8 @@ async function checkRetentionAndBilling(topic: { userId: string; topicId: string
 	if (!snapshot) {
 		throw new Error("Rebuild snapshot missing")
 	}
+
+	// settle the context, then age every entry a year
 	await commitPersonalSourcesContext({ snapshot, context: "Current remaining text", cost: 0 })
 	await db
 		.update(personalSourceEntries)

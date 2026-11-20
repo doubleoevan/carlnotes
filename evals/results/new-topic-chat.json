@@ -1,9 +1,9 @@
 {
 	"name": "new-topic-chat",
-	"passedRunCount": 8,
+	"passedRunCount": 3,
 	"runCount": 9,
-	"ranOn": "2026-11-14",
-	"commit": "7a14829a",
+	"ranOn": "2026-11-20",
+	"commit": "2c229c8d",
 	"hasUncommittedChanges": true,
 	"writerModelIds": [
 		"chat-model"

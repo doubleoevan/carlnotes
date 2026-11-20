@@ -12,8 +12,10 @@ import {
 	type EmbeddedTopicMemoryWrite,
 	loadTopicMemoryReplacementCandidate,
 } from "./applyTopicMemoryWrite"
-import { recordTopicMemorySpend } from "./topicMemorySpend"
+import type { TopicMemoryModelInput } from "./topicMemoryModelCall"
+import { chargeTopicMemorySpend } from "./topicMemorySpend"
 
+// a replacement that a write may make, a claim as the review reads it, and the earlier and newer claim of one type
 type ReplacementCandidate = NonNullable<ApplyTopicMemoryWriteOptions["replacement"]>
 type ReplacementClaim = { text: string; factDate: string | null; observedDay: string }
 type ReplacementPair = {
@@ -21,6 +23,7 @@ type ReplacementPair = {
 	earlier: ReplacementClaim
 	newer: ReplacementClaim
 }
+// the review's reply, how long one review may run, and the most pairs it reads
 const replacementVerdicts = z.object({ confirmedIndexes: z.array(z.number().int().nonnegative()) })
 const REPLACEMENT_REVIEW_TIMEOUT_MS = 20_000
 const REPLACEMENT_REVIEW_LIMIT = 12
@@ -29,17 +32,14 @@ const REPLACEMENT_REVIEW_LIMIT = 12
 export async function reviewTopicMemoryReplacements({
 	writes,
 	topicId,
-	scanId,
 	scanStartedAt,
 	litellmApiKey,
 	signal,
-}: {
+	spend,
+}: Pick<TopicMemoryModelInput, "litellmApiKey" | "signal" | "spend"> & {
 	writes: EmbeddedTopicMemoryWrite[]
 	topicId: string
-	scanId: string
 	scanStartedAt: Date
-	litellmApiKey: string
-	signal: AbortSignal
 }): Promise<Map<EmbeddedTopicMemoryWrite, ReplacementCandidate>> {
 	// require a unique active candidate for a single-valued type and a newer observation
 	const reviewed = await runWithConcurrency(writes, 4, async (write) => ({
@@ -71,7 +71,7 @@ export async function reviewTopicMemoryReplacements({
 			...promptTelemetry(prompt),
 			...PRIVATE_MODEL_OPTIONS,
 		})
-		await recordTopicMemorySpend(scanId, tokenCost(usage.totalTokens ?? 0, CHEAP_COST_PER_MILLION_TOKENS))
+		chargeTopicMemorySpend(spend, tokenCost(usage.totalTokens ?? 0, CHEAP_COST_PER_MILLION_TOKENS))
 		if (output.confirmedIndexes.some((index) => !candidates[index])) {
 			return new Map()
 		}
@@ -80,12 +80,14 @@ export async function reviewTopicMemoryReplacements({
 			candidates.flatMap(({ write, candidate }, index) => (confirmed.has(index) ? [[write, candidate] as const] : [])),
 		)
 	} catch (error) {
+		// a cancelled update and a rejected key end the review
 		signal.throwIfAborted()
 		if (isModelAuthenticationRejection(error)) {
 			throw error
 		}
+		// an unreadable reply is billed, and any failure left confirms no replacement
 		if (NoObjectGeneratedError.isInstance(error)) {
-			await recordTopicMemorySpend(scanId, tokenCost(error.usage?.totalTokens ?? 0, CHEAP_COST_PER_MILLION_TOKENS))
+			chargeTopicMemorySpend(spend, tokenCost(error.usage?.totalTokens ?? 0, CHEAP_COST_PER_MILLION_TOKENS))
 		}
 		return new Map()
 	}

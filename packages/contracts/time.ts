@@ -1,4 +1,4 @@
-// time units and time limits that every module shares
+// time units, time limits, and the jittered backoff wait that every module shares
 
 // one minute, one hour, and one day in milliseconds
 export const MINUTE_MS = 60 * 1000
@@ -36,6 +36,48 @@ export async function withTimeLimit<Result>({
 	} finally {
 		clearTimeout(timeLimitTimer)
 	}
+}
+
+/**
+ * Returns whether the work finished within the time limit. The timer stops either way, so it never keeps the process
+ * alive, and a rejection of the work itself still throws.
+ */
+export async function isDoneWithin(work: Promise<unknown>, timeLimitMs: number): Promise<boolean> {
+	// the error that marks the time limit, told apart from the work's own
+	const timeLimitError = new Error(`the work did not finish within ${timeLimitMs} ms`)
+	try {
+		await withTimeLimit({ work, timeLimitMs, toError: () => timeLimitError })
+		return true
+	} catch (error) {
+		// the time limit passing first reads as false
+		if (error === timeLimitError) {
+			return false
+		}
+		throw error
+	}
+}
+
+// the first wait, how many times it doubles, the longest wait before the jitter, unlimited if unset, and the random
+// source, which a test sets
+type JitteredBackoffOptions = {
+	firstWaitMs: number
+	doublingCount: number
+	maximumWaitMs?: number
+	random?: () => number
+}
+
+/**
+ * Returns a backoff wait: the first wait doubled the given number of times up to the longest wait, then scaled by a
+ * random 50 to 100 percent and rounded to a whole millisecond, so retries that failed together spread apart.
+ */
+export function toJitteredBackoffMs({
+	firstWaitMs,
+	doublingCount,
+	maximumWaitMs = Number.POSITIVE_INFINITY,
+	random = Math.random,
+}: JitteredBackoffOptions): number {
+	const backoffMs = Math.min(firstWaitMs * 2 ** doublingCount, maximumWaitMs)
+	return Math.round(backoffMs * (0.5 + random() / 2))
 }
 
 /**

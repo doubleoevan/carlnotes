@@ -3,12 +3,20 @@ import { expect, test } from "bun:test"
 import { DAY_MS } from "@carlnotes/contracts/time"
 import { db } from "@carlnotes/db"
 import { topics } from "@carlnotes/db/schema/topics"
-import { frequencyWindowMs, toScheduledTopicFilter } from "./scheduledTopicFilter"
+import { sql as toSql } from "drizzle-orm"
+import { frequencyWindowMs, toLastCompletedScans, toScheduledTopicFilter } from "./scheduledTopicFilter"
 import { isWithinDailyTopicLimit } from "./scheduledTopicLimits"
 
 // the sql and the parameters that a select of the scheduled Topics renders on a given day
 function toScheduledTopicQuery(now: Date): { sql: string; params: unknown[] } {
-	return db.select({ id: topics.id }).from(topics).where(toScheduledTopicFilter(now)).toSQL()
+	// the Topics joined to their last completed Scan, as the sweep's own reads join them
+	const lastCompletedScans = toLastCompletedScans()
+	return db
+		.select({ id: topics.id })
+		.from(topics)
+		.leftJoinLateral(lastCompletedScans, toSql`true`)
+		.where(toScheduledTopicFilter(now, lastCompletedScans.startedAt))
+		.toSQL()
 }
 
 // the daily frequency waits a day before a re-scan, the weekly frequency waits seven
@@ -24,9 +32,10 @@ test("the scheduled topic filter reads the last completed scan in sql with the d
 	const now = new Date("2026-07-22T12:00:00Z")
 	const { sql, params } = toScheduledTopicQuery(now)
 
-	// the subquery over completed scans, and the null branch for a topic never scanned.
+	// the subquery over completed scans, joined once to each topic, and the null branch for a topic never scanned.
 	// a failed scan that was dispatched and never picked up failed without running, so it spends no window
-	expect(sql).toContain('max("scans"."started_at")')
+	expect(sql).toContain('left join lateral (select max("started_at") as "last_completed_scan_started_at" from "scans"')
+	expect(sql.match(/max\("started_at"\)/g)).toHaveLength(1)
 	expect(sql).toContain("<> 'running'")
 	expect(sql).toContain("is null")
 	expect(sql).toContain(

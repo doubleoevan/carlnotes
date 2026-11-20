@@ -1,5 +1,5 @@
 // the content fetch for one Resource to score: its stored text reused or revalidated, or the page fetched fresh and
-// stored, with the fields that fetch writes to the Resource row
+// stored, with the fields that fetch writes to the Resource row. a fetch that fails scores the snippet
 
 import { toUrlHost } from "@carlnotes/contracts/sources"
 import { db } from "@carlnotes/db"
@@ -14,30 +14,41 @@ import { type Budget, charge, type FetchOutcome } from "@carlnotes/models/budget
 import { reportError } from "@carlnotes/server/monitoring"
 import { eq } from "drizzle-orm"
 import { fetchAndStoreHostFavicon } from "../favicons"
+import { markFirecrawlCreditSpent } from "../firecrawlCredit"
 import { isTitleFromUrlFallback } from "../ingest/normalize"
-import { CONTENT_TTL_MS, fetchContent, isContentStale, revalidateContent } from "../scrape"
+import {
+	CONTENT_TTL_MS,
+	fetchContent,
+	isContentStale,
+	isFirecrawlCreditSpent,
+	revalidateContent,
+	UnreadablePageError,
+} from "../scrape"
 import type { Resource } from "./filter"
 
 // how a tweet's canonical url always starts, where ingestion folds twitter.com onto x.com and lowercases the host
 const X_URL_PREFIX = "https://x.com/"
 
+// the text to score, how it was read, and whether the next Scan reads the page again because its fetch failed for a
+// reason other than the page itself
+type ResourceContent = { content: string; fetchOutcome: FetchOutcome; isPageReadAgain: boolean }
+
 /**
- * Returns the Resource's content to score, and whether it was reused from storage, revalidated, or fetched.
+ * Returns the Resource's content to score, whether it was reused from storage, revalidated, or fetched, and whether a
+ * failed fetch that says nothing about the page left the snippet to score. Only Firecrawl's report that it could not
+ * read the page says something about it.
  */
-export async function fetchResourceContent(
-	resource: Resource,
-	budget: Budget,
-): Promise<{ content: string; fetchOutcome: FetchOutcome }> {
+export async function fetchResourceContent(resource: Resource, budget: Budget): Promise<ResourceContent> {
 	// a Resource whose snippet is already its whole text needs no fetch. it counts as reused, which charges no fetch credit
 	if (isSnippetComplete(resource.url)) {
-		return { content: resource.snippet ?? "", fetchOutcome: "reused" }
+		return { content: resource.snippet ?? "", fetchOutcome: "reused", isPageReadAgain: false }
 	}
 
 	// reuse stored content scores as-is if it isn't stale, read back from object storage, with no fetch
 	if (resource.contentKey && !isContentStale(resource.fetchedAt, new Date(), CONTENT_TTL_MS)) {
 		const storedContent = await readStoredContent(resource.contentKey, resource.id)
 		if (storedContent !== null) {
-			return { content: storedContent, fetchOutcome: "reused" }
+			return { content: storedContent, fetchOutcome: "reused", isPageReadAgain: false }
 		}
 	}
 
@@ -47,7 +58,7 @@ export async function fetchResourceContent(
 		const storedContent = outcome === "not-modified" ? await readStoredContent(resource.contentKey, resource.id) : null
 		if (storedContent !== null) {
 			await db.update(resources).set({ fetchedAt: new Date() }).where(eq(resources.id, resource.id))
-			return { content: storedContent, fetchOutcome: "revalidated" }
+			return { content: storedContent, fetchOutcome: "revalidated", isPageReadAgain: false }
 		}
 	}
 
@@ -68,16 +79,15 @@ async function readStoredContent(contentKey: string, resourceId: string): Promis
 }
 
 // fetch the content by the path the Resource's kind selects, write it to object storage
-async function fetchAndStoreContent(
-	resource: Resource,
-	budget: Budget,
-): Promise<{ content: string; fetchOutcome: FetchOutcome }> {
+async function fetchAndStoreContent(resource: Resource, budget: Budget): Promise<ResourceContent> {
 	try {
-		// fetch the content, charge what that fetch spent, then write the body to object storage
+		// fetch the content, charge what that fetch spent, then write the body to object storage. a rate-limited scrape
+		// waits inside the review attempt's model call wait deadline
 		const { text, cost, etag, lastModified, title, faviconUrl } = await fetchContent(
 			resource.url,
 			resource.kind,
 			resource.transcriptUrl,
+			budget.modelCallWaitDeadlineAt,
 		)
 		charge(budget, "fetch", cost)
 		const stored = text ? await storeResourceContent(resource.id, text) : null
@@ -97,13 +107,23 @@ async function fetchAndStoreContent(
 		if (host) {
 			void fetchAndStoreHostFavicon(host, faviconUrl)
 		}
-		return { content: scoringText, fetchOutcome: "fetched" }
+		return { content: scoringText, fetchOutcome: "fetched", isPageReadAgain: false }
 	} catch (error) {
 		// the fetch failed, so fall back to the snippet. the Finding is still written, with less to go on
-		console.error(`content fetch failed for ${resource.url}`, error)
-		reportError(error, "fetch", { resourceId: resource.id, url: resource.url })
-		return { content: resource.snippet ?? "", fetchOutcome: "fetched" }
+		await reportFailedFetch(resource, error)
+		const isPageReadAgain = !(error instanceof UnreadablePageError)
+		return { content: resource.snippet ?? "", fetchOutcome: "fetched", isPageReadAgain }
 	}
+}
+
+// report a failed fetch. a spent credit fails every page alike, so it is marked for the sweep's one report instead
+async function reportFailedFetch(resource: Resource, error: unknown): Promise<void> {
+	if (isFirecrawlCreditSpent(error)) {
+		await markFirecrawlCreditSpent()
+		return
+	}
+	console.error(`content fetch failed for ${resource.url}`, error)
+	reportError(error, "fetch", { resourceId: resource.id, url: resource.url })
 }
 
 // write the fetched text to object storage, returning its key and size, or null if the write fails

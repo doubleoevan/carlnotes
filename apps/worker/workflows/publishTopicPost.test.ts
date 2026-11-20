@@ -2,6 +2,7 @@
 // and an edit's summary after its quiet wait
 import { beforeEach, expect, mock, test } from "bun:test"
 import { TOPIC_POST_DISCUSSION_WAIT_MS } from "@carlnotes/contracts/topicPosts"
+import * as temporalWorkflow from "@temporalio/workflow"
 
 // what the workflow did, in order, the steps a test makes fail, and whether the workflow runs on the patched code
 let steps: string[] = []
@@ -18,8 +19,10 @@ const toActivity =
 		}
 	}
 
-// the sandbox's activities, timer, and patch marker, replaced before the workflow module loads
+// the sandbox's activities, timer, and patch marker, replaced before the workflow module loads. every other export
+// stays, because the replacement holds for each test file that loads after this one
 mock.module("@temporalio/workflow", () => ({
+	...temporalWorkflow,
 	proxyActivities: () => ({
 		writeTopicPostSummary: toActivity("summary"),
 		startTopicPostImageRender: toActivity("image"),

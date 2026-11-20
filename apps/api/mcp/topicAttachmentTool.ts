@@ -1,5 +1,6 @@
 // the add_topic_attachment tool: a page by its url, or pasted text with a title, added to a topic its owner names
 // through the url attachment route's own add
+import { SPENT_BUDGET_REJECTION } from "@carlnotes/models/models"
 import { z } from "zod"
 import { type AddTopicAttachmentResult, addTopicAttachment, type TopicAttachmentAdd } from "../topic/attachmentWrites"
 import { type RegisterToolsOptions, topicIdArgument, toTextResult } from "./toolShapes"
@@ -80,6 +81,8 @@ function toAddTopicAttachmentText(addTopicAttachmentResult: AddTopicAttachmentRe
 			return `Added ${addTopicAttachmentResult.filename}. Carl reads it in the background.`
 		case "invalid":
 			return `${addTopicAttachmentResult.reason}. Nothing was added.`
+		case "budgetSpent":
+			return SPENT_BUDGET_REJECTION
 		// the owner check and an internal failure
 		case "forbidden":
 		case "failed":

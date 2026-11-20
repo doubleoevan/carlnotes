@@ -13,7 +13,7 @@ import {
 } from "@carlnotes/contracts/plans"
 import { and, count, eq, inArray } from "drizzle-orm"
 import { hasUserBlockBetween } from "./contentFilters"
-import { canRateTopic } from "./findingPermissions"
+import { canRateTopic, canRateTopicMemories } from "./findingPermissions"
 import { type DbHandle, db } from "./index"
 import { isMonthlyBudgetCutoffPassed } from "./monthlyBudgetCutoffs"
 import {
@@ -26,10 +26,9 @@ import {
 	loadBillingAccess,
 	loadTopicImageRegenerationQuota,
 	loadUserAccess,
-	monthlySpendDollars,
 	scansToday,
-	toSpendCents,
 } from "./quotas"
+import { monthlySpendDollars, toSpendCents } from "./recordedSpend"
 import { topics } from "./schema/topics"
 import { assertNever, canRequestTopicScan, canSeeTopic, toTopicEditRole } from "./topicPermissions"
 
@@ -51,6 +50,8 @@ export type Capability =
 	// rating and creating a topic, and its scans
 	| "topic:rate"
 	| "topic:create"
+	// rating a topic's memories, which steers what Carl remembers
+	| "topicMemory:rate"
 	| "scan:request"
 	| "scan:manual"
 	// chat, and a topic's podcast episodes
@@ -127,11 +128,17 @@ export async function isAllowed(userId: string | null, capability: Capability, t
 }
 
 // the capabilities that the admin override does not apply to
-type OwnRuleCapability = "topic:rate" | "scan:request" | "profile:setProfileOrder"
+type OwnRuleCapability = "topic:rate" | "topicMemory:rate" | "scan:request" | "profile:setProfileOrder"
 
 // whether a capability is decided by its own rule, before the admin override
 function isOwnRuleCapability(capability: Capability): capability is OwnRuleCapability {
-	return capability === "topic:rate" || capability === "scan:request" || capability === "profile:setProfileOrder"
+	const ownRuleCapabilities: Capability[] = [
+		"topic:rate",
+		"topicMemory:rate",
+		"scan:request",
+		"profile:setProfileOrder",
+	]
+	return ownRuleCapabilities.includes(capability)
 }
 
 // the decision for a capability that the admin override does not apply to
@@ -144,6 +151,10 @@ async function decideOwnRuleCapability(
 		// rating is a subscriber action, not an admin power, so it uses the topic rule
 		case "topic:rate":
 			return topic ? canRateTopic(userId, topic) : false
+		// a memory's rating changes what Carl says to every reader, so only the Topic's owner and a leader of its owning
+		// team rate, and an admin gets no override
+		case "topicMemory:rate":
+			return topic ? canRateTopicMemories(userId, topic) : false
 		// Scan workers can use the same authority through their transaction
 		case "scan:request":
 			return canRequestTopicScan(userId, topic)

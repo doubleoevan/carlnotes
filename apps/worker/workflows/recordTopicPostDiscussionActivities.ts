@@ -4,13 +4,14 @@
 import { isBudgetRejection } from "@carlnotes/models/models"
 import { SpeechFailedError } from "@carlnotes/pipeline/podcast/podcastEpisodeAudio"
 import { RejectedScriptError } from "@carlnotes/pipeline/podcast/podcastEpisodeScript"
+import { recordTopicPostDiscussionAudio } from "@carlnotes/pipeline/topicPosts/topicPostDiscussionAudio"
 import {
 	failTopicPostDiscussion,
-	recordTopicPostDiscussionAudio,
 	TopicPostDiscussionError,
 	writeTopicPostDiscussionScript,
 } from "@carlnotes/pipeline/topicPosts/topicPostDiscussions"
 import { ApplicationFailure } from "@temporalio/activity"
+import { runWithHeartbeat } from "../activityHeartbeat"
 
 // the discussion's row and the starter's note
 type WriteDiscussionScriptOptions = { discussionId: string; hint?: string }
@@ -31,12 +32,12 @@ export async function writeTopicPostDiscussionScriptActivity({
 }
 
 /**
- * Records, encodes, stores, and publishes the discussion. A speech failure another attempt cannot fix, and a spent
- * budget, fail for good.
+ * Records, encodes, stores, and publishes the discussion, heartbeating every 30 seconds, and stops the encode and the
+ * upload once the attempt is cancelled. A speech failure another attempt cannot fix, and a spent budget, fail for good.
  */
 export async function recordTopicPostDiscussionAudioActivity(discussionId: string): Promise<void> {
 	try {
-		await recordTopicPostDiscussionAudio(discussionId)
+		await runWithHeartbeat((signal) => recordTopicPostDiscussionAudio(discussionId, signal))
 	} catch (error) {
 		throw toDiscussionActivityFailure(error)
 	}

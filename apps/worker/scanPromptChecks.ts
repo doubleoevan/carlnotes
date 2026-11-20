@@ -14,7 +14,7 @@ import { toTopicImagePrompt } from "@carlnotes/pipeline/topicImages/writeTopicIm
 import {
 	buildTopicMemoryClaimCheckPrompt,
 	buildTopicMemorySplitPrompt,
-} from "@carlnotes/pipeline/topicMemoryClaimReview"
+} from "@carlnotes/pipeline/topicMemoryClaimPrompts"
 import { buildTopicMemoryDraftPrompt } from "@carlnotes/pipeline/topicMemoryDrafts"
 import { buildTopicMemoryReplacementPrompt } from "@carlnotes/pipeline/topicMemoryReplacements"
 import { buildTopicPostSummaryPrompt } from "@carlnotes/pipeline/topicPosts/summarizeTopicPost"

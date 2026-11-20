@@ -44,7 +44,7 @@ test("the health route responds without reaching the database", async () => {
 		toQueryRows: () => SELECT_ONE_ROWS,
 	})
 	expect(response.status).toBe(200)
-	expect(JSON.parse(response.body)).toEqual({ status: "ok" })
+	expect(JSON.parse(response.body)).toEqual({ status: "ok", process: "api" })
 	expect(response.queryCount).toBe(0)
 })
 

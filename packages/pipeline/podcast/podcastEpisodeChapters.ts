@@ -3,10 +3,20 @@
 
 import { db } from "@carlnotes/db"
 import { podcastEpisodeChapters, podcastEpisodes } from "@carlnotes/db/schema/podcast"
-import { and, desc, eq, inArray, isNotNull, isNull, type SQL, sql } from "drizzle-orm"
+import { and, desc, eq, exists, inArray, isNotNull, isNull, type SQL, type SQLWrapper, sql } from "drizzle-orm"
 
 // a topic and one of its resources
 export type TopicResourceRef = { topicId: string; resourceId: string }
+
+// the rated chapters of a resource in a topic's podcast episodes. the resource is an id, or a column for a read of
+// many resources
+function toRatedChapterFilter(topicId: string, resourceId: string | SQLWrapper): SQL | undefined {
+	return and(
+		eq(podcastEpisodes.topicId, topicId),
+		eq(podcastEpisodeChapters.resourceId, resourceId),
+		isNotNull(podcastEpisodeChapters.rating),
+	)
+}
 
 /**
  * Returns the newest rating of a chapter that narrated the resource in one of the topic's podcast episodes, as a subquery.
@@ -17,16 +27,27 @@ export function toPodcastEpisodeChapterRatingSql({ topicId, resourceId }: TopicR
 		.select({ rating: podcastEpisodeChapters.rating })
 		.from(podcastEpisodeChapters)
 		.innerJoin(podcastEpisodes, eq(podcastEpisodeChapters.podcastEpisodeId, podcastEpisodes.id))
-		.where(
-			and(
-				eq(podcastEpisodes.topicId, topicId),
-				eq(podcastEpisodeChapters.resourceId, resourceId),
-				isNotNull(podcastEpisodeChapters.rating),
-			),
-		)
+		.where(toRatedChapterFilter(topicId, resourceId))
 		.orderBy(desc(podcastEpisodes.createdAt))
 		.limit(1)
+
+	// the one rating, as a value in the statement that reads it
 	return sql`(${podcastEpisodeChapterRatingQuery})`
+}
+
+/**
+ * Returns whether a chapter that narrated the resource in one of the topic's podcast episodes holds a rating. If the
+ * topic has no finding of the resource, the next one takes that rating. The resource is a column of the read that the
+ * condition is part of.
+ */
+export function hasRatedPodcastEpisodeChapter(topicId: string, resourceId: SQLWrapper): SQL {
+	return exists(
+		db
+			.select({ id: podcastEpisodeChapters.id })
+			.from(podcastEpisodeChapters)
+			.innerJoin(podcastEpisodes, eq(podcastEpisodeChapters.podcastEpisodeId, podcastEpisodes.id))
+			.where(toRatedChapterFilter(topicId, resourceId)),
+	)
 }
 
 /**

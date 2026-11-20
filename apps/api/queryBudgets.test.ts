@@ -17,6 +17,7 @@ import * as redis from "@carlnotes/db/redis"
 import { restoreRedisClient } from "@carlnotes/db/redisClientStub"
 import { runWithRequestMemo } from "@carlnotes/db/requestMemo"
 import { scans } from "@carlnotes/db/schema/scans"
+import { TOPIC_MEMORY_EMBEDDING_MODEL } from "@carlnotes/db/schema/topicMemories"
 import { topics } from "@carlnotes/db/schema/topics"
 import * as viewerCounts from "@carlnotes/db/viewerCounts"
 import * as litellm from "@carlnotes/models/litellm"
@@ -157,6 +158,30 @@ test("the visitor feed's cache hit request stays inside its maximum", async () =
 	expect(cacheHitRequest.queryCount).toBeLessThanOrEqual(MAX_TOPIC_FEED_CACHE_HIT_QUERIES)
 })
 
+// a full Journal's count rides the scans read: a number for the rows that stand alone and only the rows that can group
+test("the topic page counts a Journal of 100 topic memories inside its scans read", async () => {
+	// one succeeded Scan whose row holds 98 ungrouped rows and two statements of one fact
+	const groupRow = { subject: '["cafe"]', claimType: "price", value: "usd 10", factDate: null }
+	const groupRows = [
+		{ ...groupRow, id: "memory-1", embeddingModel: TOPIC_MEMORY_EMBEDDING_MODEL, embedding: [1, 0] },
+		{ ...groupRow, id: "memory-2", embeddingModel: TOPIC_MEMORY_EMBEDDING_MODEL, embedding: [0.99, 0.1] },
+	]
+	const startedAt = new Date("2026-11-18T09:00:00Z")
+	const scanRow = ["scan-1", "succeeded", startedAt, startedAt, null, 5, 2, 3, "0.1", null, null]
+	sentQueries = stubConnectionPool((sentQuery) =>
+		sentQuery.text.includes("'ungroupedCount'")
+			? [[...scanRow, { ungroupedCount: 98, groupRows }]]
+			: toBudgetQueryRows(sentQuery),
+	)
+	const { response, queryCount } = await requestAsUser("/api/topics/topic-1", "user-1")
+
+	// the two statements count as one group beside the 98, with no read of the Journal apart from the scans read
+	expect(response.status).toBe(200)
+	expect(await response.json()).toMatchObject({ topicMemoryCount: 99 })
+	expect(queryCount).toBeLessThanOrEqual(MAX_TOPIC_PAGE_QUERIES)
+	expect(sentQueries.filter((sentQuery) => sentQuery.text.includes('from "topic_memories"'))).toHaveLength(1)
+})
+
 // a signed-in topic page reads the user's access row once and their topic role once, however many checks it makes
 test("the topic page reads the user's access and topic role once", async () => {
 	// one signed-in page load inside its maximum
@@ -271,8 +296,8 @@ test("a bypassed cache fails the mention count's maximum", async () => {
 })
 
 // the most daily spend cutoff reads a manual scan request may send: none for a paid user or on a cache hit, and on a
-// miss the settings row and the seven free-plan spend sums
-const MAX_DAILY_SPEND_CUTOFF_CACHE_MISS_QUERIES = 8
+// miss the settings row and the eight free-plan spend sums
+const MAX_DAILY_SPEND_CUTOFF_CACHE_MISS_QUERIES = 9
 
 // a topic owned by the signed-in user, so the manual scan gate allows the scan
 const OWNED_TOPIC_ROW = toTableRow(topics, { id: "topic-1", ownerId: "user-1", name: "Agents", visibility: "public" })

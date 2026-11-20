@@ -45,3 +45,13 @@ export function isImageAttachmentType(contentType: string): boolean {
 
 // a rejection safe to show the user as written: their file or url, not an infra failure like a misconfigured llm proxy
 export class AttachmentValidationError extends Error {}
+
+/**
+ * The failure of a url attachment whose page was not fetched because the adding user's monthly budget is spent.
+ */
+export class AttachmentBudgetSpentError extends Error {
+	constructor() {
+		super("the monthly budget is spent, so the page was not fetched")
+		this.name = "AttachmentBudgetSpentError"
+	}
+}

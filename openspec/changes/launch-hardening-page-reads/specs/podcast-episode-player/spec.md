@@ -74,7 +74,7 @@ published. A user who may not start a Scan SHALL see the latest Podcast Episode 
 - **WHEN** a reader who followed a link to a rendering Podcast Episode hides the tab for ten minutes
 - **THEN** no check is sent until the tab shows again, and one is sent at once then
 
-#### Scenario: A closed-out Podcast Episode stops the checks
+#### Scenario: A reaped Podcast Episode stops the checks
 
 - **WHEN** the sweep fails a Podcast Episode that was stuck recording, and the next check reads it as failed
 - **THEN** the player says "Coffee Break podcast failed to record.", and no further check is sent

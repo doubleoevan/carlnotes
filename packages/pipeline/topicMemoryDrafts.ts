@@ -12,13 +12,15 @@ import {
 import { PRIVATE_MODEL_OPTIONS } from "@carlnotes/models/privateModelOptions"
 import { loadCurrentDayContext } from "@carlnotes/models/prompts/currentDayContext"
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "@carlnotes/models/prompts/fetch"
+import { loadTopicMemoryClaimBlocks } from "@carlnotes/models/prompts/topicMemoryClaimBlocks"
 import { writePrompt } from "@carlnotes/models/prompts/write"
 import { generateText, NoObjectGeneratedError, NoOutputGeneratedError, Output } from "ai"
 import { isPromoted } from "./review/scorePolicy"
 import { loadTopicMemoryNeighbors, type TopicMemoryFinding } from "./topicMemoryEvidence"
+import { runTopicMemoryModelCall, type TopicMemoryModelInput } from "./topicMemoryModelCall"
 import { type TopicMemoryWrite, topicMemoryDraftResponse, toTopicMemoryDraft } from "./topicMemoryOperations"
 import type { loadTopicMemoryReconciliationJournal } from "./topicMemoryReconciliation"
-import { recordTopicMemorySpend } from "./topicMemorySpend"
+import { canSpendOnTopicMemories, chargeTopicMemorySpend } from "./topicMemorySpend"
 import { resolveTopicMemorySubject, supportsTopicMemoryAlias, type TopicMemorySubject } from "./topicMemorySubjects"
 
 // reserve time for claim validation and writes after optional extraction
@@ -31,13 +33,7 @@ export type EmbeddedTopicMemoryFinding = Omit<TopicMemoryFinding, "embedding" | 
 }
 export type TopicMemoryDraft = TopicMemoryWrite & { findingIds: string[] }
 type TopicScope = { name: string; prompt: string }
-type TopicMemoryDraftInput = {
-	scanId: string
-	topicId: string
-	scanStartedAt: Date
-	signal: AbortSignal
-	litellmApiKey: string
-}
+type TopicMemoryDraftInput = TopicMemoryModelInput & { scanId: string; topicId: string; scanStartedAt: Date }
 
 /**
  * Extracts source-linked drafts from a group of similar Findings.
@@ -49,6 +45,8 @@ export async function draftTopicMemoriesFromFindings({
 	scanStartedAt,
 	litellmApiKey,
 	signal,
+	spend,
+	waitDeadlineAt,
 	scope,
 	subjects,
 	ratedMemories,
@@ -90,16 +88,21 @@ export async function draftTopicMemoriesFromFindings({
 		subjects,
 	})
 
-	// give a positively rated or promoted Finding a second extraction when the first has no usable draft
-	const draftInput = { scanId, litellmApiKey, signal, relatedFindings, subjects, builtPrompt }
+	// give a positively rated or promoted Finding a second extraction when the first has no usable draft, unless the
+	// update is at its spend limit
+	const modelInput = { litellmApiKey, signal, spend, waitDeadlineAt }
+	const draftInput = { ...modelInput, scanId, relatedFindings, subjects, builtPrompt }
 	const drafts = await generateTopicMemoryDrafts(draftInput, false)
+	// the first drafts stand if there are any, if no Finding was rated up or promoted, or if no retry can be paid for
 	if (
 		drafts.length ||
 		!relatedFindings.some(({ rating, relevanceScore }) => rating === "up" || isPromoted(relevanceScore)) ||
+		!canSpendOnTopicMemories(spend) ||
 		!reservePremiumRetry()
 	) {
 		return drafts
 	}
+	// the second extraction asks the premium model
 	return generateTopicMemoryDrafts(draftInput, true)
 }
 
@@ -108,10 +111,12 @@ async function generateTopicMemoryDrafts(
 		scanId,
 		litellmApiKey,
 		signal,
+		spend,
+		waitDeadlineAt,
 		relatedFindings,
 		subjects,
 		builtPrompt,
-	}: Pick<TopicMemoryDraftInput, "scanId" | "litellmApiKey" | "signal"> & {
+	}: Pick<TopicMemoryDraftInput, "scanId" | "litellmApiKey" | "signal" | "spend" | "waitDeadlineAt"> & {
 		relatedFindings: EmbeddedTopicMemoryFinding[]
 		subjects: TopicMemorySubject[]
 		builtPrompt: BuiltPrompt
@@ -121,23 +126,28 @@ async function generateTopicMemoryDrafts(
 	// charge failed structured outputs when they report usage
 	const cost = (usage: Parameters<typeof premiumModelCost>[0]): number =>
 		usePremiumModel ? premiumModelCost(usage) : tokenCost(usage.totalTokens ?? 0, CHEAP_COST_PER_MILLION_TOKENS)
-	const result = await generateText({
-		model: usePremiumModel ? scoreModel(litellmApiKey) : cheapModel(litellmApiKey),
-		providerOptions: usePremiumModel ? LOW_REASONING_PROVIDER_OPTIONS : undefined,
-		prompt: builtPrompt.prompt,
-		output: Output.object({ schema: topicMemoryDraftResponse }),
-		abortSignal: usePremiumModel
-			? AbortSignal.any([signal, AbortSignal.timeout(PREMIUM_EXTRACTION_TIMEOUT_MS)])
-			: signal,
-		maxRetries: 0,
-		maxOutputTokens: MAX_OUTPUT_TOKENS,
-		...promptTelemetry(builtPrompt),
-		...PRIVATE_MODEL_OPTIONS,
-	}).catch(async (error: unknown) => {
+	// a rate limit waits and tries the extraction again. the optional premium pass gets a wait deadline that has
+	// passed, so it makes one attempt, because its transient failure is skipped below
+	const extraction = runTopicMemoryModelCall({ signal, waitDeadlineAt: usePremiumModel ? 0 : waitDeadlineAt }, () =>
+		generateText({
+			model: usePremiumModel ? scoreModel(litellmApiKey) : cheapModel(litellmApiKey),
+			providerOptions: usePremiumModel ? LOW_REASONING_PROVIDER_OPTIONS : undefined,
+			prompt: builtPrompt.prompt,
+			output: Output.object({ schema: topicMemoryDraftResponse }),
+			abortSignal: usePremiumModel
+				? AbortSignal.any([signal, AbortSignal.timeout(PREMIUM_EXTRACTION_TIMEOUT_MS)])
+				: signal,
+			maxRetries: 0,
+			maxOutputTokens: MAX_OUTPUT_TOKENS,
+			...promptTelemetry(builtPrompt),
+			...PRIVATE_MODEL_OPTIONS,
+		}),
+	)
+	const extractionResult = await extraction.catch(async (error: unknown) => {
 		// account for usage the SDK reported before propagating cancellation
 		const hasInvalidOutput = !isModelAuthenticationRejection(error) && NoObjectGeneratedError.isInstance(error)
 		if (hasInvalidOutput && error.usage) {
-			await recordTopicMemorySpend(scanId, cost(error.usage))
+			chargeTopicMemorySpend(spend, cost(error.usage))
 		}
 		signal.throwIfAborted()
 
@@ -152,18 +162,20 @@ async function generateTopicMemoryDrafts(
 		}
 		throw error
 	})
-	if (!result) {
+	if (!extractionResult) {
 		return []
 	}
 
 	// map citations back to the indexed public Findings in this request
-	await recordTopicMemorySpend(scanId, cost(result.usage))
-	const output = readTopicMemoryDraftOutput(result)
+	chargeTopicMemorySpend(spend, cost(extractionResult.usage))
+	const output = readTopicMemoryDraftOutput(extractionResult)
 	return (output?.facts ?? []).flatMap((draft) => {
 		const findingIds = [...new Set(draft.sourceFindingIndexes.map((index) => relatedFindings[index]?.id))]
+		// a draft that cites an index outside the request is dropped
 		if (findingIds.some((id) => id === undefined)) {
 			return []
 		}
+		// a draft that makes no valid write is dropped too
 		const write = toTopicMemoryDraft(draft)
 		if (!write) {
 			return []
@@ -184,6 +196,7 @@ function readTopicMemoryDraftOutput<DraftOutput>(result: { output: DraftOutput }
 	try {
 		return result.output
 	} catch (error) {
+		// any other error is thrown, and an empty response returns nothing
 		if (!NoOutputGeneratedError.isInstance(error)) {
 			throw error
 		}
@@ -198,14 +211,17 @@ function validateProposedSubjectAlias({
 	subjects,
 	findingIds,
 }: {
+	// the write, the alias that its draft proposed, the request's Findings, the known subjects, and the draft's Findings
 	write: TopicMemoryWrite
 	alias: { observedName: string; quote: string; sourceFindingIndex: number } | null | undefined
 	relatedFindings: EmbeddedTopicMemoryFinding[]
 	subjects: TopicMemorySubject[]
 	findingIds: (string | undefined)[]
 }): TopicMemoryWrite["subjectAlias"] {
+	// the subject that the write resolves to, and the Finding that the alias cites
 	const canonical = resolveTopicMemorySubject(write, subjects)
 	const source = alias && relatedFindings[alias.sourceFindingIndex]
+	// no alias without a cited Finding of the draft and a known subject
 	if (
 		!alias ||
 		!source ||
@@ -214,6 +230,7 @@ function validateProposedSubjectAlias({
 	) {
 		return
 	}
+	// the alias stands only if the Finding's own words support it
 	const excerpt = [source.title, source.snippet, source.articleContext].filter(Boolean).join(" ")
 	return supportsTopicMemoryAlias({
 		canonical: canonical.subject,
@@ -254,13 +271,16 @@ export async function buildTopicMemoryDraftPrompt({
 	subjects?: TopicMemorySubject[]
 }): Promise<BuiltPrompt> {
 	// keep the current day separate from the observation dates when a historical Scan runs through backfill
-	const [{ template, name, registryPrompt }, currentDayBlock] = await Promise.all([
+	const [{ template, name, registryPrompt }, currentDayBlock, topicMemoryClaimBlocks] = await Promise.all([
 		fetchPromptTemplate("propose-topic-memories"),
 		loadCurrentDayContext(now),
+		loadTopicMemoryClaimBlocks(),
 	])
-	const datedNeighbors = neighbors.flatMap(({ lastSeenAt, ...neighbor }) => {
+	// a note holds its rater's private words and a proposed claim is shown to every reader, so only the thumbs go in
+	const datedNeighbors = neighbors.flatMap(({ lastSeenAt, feedback, ...neighbor }) => {
 		const text = toNamedTopicMemoryText(neighbor.text, neighbor.person)
-		return text ? [{ ...neighbor, text, lastSeenDay: toUtcDay(lastSeenAt) }] : []
+		const ratings = feedback?.map(({ rating }) => rating)
+		return text ? [{ ...neighbor, text, ratings, lastSeenDay: toUtcDay(lastSeenAt) }] : []
 	})
 	const prompt = writePrompt(
 		template,
@@ -270,7 +290,12 @@ export async function buildTopicMemoryDraftPrompt({
 			topicScope: JSON.stringify(scope ?? null),
 			existingSubjects: JSON.stringify(subjects),
 		},
-		{ currentDayBlock, scanDay: toUtcDay(scanStartedAt), claimTypes: topicMemoryClaimTypes.join(", ") },
+		{
+			currentDayBlock,
+			...topicMemoryClaimBlocks,
+			scanDay: toUtcDay(scanStartedAt),
+			claimTypes: topicMemoryClaimTypes.join(", "),
+		},
 	)
 	return { prompt, name, registryPrompt }
 }

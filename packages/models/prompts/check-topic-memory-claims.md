@@ -1,9 +1,9 @@
 ---
 title: Check Topic Memory Claims
-version: 4
+version: 5
 model tier: cheap
 description: Classify whether each proposed topic memory states one claim.
-updated: 2026-11-16
+updated: 2026-11-20
 ---
 
 Check each topic memory on its own. Label it single when it states one fact or one factual correction. Label it compound when it states claims that could be supported or corrected separately. Label it incomplete when it depends on another sentence or article to supply the subject, full name, destination, or object. A bare surname for a second person is incomplete when their identity matters. Label it nonclaim when it is a bookmark, a scan note, instructions, a placeholder, or a list with no factual assertion.
@@ -14,7 +14,7 @@ Field extraction requested: {{extractFields}}. When requested, include fields on
 
 Reuse an existing subject spelling when it names the same entity. Use role for a job or appointment, education for a degree or study, founding for creating an organization, funding for a grant or investment, launch for a release, shutdown for a closure, airDate for a broadcast date, runtime for a duration, location for a place, price for an amount charged, and statistic for a measurement or count. Use other for a job listing, a stated preference, or any unclear property. Keep the full property in the value, including the organization in a role and the currency and billing unit in a price. Use numerals and ISO dates when known.
 
-Use the title, excerpt and any supplied article context to resolve a fragment. A travel duration needs the traveler and the destination or route, such as “Mara traveled through Kyoto and Osaka for about a month.” Keep it when the source supports those details. Omit an isolated duration or a reference to “the trip.”
+{{topicMemoryClaimContextBlock}}
 
 Label a claim incomplete if it omits the business whose clients it describes, the person or institution that selected them for a program, the people or event described by attendance together, or the date of a job start. Approximate dates such as July 2025 count. A time, institution, or event name that identifies the claim can belong to the same claim.
 

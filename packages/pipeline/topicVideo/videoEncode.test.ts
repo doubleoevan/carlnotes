@@ -78,7 +78,10 @@ test("a pan holds its zoom and travels across the image", () => {
 test("a shot crossfades from the still before it, which keeps moving", () => {
 	const shotArguments = toVideoShotArguments(MIDDLE_SHOT)
 	const filterGraph = toFilterGraph(shotArguments)
-	expect(shotArguments.slice(0, 5)).toEqual(["-y", "-i", SHOT_PICTURE.stillPath, "-i", PREVIOUS_SHOT_PICTURE.stillPath])
+	expect(shotArguments.filter((_, i) => shotArguments[i - 1] === "-i")).toEqual([
+		SHOT_PICTURE.stillPath,
+		PREVIOUS_SHOT_PICTURE.stillPath,
+	])
 
 	// the pan goes on from frame 120 of its 130, and the tail fades out over the shot
 	expect(filterGraph).toContain("[1:v]zoompan=z='1.25':x='(iw-iw/zoom)*(1-(on+120)/130)':y='ih/2-(ih/zoom/2)':d=10:")
@@ -122,13 +125,28 @@ test("the lower third keeps its segment's fades in a shot that starts later", ()
 	const shotArguments = toVideoShotArguments({ ...MIDDLE_SHOT, lowerThird })
 	const filterGraph = toFilterGraph(shotArguments)
 
-	// the lower third loops as the third input, after the two stills
-	expect(shotArguments.join(" ")).toContain("-framerate 24 -loop 1 -i /work/chapter-0-lower-third.png")
+	// the lower third loops as the third input, after the two stills, for the 2.5 seconds until its fade out ends
+	expect(shotArguments.join(" ")).toContain("-framerate 24 -loop 1 -t 2.5 -i /work/chapter-0-lower-third.png")
 	expect(filterGraph).toContain(
 		"[2:v]format=rgba,setpts=PTS+5.5/TB,fade=t=in:st=0.6:d=0.4:alpha=1,fade=t=out:st=7.6:d=0.4:alpha=1,setpts=PTS-5.5/TB[lowerThird]",
 	)
-	expect(filterGraph).toContain("[crossfaded][lowerThird]overlay=0:0[titled]")
+	expect(filterGraph).toContain("[crossfaded][lowerThird]overlay=0:0:eof_action=pass[titled]")
 	expect(filterGraph).toContain("[titled]format=yuv420p[segment]")
+})
+
+// with no thread count, ffmpeg takes a thread for each core of the node, and a render's memory grows with the node
+test("every part of a shot's run takes two threads: each input, the filter graph, and the encoder", () => {
+	const lowerThird = { lowerThirdPath: "/work/lower-third.png", shotStartSeconds: 0, isShownThroughout: false }
+	const shotArguments = toVideoShotArguments({ ...MIDDLE_SHOT, lowerThird })
+
+	// the filter graph's count comes first, each of the three inputs has a count of its own ahead of its file, and the
+	// encoder's follows the H.264 settings
+	expect(shotArguments.slice(0, 3)).toEqual(["-y", "-filter_complex_threads", "2"])
+	const inputCount = shotArguments.filter((argument) => argument === "-i").length
+	const threadCounts = shotArguments.filter((_, i) => shotArguments[i - 1] === "-threads")
+	expect(inputCount).toBe(3)
+	expect(threadCounts).toEqual(["2", "2", "2", "2"])
+	expect(shotArguments.slice(-4)).toEqual(["-threads", "2", "-an", "/work/chapter-0-shot-3.mp4"])
 })
 
 // a shot the lower third never reaches has no lower third input
@@ -141,7 +159,9 @@ test("a shot past the lower third draws none", () => {
 // the intro's and the sign-off's lower third fades in on the part's first shot and never fades out
 test("a lower third shown throughout fades in and stays", () => {
 	const lowerThird = { lowerThirdPath: "/work/intro-lower-third.png", shotStartSeconds: 0, isShownThroughout: true }
-	const filterGraph = toFilterGraph(toVideoShotArguments({ ...MIDDLE_SHOT, lowerThird }))
+	const shotArguments = toVideoShotArguments({ ...MIDDLE_SHOT, lowerThird })
+	const filterGraph = toFilterGraph(shotArguments)
+	expect(shotArguments).not.toContain("-t")
 	expect(filterGraph).toContain(
 		"[2:v]format=rgba,setpts=PTS+0/TB,fade=t=in:st=0.6:d=0.4:alpha=1,setpts=PTS-0/TB[lowerThird]",
 	)

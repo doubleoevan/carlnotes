@@ -4,6 +4,7 @@ import { once } from "node:events"
 import { readFile } from "node:fs/promises"
 import { pipeline } from "node:stream/promises"
 import { fileURLToPath } from "node:url"
+import { toChildProcessEnvironment } from "@carlnotes/server/childProcessRequest"
 import { chromium } from "playwright-core"
 import type { CaptureChapterInput } from "./captureVideoScene"
 import { H264_ARGUMENTS } from "./videoH264"
@@ -45,13 +46,7 @@ async function captureWithBrowser(
 ): Promise<void> {
 	// supply only the settings the offline browser and encoder require
 	const input = await readCaptureInput(inputPath, signal)
-	const env: Record<string, string> = { TMPDIR: directory }
-	for (const key of ["PATH", "HOME", "PLAYWRIGHT_BROWSERS_PATH"]) {
-		const value = process.env[key]
-		if (value) {
-			env[key] = value
-		}
-	}
+	const env = toChildProcessEnvironment(directory, ["PATH", "HOME", "PLAYWRIGHT_BROWSERS_PATH"])
 
 	// bound browser startup and dispose of its process group on every exit
 	signal.throwIfAborted()
@@ -81,10 +76,13 @@ async function captureWithBrowser(
 
 // cancel the read and release the capture deadline even if the filesystem has an outstanding operation
 async function readCaptureInput(path: string, signal: AbortSignal): Promise<CaptureChapterInput> {
+	// a promise that rejects once the signal aborts
 	signal.throwIfAborted()
 	const stopped = Promise.withResolvers<never>()
 	const stop = (): void => stopped.reject(signal.reason)
 	signal.addEventListener("abort", stop, { once: true })
+
+	// the first of the read and the abort decides
 	try {
 		const text = await Promise.race([readFile(path, { encoding: "utf8", signal }), stopped.promise])
 		return JSON.parse(text)
@@ -153,6 +151,8 @@ async function captureFrames({
 		capture.stdout.once("data", () => onFirstFrame(encoder))
 	}
 	capture.stdout.on("data", progress)
+
+	// both children's exits, and a stop that kills whichever is still running
 	const processes = [waitForCaptureExit(encoder), waitForCaptureExit(capture)]
 	const stopChildren = (): void => {
 		for (const child of [capture, encoder]) {

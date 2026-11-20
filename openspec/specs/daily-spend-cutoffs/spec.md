@@ -9,8 +9,9 @@ new Topics' first Scans under a dispatch limit without ever skipping one, and cl
 ### Requirement: Free-plan spend is the UTC day's spend billed to free users
 
 The free-plan spend SHALL be the spend recorded since midnight UTC that bills a user whose plan is free and who is not
-an admin. It SHALL sum the same kinds of spend as the day's spend report, read by each user's current plan and role. A
-paid user's or an admin's spend SHALL NOT count toward it.
+an admin. It SHALL sum every kind of spend that the day's spend report sums and that bills a user, read by each user's
+current plan and role, a user's own rows in the `spends` table among them. A `spends` row with no user is the
+platform's, and SHALL NOT count toward it. A paid user's or an admin's spend SHALL NOT count toward it.
 
 #### Scenario: A paid user's spend does not count
 
@@ -29,6 +30,18 @@ paid user's or an admin's spend SHALL NOT count toward it.
 - **GIVEN** a free user who spent 120 dollars before midnight UTC and nothing since
 - **WHEN** the free-plan spend is read after midnight UTC
 - **THEN** it is zero
+
+#### Scenario: The platform's spend does not count
+
+- **GIVEN** a day on which the film backfill's renders cost the platform 40 dollars and free users spent 30 dollars
+- **WHEN** the free-plan spend is read
+- **THEN** it is 30 dollars
+
+#### Scenario: A free user's url fetch counts
+
+- **GIVEN** a free user whose url attachment's fetch was recorded today
+- **WHEN** the free-plan spend is read
+- **THEN** it includes that fetch's cost
 
 ### Requirement: Each daily spend cutoff is passed at its dollar amount
 
@@ -177,7 +190,7 @@ none against the scan dispatch limit. A limit of zero SHALL start none. A Waitin
 #### Scenario: A Waiting Scan is never closed out as stale
 
 - **GIVEN** a Waiting Scan opened six hours ago
-- **WHEN** the stale scan close-out runs
+- **WHEN** the reaper reads the stale Scans
 - **THEN** the Waiting Scan stays running
 
 #### Scenario: A Waiting Scan is never failed for a spent key

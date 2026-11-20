@@ -4,6 +4,7 @@ import { expect, test } from "bun:test"
 import {
 	GENERATED_CHAPTER_IMAGE_LIMIT_PER_CHAPTER,
 	toTopicVideoCaptionsKey,
+	toTopicVideoChapterImageCheckKeys,
 	toTopicVideoChapterImageKey,
 	toTopicVideoChapterImageKeys,
 	toTopicVideoChaptersKey,
@@ -85,8 +86,8 @@ test("toTopicVideoChapterImageKeys lists the first key, then the numbered ones, 
 	expect(firstStyleKeys.at(-1)).toBe("episodes/episode-1/video/chapter-1-image-11.jpg")
 })
 
-// a film lists every generated image key of each chapter of its podcast episode in every style, and a podcast episode
-// with no film row lists none
+// a film lists every generated image key of each chapter of its podcast episode in every style, with the two check
+// keys of each image in the current style, and a podcast episode with no film row lists none
 test("toTopicVideoKeys lists each chapter's generated images in every style under the film's folder", () => {
 	const filmRow = { introKey: null, chaptersKey: null, signOffKey: null, filmKey: null, captionsKey: null }
 	const topicVideoKeys = toTopicVideoKeys({
@@ -95,11 +96,15 @@ test("toTopicVideoKeys lists each chapter's generated images in every style unde
 		imageHash: null,
 		chapterCount: 2,
 	})
+	const currentStyleImageKeys = [
+		...toTopicVideoChapterImageKeys("episode-1", 0),
+		...toTopicVideoChapterImageKeys("episode-1", 1),
+	]
 	expect(topicVideoKeys).toEqual([
 		...toTopicVideoChapterImageKeys("episode-1", 0, 1),
 		...toTopicVideoChapterImageKeys("episode-1", 1, 1),
-		...toTopicVideoChapterImageKeys("episode-1", 0),
-		...toTopicVideoChapterImageKeys("episode-1", 1),
+		...currentStyleImageKeys,
+		...currentStyleImageKeys.flatMap((imageKey) => Object.values(toTopicVideoChapterImageCheckKeys(imageKey))),
 		"episodes/episode-1/video/chapter-0-scene-plan.json",
 		"episodes/episode-1/video/chapter-1-scene-plan.json",
 		"episodes/episode-1/video/picture-motion.json",

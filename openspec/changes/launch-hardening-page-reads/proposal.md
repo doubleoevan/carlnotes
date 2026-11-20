@@ -49,7 +49,7 @@ No route, field, or MCP tool return that a released build reads is removed or ch
 - `news`, `updates`: the own group's candidate ids, the count on a cursor read, the person's cached first page, and
   the null opener's marker.
 - `topic-video-player`, `topic-post-discussions`, `podcast-episode-player`: polls that read a
-  status, pause in a hidden tab, and stop on a closed-out row.
+  status, pause in a hidden tab, and stop on a reaped row.
 - `site-search`, `podcast-episode-search`, `topic-chat`, `mcp-server`: the bounded search embedding, a chat turn's
   headers before retrieval, and protocol messages counted apart from tool calls.
 - `seo`, `social-sharing`, `static-serving`: cached documents, a cached card lookup, and a plain 404 for a missing

@@ -74,6 +74,8 @@ export const users = pgTable(
 		index("users_email_lower_idx").on(sql`lower(${table.email})`),
 		// the trigram index behind the username search, which matches anywhere in the name
 		index("users_username_normalized_trgm").using("gin", table.usernameNormalized.op("gin_trgm_ops")),
+		// the sweep counts the day's and the past hour's signups by when each account was created
+		index("users_created_idx").on(table.createdAt),
 	],
 )
 

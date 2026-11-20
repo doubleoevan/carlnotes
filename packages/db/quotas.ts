@@ -1,43 +1,24 @@
-// per-user limits, the month's spend, and the podcast episode checks
+// per-user limits, the user access row, the UTC day and month starts, and the podcast episode checks
 import { dailyFrequencies, isAdminRole } from "@carlnotes/contracts/enums"
 import {
 	ADMIN_QUOTA,
 	MAX_TOPIC_POST_BODY_IMAGE_BYTES,
 	type OverageBillingAccess,
 	PLANS,
-	type Plan,
-	toCentsFromDollars,
 	type UserAccess,
 } from "@carlnotes/contracts/plans"
 import { DAY_MS, toUtcDay } from "@carlnotes/contracts/time"
-import { and, count, eq, gte, inArray, isNull, ne, type SQL, sql } from "drizzle-orm"
-import type { AnyPgColumn } from "drizzle-orm/pg-core"
+import { and, count, eq, gte, inArray, isNull, ne } from "drizzle-orm"
 import { type DbHandle, db } from "./index"
 import { countRateLimitHit } from "./redisRateLimits"
 import { memoizeInRequest } from "./requestMemo"
 import { billingSubscriptions } from "./schema/billing"
-import { chatTurns } from "./schema/chat"
-import { personalSourcesSummarySpends } from "./schema/personalSources"
-import { podcastEpisodes, topicVideos } from "./schema/podcast"
 import { scans } from "./schema/scans"
 import { teamMembers } from "./schema/teams"
 import { topicImageRenders } from "./schema/topicImages"
 import { topicPostDiscussions } from "./schema/topicPosts"
 import { topics } from "./schema/topics"
 import { users } from "./schema/users"
-
-// a recorded spend in dollars, split into scans, chat, and podcast episodes, which include Topic Post Discussions
-export type RecordedSpend = {
-	scanDollars: number
-	chatDollars: number
-	podcastEpisodeDollars: number
-	personalSourcesDollars: number
-	topicImageDollars: number
-}
-
-// when the spend to sum starts, the one user whose spend to sum, and the plan whose users to sum without admins.
-// every user if both are unset
-export type LoadSpendSinceOptions = { since: Date; userId?: string; billedPlan?: Plan }
 
 // how many teams a user may create in a day
 const DAILY_TEAM_LIMIT = 20
@@ -257,120 +238,6 @@ export async function loadDiscussionRegenerationQuota(userId: string): Promise<I
 	const used = usedRow?.used ?? 0
 	const limit = userAccess.isAdmin ? ADMIN_QUOTA : PLANS[userAccess.plan].discussionRegenerationLimit
 	return { used, limit, remaining: Math.max(0, limit - used) }
-}
-
-/**
- * Returns this month's recorded spend for the user, split into scans, chat, and podcast episodes, read at most once per
- * request. A write in the request clears the memo, so a read after a spend row is written sums again.
- */
-export function monthlySpendDollars(userId: string): Promise<RecordedSpend> {
-	// sum since the start of the UTC month, which the budget resets on, once per request for the user and the month
-	const since = startOfUtcMonth(new Date())
-	return memoizeInRequest(`monthly-spend:${userId}:${since.toISOString()}`, () => loadSpendSince({ since, userId }))
-}
-
-/**
- * Returns the spend recorded since a time for one user, for the users on one plan who are not admins, or for every user,
- * split into scans, chat, and podcast episodes.
- */
-export async function loadSpendSince({ since, userId, billedPlan }: LoadSpendSinceOptions): Promise<RecordedSpend> {
-	// filter each sum by the user column it bills, for the one user if one is given, even an empty user id
-	const toBilledUserFilter = (billedUserColumn: AnyPgColumn): SQL | undefined =>
-		and(
-			userId !== undefined ? eq(billedUserColumn, userId) : undefined,
-			billedPlan !== undefined ? inArray(billedUserColumn, toPlanUserIdQuery(billedPlan)) : undefined,
-		)
-
-	// sum each table's cost since the start time for the billed users
-	const [
-		[scanSpendRow],
-		[chatSpendRow],
-		[podcastEpisodeSpendRow],
-		[personalSourcesSpendRow],
-		[topicImageSpendRow],
-		[topicPostDiscussionSpendRow],
-		[topicVideoSpendRow],
-	] = await Promise.all([
-		db
-			.select({ dollars: sql<string>`coalesce(sum(${scans.cost}), 0)` })
-			.from(scans)
-			.where(and(toBilledUserFilter(scans.ownerId), gte(scans.startedAt, since))),
-		db
-			.select({ dollars: sql<string>`coalesce(sum(${chatTurns.cost}), 0)` })
-			.from(chatTurns)
-			.where(and(toBilledUserFilter(chatTurns.userId), gte(chatTurns.createdAt, since))),
-		db
-			.select({ dollars: sql<string>`coalesce(sum(${podcastEpisodes.cost}), 0)` })
-			.from(podcastEpisodes)
-			.where(and(toBilledUserFilter(podcastEpisodes.ownerId), gte(podcastEpisodes.createdAt, since))),
-		db
-			.select({ dollars: sql<string>`coalesce(sum(${personalSourcesSummarySpends.cost}), 0)` })
-			.from(personalSourcesSummarySpends)
-			.where(
-				and(
-					toBilledUserFilter(personalSourcesSummarySpends.userId),
-					gte(personalSourcesSummarySpends.createdAt, since),
-				),
-			),
-		// the topic image renders bill the user that asked for them
-		db
-			.select({ dollars: sql<string>`coalesce(sum(${topicImageRenders.cost}), 0)` })
-			.from(topicImageRenders)
-			.where(and(toBilledUserFilter(topicImageRenders.userId), gte(topicImageRenders.createdAt, since))),
-		// the Topic Post Discussions bill the user that started them
-		db
-			.select({ dollars: sql<string>`coalesce(sum(${topicPostDiscussions.cost}), 0)` })
-			.from(topicPostDiscussions)
-			.where(and(toBilledUserFilter(topicPostDiscussions.userId), gte(topicPostDiscussions.createdAt, since))),
-		// the films bill their podcast episode's owner.
-		// ponytail: a rebuild's cost counts in the month the film was made, a cost row per render if that drifts
-		db
-			.select({ dollars: sql<string>`coalesce(sum(${topicVideos.cost}), 0)` })
-			.from(topicVideos)
-			.innerJoin(podcastEpisodes, eq(podcastEpisodes.id, topicVideos.podcastEpisodeId))
-			.where(and(toBilledUserFilter(podcastEpisodes.ownerId), gte(topicVideos.createdAt, since))),
-	])
-
-	// a discussion is the two hosts recorded, and a film is its podcast episode's, so both count as podcast episode
-	// spend
-	const podcastEpisodeDollars =
-		Number(podcastEpisodeSpendRow?.dollars ?? 0) +
-		Number(topicPostDiscussionSpendRow?.dollars ?? 0) +
-		Number(topicVideoSpendRow?.dollars ?? 0)
-	return {
-		scanDollars: Number(scanSpendRow?.dollars ?? 0),
-		chatDollars: Number(chatSpendRow?.dollars ?? 0),
-		podcastEpisodeDollars,
-		personalSourcesDollars: Number(personalSourcesSpendRow?.dollars ?? 0),
-		topicImageDollars: Number(topicImageSpendRow?.dollars ?? 0),
-	}
-}
-
-/**
- * Returns a subquery of the ids of the users on the plan who are not admins.
- */
-export function toPlanUserIdQuery(plan: Plan): SQL {
-	return sql`(select ${users.id} from ${users} where ${users.plan} = ${plan} and ${users.role} <> 'admin')`
-}
-
-/**
- * Returns a recorded spend in cents, summed across scans, chat, and podcast episodes.
- */
-export function toSpendCents({
-	scanDollars,
-	chatDollars,
-	podcastEpisodeDollars,
-	personalSourcesDollars,
-	topicImageDollars,
-}: RecordedSpend): number {
-	// round each table's dollars to cents before adding, the way every budget comparison does
-	return (
-		toCentsFromDollars(scanDollars) +
-		toCentsFromDollars(chatDollars) +
-		toCentsFromDollars(podcastEpisodeDollars) +
-		toCentsFromDollars(personalSourcesDollars) +
-		toCentsFromDollars(topicImageDollars)
-	)
 }
 
 /**

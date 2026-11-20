@@ -1,5 +1,6 @@
 // the sweep's notifications email: one email a day to each user that other people reacted to, commented on, or
-// mentioned, with nothing sent on a quiet day
+// mentioned, with nothing sent on a quiet day, which is recorded so the day reads that user once
+import { toChunks } from "@carlnotes/contracts/arrays"
 import { toSocialTargetPath, toTopicPostPath } from "@carlnotes/contracts/seo"
 import { REACTION_TYPE_LABELS } from "@carlnotes/contracts/social"
 import { DAY_MS, toUtcDay } from "@carlnotes/contracts/time"
@@ -22,7 +23,8 @@ import {
 import { toUnsubscribeHeaders, toUnsubscribeUrl } from "@carlnotes/emails/unsubscribe"
 import { appUrl } from "@carlnotes/server/appUrl"
 import { reportError } from "@carlnotes/server/monitoring"
-import { and, eq, max } from "drizzle-orm"
+import { and, eq, exists, gt, inArray, notExists, sql } from "drizzle-orm"
+import { alias } from "drizzle-orm/pg-core"
 import { loadNotificationsEmailRows, type NotificationsEmailRow } from "./notificationsEmailRows"
 
 // the job's name, so two sweeps never send the day's emails at once, and the UTC hour the day's emails go out after.
@@ -33,6 +35,9 @@ const NOTIFICATIONS_EMAIL_UTC_HOUR = 15
 // how far back one email reads at most, and how far a first email reads
 const MAX_ACTIVITY_MS = 7 * DAY_MS
 const FIRST_ACTIVITY_MS = DAY_MS
+
+// how many users one insert or delete of the sends table names
+const SEND_ROW_CHUNK_SIZE = 1000
 
 /**
  * Sends the day's notifications emails once the send hour has passed, under the job's lease. Returns how many were
@@ -46,8 +51,9 @@ export async function sendNotificationsEmails(now = new Date()): Promise<number 
 }
 
 /**
- * Sends one notifications email to each user who has something to read since their last one and none sent today.
- * Returns how many were sent.
+ * Sends one notifications email to each user who has something to read since their last one and no row today, and
+ * records the quiet day of each one with nothing to read, so no later sweep that day reads them again. Returns how
+ * many were sent.
  */
 export async function sendDayNotificationsEmails(now: Date): Promise<number> {
 	// the users who may get an email today, whose activity alone is worth a read
@@ -66,42 +72,112 @@ export async function sendDayNotificationsEmails(now: Date): Promise<number> {
 
 	// send each recipient their own items, one recipient at a time, so one failed send stops nothing else
 	let sentCount = 0
+	const quietUserIds: string[] = []
 	for (const recipient of recipients) {
-		const activityStartAt = recipient.lastActivityEndAt ?? new Date(now.getTime() - FIRST_ACTIVITY_MS)
+		const activityStartAt = toActivityStartAt(recipient, now)
 		const recipientActivityRows = (activityRowsByRecipientId.get(recipient.userId) ?? []).filter(
 			(activityRow) => activityRow.createdAt > activityStartAt,
 		)
-		const isSent = await sendNotificationsEmail({
+		const sendOutcome = await sendNotificationsEmail({
 			recipient,
 			activityRows: recipientActivityRows,
 			sentDay,
 			now,
 		}).catch((error: unknown) => {
 			reportError(error, "email", { emailKind: "notifications" })
-			return false
+			return "notSent" as const
 		})
-		sentCount += isSent ? 1 : 0
+
+		// count a sent email, and keep a quiet recipient for the day's record
+		sentCount += sendOutcome === "sent" ? 1 : 0
+		if (sendOutcome === "quiet") {
+			quietUserIds.push(recipient.userId)
+		}
 	}
+
+	// record the quiet days once the sends are done. a recipient whose read or send failed has no row, so the next
+	// sweep reads them again
+	await recordQuietDays({ quietUserIds, sentDay, now })
+
+	// keep each recipient's latest email row and latest quiet day row alone, the two rows the recipients read uses
+	await deleteOlderSendRows(recipients.map((recipient) => recipient.userId))
 	return sentCount
 }
 
-// a recipient: their address, and the end of the time their last notifications email covered, null before a first one
-type Recipient = { userId: string; email: string; lastActivityEndAt: Date | null }
+// a recipient: their address, the end of the time their last notifications email covered, null before a first one,
+// and the time of their last quiet day's check, null if no quiet day was recorded
+type Recipient = { userId: string; email: string; lastActivityEndAt: Date | null; lastQuietCheckAt: Date | null }
 
-// the users who may get an email today: the switch is on and no email went out today
+// the users who may get an email today: the switch is on, and today has no row of theirs, an email's or a quiet day's
 async function loadRecipients(sentDay: string): Promise<Recipient[]> {
-	const recipientRows = await db
+	// today's row of a user
+	const todaySends = alias(notificationsEmailSends, "today_sends")
+	const todaySendQuery = db
+		.select({ userId: todaySends.userId })
+		.from(todaySends)
+		.where(and(eq(todaySends.userId, users.id), eq(todaySends.sentDay, sentDay)))
+
+	// the latest end among the emails that were sent, and the latest check among the quiet days, which are not emails
+	const { activityEndAt, isQuiet } = notificationsEmailSends
+	return db
 		.select({
 			userId: users.id,
 			email: users.email,
-			lastActivityEndAt: max(notificationsEmailSends.activityEndAt),
-			lastSentDay: max(notificationsEmailSends.sentDay),
+			lastActivityEndAt: sql<Date | null>`max(${activityEndAt}) filter (where not ${isQuiet})`.mapWith(activityEndAt),
+			lastQuietCheckAt: sql<Date | null>`max(${activityEndAt}) filter (where ${isQuiet})`.mapWith(activityEndAt),
 		})
 		.from(users)
 		.leftJoin(notificationsEmailSends, eq(notificationsEmailSends.userId, users.id))
-		.where(eq(users.isNotificationsEmailEnabled, true))
+		.where(and(eq(users.isNotificationsEmailEnabled, true), notExists(todaySendQuery)))
 		.groupBy(users.id, users.email)
-	return recipientRows.filter((recipientRow) => recipientRow.lastSentDay !== sentDay)
+}
+
+// where a recipient's email starts: the end of their last email. before a first email it is a day back, or their
+// last quiet day's check if that is older, so nothing after that check is left out
+function toActivityStartAt({ lastActivityEndAt, lastQuietCheckAt }: Recipient, now: Date): Date {
+	if (lastActivityEndAt) {
+		return lastActivityEndAt
+	}
+	const firstActivityStartMs = now.getTime() - FIRST_ACTIVITY_MS
+	return new Date(Math.min(firstActivityStartMs, lastQuietCheckAt?.getTime() ?? firstActivityStartMs))
+}
+
+// the recipients with nothing to read today, the UTC day, and the time of the check
+type RecordQuietDaysOptions = { quietUserIds: string[]; sentDay: string; now: Date }
+
+// record today as quiet for each recipient with nothing to read, a thousand rows an insert. a recipient whose row
+// another write took first keeps that row
+async function recordQuietDays({ quietUserIds, sentDay, now }: RecordQuietDaysOptions): Promise<void> {
+	for (const quietUserIdChunk of toChunks(quietUserIds, SEND_ROW_CHUNK_SIZE)) {
+		await db
+			.insert(notificationsEmailSends)
+			.values(quietUserIdChunk.map((userId) => ({ userId, sentDay, activityEndAt: now, isQuiet: true })))
+			.onConflictDoNothing()
+	}
+}
+
+// delete each user's rows that a later row of the same kind follows, a thousand users a delete. the recipients read
+// uses only the latest email's end and the latest quiet day's check, so the table holds at most two rows a user
+async function deleteOlderSendRows(userIds: string[]): Promise<void> {
+	const laterSends = alias(notificationsEmailSends, "later_sends")
+	for (const userIdChunk of toChunks(userIds, SEND_ROW_CHUNK_SIZE)) {
+		// a later row of the user's of the same kind, an email's or a quiet day's
+		const laterSendQuery = db
+			.select({ userId: laterSends.userId })
+			.from(laterSends)
+			.where(
+				and(
+					eq(laterSends.userId, notificationsEmailSends.userId),
+					eq(laterSends.isQuiet, notificationsEmailSends.isQuiet),
+					gt(laterSends.sentDay, notificationsEmailSends.sentDay),
+				),
+			)
+
+		// delete the chunk's rows that such a row follows
+		await db
+			.delete(notificationsEmailSends)
+			.where(and(inArray(notificationsEmailSends.userId, userIdChunk), exists(laterSendQuery)))
+	}
 }
 
 // one item as the email shows it: the Finding, the Topic Post, the Podcast Episode, or the Topic it is on, by name
@@ -175,19 +251,22 @@ type SendNotificationsEmailOptions = {
 	now: Date
 }
 
+// how one recipient's send ended: an email went out, the day had nothing for them to read, or no email went out
+// because another sweep took the day or the mailer rejected the send
+type SendOutcome = "sent" | "quiet" | "notSent"
+
 // send one recipient's email, or nothing on a quiet day. the day's row is written after the render and before the send,
-// so a second sweep sends nothing, and a rejected send deletes the row for the next sweep. returns whether an email
-// went out
+// so a second sweep sends nothing, and a rejected send deletes the row for the next sweep. returns how the send ended
 async function sendNotificationsEmail({
 	recipient,
 	activityRows,
 	sentDay,
 	now,
-}: SendNotificationsEmailOptions): Promise<boolean> {
+}: SendNotificationsEmailOptions): Promise<SendOutcome> {
 	// a quiet day sends nothing
 	const readableActivityRows = await toReadableActivityRows(recipient.userId, activityRows)
 	if (readableActivityRows.length === 0) {
-		return false
+		return "quiet"
 	}
 
 	// the items newest first, with the link that turns the email off
@@ -215,7 +294,7 @@ async function sendNotificationsEmail({
 		.onConflictDoNothing()
 		.returning({ userId: notificationsEmailSends.userId })
 	if (!sendRow) {
-		return false
+		return "notSent"
 	}
 
 	// a rejected send gives the day back, so the next sweep sends the same items
@@ -225,5 +304,5 @@ async function sendNotificationsEmail({
 			.delete(notificationsEmailSends)
 			.where(and(eq(notificationsEmailSends.userId, recipient.userId), eq(notificationsEmailSends.sentDay, sentDay)))
 	}
-	return isAccepted
+	return isAccepted ? "sent" : "notSent"
 }

@@ -57,9 +57,27 @@ export async function startTopicImageRender({
 		throw new Error(`no render row was written for topic ${topicId}`)
 	}
 
-	// the workflow that draws the image
-	await startTopicImageWorkflow({ topicId, renderId: renderRow.id, imagePrompt })
+	// the workflow that draws the image. a row with no workflow would stay pending and count as a regeneration, so a
+	// failed start takes the row back
+	try {
+		await startTopicImageWorkflow({ topicId, renderId: renderRow.id, imagePrompt })
+	} catch (error) {
+		await db.delete(topicImageRenders).where(eq(topicImageRenders.id, renderRow.id))
+		throw error
+	}
 	return renderRow.id
+}
+
+/**
+ * Deletes a render row that is still pending, which gives its regeneration back to the month's count and leaves the
+ * current image as it was. Returns whether a pending row was there to delete.
+ */
+export async function deletePendingTopicImageRender(renderId: string): Promise<boolean> {
+	const deletedRows = await db
+		.delete(topicImageRenders)
+		.where(and(eq(topicImageRenders.id, renderId), eq(topicImageRenders.status, "pending")))
+		.returning({ id: topicImageRenders.id })
+	return deletedRows.length > 0
 }
 
 /**

@@ -1,5 +1,6 @@
 // the Scan pipeline as three activities: ingest, review, and the write that completes the Scan
 
+import { WORKER_SHUTDOWN_FAILURE_TYPE } from "@carlnotes/contracts/scanFailure"
 import { toTopicPath } from "@carlnotes/contracts/seo"
 import type { StoredScanSourceResults, StoredSourceResult } from "@carlnotes/contracts/topics"
 import { db } from "@carlnotes/db"
@@ -11,18 +12,19 @@ import { type Budget, newBudget, toCheckpointBudget, toResumedBudget } from "@ca
 import { loadOrProvisionUserLiteLLMKey } from "@carlnotes/models/litellm"
 import { notifyIndexNow } from "@carlnotes/pipeline/indexNow"
 import { ingestFromTopicSources, toScannedSource } from "@carlnotes/pipeline/ingest/index"
-import type { DiscoveredResource } from "@carlnotes/pipeline/ingest/ingester"
+import { type ResourceDiscovery, toResourceDiscovery } from "@carlnotes/pipeline/ingest/ingester"
 import { saveTopicVectors } from "@carlnotes/pipeline/meanVectors"
 import type { ReviewSummary } from "@carlnotes/pipeline/review/index"
 import { reviewScan } from "@carlnotes/pipeline/review/index"
 import type { ScannedSource } from "@carlnotes/pipeline/review/summarize"
-import { HEARTBEAT_INTERVAL_MS, REVIEW_MODEL_CALL_WAIT_DEADLINE_MS } from "@carlnotes/pipeline/stageTimeouts"
+import { REVIEW_MODEL_CALL_WAIT_DEADLINE_MS } from "@carlnotes/pipeline/stageTimeouts"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { appBaseUrl } from "@carlnotes/server/appUrl"
 import { reportError } from "@carlnotes/server/monitoring"
 import { propagateAttributes, startActiveObservation } from "@langfuse/tracing"
 import { ApplicationFailure, asyncLocalStorage } from "@temporalio/activity"
-import { and, count, eq, isNull } from "drizzle-orm"
+import { and, count, eq, isNull, type SQL, sql } from "drizzle-orm"
+import { runWithHeartbeat } from "../activityHeartbeat"
 
 import { toScanSourceResults } from "./scanSourceResults"
 
@@ -31,9 +33,10 @@ export { toScanSourceResults }
 // a persisted Scan row, and the aggregate that ingest hands to review
 type Scan = typeof scans.$inferSelect
 
-// what ingest leaves for the stages after it
+// what ingest leaves for the stages after it. a payload from a worker before the smaller result holds each
+// Resource's title and snippet too, which the stages after ingest never read
 export type IngestStageResult = {
-	resources: DiscoveredResource[]
+	resources: ResourceDiscovery[]
 	foundCount: number
 	status: Scan["status"]
 	problemSources: Scan["problemSources"]
@@ -80,9 +83,10 @@ export async function ingestForScan(scanId: string, topicId: string): Promise<In
 				earlierKeptCount: 0,
 				earlierFoundCount: 0,
 			})
-			// drop the fetched page bodies and each Source's own Resources before the result crosses the activity boundary
+			// keep only what the later stages read of each Resource, and drop each Source's own Resources, before the
+			// result crosses the activity boundary. the result is written into the workflow's history three times
 			return {
-				resources: summary.resources.map(({ fetchedBody, ...resource }) => resource),
+				resources: summary.resources.map(toResourceDiscovery),
 				foundCount: summary.foundCount,
 				status: summary.status,
 				problemSources: summary.problemSources,
@@ -96,7 +100,9 @@ export async function ingestForScan(scanId: string, topicId: string): Promise<In
 
 /**
  * Review what ingest found, paying for the fetches and the model calls it needs.
- * A second attempt skips every Resource the first one already scored, and resumes with what it spent.
+ * A later attempt skips every Resource an earlier one already scored, and resumes with what it spent.
+ * A review that a person's stop cancelled returns what it scored, and one that its worker's shutdown cancelled throws,
+ * so Temporal starts it again on a worker that is staying up.
  */
 export async function reviewForScan(
 	scanId: string,
@@ -133,9 +139,24 @@ export async function reviewForScan(
 				stopSignal(),
 			)
 			await recordScanProgress(scanId, stageBudget)
+			throwIfWorkerShutDown(stageBudget)
 			return { review, budget: stageBudget }
 		}),
 	)
+}
+
+// fail the review attempt if the worker's shutdown is what cancelled it. a shutdown aborts the same signal that a
+// person's stop does, so the review has returned with part of its pages scored and no recap, and returning that would
+// save the Scan as succeeded. the failure is one that Temporal retries
+function throwIfWorkerShutDown(stageBudget: Budget): void {
+	const activityContext = asyncLocalStorage.getStore()
+	if (!activityContext?.cancellationDetails?.workerShutdown) {
+		return
+	}
+
+	// checkpoint what this attempt spent, so the next attempt resumes from it
+	activityContext.heartbeat(toCheckpointBudget(stageBudget))
+	throw ApplicationFailure.retryable("the worker shut down during the review", WORKER_SHUTDOWN_FAILURE_TYPE)
 }
 
 /**
@@ -306,6 +327,16 @@ export async function reportScanPushNotStarted(scanId: string, reason: string): 
 }
 
 /**
+ * Reports a Scan whose topic memory workflow could not be started. The Scan is already complete, so nothing else
+ * changes.
+ * @public Temporal runs it by name through the proxyActivities in runTopicScan.ts.
+ */
+export async function reportTopicMemoriesNotStarted(scanId: string, reason: string): Promise<void> {
+	console.error(`the topic memory workflow for scan ${scanId} could not be started: ${reason}`)
+	reportError(new Error("a topic memory workflow could not be started"), "worker", { scanId, reason })
+}
+
+/**
  * Reports a Scan whose podcast episode workflow could not be started.
  * The Scan is already complete, so nothing else changes.
  * @public Temporal runs it by name through the proxyActivities in runTopicScan.ts.
@@ -320,8 +351,9 @@ export async function reportPodcastEpisodeRecordingNotStarted(scanId: string, re
  * the topic's vectors from what the Scan kept before it failed.
  */
 export async function failScan(scanId: string, reason: string, budget?: Budget): Promise<void> {
-	// a Scan that failed before its first stage returned has no spend to record
-	const spend = budget ? { stageCosts: budget.stageCosts, cost: budget.spentDollars.toString() } : {}
+	// a Scan that failed before its first stage returned has no spend to record. a stage that saved more spend before
+	// it failed keeps its saved cost and stage costs, so the failure never lowers what the Scan spent
+	const spend = budget ? toFailedScanSpend(budget) : {}
 	const [failedScan] = await db
 		.update(scans)
 		.set({ status: "failed", error: reason, finishedAt: new Date(), ...spend })
@@ -331,6 +363,15 @@ export async function failScan(scanId: string, reason: string, budget?: Budget):
 	// save the topic's vectors from what the failed scan kept before its stage threw
 	if (failedScan?.topicId) {
 		await saveTopicVectorsAfterScan({ scanId, topicId: failedScan.topicId })
+	}
+}
+
+// the spend a failed Scan records: the budget's cost and stage costs, unless the row already holds a higher cost
+function toFailedScanSpend(budget: Budget): { cost: SQL; stageCosts: SQL } {
+	const cost = budget.spentDollars.toString()
+	return {
+		cost: sql`greatest(${scans.cost}, ${cost}::numeric)`,
+		stageCosts: sql`case when ${scans.cost} > ${cost}::numeric then ${scans.stageCosts} else ${JSON.stringify(budget.stageCosts)}::jsonb end`,
 	}
 }
 
@@ -345,9 +386,7 @@ async function saveTopicVectorsAfterScan({ scanId, topicId }: SaveTopicVectorsAf
 // report that this worker is alive for as long as the stage runs, and checkpoint the Budget's settled spend as what it
 // reports
 function withHeartbeat<Result>(budget: Budget, runStage: () => Promise<Result>): Promise<Result> {
-	const activityContext = asyncLocalStorage.getStore()
-	const heartbeatPump = setInterval(() => activityContext?.heartbeat(toCheckpointBudget(budget)), HEARTBEAT_INTERVAL_MS)
-	return runStage().finally(() => clearInterval(heartbeatPump))
+	return runWithHeartbeat(runStage, { toHeartbeatDetails: () => toCheckpointBudget(budget) })
 }
 
 // the signal that aborts when the user stops the Scan

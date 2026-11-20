@@ -5,10 +5,16 @@ import { MAX_ATTACHMENT_CONTEXT_CHARS } from "@carlnotes/contracts/topics"
 import { restoreConnectionPool, stubConnectionPool, toTableRow } from "@carlnotes/db/connectionPoolStub"
 import { attachments } from "@carlnotes/db/schema/topics"
 import * as store from "@carlnotes/db/store"
+import * as spendReservations from "@carlnotes/models/spendReservations"
 import { FetchStatusError } from "@carlnotes/server/publicFetch"
 // the methods to test, and the ingestion, which the pool stub keeps off the database
 import { ingestAttachment, ingestUrlAttachment, toTopicContextHash } from "./attach"
-import { AttachmentValidationError, isTableFileType, toCanonicalContentType } from "./attachContentType"
+import {
+	AttachmentBudgetSpentError,
+	AttachmentValidationError,
+	isTableFileType,
+	toCanonicalContentType,
+} from "./attachContentType"
 import { MAX_TABLE_CHARS, MAX_TABLE_ROWS, toTableText } from "./attachTable"
 import * as scrape from "./scrape"
 import * as temporalClient from "./temporalClient"
@@ -247,14 +253,19 @@ test("a successful upload leaves no key pending", async () => {
 	expect(deleteStoredObjectSpy).not.toHaveBeenCalled()
 })
 
+// a page that a user adds to their Topic by its url
+const URL_ATTACHMENT_ADD = { topicId: "topic-1", url: "https://a.test/page", userId: "user-1" }
+
 // a page its host refuses is the user's to fix, so it is a validation error. a scraper with no key, a scraper error, and
 // any other fault are infrastructure failures, which are rethrown as they are so the error report names them
 test("ingestUrlAttachment rejects a page its host refuses and rethrows any other fetch failure", async () => {
-	// the host answers 404
+	// the user has budget left, and the host answers 404
+	const release = mock(async () => {})
+	spyOn(spendReservations, "reserveUserSpend").mockResolvedValue({ release })
 	const fetchContentSpy = spyOn(scrape, "fetchContent").mockRejectedValue(
 		new FetchStatusError("firecrawl scrape https://a.test/page", 404),
 	)
-	const hostRejection = await ingestUrlAttachment("topic-1", "https://a.test/page").catch((error: unknown) => error)
+	const hostRejection = await ingestUrlAttachment(URL_ATTACHMENT_ADD).catch((error: unknown) => error)
 	expect(hostRejection).toBeInstanceOf(AttachmentValidationError)
 	expect((hostRejection as Error).message).toBe("this page could not be read: https://a.test/page")
 
@@ -264,7 +275,43 @@ test("ingestUrlAttachment rejects a page its host refuses and rethrows any other
 		new FetchStatusError("firecrawl scrape https://a.test/page", 503),
 	]) {
 		fetchContentSpy.mockRejectedValue(infrastructureError)
-		const rethrownError = await ingestUrlAttachment("topic-1", "https://a.test/page").catch((error: unknown) => error)
+		const rethrownError = await ingestUrlAttachment(URL_ATTACHMENT_ADD).catch((error: unknown) => error)
 		expect(rethrownError).toBe(infrastructureError)
 	}
+
+	// every fetch held the user's budget while it ran, and gave it back
+	expect(release).toHaveBeenCalledTimes(3)
+})
+
+// the fetch is a paid call with no row of its own, so it is gated and recorded like a chat turn's spend
+test("a url attachment's fetch is the adding user's spend, and a spent budget fetches nothing", async () => {
+	// a spent budget rejects the page before any request goes out
+	const fetchContentSpy = spyOn(scrape, "fetchContent")
+	const reserveSpy = spyOn(spendReservations, "reserveUserSpend").mockResolvedValue("rejected")
+	const budgetRejection = await ingestUrlAttachment(URL_ATTACHMENT_ADD).catch((error: unknown) => error)
+	expect(budgetRejection).toBeInstanceOf(AttachmentBudgetSpentError)
+	expect(fetchContentSpy).not.toHaveBeenCalled()
+
+	// with budget left, the fetch's cost is recorded for the user and the Topic before the page is ingested
+	reserveSpy.mockResolvedValue({ release: mock(async () => {}) })
+	const fetchFailure = new Error("stop after the spend is recorded")
+	fetchContentSpy.mockResolvedValue({
+		text: "",
+		cost: 0.001,
+		etag: null,
+		lastModified: null,
+		title: null,
+		faviconUrl: null,
+	})
+	const sentQueries = stubConnectionPool(({ text: queryText }) => {
+		if (queryText.startsWith('insert into "spends"')) {
+			return []
+		}
+		throw fetchFailure
+	})
+
+	// the spend row is written with the user and the Topic
+	await ingestUrlAttachment(URL_ATTACHMENT_ADD).catch(() => undefined)
+	const spendWrite = sentQueries.find((sentQuery) => sentQuery.text.startsWith('insert into "spends"'))
+	expect(spendWrite?.values).toEqual(expect.arrayContaining(["urlAttachmentFetch", 0.001, "user-1", "topic-1"]))
 })

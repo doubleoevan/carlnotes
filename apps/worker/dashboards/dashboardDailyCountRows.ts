@@ -11,7 +11,7 @@ import {
 } from "@carlnotes/contracts/seo"
 import { toCutText, toOneLineText } from "@carlnotes/contracts/text"
 import { db } from "@carlnotes/db"
-import { type PlaceColumns, toDailyCountPlace } from "@carlnotes/db/dailyCountBuffer"
+import { type PlaceColumns, toDailyCountPlace } from "@carlnotes/db/dailyCountPlaces"
 import { toConvertedPersonalSourcesFilter } from "@carlnotes/db/personalSourcesAuthority"
 import { dailyPlayCounts, dailyViewCounts } from "@carlnotes/db/schema/dailyCounts"
 import { podcastEpisodes } from "@carlnotes/db/schema/podcast"

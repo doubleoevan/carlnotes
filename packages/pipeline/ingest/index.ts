@@ -27,7 +27,7 @@ import type {
 	SourceIngester,
 } from "./ingester"
 import { PaidSourceError } from "./ingester"
-import { toCanonicalUrl, toFallbackTitle } from "./normalize"
+import { toCanonicalUrl, toFallbackTitle, toLimitedSnippet } from "./normalize"
 import { podcastIngester } from "./podcast"
 import { redditIngester } from "./reddit"
 import { rssIngester } from "./rss"
@@ -237,12 +237,14 @@ export function toScanSummary(outcomes: SourceOutcome[]): ScanSummary {
 				continue
 			}
 
-			// a Resource with no title would render as a bare host, so derive one from its snippet or url
+			// a Resource with no title would render as a bare host, so derive one from its snippet or url, and store
+			// no more of the snippet than its limit
 			const title = resource.title?.trim() || toFallbackTitle(canonicalUrl, resource.snippet)
 			resourceByUrl.set(canonicalUrl, {
 				...resource,
 				url: canonicalUrl,
 				title,
+				snippet: toLimitedSnippet(resource.snippet),
 				isFromCustomSource: isCustomSource,
 				sourceId: outcome.sourceId,
 			})

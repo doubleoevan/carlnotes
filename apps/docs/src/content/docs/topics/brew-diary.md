@@ -11,6 +11,6 @@ Carl gets smarter with every brew. The Journal shows the takeaways Carl has lear
 
 ![The Keeping Up with the Chens Brew diary shows its list of brews beside the Journal button.](../../../assets/screenshots/brew-diary-journal.png)
 
-Topic owners and team leads can rate every Takeaway 👍 or 👎 and add a note. Carl chooses which ones to use each time he writes. A rating tells Carl what’s worth keeping. A note sets him straight. Every takeaway Carl remembers builds him into your topic’s subject matter expert.
+Topic owners and the leads of a topic’s own team can rate every Takeaway 👍 or 👎 and add a note. Carl chooses which ones to use each time he writes. A rating tells Carl what’s worth keeping. A note sets him straight. Every takeaway Carl remembers builds him into your topic’s subject matter expert.
 
 ![Topic Takeaways for Keeping Up with the Chens shows an example note beside a selected thumbs up.](../../../assets/screenshots/topic-takeaways-feedback.png)

@@ -2,7 +2,6 @@
 // once per person, podcast episode, and format in five minutes. a person reaches Redis only as a keyed hash. each daily
 // count row's count waits in one Redis hash and its people in one HyperLogLog sketch, until the minute sweep takes them
 // into Postgres
-import { createHash } from "node:crypto"
 import { toChunks } from "@carlnotes/contracts/arrays"
 import type { Place, ViewItemKind } from "@carlnotes/contracts/dashboards"
 import type { PodcastEpisodeFormat } from "@carlnotes/contracts/podcast"
@@ -35,9 +34,6 @@ export type DailyCountEntry = { dailyCountRow: DailyCountRow; count: number; dai
 // a daily count row's saved sketch, and the hash fields whose taken sketches merge into it
 type DailyCountSketchMerge = { savedSketch: Uint8Array | null; dailyCountFields: string[] }
 
-// a daily count row's five place columns, all null for a row with no known place
-export type PlaceColumns = Record<keyof Place, string | null>
-
 // how long a day's set of an item's viewers lasts after its latest new viewer, a day and two hours, and how long a
 // play's claim lasts
 const VIEW_CLAIM_SECONDS = 26 * 60 * 60
@@ -54,6 +50,9 @@ const TAKEN_SKETCH_KEY_PREFIX = "daily-counts:taken:"
 const MERGE_KEY_PREFIX = "daily-counts:merging:"
 const COUNT_KEY_PREFIX = "daily-counts:counting:"
 
+// how many sweeps in a row could not save a batch
+const FAILED_SWEEP_COUNT_KEY = "daily-counts:failed-sweeps"
+
 // how long a counting or merge key lives if its work stops before it drops the key
 const TEMPORARY_KEY_SECONDS = 600
 
@@ -62,9 +61,6 @@ const SKETCH_CHUNK_SIZE = 100
 
 // how many characters of a person's keyed hash Redis holds, 132 bits
 const PERSON_HASH_LENGTH = 22
-
-// the place key of a view or play with no known place
-const UNKNOWN_PLACE_KEY = "unknown"
 
 // count the row and add the person to its sketch, if the person's claim is new
 const COUNT_SCRIPT_TAIL = `redis.call('HINCRBY', KEYS[2], ARGV[2], 1)
@@ -231,10 +227,11 @@ export async function deleteTakenDailyCountSketches(dailyCountEntries: DailyCoun
 }
 
 /**
- * Puts taken rows back for the next sweep in one Redis call, for a batch the sweep could not save.
+ * Puts taken rows back for the next sweep in one Redis call, for a batch the sweep could not save. Returns whether
+ * Redis put them back.
  */
-export async function returnDailyCountEntries(dailyCountEntries: DailyCountEntry[]): Promise<void> {
-	await runWithRedis("daily count return", (client) =>
+export async function returnDailyCountEntries(dailyCountEntries: DailyCountEntry[]): Promise<boolean> {
+	const scriptReplies = await runWithRedis("daily count return", (client) =>
 		Promise.all(
 			dailyCountEntries.map(({ dailyCountField, count }) => {
 				// the hash, the live sketch, and the taken sketch, then the field and its count
@@ -247,6 +244,24 @@ export async function returnDailyCountEntries(dailyCountEntries: DailyCountEntry
 			}),
 		),
 	)
+	return scriptReplies !== null
+}
+
+/**
+ * Counts one more sweep in a row that could not save a daily count batch. Returns the count, or null if Redis fails.
+ */
+export async function countFailedDailyCountSweep(): Promise<number | null> {
+	const failedSweepCount = await runWithRedis("daily count failed sweep count", (client) =>
+		client.send("INCR", [FAILED_SWEEP_COUNT_KEY]),
+	)
+	return failedSweepCount === null ? null : Number(failedSweepCount)
+}
+
+/**
+ * Forgets the sweeps that could not save a daily count batch, once a sweep has saved every batch it took.
+ */
+export async function clearFailedDailyCountSweeps(): Promise<void> {
+	await runWithRedis("daily count failed sweep clear", (client) => client.del(FAILED_SWEEP_COUNT_KEY))
 }
 
 /**
@@ -305,45 +320,6 @@ export async function countSketchGroups(
 		await runWithRedis("daily count sketch delete", (client) => client.del(...countKeyChunk))
 	}
 	return peopleCounts
-}
-
-/**
- * Returns the key that names a place in a daily count row: a hash of its values, or unknown for no place. A place with
- * no postal or metro code hashes its first five values alone, so it keeps the key it had before those codes were read.
- */
-export function toPlaceKey(place: Place | null): string {
-	if (!place) {
-		return UNKNOWN_PLACE_KEY
-	}
-	const { country, region, city, postalCode, metroCode, latitude, longitude } = place
-	const placeCodes = postalCode === null && metroCode === null ? [] : [postalCode, metroCode]
-	const placeValues = JSON.stringify([country, region, city, latitude, longitude, ...placeCodes])
-	return createHash("sha256").update(placeValues).digest("hex").slice(0, 32)
-}
-
-/**
- * Returns a place's daily count columns, all null for no place.
- */
-export function toPlaceColumns(place: Place | null): PlaceColumns {
-	return (
-		place ?? {
-			country: null,
-			region: null,
-			city: null,
-			postalCode: null,
-			metroCode: null,
-			latitude: null,
-			longitude: null,
-		}
-	)
-}
-
-/**
- * Returns the place a daily count row's columns name, or null for a row with no known country.
- */
-export function toDailyCountPlace(placeColumns: PlaceColumns): Place | null {
-	const { country, region, city, postalCode, metroCode, latitude, longitude } = placeColumns
-	return country ? { country, region, city, postalCode, metroCode, latitude, longitude } : null
 }
 
 // run the count script for one person's view or play of a row, under the person's keyed hash

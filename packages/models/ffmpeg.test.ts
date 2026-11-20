@@ -11,6 +11,7 @@ test.skipIf(!Bun.which("ffmpeg"))("runFfmpeg feeds the input pipe and returns th
 
 	// resample it to 8 kHz through the pipes
 	const resampledWav = await runFfmpeg({
+		timeoutMs: 60_000,
 		ffmpegArguments: ["-i", "pipe:0", "-ar", "8000", "-f", "wav", "pipe:1"],
 		inputBytes: silentWav,
 	})
@@ -22,7 +23,10 @@ test.skipIf(!Bun.which("ffmpeg"))("runFfmpeg feeds the input pipe and returns th
 
 test.skipIf(!Bun.which("ffmpeg"))("runFfmpeg throws ffmpeg's error text on a failed run", async () => {
 	// an input file that does not exist
-	const failedRun = runFfmpeg({ ffmpegArguments: ["-i", "/nonexistent/recording.webm", "-f", "wav", "pipe:1"] })
+	const failedRun = runFfmpeg({
+		timeoutMs: 60_000,
+		ffmpegArguments: ["-i", "/nonexistent/recording.webm", "-f", "wav", "pipe:1"],
+	})
 	await expect(failedRun).rejects.toThrow(/^ffmpeg exited with \d+: [\s\S]*nonexistent/)
 })
 
@@ -42,6 +46,7 @@ test.skipIf(!Bun.which("ffmpeg"))("runFfmpeg kills a run whose signal aborts", a
 	const abortController = new AbortController()
 	const runStartMs = performance.now()
 	const longRun = runFfmpeg({
+		timeoutMs: 60_000,
 		ffmpegArguments: ["-re", "-f", "lavfi", "-i", "anullsrc=r=16000:cl=mono", "-t", "3600", "-f", "wav", "pipe:1"],
 		signal: abortController.signal,
 	})
@@ -54,6 +59,6 @@ test.skipIf(!Bun.which("ffmpeg"))("runFfmpeg kills a run whose signal aborts", a
 
 // a signal that aborted before the run starts no ffmpeg
 test.skipIf(!Bun.which("ffmpeg"))("runFfmpeg rejects a run whose signal has already aborted", async () => {
-	const abortedRun = runFfmpeg({ ffmpegArguments: ["-version"], signal: AbortSignal.abort() })
+	const abortedRun = runFfmpeg({ timeoutMs: 60_000, ffmpegArguments: ["-version"], signal: AbortSignal.abort() })
 	await expect(abortedRun).rejects.toThrow()
 })

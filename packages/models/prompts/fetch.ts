@@ -5,6 +5,7 @@ import { LangfuseClient } from "@langfuse/client"
 import animateChapterPictureTemplate from "./animate-chapter-picture.md" with { type: "text" }
 import attachContextTemplate from "./attach-context.md" with { type: "text" }
 import attachImageContextTemplate from "./attach-image-context.md" with { type: "text" }
+import carlWrittenVoiceTemplate from "./carl-written-voice.md" with { type: "text" }
 import chatConductTemplate from "./chat-conduct.md" with { type: "text" }
 import chatDocsGuideTemplate from "./chat-docs-guide.md" with { type: "text" }
 import chatGlossaryTemplate from "./chat-glossary.md" with { type: "text" }
@@ -39,9 +40,14 @@ import summarizePersonalSourcesContextTemplate from "./summarize-personal-source
 import summarizeResourceTemplate from "./summarize-resource.md" with { type: "text" }
 import summarizeTopicPostTemplate from "./summarize-topic-post.md" with { type: "text" }
 import summarizeTopicScanTemplate from "./summarize-topic-scan.md" with { type: "text" }
+import topicImageLimitsTemplate from "./topic-image-limits.md" with { type: "text" }
 import topicImageSceneTemplate from "./topic-image-scene.md" with { type: "text" }
 import topicImageStyleTemplate from "./topic-image-style.md" with { type: "text" }
+import topicMemoryAsOfClaimsTemplate from "./topic-memory-as-of-claims.md" with { type: "text" }
 import topicMemoryBackgroundTemplate from "./topic-memory-background.md" with { type: "text" }
+import topicMemoryClaimContextTemplate from "./topic-memory-claim-context.md" with { type: "text" }
+import topicMemoryClaimDatesTemplate from "./topic-memory-claim-dates.md" with { type: "text" }
+import topicMemoryClaimRulesTemplate from "./topic-memory-claim-rules.md" with { type: "text" }
 import topicVideoImageStyleTemplate from "./topic-video-image-style.md" with { type: "text" }
 import updatesRecapTemplate from "./updates-recap.md" with { type: "text" }
 import { stripFrontmatter } from "./write.ts"
@@ -53,6 +59,10 @@ import writeTopicPostDiscussionTemplate from "./write-topic-post-discussion.md" 
 export const FALLBACK_PROMPT_TEMPLATES = {
 	"current-day-context": currentDayContextTemplate,
 	"topic-memory-background": topicMemoryBackgroundTemplate,
+	"topic-memory-claim-context": topicMemoryClaimContextTemplate,
+	"topic-memory-claim-rules": topicMemoryClaimRulesTemplate,
+	"topic-memory-claim-dates": topicMemoryClaimDatesTemplate,
+	"topic-memory-as-of-claims": topicMemoryAsOfClaimsTemplate,
 	"propose-topic-memories": proposeTopicMemoriesTemplate,
 	"reconcile-topic-memory-claims": reconcileTopicMemoryClaimsTemplate,
 	"check-topic-memory-claims": checkTopicMemoryClaimsTemplate,
@@ -85,8 +95,10 @@ export const FALLBACK_PROMPT_TEMPLATES = {
 	"chat-team": chatTeamTemplate,
 	"chat-room-turn": chatRoomTurnTemplate,
 	"updates-recap": updatesRecapTemplate,
+	"carl-written-voice": carlWrittenVoiceTemplate,
 	"topic-image-scene": topicImageSceneTemplate,
 	"topic-image-style": topicImageStyleTemplate,
+	"topic-image-limits": topicImageLimitsTemplate,
 	"topic-video-image-style": topicVideoImageStyleTemplate,
 	"check-agreement": checkAgreementTemplate,
 	"moderate-user-text": moderateUserTextTemplate,

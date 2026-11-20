@@ -8,6 +8,7 @@ import { teamTopics } from "@carlnotes/db/schema/teamTopics"
 import { attachments, sources, topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
 import { and, count, desc, eq, gte, inArray, lte, sql } from "drizzle-orm"
+import { alias } from "drizzle-orm/pg-core"
 import { memberTopicIds, subscribedTopicIds } from "../authorization"
 import { loadTopicChatMentions } from "../chat/mentions"
 import { loadLatestPodcastEpisodes } from "../podcast/podcastEpisodeShapes"
@@ -188,24 +189,42 @@ async function loadFeedAttachmentRows(
 		.where(inArray(attachments.topicId, topicIds))
 }
 
-// the most recent succeeded scan per topic. the distinct-on keeps the summary from that same latest row
-async function loadLastSucceededScanRows(
+// the scans that a topic's recap is read from
+const recapScans = alias(scans, "recap_scans")
+
+/**
+ * Loads the most recent succeeded scan per topic, with the recap of the newest succeeded scan that wrote one. A scan
+ * that reviewed nothing writes no recap, and never blanks the recap of the scan before it.
+ */
+export async function loadLastSucceededScanRows(
 	topicIds: string[],
 ): Promise<Pick<typeof scans.$inferSelect, "topicId" | "startedAt" | "finishedAt" | "scanSummary" | "cost">[]> {
-	return (
-		db
-			.selectDistinctOn([scans.topicId], {
-				topicId: scans.topicId,
-				startedAt: scans.startedAt,
-				finishedAt: scans.finishedAt,
-				scanSummary: scans.scanSummary,
-				cost: scans.cost,
-			})
-			// sort so that the latest succeeded scan is the distinct row kept per topic
-			.from(scans)
-			.where(and(inArray(scans.topicId, topicIds), eq(scans.status, "succeeded")))
-			.orderBy(scans.topicId, desc(scans.startedAt))
-	)
+	// the latest succeeded scan per topic, sorted so that it is the distinct row kept
+	const latestScans = db
+		.selectDistinctOn([scans.topicId], {
+			topicId: scans.topicId,
+			startedAt: scans.startedAt,
+			finishedAt: scans.finishedAt,
+			cost: scans.cost,
+		})
+		.from(scans)
+		.where(and(inArray(scans.topicId, topicIds), eq(scans.status, "succeeded")))
+		.orderBy(scans.topicId, desc(scans.startedAt))
+		.as("latest_scans")
+
+	// the recap reads once per topic's latest scan instead of once per succeeded scan. a sql fragment prints an
+	// aliased table as its alias alone, so the from clause names the table and then the alias. drizzle drops the table
+	// name from a top-level column in a one-table select, so the recap's subquery nests in an outer sql fragment
+	const lastScanRecapQuery = sql`(select ${recapScans.scanSummary} from ${scans} ${sql.identifier("recap_scans")} where ${recapScans.topicId} = ${latestScans.topicId} and ${recapScans.status} = 'succeeded' and ${recapScans.scanSummary} <> '' order by ${recapScans.startedAt} desc limit 1)`
+	return db
+		.select({
+			topicId: latestScans.topicId,
+			startedAt: latestScans.startedAt,
+			finishedAt: latestScans.finishedAt,
+			scanSummary: sql<string | null>`${lastScanRecapQuery}`,
+			cost: latestScans.cost,
+		})
+		.from(latestScans)
 }
 
 // this month's scan spend per topic

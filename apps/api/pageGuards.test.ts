@@ -1,10 +1,18 @@
-// page guard tests: the click id redirect, and the render limit that sheds a visitor's render past it
+// page guard tests: the click id redirect, the render limit that sheds a visitor's render past it with a page that
+// retries, and the minute's counts of the renders started and shed
 import { afterEach, expect, mock, test } from "bun:test"
 import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
+import { toRenderShedCrossings } from "./apiGauges"
 import { RENDERED_EDGE_CACHE_CONTROL } from "./edgeCache"
+import server from "./index"
 import { createBundleDirectory, removeTestDirectories, request, withWorkingDirectory } from "./indexTestFixtures"
 import { SESSION_COOKIE } from "./testSession"
+import {
+	BUSY_RENDER_MAX_RETRY_AFTER_SECONDS,
+	BUSY_RENDER_MIN_RETRY_AFTER_SECONDS,
+	readAndResetRenderGauges,
+} from "./uiServer"
 
 // put each spy and the render limit back, and remove the temporary directories after each test
 const restoreEnvSettings = saveEnvSettings(["RENDER_CONCURRENCY"])
@@ -65,12 +73,55 @@ test("a visitor's render past the limit responds 503 with a retry, and a signed-
 		]),
 	)
 
-	// one visitor render runs, the other is shed with a two-second retry, and the signed-in one renders
+	// one visitor render runs, the other is shed with a retry of two to six seconds, and the signed-in one renders
 	expect([firstResponse.status, secondResponse.status].sort()).toEqual([200, 503])
 	const shedResponse = firstResponse.status === 503 ? firstResponse : secondResponse
-	expect(shedResponse.retryAfter).toBe("2")
 	expect(shedResponse.cacheControl).toBe("private, no-cache")
 	expect(signedInResponse.status).toBe(200)
+
+	// the retry wait is a whole number of seconds within the jitter range
+	const retryAfterSeconds = Number(shedResponse.retryAfter)
+	expect(Number.isInteger(retryAfterSeconds)).toBe(true)
+	expect(retryAfterSeconds).toBeGreaterThanOrEqual(BUSY_RENDER_MIN_RETRY_AFTER_SECONDS)
+	expect(retryAfterSeconds).toBeLessThanOrEqual(BUSY_RENDER_MAX_RETRY_AFTER_SECONDS)
+})
+
+// a bare line of text told a visitor nothing and never tried again, and a shed render was counted nowhere
+test("a shed visitor gets a page that retries after its Retry-After wait, and the minute counts the renders started and shed", async () => {
+	// start the minute's counts over, then shed one of two visitor renders beside a signed-in render
+	Bun.env.RENDER_CONCURRENCY = "1"
+	readAndResetRenderGauges()
+	const bundleDirectory = await createBundleDirectory({ renderDelayMs: 50 })
+	const responses = await withWorkingDirectory(bundleDirectory, () =>
+		Promise.all([
+			server.fetch(new Request("http://localhost/topics/abc123")),
+			server.fetch(new Request("http://localhost/topics/def456")),
+			server.fetch(new Request("http://localhost/topics/ghi789", { headers: { cookie: SESSION_COOKIE } })),
+		]),
+	)
+
+	// the shed response is an html page that names the site and asks for the same address again after the same wait
+	// as its Retry-After header
+	const shedResponse = responses.find((response) => response.status === 503)
+	const shedPage = (await shedResponse?.text()) ?? ""
+	expect(shedResponse?.headers.get("content-type")).toBe("text/html; charset=utf-8")
+	expect(shedPage).toStartWith("<!doctype html>")
+	expect(shedPage).toContain(`<meta http-equiv="refresh" content="${shedResponse?.headers.get("retry-after")}">`)
+	expect(shedPage).toContain("<h1>CarlNotes is busy</h1>")
+	expect(shedPage).not.toContain("<script")
+
+	// the minute started two renders and shed one, which crosses the render-shed threshold, and the counts start over
+	const renderGauges = readAndResetRenderGauges()
+	expect(renderGauges).toEqual({ startedCount: 2, shedCount: 1 })
+	expect(toRenderShedCrossings(renderGauges)).toEqual([
+		{
+			condition: "render-shed",
+			message: "a replica shed visitor page renders past its render limit",
+			values: { startedCount: 2, shedCount: 1 },
+		},
+	])
+	expect(readAndResetRenderGauges()).toEqual({ startedCount: 0, shedCount: 0 })
+	expect(toRenderShedCrossings({ startedCount: 40, shedCount: 0 })).toEqual([])
 })
 
 // only a visitor's render counts against the limit, so signed-in renders in progress never shed a visitor

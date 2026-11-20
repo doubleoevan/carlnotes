@@ -5,6 +5,8 @@ import { restoreConnectionPool, stubConnectionPool, toTableRow } from "@carlnote
 import { sources } from "@carlnotes/db/schema/topics"
 import { newBudget } from "@carlnotes/models/budget"
 import { ingestFromTopicSources, type SourceOutcome, toScannedSource, toScanSummary } from "./index"
+import { toResourceDiscovery } from "./ingester"
+import { MAX_SNIPPET_CHARS } from "./normalize"
 
 // the label and duration of a Source outcome, for the tests that read neither
 const UNREAD_OUTCOME_FIELDS = { label: "a source", durationMs: 0 }
@@ -163,4 +165,52 @@ test("toScannedSource reads an empty result with no fallback mode as ok, and one
 		status: "fallback",
 		fallbackMode: "reddit-rss",
 	})
+})
+
+test("a Resource whose Source returned a long text stores its snippet up to the limit", () => {
+	// a feed item with a whole article as its description, and one with a short one
+	const article = "A long article. ".repeat(5000)
+	const scanSummary = toScanSummary([
+		toSourceOutcome({
+			resources: [
+				{ url: "https://example.test/long", kind: "read", title: "Long", snippet: article },
+				{ url: "https://example.test/short", kind: "read", title: "Short", snippet: "A short text." },
+			],
+		}),
+	])
+	const snippets = scanSummary.resources.map((resource) => resource.snippet)
+	expect(snippets).toEqual([article.slice(0, MAX_SNIPPET_CHARS), "A short text."])
+	expect(scanSummary.foundCount).toBe(2)
+})
+
+// a Scan's ingest result is written into its workflow history three times
+test("what the stages after ingest read of 688 Resources with long snippets is under 200 KB", () => {
+	// the widest Scan in dev: 688 Resources, with snippets up to 75,000 characters before the limit, and urls of 131
+	// characters, which is the mean length of a stored url in dev
+	const sourceId = crypto.randomUUID()
+	const toUrl = (place: number): string => `https://www.example.com/${String(place).padStart(4, "0")}/`.padEnd(131, "a")
+	const discoveredResources = Array.from({ length: 688 }, (_, place) => ({
+		url: toUrl(place),
+		kind: "read" as const,
+		title: "A headline of ordinary length",
+		snippet: "x".repeat(75_000),
+		isFromCustomSource: false,
+		sourceId,
+	}))
+	const resourceDiscoveries = discoveredResources.map(toResourceDiscovery)
+
+	// each one holds its url and its Source, and a flag only if the flag is set
+	expect(resourceDiscoveries[0]).toEqual({ url: discoveredResources[0]?.url ?? "", sourceId })
+	expect(
+		toResourceDiscovery({ ...discoveredResources[0], isFromCustomSource: true, isFromPersonalSources: true } as never),
+	).toEqual({
+		url: discoveredResources[0]?.url ?? "",
+		sourceId,
+		isFromCustomSource: true,
+		isFromPersonalSources: true,
+	})
+
+	// the urls alone are 90 KB, and the whole result is a fifteenth of Temporal's 2 MB payload limit
+	expect(JSON.stringify(resourceDiscoveries).length).toBeLessThan(200_000)
+	expect(JSON.stringify(discoveredResources).length).toBeGreaterThan(50_000_000)
 })

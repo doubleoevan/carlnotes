@@ -12,8 +12,7 @@ import {
 import { db } from "@carlnotes/db"
 import { pushDevices, pushNotificationSends } from "@carlnotes/db/schema/pushDevices"
 import { sessions } from "@carlnotes/db/schema/users"
-import { loadUpdateCount } from "@carlnotes/db/updateCounts"
-import { runWithConcurrency } from "@carlnotes/server/concurrency"
+import { loadUpdateCounts } from "@carlnotes/db/updateCounts"
 import {
 	chunkPushMessages,
 	type ExpoPushMessage,
@@ -53,9 +52,6 @@ export type PushTarget = {
 	body: string
 	url: string
 }
-
-// how many recipients' update counts load at once
-const UPDATE_COUNT_CONCURRENCY = 5
 
 // the ticket errors that waiting can fix, and the one that retires the phone. any other error is final
 const RETRYABLE_TICKET_ERROR_CODES = new Set(["MessageRateExceeded", "ExpoError", "ProviderError"])
@@ -101,10 +97,11 @@ export async function deliverPushes(
 	const pushDeliveryTally: PushChunkTally = { acceptedCount: 0, retryableError: null, rejectedError: null }
 	let messageIndex = 0
 	for (const pushMessageChunk of chunkPushMessages(pushMessages)) {
-		// a cancelled attempt stops between chunks
+		// a cancelled attempt stops between chunks, and a chunk reports that the send is alive before its first read
 		if (pushProgress.isCancelled()) {
 			return { outcome: "retryable", pushError: "cancelled" }
 		}
+		pushProgress.onProgress()
 
 		// the chunk's own targets, in the same order as its messages
 		const plannedPushTargets = unsentPushTargets.slice(messageIndex, messageIndex + pushMessageChunk.length)
@@ -121,9 +118,8 @@ export async function deliverPushes(
 			continue
 		}
 
-		// each message's app icon badge shows its recipient's update count, loaded for this chunk's recipients alone
-		const updateCountsByUserId = await loadUpdateCountsByUserId(chunkPushTargets)
-		pushProgress.onProgress()
+		// each message's app icon badge shows its recipient's update count, counted for this chunk's accounts together
+		const updateCountsByUserId = await loadChunkUpdateCounts(chunkPushTargets)
 		const badgedPushMessages = boundPushMessages.map((pushMessage, index) => ({
 			...pushMessage,
 			badge: updateCountsByUserId.get(chunkPushTargets[index]?.recipientUserId ?? ""),
@@ -266,25 +262,18 @@ function toPushMessage(kind: PushNotificationKind, pushTarget: PushTarget): Expo
 	}
 }
 
-// each recipient's update count, loaded once per account however many phones it has. a count that fails to load is
-// reported and left out, so that recipient's badge keeps its number and the push still sends
-async function loadUpdateCountsByUserId(pushTargets: PushTarget[]): Promise<Map<string, number>> {
-	// the chunk's recipients, each counted once
+// the update count of each of a chunk's recipient accounts, counted together in one grouped read however many phones
+// an account has. counts that fail to load are reported and left out, so the chunk's badges keep their numbers and
+// its pushes still send
+async function loadChunkUpdateCounts(pushTargets: PushTarget[]): Promise<Map<string, number>> {
+	// each account once, then one read for all of them
 	const recipientUserIds = [...new Set(pushTargets.map((pushTarget) => pushTarget.recipientUserId))]
-	const updateCounts = await runWithConcurrency(recipientUserIds, UPDATE_COUNT_CONCURRENCY, (recipientUserId) =>
-		loadUpdateCount(recipientUserId).catch((error) => {
-			reportError(error, "push")
-			return undefined
-		}),
-	)
-
-	// pair each loaded count with its recipient
-	return new Map(
-		recipientUserIds.flatMap((recipientUserId, index) => {
-			const updateCount = updateCounts[index]
-			return updateCount === undefined ? [] : [[recipientUserId, updateCount] as const]
-		}),
-	)
+	try {
+		return await loadUpdateCounts(recipientUserIds)
+	} catch (error) {
+		reportError(error, "push")
+		return new Map()
+	}
 }
 
 // the recipient and phone pairs that the event already reached

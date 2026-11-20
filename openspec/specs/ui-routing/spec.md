@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change move-ui-to-tanstack-start. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: The ui routes are files under a route tree
 
 The ui SHALL declare its routes as files under `apps/web/src/routes`, one file per route, with the route tree generated from that directory. Every page under `apps/web/src/pages` SHALL have a route file, except `NotFoundPage`, which the `_layout` route renders as its `notFoundComponent`.
@@ -21,11 +23,20 @@ A literal path passed to the router's own `Link` or `useNavigate` SHALL be type-
 
 ### Requirement: Public routes render on the server, signed-in routes render on the client
 
-A route whose content a signed-out visitor may read SHALL render on the server, so the HTML the server sends includes that content before any script runs. Every element of that content SHALL be shown in that HTML, never hidden until a script runs or the page scrolls, so a crawler that renders without scrolling and a browser without scripts both see it. An entrance animation that plays on load from the HTML is allowed, and content the browser renders can stay hidden until it scrolls into view. The sign-in, sign-up, and password reset pages, and every route behind sign-in, SHALL NOT render on the server, and their pages render in the browser. A request that brings a session cookie SHALL render every route in the browser.
+A route whose content a signed-out visitor may read SHALL render on the server, so the HTML the server sends includes
+that content before any script runs. Every element of that content SHALL be shown in that HTML, never hidden until a
+script runs or the page scrolls, so a crawler that renders without scrolling and a browser without scripts both see it.
+An entrance animation that plays on load from the HTML is allowed, and content the browser renders can stay hidden
+until it scrolls into view. The sign-in, sign-up, and password reset pages, and every route behind sign-in, SHALL NOT
+render on the server, and their pages render in the browser. A request that brings a session cookie SHALL render every
+route in the browser.
 
 A server-rendered route SHALL read its data in a loader that calls the api over http, at the base url the app gives the
-typed client. `apps/web` and the universal packages SHALL NOT import the api, the worker, or the database as values, and
-the package boundary check SHALL enforce that rule in preflight, as the workspace-structure capability states.
+typed client. On the server that base url SHALL be the value of `API_ORIGIN` if it is set, and the loopback address
+`http://localhost:3000` otherwise. The `web` service SHALL start with `API_ORIGIN` unset, so a render reads the api of
+the process that renders it. `apps/web` and the universal packages SHALL NOT import the api, the worker, or the
+database as values, and the package boundary check SHALL enforce that rule in preflight, as the workspace-structure
+capability states.
 
 #### Scenario: A public page arrives rendered
 
@@ -34,8 +45,10 @@ the package boundary check SHALL enforce that rule in preflight, as the workspac
 
 #### Scenario: A public page's lower sections show without a scroll
 
-- **WHEN** a crawler renders a public topic page at a phone's size without scrolling, or a browser without scripts opens it
-- **THEN** every section is shown, including the one with Carl's recap below the first screen, and none has zero opacity
+- **WHEN** a crawler renders a public topic page at a phone's size without scrolling, or a browser without scripts
+  opens it
+- **THEN** every section is shown, including the one with Carl's recap below the first screen, and none has zero
+  opacity
 
 #### Scenario: A signed-in page arrives unrendered
 
@@ -52,6 +65,17 @@ the package boundary check SHALL enforce that rule in preflight, as the workspac
 - **WHEN** code under `apps/web` or a universal package imports the api, the worker, or the database as a value
 - **THEN** the package boundary check fails, whether or not that import would have worked on the server
 
+#### Scenario: A web service render reads its own api
+
+- **WHEN** the `web` service renders a public topic page with `API_ORIGIN` unset
+- **THEN** the page's loader reads the topic from the `web` process's own `/api`, and no request goes to the `app`
+  service
+
+#### Scenario: A set origin moves a render's reads
+
+- **WHEN** a process starts with `API_ORIGIN` naming another service and renders a public page
+- **THEN** the page's loader reads from that origin
+
 ### Requirement: A route behind sign-in redirects a signed-out visitor
 
 A route that requires a session SHALL redirect a signed-out visitor to sign in with a `next` parameter naming the path they asked for. `/activity`, `/account`, `/admin`, and `/mcp/consent` SHALL decide this in `beforeLoad`, before they render. `/invite/$token` SHALL decide it in its page once the session loads, since its loader runs on the server, where no session is visible.
@@ -65,4 +89,3 @@ A route that requires a session SHALL redirect a signed-out visitor to sign in w
 
 - **WHEN** a visitor redirected from a route signs in
 - **THEN** they arrive at the path they originally asked for
-

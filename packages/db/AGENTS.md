@@ -23,8 +23,8 @@ fingerprints. `personalSourcesContext.ts` reads bounded live excerpts and commit
 current revision. `personalSourcesWork.ts` exposes content-free deadlines and dirty Topic IDs for Temporal and sweep
 recovery. `personalSourcesLinkQueue.ts` claims bounded live links, recovers unfinished leases, and records durable
 review outcomes. Only canonical URL fingerprints and positions live in queue metadata. Private sender preference is read
-per Topic. `quotas.ts` includes `personal_source_distillation_spends` in monthly totals. Unknown attempts keep a
-conservative cost estimate.
+per Topic. `recordedSpend.ts` includes `personal_source_distillation_spends` in monthly totals. Unknown attempts keep
+a conservative cost estimate.
 
 `personalSourcesReceive.ts` accepts encrypted content, links, counters, and retry metadata in one transaction.
 `personalSourcesLocks.ts` locks the sender before the Topic when filing. Competing sends and access changes wait, while
@@ -49,90 +49,99 @@ schema reconciliation; released migrations stay unchanged.
 and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
 
 - `schema/` — the schema, one file per domain: `users.ts` (users and Better Auth's tables), `topics.ts`, `scans.ts`
-  (scans, resources, findings, the finding markers, and `resource_images`, the images of a Resource's own page that
-  its films show, with `resources.images_fetched_at` and `images_filter_version` recording that their fetch ran and
-  under which version of the image filter), `topicEmailSends.ts` (the emails a Topic sent), `teams.ts`,
-  `teamTopics.ts` (the topics shared into a team beyond its owning team), `invites.ts`, `chat.ts`, `notes.ts`,
-  `podcast.ts`, `billing.ts` (each user's one billing subscription and the provider that bills it), `releases.ts`,
-  `jobLeases.ts` (each job's lease row), `storage.ts` (favicons and the pending object deletions),
-  `mobileMinimumVersions.ts` (the minimum app version of each platform), `spendControlSettings.ts` (the one row of
-  admin overrides on the daily spend cutoffs, the first scan dispatch limit, the hourly signup alert, and a film's
-  generated image limit, with the switches: the unverified accounts switch, the pauses on new podcast episodes and on
-  new films, and the home that shows featured items only), `uncheckedImages.ts` (the unchecked images: one row for each
-  upload whose image moderation could not run, by subject kind and subject id, with the avatar key or the image hash,
-  the uploader, whether the image is already published, and when it was uploaded and reported), `reports.ts` (content
-  reports),
-  `userBlocks.ts`
-  (the users a user blocked), `social.ts` (reactions, comments, the users a comment mentions, and the links of a comment
-  shared with the podcast, each row on exactly one social target), `notificationsEmailSends.ts` (one row per user per
-  UTC day that a notifications email went out), `pushDevices.ts` (each phone's Expo push token, bound to the session
-  that registered it so ending the session or closing the account deletes it, and the push sends the push service
-  accepted, one per event, recipient, and phone, with each receipt, indexed by phone and recipient for the cascades),
-  `viewerCounts.ts` (the saved HyperLogLog counter of each topic's viewers and each podcast episode's listeners),
-  `topicPosts.ts` (a topic's Topic Posts and the recorded discussions of them), `dailyCounts.ts` (the daily view and
-  play daily counts per item, UTC day, and place, with each row's sketch of distinct people and no address or individual
-  event), `dashboards.ts` (the nightly dashboard snapshots, one per Dashboard, selection, and access level),
-  `vectors.ts` (the topic and podcast episode vectors that rank related topics, related podcast episodes, and the
-  podcast episode search, each table kept apart from the row it ranks so a read of a whole row never includes a vector,
-  and each table's public and shown flag with its partial HNSW index), and `columns.ts` (the pgEnums and the column
-  helpers they share). A table references another file's table through a lazy `references`, so the files import each
-  other freely. `index.ts` spreads every file into the one `schema` object the client is bound to.
+  (scans, resources, findings, the finding markers, `filtered_findings`, the row that a Topic's max-results filter
+  leaves for a Finding it removes, keyed by Topic and Resource with the two hashes the page was scored against, its
+  score, and its bonus, and no text, and `resource_images`, the images of a Resource's own page that its films show,
+  with `resources.images_fetched_at` and `images_filter_version` recording that their fetch ran and under which version
+  of the image filter), `topicEmailSends.ts` (the emails a Topic sent), `teams.ts`, `teamTopics.ts` (the topics shared
+  into a team beyond its owning team), `invites.ts`, `chat.ts`, `notes.ts`, `podcast.ts`, `billing.ts` (each user's one
+  billing subscription and the provider that bills it), `releases.ts`, `jobLeases.ts` (each job's lease row),
+  `storage.ts` (favicons and the pending object deletions), `mobileMinimumVersions.ts` (the minimum app version of each
+  platform), `spendControlSettings.ts` (the one row of admin overrides on the daily spend cutoffs, the first scan
+  dispatch limit, the hourly signup alert, and a film's generated image limit, with the switches: the unverified
+  accounts switch, the pauses on new podcast episodes and on new films, and the home that shows featured items only),
+  `uncheckedImages.ts` (the unchecked images: one row for each upload whose image moderation could not run, by subject
+  kind and subject id, with the avatar key or the image hash, the uploader, whether the image is already published, and
+  when it was uploaded and reported), `reports.ts` (content reports), `userBlocks.ts` (the users a user blocked),
+  `social.ts` (reactions, comments, the users a comment mentions, and the links of a comment shared with the podcast,
+  each row on exactly one social target), `notificationsEmailSends.ts` (one row per user per UTC day that a
+  notifications email went out, or that had nothing to send them, marked `is_quiet`), `pushDevices.ts` (each phone's
+  Expo push token, bound to the session that registered it so ending the session or closing the account deletes it, and
+  the push sends the push service accepted, one per event, recipient, and phone, with each receipt, indexed by phone and
+  recipient for the cascades), `viewerCounts.ts` (the saved HyperLogLog counter of each topic's viewers and each podcast
+  episode's listeners), `topicPosts.ts` (a topic's Topic Posts and the recorded discussions of them), `dailyCounts.ts`
+  (the daily view and play daily counts per item, UTC day, and place, with each row's sketch of distinct people and no
+  address or individual event), `dashboards.ts` (the nightly dashboard snapshots, one per Dashboard, selection, and
+  access level), `vectors.ts` (the topic and podcast episode vectors that rank related topics, related podcast episodes,
+  and the podcast episode search, each table kept apart from the row it ranks so a read of a whole row never includes a
+  vector, and each table's public and shown flag with its partial HNSW index), and `columns.ts` (the pgEnums and the
+  column helpers they share). The five kinds of row that the sweep's reaper starts again each hold a nullable
+  `restarted_at`: a podcast episode in `episodes`, a film in `topic_videos`, a Topic Post Discussion in
+  `topic_post_discussions`, a topic image render in `topic_image_renders`, and an attachment in `attachments`. A table
+  references another file's table through a lazy `references`, so the files import each other freely. `index.ts` spreads
+  every file into the one `schema` object the client is bound to.
 - `index.ts` — the pooled client, the connection pool's counts, `sizeConnectionPool`, `isUniqueViolation`, and the
   `DbTransaction` and `DbHandle` types that a function sharing its caller's transaction takes. Each long-running
   process, the api, the Temporal worker, the sweep, and the budget reset, awaits `sizeConnectionPool` at startup. It
-  reads `SHOW max_connections` and sizes the pool to 0.9 times that value, the share Neon's connection pooler holds on
-  its server side for one user and database, divided by the pool count, how many processes can hold a pool at once: 8 by
-  default, or `DATABASE_POOL_COUNT`. `DATABASE_POOL_MAX` sets the size itself instead. Until the read completes, and if
-  it fails, the pool holds 15 connections, and a failed read is reported. A process with no `DATABASE_URL`, such as a
-  test, keeps the default and reads nothing. The size is logged at startup. A request waiting for a connection fails
-  after `DATABASE_CONNECT_TIMEOUT_MS`, 10 seconds by default. A short-lived job keeps the default. If
-  `DATABASE_WS_PROXY` is set, `configureWebSocketProxy` sends every connection through that Neon WebSocket proxy with
-  TLS off, which only the image smoke test does. `isUniqueViolation`
-  is true if an error is Postgres rejecting a duplicate key. `runWithIterativeIndexScan` runs a ranked read in a
-  transaction that sets pgvector's `hnsw.iterative_scan` to `strict_order`, so an HNSW scan continues past its first
-  candidates until the filters after it fill the read's limit. `isFindingShown` keeps a finding no user rated down,
-  `hasEnoughFindingsToList` a topic with enough of those findings to be listed, `isPublicAndShown` a public topic that
-  has them, and `isCurrentModelEmbedding` a resource the current embedding model embedded. The api and the worker both
-  apply them.
+  reads `SHOW max_connections` and takes 0.9 times that value, the share Neon's connection pooler holds on its server
+  side for one user and database. That number divided by the pool count is one pool share, and the pool holds the
+  process's own pool shares of it, which the caller passes: one for the api, the web service, a film replica, the sweep,
+  and the budget reset, and two for a Temporal worker that runs Scans. The pool count is the pool shares that can be
+  held at once: 14 by default, or `DATABASE_POOL_COUNT`. `DATABASE_POOL_MAX` sets the size itself instead. Until the
+  read completes, and if it fails, the pool holds 15 connections, and a failed read is reported. A process with no
+  `DATABASE_URL`, such as a test, keeps the default and reads nothing. The size is logged at startup. A request waiting
+  for a connection fails after `DATABASE_CONNECT_TIMEOUT_MS`, 10 seconds by default. A short-lived job keeps the
+  default. If `DATABASE_WS_PROXY` is set, `configureWebSocketProxy` sends every connection through that Neon WebSocket
+  proxy with TLS off, which only the image smoke test does. `isUniqueViolation` is true if an error is Postgres
+  rejecting a duplicate key. `runWithIterativeIndexScan` runs a ranked read in a transaction that sets pgvector's
+  `hnsw.iterative_scan` to `strict_order`, so an HNSW scan continues past its first candidates until the filters after
+  it fill the read's limit. `isFindingShown` keeps a finding no user rated down, `hasEnoughFindingsToList` a topic with
+  enough of those findings to be listed, `isPublicAndShown` a public topic that has them, and `isCurrentModelEmbedding`
+  a resource the current embedding model embedded. The api and the worker both apply them. `isScanRunning` and
+  `isSourcePending` write their status into the SQL, so the sweep's and the reaper's reads keep the partial indexes
+  `scans_running_started_idx` and `sources_pending_topic_idx` under a prepared statement's generic plan too.
 - `store.ts` is object storage, through Bun's built-in S3 client that the `S3_*` settings select: the uploads, the
   reads, the object keys, and `deleteStoredObject`. It deletes through the bucket and clears the key's row in
   `pending_object_deletions`, and a failed delete writes its failure to that row with the next try pushed back. A write
   that deletes or fails the row naming an object records the key with `recordPendingObjectDeletions` in the same
   transaction, and an upload records its key first with `recordPendingObjectDeletionBeforeUpload`, with a grace period,
-  and clears it with `clearPendingObjectDeletion` in the row insert's transaction. `clearPendingObjectDeletions`
-  returns how many keys were pending. `deletePendingStoredObjects` deletes only the keys still pending, the first key
-  before the others, and records each deleted key again for the upload grace period, so a save that clears one of those
-  rows can tell that its objects may be gone.
-  `apps/worker/retryPendingObjectDeletions.ts` retries the pending keys after the sweep. Resource content deletes
-  through `deleteStoredObject` with no pending row. Its key is fixed per Resource, and the next fetch rewrites it. A
-  Resource Image sits beside it at `toResourceImageKey`, `resources/<id>/images/<position>.jpg`.
-  `topicVideoKeys.ts` holds a film's object keys. A film's part,
-  chapters, and captions keys include the film's render version from version 2 (`render_version` on
-  `topic_videos`, with `failed_render_version` for a re-render that failed for good), so a re-render
-  never writes over the film that plays. `toTopicVideoImageLargeOriginalKey` is the larger original of a
-  film's own image, and `toTopicVideoChapterImageKeys` lists the
-  `GENERATED_CHAPTER_IMAGE_LIMIT_PER_CHAPTER` generated image keys a chapter may have in a style version, the first
-  at the key that the api serves. A new `GENERATED_CHAPTER_IMAGE_STYLE_VERSION` gives the images new keys, so a
-  re-render draws them again.
-  `store.smoke.ts` (`bun run smoke:store`) uploads a fake resource's content, reads it back, and checks the key, size,
-  and body round-trip against the live bucket.
-- `redis.ts` — the Redis store, on Bun's built-in client from `REDIS_URL`.
-  `runWithRedis` runs one operation and returns null on any failure, including a command with no reply in two seconds,
-  and three such commands in a row replace the client, so a wedged connection never holds every request. `cacheJson`
-  returns a cached value, or loads the value and caches it, and concurrent callers of one key in a process share one
-  load. `redisGauges.ts` holds the extra gauges the minute line reads: the store's counts with the server's used and
-  maximum memory, warning if the command connection is down, at eight tenths of the memory limit, and at ten errors in a
-  minute. `redisRateLimits.ts` holds the rate limits over the store: `incrementRateLimitWindow` is the fixed window
-  counter behind the api's shared limiters, `countRateLimitHit` counts a hit and returns whether it is within a limit,
-  and `takeRateLimitSlot` is the slot that one call holds at a time, behind the Resend limit that the api and the worker
-  share. `publishToChannel` and `subscribeToChannel` are the fan-out, and each process subscribes on one subscriber
-  connection. `addSubscriberReconnectListener` runs a listener each time that connection has come back after a drop.
-  `readAndResetRedisGauges` returns the minute line's counts. `redisConnection.ts` is one connection and its reconnects:
-  the client options, the connect with its backoff, the reconnect on a drop, and the failed operation count. The store
-  holds a command connection and a subscriber connection over it. The store reconnects with no limit on attempts, and
-  the reconnect delay doubles from one second up to 30 seconds. If an operation returns null, the caller goes on without
-  Redis. Sessions read Postgres, a cache calls its loader, and a Resend call goes out without a slot. A limiter counts
-  the hit in this process's memory instead, so a caller stays bounded at the limit per replica.
+  and clears it with `clearPendingObjectDeletion` in the row insert's transaction. `clearPendingObjectDeletions` returns
+  how many keys were pending. `deletePendingStoredObjects` deletes only the keys still pending, the first key before the
+  others, and records each deleted key again for the upload grace period, so a save that clears one of those rows can
+  tell that its objects may be gone. `apps/worker/retryPendingObjectDeletions.ts` retries the pending keys after the
+  sweep. Resource content deletes through `deleteStoredObject` with no pending row. Its key is fixed per Resource, and
+  the next fetch rewrites it. A Resource Image sits beside it at `toResourceImageKey`,
+  `resources/<id>/images/<position>.jpg`. `topicVideoKeys.ts` holds a film's object keys. A film's part, chapters, and
+  captions keys include the film's render version from version 2 (`render_version` on `topic_videos`, with
+  `failed_render_version` for a re-render that failed for good), so a re-render never writes over the film that plays.
+  `toTopicVideoImageLargeOriginalKey` is the larger original of a film's own image, and `toTopicVideoChapterImageKeys`
+  lists the `GENERATED_CHAPTER_IMAGE_LIMIT_PER_CHAPTER` generated image keys a chapter may have in a style version, the
+  first at the key that the api serves. `toTopicVideoChapterImageCheckKeys` names the two keys beside an image's key
+  that hold its check, neither of them served: the image as it was drawn, until the image moderation has checked it, and
+  the marker of a rejection. `toTopicVideoKeys` lists both for every image of the current style. A new
+  `GENERATED_CHAPTER_IMAGE_STYLE_VERSION` gives the images new keys, so a re-render draws them again.
+  `toTopicVideoShotKeyPrefix` and `toTopicVideoShotKey` name the shots that a render keeps until it ends,
+  `episodes/<id>/video/shots/v<render version>/<hash>.mp4`. No row names a shot: each has a pending deletion two days
+  out from its upload, and the render deletes its shots by listing the prefix. `store.smoke.ts` (`bun run smoke:store`)
+  uploads a fake resource's content, reads it back, and checks the key, size, and body round-trip against the live
+  bucket.
+- `redis.ts` — the Redis store, on Bun's built-in client from `REDIS_URL`. `runWithRedis` runs one operation and returns
+  null on any failure, including a command with no reply in two seconds, and three such commands in a row replace the
+  client, so a wedged connection never holds every request. `cacheJson` returns a cached value, or loads the value and
+  caches it, and concurrent callers of one key in a process share one load. `redisGauges.ts` holds the extra gauges the
+  minute line reads: the store's counts with the server's used and maximum memory, warning if the command connection is
+  down, at eight tenths of the memory limit, and at ten errors in a minute. `redisRateLimits.ts` holds the rate limits
+  over the store: `incrementRateLimitWindow` is the fixed window counter behind the api's shared limiters,
+  `countRateLimitHit` counts a hit and returns whether it is within a limit, and `takeRateLimitSlot` is the slot that
+  one call holds at a time, behind the Resend limit that the api and the worker share and the one-hour slot that each
+  report of the sweep takes. `publishToChannel` and `subscribeToChannel` are the fan-out, and each process subscribes on
+  one subscriber connection. `addSubscriberReconnectListener` runs a listener each time that connection has come back
+  after a drop. `readAndResetRedisGauges` returns the minute line's counts. `redisConnection.ts` is one connection and
+  its reconnects: the client options, the connect with its backoff, the reconnect on a drop, and the failed operation
+  count. The store holds a command connection and a subscriber connection over it. The store reconnects with no limit on
+  attempts, and the reconnect delay doubles from one second up to 30 seconds. If an operation returns null, the caller
+  goes on without Redis. Sessions read Postgres, a cache calls its loader, and a Resend call goes out without a slot. A
+  limiter counts the hit in this process's memory instead, so a caller stays bounded at the limit per replica.
 - `viewerCounts.ts` — a topic's viewers and a podcast episode's listeners, one Redis HyperLogLog each, named by a
   `ViewerCountRef`. `addViewer` adds one person and lists the ref as changed if the counter grew, `readViewerEstimate`
   reads the estimate, `takeChangedViewerCountRefs` takes the changed set for the worker's sync, and
@@ -160,8 +169,17 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   change released, `releaseTopicVideoProfileOrders` for the films of removed podcast episodes, and
   `releaseTopicPostProfileOrder` for a deleted post. `featuredOrder.ts` is the write and the release both share.
   `topic_posts.home_order` and `topic_posts.profile_order` hold a Topic Post's two orders.
-- `quotas.ts` — the derived per-user limits, and `loadUserAccess`, the one read of a user's role, plan, budget
-  override, and admin block, which the api and the worker share.
+- `quotas.ts` — the derived per-user limits, and `loadUserAccess`, the one read of a user's role, plan, budget override,
+  and admin block, which the api and the worker share. `startOfUtcDay` and `startOfUtcMonth` are when a quota day and
+  the month's spend roll over. `hasFullPodcastEpisodes` is true on a paid plan or for an admin, and the free plan gets
+  short podcast episodes.
+- `recordedSpend.ts` — the recorded spend. `monthlySpendDollars` reads a user's spend for the month on scans, chat
+  turns, and podcast episodes, once per request through the request memo. `loadSpendSince` sums eight tables for one
+  user, for one plan's users who are not admins (`toPlanUserIdQuery`), or for every user, and `toSpendCents` adds a
+  recorded spend's kinds in cents. The eighth table is `spends` (`schema/spends.ts`), the paid calls that no other row
+  records: a row with a user bills that user's month as `otherDollars`, and a row with no user is the platform's own
+  cost, `platformDollars`, which only the sum across every user includes, so no user's budget and no plan's cutoff
+  reads it. `spends.ts` holds `recordSpend`, the one write of such a row, dated when the cost was incurred.
 - `inviteLimits.ts` — the daily invite limit. `toAccountSignalWeight` is the age and reputation factor that the invite
   limit and a Finding's reaction signal share.
 - `socialLimits.ts` — `countSocialWriteToday`, the flat daily count of an account's reaction saves and comment posts and
@@ -169,9 +187,7 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
 - `sharedComments.ts` — the comments a Topic's editors share with the podcast: the shared comment slots a Topic has for
   its next Podcast Episode, the share under a per-Topic advisory lock and its taking back, the links a shared comment
   queues in `comment_links`, what a Scan's scoring context and a Podcast Episode's script read, and the mark that frees
-  a shared comment slot once a script read the comment. `monthlySpendDollars` reads a user's spend for the month on
-  scans, chat turns, and podcast episodes, once per request through the request memo. `hasFullPodcastEpisodes` is true
-  on a paid plan or for an admin, and the free plan gets short podcast episodes.
+  a shared comment slot once a script read the comment.
 - `monthlyBudgetCutoffs.ts` — the monthly budget cutoffs. `isMonthlyBudgetCutoffPassed` is true once the month's spend
   reaches the share of the budget where the plan stops a kind of spend: spoken questions, full podcast episodes,
   podcast episodes, daily scans, or manual scans. The daily scans cutoff moves with the daily scans left this month, at
@@ -237,8 +253,11 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   day, and a play once per person, podcast episode, and format in five minutes, each row's count in one hash and its
   people in one HyperLogLog sketch until the worker's minute sweep takes them into Postgres. A person is counted under a
   keyed hash of their viewer element, so no user id reaches Redis or a saved sketch, and nothing is counted without
-  `BETTER_AUTH_SECRET`. `toPlaceColumns` and `toDailyCountPlace` turn a place into a row's five place columns and back.
+  `BETTER_AUTH_SECRET`. `returnDailyCountEntries` returns whether Redis put a failed batch back, and
+  `countFailedDailyCountSweep` and `clearFailedDailyCountSweeps` keep the count of sweeps in a row that failed one.
   `redisFakeDailyCounts.ts` holds its scripts for the Redis test fake.
+- `dailyCountPlaces.ts` — the place of a daily count row: `toPlaceKey` names a place by a hash of its values, or
+  `unknown` for no place, and `toPlaceColumns` and `toDailyCountPlace` turn a place into a row's place columns and back.
 - `dashboardSnapshotRows.ts` — deletes whole Dashboards' snapshots, which a rebuild, a closed account, and a deleted
   team share, since a snapshot's subject has no foreign key. Each delete first starts a new snapshot generation in
   Redis, and a build that read the old generation before it loaded the daily counts writes nothing. A publication's
@@ -261,11 +280,17 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   tests share: an access row and each table's spend sum. Only tests import it.
 - `dailySpendCutoffTestFixtures.ts` — `DEFAULT_SPEND_CONTROL_SETTINGS` and `toDailySpendCutoffState`, the built-in spend
   control settings and a loaded cutoff state that the daily spend cutoff, scan queue, and scheduled Topic limit tests
-  share. Only tests import it.
+  share. `EMPTY_OVERRIDES_ROW`, `UNVERIFIED_SWITCH_ON_ROW`, `SPEND_CONTROL_ENV_NAMES`, and `stubCutoffQueries`, which
+  returns each cutoff read's rows from the stubbed database, are what `dailySpendCutoffs.test.ts` and
+  `dailySpendCutoffWaitingScans.test.ts` share. Only tests import it.
+- `schemaTestFixtures.ts` — `migrationsDirectory`, `initialSql`, and `allMigrationsSql`, the migration SQL that
+  `schema.test.ts`, `chatSchema.test.ts`, `podcastSchema.test.ts`, `socialSchema.test.ts`, and `migrationRules.test.ts`
+  read. Only tests import it.
 - `connectionPoolStub.ts` — the connection pool stub that the tests share. `stubConnectionPool` returns the rows that
   a test picks for each query, records each query sent, counts each one toward the running request, and runs a
   transaction's callback on the stubbed client. `restoreConnectionPool` puts the pool's own query and the client's own
-  transaction back, and `toTableRow` builds a row in a table's column order. The free, plus, and admin access rows
+  transaction back, `toTableRow` builds a row in a table's column order, and `toTableUpdates` picks one table's
+  updates among the queries sent. The free, plus, and admin access rows
   and `toSpendSumRows`, a spend sum's row from the dollars given for each table, are what the spend tests return. Only
   tests import it.
 - `contentFilters.ts` — the read filters that decide what one user sees: `toNotUserBlockedAuthorFilter` for rows by a
@@ -278,17 +303,22 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   recipients import the one copy.
 - `inviteFilters.ts` — `loadUserEmail`, `toInviteAddressedToUserFilter` (the invitations addressed to a user by
   account or verified address), and `toPendingTopicInviteFilter` (the topic invitations still waiting for an answer).
-- `noteBadges.ts` — the unread edit and comment counts on each note a user may see, `loadBadgedPages` (their teams and
-  the topics those teams hold), `loadPageNoteBadges` for pages already loaded, and `saveNoteRead`, the read time that
-  clears them.
+  Both take one loaded user, or `JOINED_USER_INVITE_ADDRESS`, the joined `users` row's own columns, for a read of
+  many users at once.
+- `noteBadges.ts` — `loadNoteBadges`, the unread edit and comment counts on each note a user may see, `loadNoteCounts`,
+  the same counts summed for many users in one grouped read, and `saveNoteRead`, the read time that clears them.
 - `unseenCommentMentions.ts` — the cached read of a user's unseen Comment Mentions: `toUnseenCommentMentionsKey`, its
   Redis key, `clearUnseenCommentMentions`, which deletes the cached reads of the users given, and the reads of the
   users that a Comment's thread, an author's Comments, a Topic's Comments, a Topic Post's Comments, or some Podcast
   Episodes' Comments mention, each for the write that clears them. The api and the pipeline's Podcast Episode removal
   both clear through it.
-- `updateCounts.ts` — `loadUpdateCount`, a user's unseen chat mentions, unread note edits and comments, and pending
-  topic invitations summed as the apps' update count, which each push sets as the app icon badge, and
-  `toUnseenChatMentionFilter`, which the api's chat mention reads share.
+- `updateCounts.ts` — `loadUpdateCounts`, the update count of each of many users in three grouped reads: their unseen
+  chat mentions, unread note edits and comments, and pending topic invitations, which each push sets as the app icon
+  badge, and `toUnseenChatMentionFilter`, which the api's chat mention reads share for one user.
+- `updateCounts.smoke.ts` (`bun run smoke:update-counts`) — seeds a member of two teams, a member who blocked an
+  author, a person on no team, a person with an unverified address, and a waiting request to join, and proves that
+  the grouped count of all five equals each one counted alone and that the note part equals `loadNoteBadges`. It
+  deletes its rows at the end.
 - `pushDevices.smoke.ts` (`bun run smoke:push-devices`) — inside one rolled-back transaction, proves that ending a
   session or closing the account deletes its push devices, that a repeated send for one event, recipient, and phone
   breaks the unique index, that a send whose event does not match its kind fails the check, and that retiring a phone
@@ -340,22 +370,32 @@ until explicit deletion. Released read contracts retain nullable expiry fields a
 survive the MCP picker outside matching and open from the shared AI sender label; missing references remain plain
 labels.
 
-Topic Posts beyond their tables: `quotas.ts` holds `loadDiscussionRegenerationQuota` and sums a discussion's cost
-into the month's podcast spend. `topicImages.ts` holds `isImageReportedByUser`, which a Topic's and a Topic Post's
-image both read, and `loadTopicPostImageUrlsByPost` for the admin's reports. `topic_posts.image_updated_at` is when a
-post's image last changed, which a reporter's hidden image compares against. `sharedComments.ts` reads a post's
-shared Comments for its discussion and, for one reader, its chat. `store.ts` holds a discussion's audio key, and
-`loadUploadKeysInGrace` and `clearPendingObjectDeletions` for a post's body images. `quotas.ts` holds
-`loadTopicPostBodyImageLimits`.
+Topic Posts beyond their tables: `quotas.ts` holds `loadDiscussionRegenerationQuota`, and `recordedSpend.ts` sums a
+discussion's cost into the month's podcast spend. `topicImages.ts` holds `isImageReportedByUser`, which a Topic's and a Topic Post's image both
+read, and `loadTopicPostImageUrlsByPost` for the admin's reports. `topic_posts.image_updated_at` is when a post's image
+last changed, which a reporter's hidden image compares against. `sharedComments.ts` reads a post's shared Comments for
+its discussion and, for one reader, its chat. `store.ts` holds a discussion's audio key, the key of its recorded speech,
+`toTopicPostDiscussionSpeechKey`, which exists only while the discussion records, and `loadUploadKeysInGrace` and
+`clearPendingObjectDeletions` for a post's body images. `quotas.ts` holds `loadTopicPostBodyImageLimits`.
 
-`schema/topicMemories.ts` stores Topic Memories, year or month or day event dates, each rater's feedback, and exact decision records.
-`topicMemoryGroups.ts` computes reversible groups within the same subject, claim type and value. `topicMemories.ts` applies access
-filtering before grouping and selects a bounded set of ranked claims for prompts. An owner or team lead may rate
-every active topic memory. The Topic lock protects concurrent feedback writes. A page request past the grouped count returns the current last page in the same read.
-Each rater reads their own saved note.
+`schema/topicMemories.ts` stores Topic Memories, year or month or day event dates, each rater's feedback, and exact
+decision records. `topicMemoryGroups.ts` computes reversible groups within the same subject, claim type and value.
+`toVisibleTopicMemoryGroups` in `topicMemories.ts` is the read behind a Journal count: it counts in SQL the rows that
+can join no group and returns only the rows that share a key with another row, and `toTopicMemoryGroupCount` adds the
+two. `topicMemories.ts` applies access filtering before grouping, and `loadRankedTopicMemories` in
+`rankedTopicMemories.ts` selects a bounded set of ranked claims for prompts.
+The Topic's owner may rate every active topic memory, and so may a leader of the team that owns the Topic while the
+owner is an active member of it. A team that only holds a share of the Topic never rates. `canRateTopicMemories` in
+`findingPermissions.ts` is that rule, behind the `topicMemory:rate` capability, and `topicMemoryRaterCanRate` in
+`topicMemories.ts` is its SQL form: the correction, the prompt notes, and the saved mark count a rating only while its
+rater may still rate. The Topic lock protects concurrent feedback writes. A page request past the grouped count returns
+the current last page in the same read. Each rater reads their own saved note.
 
 Topic memory subject aliases are private to a Topic. `schema/topicMemories.ts` stores canonical names and aliases with a linked public Finding.
 
 `topicVideoAnimationQuota.ts` locks the owner when reserving an eligible picture for the UTC month across their films. Reservations mark whether they use the plan allowance so a released slot can fund another picture even when an admin has paid for extras. Removing a film keeps its monthly slot. Deleting the episode row clears the reservation’s episode reference. Removing the account clears its reservations.
 
-`topicMemoryFeedback.ts` checks the rater under the Topic lock and saves the vote and optional note together.
+`topicMemoryFeedback.ts` checks the rater under the Topic lock and saves the vote and optional note together, the note
+on one line. A thumbs-down with no note rejects every statement of the fact that the Journal groups with the rated one.
+A Journal page item carries the caller's own rating and note from the statement they rated, with that statement's id, so
+a newer statement of the fact never hides them, and a correction on any statement marks the item and reaches the prompt.

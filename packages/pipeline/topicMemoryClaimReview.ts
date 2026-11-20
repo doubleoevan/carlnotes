@@ -1,6 +1,5 @@
 // checks claim boundaries and splits compound wording before embedding
 import { toChunks } from "@carlnotes/contracts/arrays"
-import { topicMemoryClaimTypes } from "@carlnotes/contracts/topicMemories"
 import { db } from "@carlnotes/db"
 import { CHEAP_COST_PER_MILLION_TOKENS, premiumModelCost, tokenCost } from "@carlnotes/models/budget"
 import {
@@ -10,11 +9,18 @@ import {
 	scoreModel,
 } from "@carlnotes/models/models"
 import { PRIVATE_MODEL_OPTIONS } from "@carlnotes/models/privateModelOptions"
-import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "@carlnotes/models/prompts/fetch"
-import { writePrompt } from "@carlnotes/models/prompts/write"
+import { type BuiltPrompt, promptTelemetry } from "@carlnotes/models/prompts/fetch"
 import { generateText, NoObjectGeneratedError, Output } from "ai"
 import { z } from "zod"
-import { loadTopicMemoryFindingEvidence } from "./topicMemoryEvidence"
+import {
+	buildTopicMemoryClaimCheckPrompt,
+	buildTopicMemorySplitPrompt,
+	type TopicMemoryClaim,
+	type TopicMemoryClaimFinding,
+	type TopicMemorySplitPromptOptions,
+} from "./topicMemoryClaimPrompts"
+import { type ArticleReads, loadTopicMemoryFindingEvidence } from "./topicMemoryEvidence"
+import { runTopicMemoryModelCall, type TopicMemoryModelInput } from "./topicMemoryModelCall"
 import {
 	structuredTopicMemoryClaim,
 	type TopicMemoryWrite,
@@ -22,7 +28,7 @@ import {
 	toTopicMemoryEmbeddingText,
 	toTopicMemoryWrite,
 } from "./topicMemoryOperations"
-import { recordTopicMemorySpend } from "./topicMemorySpend"
+import { canSpendOnTopicMemories, chargeTopicMemorySpend } from "./topicMemorySpend"
 import type { TopicMemorySubject } from "./topicMemorySubjects"
 
 const CLAIMS_PER_CHECK = 10
@@ -44,32 +50,23 @@ const splitClaim = structuredTopicMemoryClaim.extend({
 })
 const splitClaims = z.object({ claims: z.array(splitClaim).max(8) })
 
+// a verdict and a checked claim as the model returns them
 type ClaimVerdict = z.infer<typeof claimVerdict>
 type CheckedClaim = z.infer<typeof checkedClaim>
-type Claim = Pick<TopicMemoryWrite, "text" | "factDate" | "person">
-export type TopicMemoryClaimFinding = {
-	id: string
-	title: string | null
-	snippet: string | null
-	description: string
-	articleContext?: string | null
-	publicationDateHint?: string | null
-}
-type ClaimFeedback = { rating: "up" | "down"; note: string | null }
-type ClaimModelInput = { litellmApiKey: string; signal: AbortSignal; scanId?: string }
-type ClaimCheck = ClaimModelInput & {
-	claims: Claim[]
+
+// a check's claims, its model tier, whether it extracts fields, and the known subjects
+type ClaimCheck = TopicMemoryModelInput & {
+	claims: TopicMemoryClaim[]
 	usePremiumModel?: boolean
 	extractFields?: boolean
 	subjects?: TopicMemorySubject[]
 }
-type ClaimSplit = ClaimModelInput & {
-	claim: Claim
-	findings: TopicMemoryClaimFinding[]
-	feedback?: ClaimFeedback[]
-	subjects?: TopicMemorySubject[]
-}
-type SplitClaim = Claim &
+
+// a split's claim, its Findings, its rating notes, and the known subjects
+type ClaimSplit = TopicMemoryModelInput & TopicMemorySplitPromptOptions
+
+// a claim that a split returned, with its fields, its Findings, and the notes it used
+type SplitClaim = TopicMemoryClaim &
 	Pick<TopicMemoryWrite, "subject" | "claimType" | "value"> & { findingIds: string[]; feedbackIndexes: number[] }
 
 export type TopicMemoryClaimCounts = { checked: number; split: number; rejected: number }
@@ -83,15 +80,22 @@ export async function validateTopicMemoryClaims({
 	findings,
 	topicId,
 	...input
-}: ClaimModelInput & { topicId?: string; proposals: ProposedClaim[]; findings: TopicMemoryClaimFinding[] }): Promise<{
+}: TopicMemoryModelInput & {
+	// the Topic, the proposed claims, and the Scan's public Findings
+	topicId?: string
+	proposals: ProposedClaim[]
+	findings: TopicMemoryClaimFinding[]
+}): Promise<{
 	writes: ProposedClaim[]
 	counts: TopicMemoryClaimCounts
 }> {
 	// retain original order so otherwise identical drafts keep stable write priority
 	const verdicts = await checkTopicMemoryClaims({ ...input, claims: proposals })
 	const findingsById = new Map(findings.map((finding) => [finding.id, finding]))
+	const articleReads: ArticleReads = new Map()
 	const checked = await reviewInBatches(
 		proposals.map((proposal, index) => ({ proposal, verdict: verdicts[index] })),
+		() => true,
 		async ({ proposal, verdict }) => {
 			if (verdict === "nonclaim" || verdict === undefined) {
 				return { writes: [], split: 0 }
@@ -106,9 +110,20 @@ export async function validateTopicMemoryClaims({
 				return { writes: [standalone], split: 0 }
 			}
 
+			// a claim that needs a rewrite is left out once the update is at its spend limit
+			if (!canSpendOnTopicMemories(input.spend)) {
+				return { writes: [], split: 0 }
+			}
+
 			// resolve missing details once against the linked public article excerpts
 			if (topicId && needsRewrite) {
-				const articles = await loadTopicMemoryFindingEvidence(topicId, proposal.findingIds, db, proposal.text)
+				const articles = await loadTopicMemoryFindingEvidence(
+					topicId,
+					proposal.findingIds,
+					db,
+					proposal.text,
+					articleReads,
+				)
 				evidence = [...articles].map(([id, context]) => ({ id, ...context }))
 			}
 			const splits = await splitTopicMemoryClaim({ ...input, claim: proposal, findings: evidence })
@@ -161,7 +176,11 @@ export async function inspectTopicMemoryClaims({
 	usePremiumModel = false,
 	...input
 }: ClaimCheck): Promise<CheckedClaim[]> {
-	const batches = await reviewInBatches(toChunks(claims, CLAIMS_PER_CHECK), async (batch) => {
+	// an update at its spend limit checks no further batch, and an unchecked claim is not written
+	const canCheck = (): boolean => canSpendOnTopicMemories(input.spend)
+	const chunks = toChunks(claims, CLAIMS_PER_CHECK)
+	const batches = await reviewInBatches(chunks, canCheck, async (batch) => {
+		// check the whole batch in one call first
 		const verdicts = await readClaimVerdicts({ ...input, claims: batch, usePremiumModel })
 		if (verdicts) {
 			return verdicts
@@ -169,15 +188,29 @@ export async function inspectTopicMemoryClaims({
 		// a smaller retry restores index coverage after a truncated or invalid response
 		const retry: CheckedClaim[] = []
 		for (const claims of toChunks(batch, Math.max(1, Math.ceil(batch.length / 2)))) {
+			// a half at the spend limit is left unchecked
+			if (!canCheck()) {
+				break
+			}
 			const checked = await readClaimVerdicts({ ...input, claims, usePremiumModel: true })
 			if (!checked) {
 				throw new Error("The topic memory claim check returned incomplete verdicts")
 			}
+			// keep the half's verdicts in the batch's order
 			retry.push(...checked)
 		}
 		return retry
 	})
-	return batches.flat()
+	// a batch that the spend limit cut short ends the checked claims, so each verdict keeps its claim's index
+	const claimsInOrder: CheckedClaim[] = []
+	for (const [index, batch] of batches.entries()) {
+		claimsInOrder.push(...batch)
+		// stop after the first batch that is missing a verdict
+		if (batch.length < (chunks[index]?.length ?? 0)) {
+			break
+		}
+	}
+	return claimsInOrder
 }
 
 async function readClaimVerdicts({
@@ -204,18 +237,26 @@ async function readClaimVerdicts({
 		: undefined
 }
 
+// review the inputs a few at a time, in order, and return the results of the batches that canStart let begin
 async function reviewInBatches<Input, Result>(
 	inputs: Input[],
+	canStart: () => boolean,
 	review: (input: Input) => Promise<Result>,
 ): Promise<Result[]> {
 	// let in-flight calls settle before releasing the Scan's budget or retrying it
 	const results: Result[] = []
 	for (const batch of toChunks(inputs, CLAIM_REVIEW_CONCURRENCY)) {
+		// start no batch once the caller says to stop
+		if (!canStart()) {
+			break
+		}
+		// wait for the whole batch, then throw its first failure
 		const settled = await Promise.allSettled(batch.map(review))
 		for (const result of settled) {
 			if (result.status === "rejected") {
 				throw result.reason
 			}
+			// keep each result in its input's order
 			results.push(result.value)
 		}
 	}
@@ -242,11 +283,13 @@ export async function splitTopicMemoryClaim({
 	const notes = feedback.slice(0, FEEDBACK_PER_SPLIT)
 	const prompt = await buildTopicMemorySplitPrompt({ claim, findings: evidence, feedback: notes, subjects })
 	const request = { ...input, prompt, schema: splitClaims, maxOutputTokens: 2350 }
+	// ask the cheap model, then the premium model if the reply is unreadable
 	const output =
 		(await generateClaimOutput(request)) ?? (await generateClaimOutput({ ...request, usePremiumModel: true }))
 	if (!output) {
 		throw new Error("The topic memory split returned unreadable claims")
 	}
+	// keep each part that is a valid write with text to embed and a Finding for every source index
 	const candidates = output.claims.flatMap((part) => {
 		const sourceIds = part.sourceFindingIndexes.map((index) => evidence[index]?.id)
 		const write = toTopicMemoryWrite({ ...part, kind: "fact", importance: 0, operation: "add" })
@@ -275,108 +318,50 @@ export async function splitTopicMemoryClaim({
 	return requireCompleteRewrite && checked.length !== output.claims.length ? [] : checked
 }
 
-/**
- * Fences only the claim text and its own factual fields.
- */
-export async function buildTopicMemoryClaimCheckPrompt(
-	claims: Claim[],
-	extractFields = false,
-	subjects: TopicMemorySubject[] = [],
-): Promise<BuiltPrompt> {
-	const { template, name, registryPrompt } = await fetchPromptTemplate("check-topic-memory-claims")
-	const indexed = claims.map(({ text, factDate, person }, index) => ({
-		index,
-		text: toStandaloneTopicMemory({ text, person })?.text ?? text,
-		factDate,
-		person,
-	}))
-	return {
-		prompt: writePrompt(
-			template,
-			{ claims: JSON.stringify(indexed), existingSubjects: JSON.stringify(subjects) },
-			{ extractFields: extractFields ? "yes" : "no", claimTypes: topicMemoryClaimTypes.join(", ") },
-		),
-		name,
-		registryPrompt,
-	}
-}
-
-/**
- * Fences the original claim, eligible evidence, and the notes needed for routing.
- */
-export async function buildTopicMemorySplitPrompt({
-	claim,
-	findings,
-	feedback,
-	subjects,
-}: Pick<ClaimSplit, "claim" | "findings" | "feedback" | "subjects">): Promise<BuiltPrompt> {
-	const { template, name, registryPrompt } = await fetchPromptTemplate("split-topic-memory")
-	const { text, factDate, person } = claim
-	const topicMemoryAndEvidence = JSON.stringify({
-		original: { text, factDate, person },
-		existingSubjects: subjects,
-		findings: findings.map(({ title, snippet, description, articleContext, publicationDateHint }, index) => ({
-			index,
-			title,
-			snippet,
-			description,
-			articleContext,
-			publicationDateHint,
-		})),
-		feedback: feedback?.map(({ note, rating }, index) => ({ index, note, rating })),
-	})
-	return {
-		prompt: writePrompt(template, { topicMemoryAndEvidence }, { claimTypes: topicMemoryClaimTypes.join(", ") }),
-		name,
-		registryPrompt,
-	}
-}
-
 async function generateClaimOutput<Value>({
 	prompt,
 	schema,
 	maxOutputTokens,
 	litellmApiKey,
 	signal,
-	scanId,
+	spend,
+	waitDeadlineAt,
 	usePremiumModel = false,
-}: ClaimModelInput & {
+}: TopicMemoryModelInput & {
 	prompt: BuiltPrompt
 	schema: z.ZodType<Value>
 	maxOutputTokens: number
 	usePremiumModel?: boolean
 }): Promise<Value | undefined> {
-	// the caller owns the Scan reservation. the dev repair uses the operator key
+	// the caller owns the Scan reservation. the dev repair uses the operator key and keeps no spend
 	signal.throwIfAborted()
-	const charge = async (usage: {
-		totalTokens?: number
-		inputTokens?: number
-		outputTokens?: number
-	}): Promise<void> => {
-		if (scanId) {
-			const cost = usePremiumModel
-				? premiumModelCost(usage)
-				: tokenCost(usage.totalTokens ?? 0, CHEAP_COST_PER_MILLION_TOKENS)
-			await recordTopicMemorySpend(scanId, cost)
-		}
+	const charge = (usage: { totalTokens?: number; inputTokens?: number; outputTokens?: number }): void => {
+		const cost = usePremiumModel
+			? premiumModelCost(usage)
+			: tokenCost(usage.totalTokens ?? 0, CHEAP_COST_PER_MILLION_TOKENS)
+		chargeTopicMemorySpend(spend, cost)
 	}
 	try {
-		const result = await generateText({
-			model: usePremiumModel ? scoreModel(litellmApiKey) : cheapModel(litellmApiKey),
-			providerOptions: usePremiumModel ? LOW_REASONING_PROVIDER_OPTIONS : undefined,
-			prompt: prompt.prompt,
-			output: Output.object({ schema }),
-			maxOutputTokens: usePremiumModel ? 2600 : maxOutputTokens,
-			maxRetries: 0,
-			abortSignal: signal,
-			...promptTelemetry(prompt),
-			...PRIVATE_MODEL_OPTIONS,
-		})
-		await charge(result.usage)
-		return result.output
+		// a rate limit or a failing provider waits and tries again inside the update's attempt
+		const topicMemoryModelCallResult = await runTopicMemoryModelCall({ signal, waitDeadlineAt }, () =>
+			generateText({
+				model: usePremiumModel ? scoreModel(litellmApiKey) : cheapModel(litellmApiKey),
+				providerOptions: usePremiumModel ? LOW_REASONING_PROVIDER_OPTIONS : undefined,
+				prompt: prompt.prompt,
+				output: Output.object({ schema }),
+				maxOutputTokens: usePremiumModel ? 2600 : maxOutputTokens,
+				maxRetries: 0,
+				abortSignal: signal,
+				...promptTelemetry(prompt),
+				...PRIVATE_MODEL_OPTIONS,
+			}),
+		)
+		charge(topicMemoryModelCallResult.usage)
+		return topicMemoryModelCallResult.output
 	} catch (error) {
+		// an unreadable reply is billed and returns nothing, and any other failure is thrown
 		if (!isModelAuthenticationRejection(error) && NoObjectGeneratedError.isInstance(error)) {
-			await charge(error.usage ?? {})
+			charge(error.usage ?? {})
 			return undefined
 		}
 		throw error

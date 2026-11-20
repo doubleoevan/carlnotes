@@ -1,5 +1,6 @@
 // the object keys of a podcast episode film's stored files: its parts by image and render version, its captions, its
-// own image and that image's larger original, and each chapter's generated images
+// own image and that image's larger original, each chapter's generated images with the two keys that hold each one's
+// check, and the shots a render keeps until it ends
 
 import { toStoredObjectKeys } from "./store"
 
@@ -98,6 +99,23 @@ export function toTopicVideoAnimationKeys(episode: string) {
 	return { decision: `${prefix}.json`, video: `${prefix}.mkv` }
 }
 
+/**
+ * Returns the prefix of the keys of a film's stored shots at one render version, or at every render version if none is
+ * given. A render keeps each shot it encodes until it ends, so a later attempt downloads the shot instead of encoding
+ * it again.
+ */
+export function toTopicVideoShotKeyPrefix(podcastEpisodeId: string, renderVersion?: number): string {
+	const shotKeyPrefix = `episodes/${podcastEpisodeId}/video/shots/`
+	return renderVersion === undefined ? shotKeyPrefix : `${shotKeyPrefix}v${renderVersion}/`
+}
+
+/**
+ * Returns the object key of one stored shot after its prefix, named by the hash of what the shot was encoded from.
+ */
+export function toTopicVideoShotKey(shotKeyPrefix: string, shotHash: string): string {
+	return `${shotKeyPrefix}${shotHash}.mp4`
+}
+
 // how many generated images one chapter of a film may have
 export const GENERATED_CHAPTER_IMAGE_LIMIT_PER_CHAPTER = 12
 
@@ -135,9 +153,25 @@ export function toTopicVideoChapterImageKeys(
 	return [toTopicVideoChapterImageKey(podcastEpisodeId, position, styleVersion), ...numberedKeys]
 }
 
+// the first style version whose generated images are stored unchecked before their check
+const FIRST_CHECKED_STYLE_VERSION = 2
+
+// the two keys beside a generated image's key that hold its check: the image as it was drawn, kept until the image
+// moderation has checked it, and the marker that the image moderation rejected it
+export type TopicVideoChapterImageCheckKeys = { uncheckedKey: string; rejectedKey: string }
+
+/**
+ * Returns the two keys that hold one generated image's check. Neither is a key that the film image route serves.
+ */
+export function toTopicVideoChapterImageCheckKeys(imageKey: string): TopicVideoChapterImageCheckKeys {
+	const keyStem = imageKey.replace(/\.jpg$/u, "")
+	return { uncheckedKey: `${keyStem}-unchecked.jpg`, rejectedKey: `${keyStem}-rejected` }
+}
+
 /**
  * Returns the object keys of every generated image that a film's chapters at the positions given may have, in each
- * style version from 1 through the one given, the current one unless given.
+ * style version from 1 through the one given, the current one unless given, and the two check keys of each image in a
+ * style version that has them.
  */
 export function toTopicVideoChapterImageKeysThroughStyle(
 	podcastEpisodeId: string,
@@ -145,9 +179,17 @@ export function toTopicVideoChapterImageKeysThroughStyle(
 	lastStyleVersion = GENERATED_CHAPTER_IMAGE_STYLE_VERSION,
 ): string[] {
 	const styleVersions = Array.from({ length: lastStyleVersion }, (_, i) => i + 1)
-	return styleVersions.flatMap((styleVersion) =>
-		positions.flatMap((position) => toTopicVideoChapterImageKeys(podcastEpisodeId, position, styleVersion)),
-	)
+	return styleVersions.flatMap((styleVersion) => {
+		// every image of the style, then each one's check keys
+		const imageKeys = positions.flatMap((position) =>
+			toTopicVideoChapterImageKeys(podcastEpisodeId, position, styleVersion),
+		)
+		const checkKeys =
+			styleVersion >= FIRST_CHECKED_STYLE_VERSION
+				? imageKeys.flatMap((imageKey) => Object.values(toTopicVideoChapterImageCheckKeys(imageKey)))
+				: []
+		return [...imageKeys, ...checkKeys]
+	})
 }
 
 // the part of a generated image's key that names its style version. version 1 has none
@@ -172,8 +214,8 @@ type TopicVideoKeyColumns = {
 
 /**
  * Returns every stored object key of a film row, its own image and that image's original among them, without the keys
- * not yet uploaded, and the keys of every generated image each chapter may have in every style, whether or not the
- * chapter has them.
+ * not yet uploaded, and the keys of every generated image each chapter may have in every style, with each image's check
+ * keys, whether or not the chapter has them.
  */
 export function toTopicVideoKeys(topicVideo: TopicVideoKeyColumns): string[] {
 	// the keys of the film's own image and of its original, if the film has an image

@@ -1,12 +1,30 @@
-// podcast episode audio tests: the chapter times, the theme's times and arguments, and the ffmpeg join over two short
-// chapter files, without and with the theme clips
-import { expect, test } from "bun:test"
+// podcast episode audio tests: the chapter times, the theme's times and arguments, the ffmpeg join over two short
+// chapter files, without and with the theme clips, and a chapter's recording, which makes no speech call for a row that
+// is no longer recording or for audio that an earlier attempt stored
+import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
+import * as store from "@carlnotes/db/store"
+import * as litellm from "@carlnotes/models/litellm"
+import * as speech from "@carlnotes/models/speech"
 import { SPEECH_BYTES_PER_SECOND, toWavBytes, WAV_HEADER_BYTES } from "@carlnotes/models/speech"
-import { joinChapterFiles, toChapterTimes, toJoinArguments } from "./podcastEpisodeAudio"
+import {
+	joinChapterFiles,
+	recordPodcastEpisodeChapter,
+	SpeechFailedError,
+	toChapterTimes,
+	toJoinArguments,
+} from "./podcastEpisodeAudio"
 import { loadThemeClips, type ThemeClips, toThemedEpisodeTimes } from "./podcastEpisodeTheme"
+import * as podcastPersonalSourcesMigration from "./podcastPersonalSourcesMigration"
+
+// put back the connection pool and the module mocks after each test
+afterEach(() => {
+	restoreConnectionPool()
+	mock.restore()
+})
 
 // no theme clip on disk, and both 60 second clips
 const NO_THEME_CLIPS: ThemeClips = { intro: null, outro: null }
@@ -162,3 +180,82 @@ test.skipIf(!Bun.which("ffmpeg"))(
 	},
 	30_000,
 )
+
+// a script of one chapter with one turn, and that chapter's recording
+const CHAPTER_SCRIPT = {
+	coldOpen: [],
+	segments: [
+		{
+			transition: [],
+			chapters: [{ findingId: "finding-1", title: "A quieter grinder", turns: [{ speaker: "host", text: "Hello." }] }],
+		},
+	],
+	signOff: [],
+}
+const CHAPTER_OPTIONS = {
+	podcastEpisodeId: "episode-1",
+	billedUserId: "owner-1",
+	position: 0,
+	speechTier: "standard" as const,
+}
+
+// stub the pool so the chapter reads its row at a status with the script, and the store so its audio is stored at a
+// byte size or not at all. the speech call records two seconds of audio
+function stubChapterRecording(
+	status: string,
+	storedByteSize: number | null,
+): { sentQueries: SentQuery[]; recordSpeechSpy: ReturnType<typeof spyOn>; uploadSpy: ReturnType<typeof spyOn> } {
+	const sentQueries = stubConnectionPool(({ text }) =>
+		text.includes('select "status", "script" from "episodes"') ? [[status, CHAPTER_SCRIPT]] : [],
+	)
+	spyOn(store, "loadStoredObjectByteSize").mockResolvedValue(storedByteSize)
+	spyOn(litellm, "loadOrProvisionUserLiteLLMKey").mockResolvedValue("owner-1-key")
+	spyOn(podcastPersonalSourcesMigration, "assertPodcastPersonalSourcesConverted").mockResolvedValue(undefined)
+
+	// a speech call that records, and an upload that stores nothing
+	const recordSpeechSpy = spyOn(speech, "recordSpeech").mockResolvedValue({
+		outcome: "recorded",
+		audioBytes: toWavBytes(new Uint8Array(2 * SPEECH_BYTES_PER_SECOND)),
+		inputTokens: 10,
+		audioTokens: 50,
+	} as never)
+	const uploadSpy = spyOn(store, "uploadAttachment").mockResolvedValue(undefined)
+	return { sentQueries, recordSpeechSpy, uploadSpy }
+}
+
+test("a chapter of a row that is no longer recording makes no speech call and adds no cost", async () => {
+	const { sentQueries, recordSpeechSpy } = stubChapterRecording("failed", null)
+
+	// the chapter fails for good, so the workflow leaves it out
+	const chapterRecording = recordPodcastEpisodeChapter(CHAPTER_OPTIONS)
+	await expect(chapterRecording).rejects.toThrow(SpeechFailedError)
+	await expect(chapterRecording).rejects.toMatchObject({ isRetryable: false })
+	expect(recordSpeechSpy).not.toHaveBeenCalled()
+	expect(sentQueries.some((sentQuery) => sentQuery.text.startsWith("update"))).toBe(false)
+})
+
+test("a chapter whose audio an earlier attempt stored is returned with no speech call and no cost", async () => {
+	const { sentQueries, recordSpeechSpy, uploadSpy } = stubChapterRecording("recording", 96_044)
+
+	// the stored audio is the chapter, at its stored size
+	expect(await recordPodcastEpisodeChapter(CHAPTER_OPTIONS)).toEqual({
+		position: 0,
+		chapterKey: store.toPodcastEpisodeChapterKey("episode-1", 0),
+		byteSize: 96_044,
+	})
+	expect(recordSpeechSpy).not.toHaveBeenCalled()
+	expect(uploadSpy).not.toHaveBeenCalled()
+	expect(sentQueries.some((sentQuery) => sentQuery.text.startsWith("update"))).toBe(false)
+})
+
+test("a chapter with no stored audio records its speech, adds its cost, and stores its audio", async () => {
+	const { sentQueries, recordSpeechSpy, uploadSpy } = stubChapterRecording("recording", null)
+	const recordedChapter = await recordPodcastEpisodeChapter(CHAPTER_OPTIONS)
+
+	// one speech call on the billed user's key, its cost on the row, and its audio under the chapter's key
+	expect(recordSpeechSpy).toHaveBeenCalledTimes(1)
+	expect(recordSpeechSpy.mock.calls[0]?.[0]).toMatchObject({ speechTier: "standard", litellmApiKey: "owner-1-key" })
+	expect(sentQueries.filter((sentQuery) => sentQuery.text.startsWith('update "episodes" set "cost"'))).toHaveLength(1)
+	expect(uploadSpy.mock.calls[0]?.[0]).toBe(recordedChapter.chapterKey)
+	expect(recordedChapter.byteSize).toBe(WAV_HEADER_BYTES + 2 * SPEECH_BYTES_PER_SECOND)
+})

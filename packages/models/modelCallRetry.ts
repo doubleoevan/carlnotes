@@ -1,6 +1,7 @@
 // the runner a Scan's model calls go through: a rate limit, an overloaded or failing provider, or a timeout waits and
 // tries again, within limits that fit inside one review attempt, and every other failure ends the call at once
 
+import { toJitteredBackoffMs } from "@carlnotes/contracts/time"
 import { runWithRetries } from "@carlnotes/server/retry"
 import { APICallError, NoObjectGeneratedError } from "ai"
 import { toModelCallFailure } from "./modelCallFailure"
@@ -31,14 +32,16 @@ const RETRY_AFTER_HEADERS = [
 ] as const
 
 // the model calls the runner covers, as each names itself in its retry log line
-type ModelCallLabel = "scoringCheap" | "scoringPremium" | "embedding" | "scan-report"
+type ModelCallLabel = "scoringCheap" | "scoringPremium" | "embedding" | "scan-report" | "topicMemories"
 
-// one call's attempt, the moment after which no wait may end, the label it logs, and whether it reviews private text
+// one call's attempt, the moment after which no wait may end, the label it logs, whether it reviews private text,
+// and the signal that ends the call's waits and attempts once its caller is cancelled
 type RunModelCallOptions<Result> = {
 	runAttempt: () => Promise<Result>
 	waitDeadlineAt: number | null
 	label: ModelCallLabel
 	isPrivate?: boolean
+	signal?: AbortSignal
 }
 
 // a wait a response named, and the header that named it
@@ -52,6 +55,7 @@ export async function runModelCall<Result>({
 	waitDeadlineAt,
 	label,
 	isPrivate = false,
+	signal,
 }: RunModelCallOptions<Result>): Promise<Result> {
 	// the moment the call started and the waits it has spent, which bound every later wait
 	const startedAt = Date.now()
@@ -62,6 +66,7 @@ export async function runModelCall<Result>({
 	return runWithRetries({
 		attempts: MODEL_CALL_ATTEMPTS,
 		runAttempt,
+		signal,
 		isRetryable: isRetryableModelCallError,
 		// each wait counts toward the call's total wait
 		toDelayMs: (error, attempt) => {
@@ -112,8 +117,12 @@ function isRetryableApiCallError(apiCallError: APICallError): boolean {
  * single wait, scaled by a random 50 to 100 percent.
  */
 export function toModelCallBackoffMs(attempt: number, random: () => number = Math.random): number {
-	const backoffMs = Math.min(MODEL_CALL_BACKOFF_MS * 2 ** (attempt - 1), MAX_MODEL_CALL_WAIT_MS)
-	return Math.round(backoffMs * (0.5 + random() / 2))
+	return toJitteredBackoffMs({
+		firstWaitMs: MODEL_CALL_BACKOFF_MS,
+		doublingCount: attempt - 1,
+		maximumWaitMs: MAX_MODEL_CALL_WAIT_MS,
+		random,
+	})
 }
 
 /**

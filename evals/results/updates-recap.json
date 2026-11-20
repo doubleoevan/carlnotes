@@ -1,9 +1,9 @@
 {
 	"name": "updates-recap",
-	"passedRunCount": 39,
-	"runCount": 40,
-	"ranOn": "2026-11-05",
-	"commit": "14a06ba2",
+	"passedRunCount": 8,
+	"runCount": 8,
+	"ranOn": "2026-11-20",
+	"commit": "2c229c8d",
 	"hasUncommittedChanges": true,
 	"writerModelIds": [
 		"score-model"

@@ -19,12 +19,12 @@ import {
 import { reportError } from "@carlnotes/server/monitoring"
 import { and, eq, isNotNull, isNull, or } from "drizzle-orm"
 import { clearPodcastEpisodeImage } from "./podcast/podcastEpisodeImageRenders"
-import { startTopicVideoRebuild } from "./temporalClient"
 import { forgetTopicCovers } from "./topicImages/topicCovers"
 import { clearTopicImage } from "./topicImages/topicImageRenders"
 import { clearTopicPostImage } from "./topicPosts/topicPostImageRenders"
 import { clearTopicVideoImage } from "./topicVideo/topicVideoImage"
 import { saveImageTopicVideosRendering } from "./topicVideo/topicVideoRows"
+import { startTopicVideoRebuild } from "./topicVideo/topicVideoWorkflowClient"
 import {
 	isUncheckedAvatarKind,
 	loadUncheckedImageSubjectState,

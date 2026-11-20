@@ -19,6 +19,26 @@ export type DiscoveredResource = NewResource & {
 	isFromPersonalSources?: boolean
 }
 
+// what the stages after ingest read of a Resource that a Scan found: its url, the one Source credited with it, and
+// whether a custom Source and whether Personal sources found it. a flag that is false is left out
+export type ResourceDiscovery = Pick<DiscoveredResource, "url" | "sourceId" | "isFromPersonalSources"> & {
+	isFromCustomSource?: boolean
+}
+
+/**
+ * Returns what the stages after ingest read of a Resource that a Scan found, so a Scan's workflow history holds no
+ * title, snippet, or body.
+ */
+export function toResourceDiscovery(discoveredResource: DiscoveredResource): ResourceDiscovery {
+	const { url, sourceId, isFromCustomSource, isFromPersonalSources } = discoveredResource
+	return {
+		url,
+		sourceId,
+		...(isFromCustomSource ? { isFromCustomSource } : {}),
+		...(isFromPersonalSources ? { isFromPersonalSources } : {}),
+	}
+}
+
 // what the Scan gives an ingester beside the Source. the Scan owner's LiteLLM key bills an ingester's model calls
 export type IngestContext = { litellmApiKey?: string; scanId?: string }
 

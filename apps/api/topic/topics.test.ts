@@ -4,7 +4,7 @@ import { afterEach, expect, test } from "bun:test"
 import type { TopicScan } from "@carlnotes/contracts/topics"
 import { appUrl } from "@carlnotes/server/appUrl"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
-import { toLastSucceededTopicScan } from "./helpers"
+import { toLastSucceededTopicScan, toLastTopicScanFields } from "./helpers"
 import { isTakingDailySlot } from "./saveHelpers"
 import { notifyIndexNowOfTopicChange } from "./saveTopic"
 
@@ -35,6 +35,26 @@ test("toLastSucceededScan skips a newer failed scan", () => {
 // a history with nothing succeeded yet has no baseline to report
 test("toLastSucceededScan is undefined when no scan has succeeded", () => {
 	expect(toLastSucceededTopicScan([scanRow("failed", "failed"), scanRow("running", "running")])).toBeUndefined()
+})
+
+// a scan that rediscovers only pages it already judged reviews nothing and writes no recap
+test("a scan with an empty recap does not blank the note, and the schedule still reads the latest scan", () => {
+	// the newest scan wrote no recap, the one before it did, and the oldest wrote another
+	const history = [scanRow("quiet", "succeeded"), scanRow("failed", "failed"), scanRow("noted", "succeeded")]
+	const scanRows = [
+		{ id: "quiet", scanSummary: "" },
+		{ id: "failed", scanSummary: "a failed scan's words" },
+		{ id: "noted", scanSummary: "Two new grinders this week." },
+		{ id: "oldest", scanSummary: "An older recap." },
+	]
+	const lastTopicScanFields = toLastTopicScanFields([...history, scanRow("oldest", "succeeded")], scanRows)
+	expect(lastTopicScanFields.scanSummary).toBe("Two new grinders this week.")
+	expect(lastTopicScanFields.lastSucceededTopicScan?.id).toBe("quiet")
+
+	// a topic whose scans wrote no recap yet has no note
+	expect(toLastTopicScanFields([scanRow("quiet", "succeeded")], [{ id: "quiet", scanSummary: null }]).scanSummary).toBe(
+		null,
+	)
 })
 
 // only a move to a daily frequency takes one of the plan's daily slots

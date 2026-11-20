@@ -7,7 +7,7 @@ import {
 	loadClaimedPersonalSourcesLinks,
 } from "@carlnotes/db/personalSourcesLinkQueue"
 import { considerCommentLinks, loadWaitingCommentLinkUrls } from "@carlnotes/db/sharedComments"
-import type { DiscoveredResource, IngestContext, IngestResult, Source } from "../ingest/ingester"
+import type { DiscoveredResource, IngestContext, IngestResult, ResourceDiscovery, Source } from "../ingest/ingester"
 import { toFallbackTitle, toResourceKind } from "../ingest/normalize"
 
 /**
@@ -71,10 +71,10 @@ export async function loadPersonalSourcesReviewLinks({
 }: {
 	topicId: string
 	scanId: string
-	discoveredResources: DiscoveredResource[]
+	discoveredResources: ResourceDiscovery[]
 }): Promise<{
 	// what the Sources found without a stale personal-only discovery, each live link's bonus, and every live url
-	discoveredResources: DiscoveredResource[]
+	discoveredResources: ResourceDiscovery[]
 	personalSourceScoreBonuses: Map<string, PersonalSourceScoreBonus>
 	claimedUrls: Set<string>
 }> {

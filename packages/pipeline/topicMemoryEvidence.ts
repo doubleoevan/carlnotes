@@ -31,6 +31,7 @@ export type TopicMemoryFinding = {
 	title: string | null
 	snippet: string | null
 	description: string
+	// what the review made of it, and the Resource's own vector
 	relevanceScore: number
 	rating: "up" | null
 	embedding: number[] | null
@@ -123,6 +124,7 @@ export async function loadEligibleTopicMemoryFindingIds(
 	topicId: string,
 	handle: DbHandle,
 ): Promise<string[]> {
+	// the Scan's thirty most relevant Findings that are eligible now
 	const rows = await handle
 		.select({ id: findings.id })
 		.from(findings)
@@ -130,6 +132,7 @@ export async function loadEligibleTopicMemoryFindingIds(
 		.where(toTopicMemoryScanFindingFilter(scanId, topicId))
 		.orderBy(desc(findings.relevanceScore), findings.id)
 		.limit(30)
+	// their ids are all that a write checks
 	return rows.map(({ id }) => id)
 }
 
@@ -192,6 +195,7 @@ export async function loadTopicMemoryNeighbors(
 		.innerJoin(topicMemories, eq(topicMemories.id, nearest.id))
 		.innerJoin(scans, eq(scans.id, topicMemories.lastSeenScanId))
 		.orderBy(nearest.distance, nearest.id)
+	// one row a group, nearest first, without its grouping columns
 	return groupTopicMemories(candidates)
 		.slice(0, TOPIC_MEMORY_NEIGHBOR_LIMIT)
 		.flatMap(([first]) => {
@@ -210,6 +214,13 @@ export async function loadTopicMemoryNeighbors(
 		})
 }
 
+// read a stored article once an update. a failed read is an empty article, which the next claim does not try again
+function readStoredArticle(contentKey: string, articleReads: ArticleReads): Promise<string> {
+	const startedRead = articleReads.get(contentKey) ?? getResourceContent(contentKey).catch(() => "")
+	articleReads.set(contentKey, startedRead)
+	return startedRead
+}
+
 /**
  * Restricts Journal evidence to shown external Findings from public Sources.
  */
@@ -223,6 +234,16 @@ export function toTopicMemoryFindingFilter(topicId: string): SQL | undefined {
 	)
 }
 
+// one Finding's evidence for a claim: the day its Scan started, its public fields, and an excerpt of its article
+type TopicMemoryFindingEvidence = {
+	day: string
+	title: string | null
+	snippet: string | null
+	description: string
+	articleContext?: string
+	publicationDateHint?: string | null
+}
+
 /**
  * Reads bounded excerpts of existing claim evidence for a split or duplicate review.
  */
@@ -231,19 +252,8 @@ export async function loadTopicMemoryFindingEvidence(
 	findingIds: string[],
 	handle: DbHandle = db,
 	claimText?: string,
-): Promise<
-	Map<
-		string,
-		{
-			day: string
-			title: string | null
-			snippet: string | null
-			description: string
-			articleContext?: string
-			publicationDateHint?: string | null
-		}
-	>
-> {
+	articleReads: ArticleReads = new Map(),
+): Promise<Map<string, TopicMemoryFindingEvidence>> {
 	if (!findingIds.length) {
 		return new Map()
 	}
@@ -267,9 +277,9 @@ export async function loadTopicMemoryFindingEvidence(
 	const evidence = await Promise.all(
 		rows
 			.toSorted((a, b) => findingIds.indexOf(a.id) - findingIds.indexOf(b.id))
-			.map(async ({ id, startedAt, article, contentKey, ...finding }, index) => {
-				const articleContext =
-					claimText && index < 3 ? await toArticleExcerpt(article, contentKey, claimText, finding.snippet) : undefined
+			.map(async ({ id, startedAt, article: inline, contentKey, ...finding }, index) => {
+				const article = { inline, contentKey, snippet: finding.snippet, articleReads }
+				const articleContext = claimText && index < 3 ? await toArticleExcerpt({ ...article, claimText }) : undefined
 				return [
 					id,
 					{ ...finding, snippet: finding.snippet?.slice(0, 240) ?? null, day: toUtcDay(startedAt), articleContext },
@@ -279,14 +289,28 @@ export async function loadTopicMemoryFindingEvidence(
 	return new Map(evidence)
 }
 
-async function toArticleExcerpt(
-	inline: string | null,
-	contentKey: string | null,
-	claimText: string,
-	snippet: string | null,
-): Promise<string | undefined> {
+// the stored articles that one update has read from object storage, by their content key, so claims that cite one
+// article share one read of it
+export type ArticleReads = Map<string, Promise<string>>
+
+// an article's inline text and content key, the claim to find in it, the Finding's excerpt, and the update's reads
+type ArticleExcerptOptions = {
+	inline: string | null
+	contentKey: string | null
+	claimText: string
+	snippet: string | null
+	articleReads: ArticleReads
+}
+
+async function toArticleExcerpt({
+	inline,
+	contentKey,
+	claimText,
+	snippet,
+	articleReads,
+}: ArticleExcerptOptions): Promise<string | undefined> {
 	// use retained article text and fall back to the selected Finding excerpt if it has expired
-	const article = inline || (contentKey ? await getResourceContent(contentKey).catch(() => "") : "") || snippet || ""
+	const article = inline || (contentKey ? await readStoredArticle(contentKey, articleReads) : "") || snippet || ""
 	const searchable = article.toLowerCase()
 	const phrase = claimText.toLowerCase().replace(/[.!?]+$/, "")
 	const names = claimText.match(/\b[\p{Lu}][\p{L}’'-]+(?: +[\p{Lu}][\p{L}’'-]+)+/gu) ?? []
@@ -295,6 +319,7 @@ async function toArticleExcerpt(
 		[phrase, ...names.map((name) => name.toLowerCase())]
 			.map((anchor) => searchable.indexOf(anchor))
 			.find((position) => position >= 0) ?? 0
+	// cut the excerpt around the match and lead with the article's own dateline if it has one
 	const start = Math.max(0, match - 550)
 	const excerpt = article.slice(start, start + 1400)
 	const dateline = article.match(/^(?:Posted On|Published(?: On)?)\s*:?\s+([A-Za-z]+ \d{1,2},? \d{4})/im)?.[1]

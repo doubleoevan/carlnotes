@@ -1,17 +1,24 @@
 // Topic Post Discussion recording tests: the first discussion's start, a start whose workflow fails, the screen of the
 // Comments and the author's name, a spent budget, and a post that is gone
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
-import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
+import { restoreConnectionPool, type SentQuery, stubConnectionPool, toTableRow } from "@carlnotes/db/connectionPoolStub"
 import * as monthlyBudgetCutoffs from "@carlnotes/db/monthlyBudgetCutoffs"
+import { topicPostDiscussions } from "@carlnotes/db/schema/topicPosts"
 import * as sharedComments from "@carlnotes/db/sharedComments"
+import * as store from "@carlnotes/db/store"
 import * as litellm from "@carlnotes/models/litellm"
 import * as models from "@carlnotes/models/models"
 import type { ModerationClassification } from "@carlnotes/models/moderation"
 import * as moderation from "@carlnotes/models/moderation"
+import * as speech from "@carlnotes/models/speech"
+import * as monitoring from "@carlnotes/server/monitoring"
+import * as podcastEpisodeAudio from "../podcast/podcastEpisodeAudio"
 import * as temporalClient from "../temporalClient"
 import * as topicMemoryPrompt from "../topicMemoryPrompt"
+import { recordTopicPostDiscussionAudio } from "./topicPostDiscussionAudio"
 import * as discussionScript from "./topicPostDiscussionScript"
 import {
+	failTopicPostDiscussion,
 	startTopicPostDiscussion,
 	startTopicPostPublishDiscussion,
 	TopicPostDiscussionError,
@@ -175,4 +182,162 @@ test("a discussion whose workflow does not start leaves no recording row, so the
 	startWorkflowSpy.mockResolvedValue()
 	expect(await startTopicPostPublishDiscussion("post-1")).toBe("discussion-1")
 	expect(startWorkflowSpy).toHaveBeenCalledTimes(2)
+})
+
+// the post keeps its earlier discussion and nobody is told of the failure, so it is reported
+test("a discussion that is closed as failed is reported, and one that already published is not", async () => {
+	// the failing write returns the post of the row it closed
+	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
+	const deleteStoredObjectsSpy = spyOn(store, "deleteStoredObjects").mockResolvedValue()
+	const sentQueries = stubConnectionPool(() => [["post-1"]])
+	await failTopicPostDiscussion("discussion-1", "the speech call failed")
+
+	// the row closes only while it still reads recording, and the report names it with its reason
+	expect(sentQueries[0]?.values).toEqual(["failed", "the speech call failed", "discussion-1", "recording"])
+	expect(reportErrorSpy.mock.calls.map((reportCall) => reportCall.slice(1))).toEqual([
+		["podcast-episode", { discussionId: "discussion-1", reason: "the speech call failed" }],
+	])
+
+	// the speech that an attempt stored goes with the failed row
+	expect(deleteStoredObjectsSpy.mock.calls).toEqual([[[SPEECH_KEY]]])
+
+	// a row that published meanwhile matches nothing, and nothing more is reported or deleted
+	stubConnectionPool(() => [])
+	await failTopicPostDiscussion("discussion-1", "the speech call failed")
+	expect(reportErrorSpy).toHaveBeenCalledTimes(1)
+	expect(deleteStoredObjectsSpy).toHaveBeenCalledTimes(1)
+})
+
+// the keys of the discussion's stored speech and of its finished audio
+const SPEECH_KEY = "topic-post-discussions/post-1/discussion-1.wav"
+const AUDIO_KEY = "topic-post-discussions/post-1/discussion-1.mp3"
+
+// two seconds of speech as a WAV file's bytes
+const TWO_SECOND_SPEECH = new Uint8Array(speech.WAV_HEADER_BYTES + 2 * speech.SPEECH_BYTES_PER_SECOND)
+
+// stub what a recording touches: the row with its script, the storage, the speech call, and the join. returns the
+// queries sent, the order the steps ran in, and the speech call's spy
+function stubRecording(storedSpeechByteSize: number | null): {
+	sentQueries: SentQuery[]
+	steps: string[]
+	recordSpeechSpy: ReturnType<typeof spyOn<typeof speech, "recordSpeech">>
+} {
+	// the recording row, and a publish that finds it still recording
+	const recordingRow = toTableRow(topicPostDiscussions, {
+		...{ id: "discussion-1", topicPostId: "post-1", userId: "member-2", kind: "publish", status: "recording" },
+		...{ script: TURNS, cost: 0, createdAt: new Date() },
+	})
+	// each query, write, and delete that the test checks, named in the order it ran
+	const steps: string[] = []
+	const sentQueries = stubConnectionPool(({ text }) => {
+		if (text.startsWith("select")) {
+			return [recordingRow]
+		}
+		// a pending deletion is a step, so its order beside the uploads is checked
+		if (text.startsWith('insert into "pending_object_deletions"')) {
+			steps.push("pending deletion")
+		}
+		return text.includes('"status" = $') ? [["discussion-1"]] : []
+	})
+
+	// the storage
+	spyOn(store, "loadStoredObjectByteSize").mockResolvedValue(storedSpeechByteSize)
+	spyOn(store, "uploadAttachment").mockImplementation(async (key) => void steps.push(`store ${key}`))
+	spyOn(store, "downloadPodcastEpisodeFile").mockImplementation(async ({ key }) => void steps.push(`read ${key}`))
+	spyOn(store, "uploadPodcastEpisodeFile").mockImplementation(async ({ key }) => void steps.push(`store ${key}`))
+	spyOn(store, "deleteStoredObjects").mockImplementation(async (keys) => void steps.push(`delete ${keys.join(" ")}`))
+
+	// the speech call on the user's key, and the join
+	spyOn(litellm, "loadOrProvisionUserLiteLLMKey").mockResolvedValue("member-2-key")
+	spyOn(podcastEpisodeAudio, "joinChapterFiles").mockImplementation(async () => void steps.push("join"))
+	const recordSpeechSpy = spyOn(speech, "recordSpeech").mockImplementation(async () => {
+		steps.push("speech")
+		return { outcome: "recorded", audioBytes: TWO_SECOND_SPEECH, inputTokens: 100, audioTokens: 50 }
+	})
+	return { sentQueries, steps, recordSpeechSpy }
+}
+
+// the speech is the paid step, so it is stored before the encode can fail, and deleted once the row publishes
+test("a discussion's speech is stored before the encode, and deleted once the discussion publishes", async () => {
+	const { sentQueries, steps } = stubRecording(null)
+	await recordTopicPostDiscussionAudio("discussion-1")
+	expect(steps).toEqual([
+		"speech",
+		"pending deletion",
+		`store ${SPEECH_KEY}`,
+		"join",
+		`store ${AUDIO_KEY}`,
+		`delete ${SPEECH_KEY}`,
+	])
+
+	// the stored speech has a pending deletion two days out
+	const pendingDeletionInsert = sentQueries.find((sentQuery) =>
+		sentQuery.text.startsWith('insert into "pending_object_deletions"'),
+	)
+	expect(pendingDeletionInsert?.values[0]).toBe(SPEECH_KEY)
+	expect(new Date(String(pendingDeletionInsert?.values[1])).getTime()).toBeGreaterThan(Date.now() + 47 * 3_600_000)
+
+	// the row publishes with the two seconds that the speech holds
+	const publishUpdate = sentQueries.find((sentQuery) => sentQuery.values.includes("published"))
+	expect(publishUpdate?.values).toEqual(expect.arrayContaining([AUDIO_KEY, 2, "discussion-1", "recording"]))
+})
+
+// a retry after a failed encode finds the speech that the earlier attempt stored
+test("a retry after a stored speech makes no speech call and adds no cost", async () => {
+	const { sentQueries, steps, recordSpeechSpy } = stubRecording(TWO_SECOND_SPEECH.byteLength)
+	await recordTopicPostDiscussionAudio("discussion-1")
+
+	// the stored speech is read and encoded, with no speech call and no cost written
+	expect(recordSpeechSpy).not.toHaveBeenCalled()
+	expect(steps).toEqual([`read ${SPEECH_KEY}`, "join", `store ${AUDIO_KEY}`, `delete ${SPEECH_KEY}`])
+	expect(sentQueries.some((sentQuery) => sentQuery.text.includes('set "cost"'))).toBe(false)
+
+	// the length comes from the stored speech's size
+	const publishUpdate = sentQueries.find((sentQuery) => sentQuery.values.includes("published"))
+	expect(publishUpdate?.values).toEqual(expect.arrayContaining([AUDIO_KEY, 2]))
+})
+
+// a post deleted during the recording took the row with it, so the read after the publish finds no row
+test("a discussion whose row is gone at the publish deletes its speech and its audio", async () => {
+	const { steps } = stubRecording(null)
+	stubConnectionPool(({ text }) =>
+		text.startsWith("select") && !text.startsWith('select "audio_key"')
+			? [
+					toTableRow(topicPostDiscussions, {
+						id: "discussion-1",
+						topicPostId: "post-1",
+						userId: "member-2",
+						script: TURNS,
+					}),
+				]
+			: [],
+	)
+	await recordTopicPostDiscussionAudio("discussion-1")
+	expect(steps.at(-1)).toBe(`delete ${SPEECH_KEY} ${AUDIO_KEY}`)
+})
+
+// a recording attempt that outlives its heartbeat may still publish while its retry runs. the retry reads the row as
+// recording, uploads to the same key, and its publish finds the row the first attempt published
+test("a discussion that an overlapping attempt published keeps its audio", async () => {
+	const { steps } = stubRecording(null)
+	stubConnectionPool(({ text }) => {
+		// the row plays the audio under the key, and the publish's update changes no row
+		if (text.startsWith('select "audio_key"')) {
+			return [[AUDIO_KEY]]
+		}
+
+		// the recording row as the attempt first read it
+		return text.startsWith("select")
+			? [
+					toTableRow(topicPostDiscussions, {
+						id: "discussion-1",
+						topicPostId: "post-1",
+						userId: "member-2",
+						script: TURNS,
+					}),
+				]
+			: []
+	})
+	await recordTopicPostDiscussionAudio("discussion-1")
+	expect(steps.at(-1)).toBe(`delete ${SPEECH_KEY}`)
 })

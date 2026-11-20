@@ -1,6 +1,7 @@
 // a chapter's generated images in a podcast episode film: each is generated in the film house style from the Finding's
-// title and public relevance explanation, in the framing of its number, checked by the image moderation, stored beside
-// the film's parts, where a second attempt reuses it, and billed like the film's own image. any failure leaves the
+// title and public relevance explanation, in the framing of its number, billed like the film's own image, kept under a
+// key that is never served until the image moderation has checked it, and then stored beside the film's parts, where a
+// second attempt reuses it. a rejected image leaves a marker, so it is never generated again. any failure leaves the
 // image out
 
 import { db } from "@carlnotes/db"
@@ -15,6 +16,7 @@ import {
 } from "@carlnotes/db/store"
 import {
 	GENERATED_CHAPTER_IMAGE_STYLE_VERSION,
+	toTopicVideoChapterImageCheckKeys,
 	toTopicVideoChapterImageKeys,
 	toTopicVideoChapterImageKeysThroughStyle,
 } from "@carlnotes/db/topicVideoKeys"
@@ -31,6 +33,7 @@ import {
 	generateTopicVideoImageOriginal,
 	TOPIC_VIDEO_IMAGE_FRAMING,
 } from "./topicVideoImage"
+import { recordPlatformTopicVideoSpend } from "./topicVideoRows"
 
 // how many chapter images are generated at once
 const CHAPTER_IMAGE_GENERATION_CONCURRENCY = 4
@@ -255,21 +258,15 @@ async function settleGeneratedChapterImage(
 	}
 }
 
-// one generated image's jpeg: the one an earlier render stored, or else a new one, generated, billed, checked, and
-// stored. returns null for an image that the image moderation does not pass, and for an image not stored if image
-// generation is skipped
-async function loadOrGenerateChapterImage({
-	podcastEpisodeId,
-	position,
-	imageNumber,
-	isChapterImageGenerationSkipped,
-	sceneInput,
-	framing,
-	model,
-	loadLitellmApiKey,
-	isPlatformBilled,
-}: ChapterImageGeneration): Promise<SettledGeneratedChapterImage | null> {
-	// a stored image is reused, so a render's second attempt and a re-render generate nothing
+// one generated image's jpeg: the one an earlier render stored, or else a new one, generated, billed, kept unchecked,
+// checked, and stored. an image that an earlier attempt generated and could not check is checked now, with no second
+// image generation. returns null for an image that the image moderation rejected now or before, for one whose check
+// did not run, and for an image not stored if image generation is skipped
+async function loadOrGenerateChapterImage(
+	chapterImageGeneration: ChapterImageGeneration,
+): Promise<SettledGeneratedChapterImage | null> {
+	// a stored image passed its check, so a render's second attempt and a re-render generate nothing
+	const { podcastEpisodeId, position, imageNumber, isChapterImageGenerationSkipped } = chapterImageGeneration
 	const imageKey = toTopicVideoChapterImageKeys(podcastEpisodeId, position)[imageNumber]
 	if (!imageKey) {
 		return null
@@ -278,54 +275,97 @@ async function loadOrGenerateChapterImage({
 		return { position, jpegBytes: await getAttachmentBytes(imageKey), isNewlyGenerated: false }
 	}
 
-	// generate nothing if image generation is skipped
-	if (isChapterImageGenerationSkipped) {
+	// generate nothing if image generation is skipped, and never generate a rejected image again
+	const { uncheckedKey, rejectedKey } = toTopicVideoChapterImageCheckKeys(imageKey)
+	if (isChapterImageGenerationSkipped || (await attachmentExists(rejectedKey))) {
 		return null
 	}
 
+	// the image an earlier attempt kept unchecked, or a new one, kept unchecked before its check can fail
+	const hasUncheckedImage = await attachmentExists(uncheckedKey)
+	const jpegBytes = hasUncheckedImage
+		? await getAttachmentBytes(uncheckedKey)
+		: await generateUncheckedChapterImage(chapterImageGeneration, uncheckedKey)
+
+	// a check that did not run keeps the image unchecked for the next attempt
+	const imageCheck = await checkGeneratedChapterImage({ jpegBytes, podcastEpisodeId, position })
+	if (imageCheck === "unchecked") {
+		return null
+	}
+
+	// a rejection leaves its marker before the image goes, and a pass puts the image under the key that is served
+	const isAllowed = imageCheck === "allowed"
+	await (isAllowed
+		? uploadAttachment(imageKey, jpegBytes, "image/jpeg")
+		: uploadAttachment(rejectedKey, new Uint8Array(), "text/plain"))
+	await deleteStoredObjects([uncheckedKey])
+	return isAllowed ? { position, jpegBytes, isNewlyGenerated: !hasUncheckedImage } : null
+}
+
+// generate one image, bill it, and keep its jpeg under the unchecked key, which is never served. returns the jpeg
+async function generateUncheckedChapterImage(
+	{ podcastEpisodeId, sceneInput, framing, model, loadLitellmApiKey, isPlatformBilled }: ChapterImageGeneration,
+	uncheckedKey: string,
+): Promise<Uint8Array> {
 	// generate the image
 	const format = GENERATED_CHAPTER_IMAGE_FORMAT
 	const imageGeneration = { sceneInput, framing, format, model, litellmApiKey: await loadLitellmApiKey() }
 	const { jpegBytes } = await generateTopicVideoImageOriginal(imageGeneration)
 
-	// add the image generation's cost to the film row unless the platform pays
-	if (!isPlatformBilled) {
+	// add the image generation's cost to the film row, or record it as the platform's if the platform pays
+	const dollars = topicImageCostDollars(model)
+	if (isPlatformBilled) {
+		await recordPlatformTopicVideoSpend({ podcastEpisodeId, kind: "topicVideoChapterImage", dollars })
+	} else {
+		// the owner's image adds to what the film cost them
 		await db
 			.update(topicVideos)
-			.set({ cost: sql`${topicVideos.cost} + ${topicImageCostDollars(model).toFixed(6)}` })
+			.set({ cost: sql`${topicVideos.cost} + ${dollars.toFixed(6)}` })
 			.where(eq(topicVideos.podcastEpisodeId, podcastEpisodeId))
 	}
 
-	// only an image that passes the image moderation is stored and shown
-	if (!(await isGeneratedChapterImageAllowed({ jpegBytes, podcastEpisodeId, position }))) {
-		return null
-	}
-	await uploadAttachment(imageKey, jpegBytes, "image/jpeg")
-	return { position, jpegBytes, isNewlyGenerated: true }
+	// keep the paid image before its check, so a check that fails to run costs no second image generation
+	await uploadAttachment(uncheckedKey, jpegBytes, "image/jpeg")
+	return jpegBytes
 }
 
 // a generated image, and the film's podcast episode and the chapter's position, which name it in a failure report
 type IsGeneratedChapterImageAllowedOptions = { jpegBytes: Uint8Array; podcastEpisodeId: string; position: number }
 
-// whether a generated image may be shown: the image moderation found no violation, or it was skipped with no moderation
-// key set. a violation, an image the moderation cannot read, and a failed check leave the image out
-export async function isGeneratedChapterImageAllowed({
+// how a generated image's check ended: it may be shown, the image moderation rejected it, or the check did not run
+type GeneratedChapterImageCheck = "allowed" | "rejected" | "unchecked"
+
+// check a generated image: allowed if the image moderation found no violation, or was skipped with no moderation key
+// set, rejected for a violation and for an image the moderation cannot read, and unchecked for a failed check, which
+// is reported without the image
+async function checkGeneratedChapterImage({
 	jpegBytes,
 	podcastEpisodeId,
 	position,
-}: IsGeneratedChapterImageAllowedOptions): Promise<boolean> {
+}: IsGeneratedChapterImageAllowedOptions): Promise<GeneratedChapterImageCheck> {
 	const classification = await classifyImage({ dataUrl: toDataUrl("image/jpeg", jpegBytes) })
 	if (classification.outcome === "classified") {
-		return !classification.verdict.isViolation
+		return classification.verdict.isViolation ? "rejected" : "allowed"
+	}
+	if (classification.outcome !== "failed") {
+		return classification.outcome === "skipped" ? "allowed" : "rejected"
 	}
 
 	// a failed check is reported, without the image
-	if (classification.outcome === "failed") {
-		reportError(classification.error, "topic-video", {
-			podcastEpisodeId,
-			position: String(position),
-			step: "generated-chapter-image-moderation",
-		})
-	}
-	return classification.outcome === "skipped"
+	reportError(classification.error, "topic-video", {
+		podcastEpisodeId,
+		position: String(position),
+		step: "generated-chapter-image-moderation",
+	})
+	return "unchecked"
+}
+
+/**
+ * Returns whether a generated image may be shown. A violation, an image the moderation cannot read, and a failed check
+ * leave the image out.
+ */
+export async function isGeneratedChapterImageAllowed(
+	isGeneratedChapterImageAllowedOptions: IsGeneratedChapterImageAllowedOptions,
+): Promise<boolean> {
+	return (await checkGeneratedChapterImage(isGeneratedChapterImageAllowedOptions)) === "allowed"
 }

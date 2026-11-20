@@ -7,7 +7,7 @@ import { NoObjectGeneratedError } from "ai"
 const SCAN_BUDGET_USD = readDollarSetting("SCAN_BUDGET_USD", 0.5)
 
 // the approximate limit on how many resources one Scan can score, bounding the paid fetch-and-scoring section
-const MAX_SCORED_RESOURCES_PER_SCAN = toPositiveInteger(Bun.env.MAX_SCORED_RESOURCES_PER_SCAN, 30)
+export const MAX_SCORED_RESOURCES_PER_SCAN = toPositiveInteger(Bun.env.MAX_SCORED_RESOURCES_PER_SCAN, 30)
 
 // best-effort dollar rates for the soft limit and the per-stage breakdown. LiteLLM meters the authoritative spend
 export const EMBED_COST_PER_MILLION_TOKENS = 0.1

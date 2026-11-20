@@ -143,6 +143,7 @@ export async function suggestTopicDraftSources({
 
 	// suggest sources from the topic draft's name and prompt
 	const suggestedSources = await suggestSources({
+		userId,
 		name,
 		prompt,
 		attachmentContext: "",

@@ -100,37 +100,41 @@ test("a Scan push reaches each live phone, records the accepted ones, and retire
 	expect(findSentQuery(sentQueries, 'delete from "push_devices"')?.values).toEqual(["device-3"])
 })
 
-// each push sets its recipient's own update count as the app icon badge: user-1 has two unseen chat mentions and one
-// pending topic invitation, and user-2 has nothing
-test("a push sets each recipient's update count as the app icon badge", async () => {
-	// user-1 is on one team, with a verified address, two unseen chat mentions, and one pending topic invitation
-	const scanPushRows = [...SCAN_PUSH_ROWS, { sqlPattern: /from "push_devices"/, rows: LIVE_PUSH_DEVICE_ROWS }]
-	const userOneRows: QueryRows[] = [
-		{ sqlPattern: /from "team_members"/, rows: [["team-1"]] },
-		{ sqlPattern: /from "users"/, rows: [["one@example.com", true]] },
-		{ sqlPattern: /from "room_mentions"/, rows: [[2]] },
-		{ sqlPattern: /from "invites"/, rows: [[1]] },
-	]
+// the grouped update count reads of a chunk: user-1 has two unseen chat mentions and one pending topic invitation,
+// and user-2 has nothing
+const UPDATE_COUNT_ROWS: QueryRows[] = [
+	{ sqlPattern: /^select "room_mentions"\."user_id", count/, rows: [["user-1", 2]] },
+	{ sqlPattern: /^select "users"\."id", count\(distinct "invites"/, rows: [["user-1", 1]] },
+]
 
-	// a read for user-1 finds their rows, and every other read finds the Scan push's
-	stubConnectionPool(({ text: sql, values }) => {
-		const queryRows = values.includes("user-1") ? userOneRows : scanPushRows
-		return sql.startsWith("select") ? (queryRows.find((queryRow) => queryRow.sqlPattern.test(sql))?.rows ?? []) : []
-	})
+// each push sets its recipient's own update count as the app icon badge, counted once for the chunk's accounts
+test("a push sets each recipient's update count as the app icon badge", async () => {
+	const sentQueries = stubDatabase([
+		...UPDATE_COUNT_ROWS,
+		...SCAN_PUSH_ROWS,
+		{ sqlPattern: /from "push_devices"/, rows: LIVE_PUSH_DEVICE_ROWS },
+	])
 	const sendSpy = spyOn(expoPush, "sendPushMessageChunk").mockResolvedValue([])
 	await sendScanPush("scan-1")
 
 	// both of user-1's phones show 3, and user-2's phone clears its badge
 	const [pushMessages] = sendSpy.mock.calls[0] ?? []
 	expect(pushMessages?.map((pushMessage) => pushMessage.badge)).toEqual([3, 3, 0])
+
+	// the chunk's two accounts are counted together: one read of the mentions, one of the notes, one of the invitations
+	const mentionCountQueries = sentQueries.filter((sentQuery) => UPDATE_COUNT_ROWS[0]?.sqlPattern.test(sentQuery.text))
+	expect(mentionCountQueries).toHaveLength(1)
+	expect(mentionCountQueries[0]?.values).toEqual(expect.arrayContaining(["user-1", "user-2"]))
+	expect(sentQueries.filter((sentQuery) => sentQuery.text.startsWith('with "member_teams"'))).toHaveLength(1)
+	expect(sentQueries.filter((sentQuery) => UPDATE_COUNT_ROWS[1]?.sqlPattern.test(sentQuery.text))).toHaveLength(1)
 })
 
-// a count that fails to load leaves that recipient's badge alone and never stops the push
-test("a failed update count sends the push without a badge", async () => {
-	// user-1's team read fails, and every other read finds the Scan push's rows
+// counts that fail to load leave the chunk's badges alone and never stop the push
+test("a failed update count sends the chunk's pushes without a badge", async () => {
+	// the mention count fails, and every other read finds the Scan push's rows
 	const scanPushRows = [...SCAN_PUSH_ROWS, { sqlPattern: /from "push_devices"/, rows: LIVE_PUSH_DEVICE_ROWS }]
-	stubConnectionPool(({ text: sql, values }) => {
-		if (values.includes("user-1") && /from "team_members"/.test(sql)) {
+	stubConnectionPool(({ text: sql }) => {
+		if (UPDATE_COUNT_ROWS[0]?.sqlPattern.test(sql)) {
 			throw new Error("connection timeout")
 		}
 		return sql.startsWith("select") ? (scanPushRows.find((queryRow) => queryRow.sqlPattern.test(sql))?.rows ?? []) : []
@@ -138,11 +142,11 @@ test("a failed update count sends the push without a badge", async () => {
 
 	// send the push
 	const sendSpy = spyOn(expoPush, "sendPushMessageChunk").mockResolvedValue([])
-	await sendScanPush("scan-1")
+	expect(await sendScanPush("scan-1")).toEqual({ outcome: "sent", acceptedCount: 0 })
 
-	// user-1's phones still get the push with no badge, and user-2's clears
+	// every phone of the chunk still gets the push, with no badge
 	const [pushMessages] = sendSpy.mock.calls[0] ?? []
-	expect(pushMessages?.map((pushMessage) => pushMessage.badge)).toEqual([undefined, undefined, 0])
+	expect(pushMessages?.map((pushMessage) => pushMessage.badge)).toEqual([undefined, undefined, undefined])
 })
 
 // a retry sends only to the phones that no record names
@@ -357,18 +361,28 @@ test("a send reports each chunk and stops once cancelled", async () => {
 		`ExponentPushToken[${index}]`,
 		"user-1",
 	])
-	stubDatabase([...SCAN_PUSH_ROWS, { sqlPattern: /from "push_devices"/, rows: manyDeviceRows }])
+	const sentQueries = stubDatabase([...SCAN_PUSH_ROWS, { sqlPattern: /from "push_devices"/, rows: manyDeviceRows }])
 	spyOn(expoPush, "sendPushMessageChunk").mockImplementation(async (pushMessageChunk) =>
 		pushMessageChunk.map((_, index) => ({ status: "ok" as const, id: `ticket-${index}` })),
 	)
 
-	// both chunks report once their badges load and again once they send
-	const onProgress = mock(() => {})
+	// both chunks report before their first read and again once they send
+	const sentQueryCountsAtProgress: number[] = []
+	const onProgress = mock(() => {
+		sentQueryCountsAtProgress.push(sentQueries.length)
+	})
 	expect(await sendScanPush("scan-1", { onProgress, isCancelled: () => false })).toEqual({
 		outcome: "sent",
 		acceptedCount: 150,
 	})
 	expect(onProgress).toHaveBeenCalledTimes(4)
+
+	// each chunk's first read, of the phones still bound, is sent right after a report
+	const boundPhoneReadIndexes = sentQueries.flatMap((sentQuery, index) =>
+		sentQuery.text.includes('"push_devices"."id" in') ? [index] : [],
+	)
+	expect(boundPhoneReadIndexes).toHaveLength(2)
+	expect(boundPhoneReadIndexes.every((readIndex) => sentQueryCountsAtProgress.includes(readIndex))).toBe(true)
 
 	// a cancel during the first chunk stops the second
 	let isCancelled = false

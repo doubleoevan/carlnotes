@@ -3,6 +3,7 @@
 // crash, and the fallback while Redis is down
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import * as quotas from "@carlnotes/db/quotas"
+import * as recordedSpend from "@carlnotes/db/recordedSpend"
 import { readAndResetRedisGauges } from "@carlnotes/db/redis"
 import { restoreRedisClient } from "@carlnotes/db/redisClientStub"
 import { type FakeRedisServer, startFakeRedisStore } from "@carlnotes/db/redisFakeServer"
@@ -18,12 +19,14 @@ beforeEach(() => {
 	fakeRedisServer = startFakeRedisStore().fakeRedisServer
 	recordedChatDollars = 0.4
 	spyOn(quotas, "loadUserAccess").mockResolvedValue({ isAdmin: false, plan: "free", budgetOverrideCents: BUDGET_CENTS })
-	spyOn(quotas, "monthlySpendDollars").mockImplementation(async () => ({
+	spyOn(recordedSpend, "monthlySpendDollars").mockImplementation(async () => ({
 		scanDollars: 0,
 		chatDollars: recordedChatDollars,
 		podcastEpisodeDollars: 0,
 		personalSourcesDollars: 0,
 		topicImageDollars: 0,
+		otherDollars: 0,
+		platformDollars: 0,
 	}))
 	spyOn(console, "error").mockImplementation(() => {})
 })

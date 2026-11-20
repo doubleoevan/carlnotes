@@ -26,6 +26,24 @@ function isTitleLine(line: string): boolean {
 	return /^[\p{Lu}\p{N}]/u.test(line) && /\p{L}/u.test(line)
 }
 
+// the most characters of a Source's native text that a Resource stores as its snippet. a feed that puts a whole
+// article in its description would otherwise store the article twice, as the snippet and as the fetched content
+export const MAX_SNIPPET_CHARS = 8000
+
+/**
+ * Returns a snippet cut to the most characters a Resource stores, without splitting a character in two.
+ */
+export function toLimitedSnippet(snippet: string | null | undefined): string | null | undefined {
+	if (!snippet || snippet.length <= MAX_SNIPPET_CHARS) {
+		return snippet
+	}
+
+	// a cut between the two halves of one character drops the first half too
+	const lastCharCode = snippet.charCodeAt(MAX_SNIPPET_CHARS - 1)
+	const isCharacterSplit = lastCharCode >= 0xd800 && lastCharCode <= 0xdbff
+	return snippet.slice(0, isCharacterSplit ? MAX_SNIPPET_CHARS - 1 : MAX_SNIPPET_CHARS)
+}
+
 /**
  * A readable title for a Resource that arrived without one, extracted from its snippet or its url.
  * Search providers sometimes return an empty title, and a row printing only its host reads as broken.

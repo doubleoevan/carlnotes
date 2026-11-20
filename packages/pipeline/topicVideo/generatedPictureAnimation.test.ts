@@ -81,6 +81,7 @@ test("a failed ready write recovers the approved upload without generating the a
 	const objects = new Map<string, Uint8Array>()
 	const lock = spyOn(filmLock, "withTopicVideoLock").mockImplementation((_episode, action) => action())
 	const exists = spyOn(storage, "attachmentExists").mockImplementation(async (key) => objects.has(key))
+	// a read returns an uploaded object's bytes
 	const read = spyOn(storage, "getAttachmentBytes").mockImplementation(async (key) => {
 		const bytes = objects.get(key)
 		if (!bytes) {
@@ -88,6 +89,7 @@ test("a failed ready write recovers the approved upload without generating the a
 		}
 		return bytes
 	})
+	// the first upload of the ready status fails, and every other upload is kept
 	let loseReadyWrite = true
 	const write = spyOn(storage, "uploadAttachment").mockImplementation(async (key, bytes, type) => {
 		if (
@@ -95,12 +97,14 @@ test("a failed ready write recovers the approved upload without generating the a
 			type === "application/json" &&
 			JSON.parse(new TextDecoder().decode(bytes)).status === "ready"
 		) {
+			// fail this one write
 			loseReadyWrite = false
 			throw Error("Ready write interrupted")
 		}
 		objects.set(key, bytes)
 	})
 	try {
+		// an animation that counts how many times it is generated
 		let calls = 0
 		const generate = async (): Promise<Uint8Array> => {
 			calls++
@@ -109,10 +113,12 @@ test("a failed ready write recovers the approved upload without generating the a
 		await expect(loadOrGenerateAnimation("episode", "picture", false, generate)).rejects.toThrow(
 			"Ready write interrupted",
 		)
+		// both retries return the uploaded animation, which was generated once
 		expect(await loadOrGenerateAnimation("episode", "picture", true, generate)).toEqual(Uint8Array.of(3, 8, 2))
 		expect(await loadOrGenerateAnimation("episode", "picture", true, generate)).toEqual(Uint8Array.of(3, 8, 2))
 		expect(calls).toBe(1)
 	} finally {
+		// put the storage and the lock back
 		write.mockRestore()
 		read.mockRestore()
 		exists.mockRestore()
@@ -128,6 +134,7 @@ test.skipIf(!Bun.which("ffmpeg") || !Bun.which("ffprobe"))(
 			// Supply an audio track so the test catches an accidental pass-through into the film.
 			const path = join(folder, "sample.mp4")
 			await runFfmpeg({
+				timeoutMs: 60_000,
 				ffmpegArguments: [
 					"-f",
 					"lavfi",
@@ -153,6 +160,7 @@ test.skipIf(!Bun.which("ffmpeg") || !Bun.which("ffprobe"))(
 			const bytes = await prepareSilentPictureAnimation(await Bun.file(path).bytes(), folder)
 			const tracks = new TextDecoder().decode(
 				await runFfmpeg({
+					timeoutMs: 60_000,
 					inputBytes: bytes,
 					ffmpegArguments: ["-f", "matroska", "-i", "pipe:0", "-map", "0", "-c", "copy", "-f", "streamhash", "pipe:1"],
 				}),
@@ -162,7 +170,7 @@ test.skipIf(!Bun.which("ffmpeg") || !Bun.which("ffprobe"))(
 
 			// Reject a shorter provider result instead of repeating it to manufacture the missing frames.
 			const short = join(folder, "short.mp4")
-			await runFfmpeg({ ffmpegArguments: ["-i", path, "-t", "1", "-c", "copy", short] })
+			await runFfmpeg({ timeoutMs: 60_000, ffmpegArguments: ["-i", path, "-t", "1", "-c", "copy", short] })
 			await expect(prepareSilentPictureAnimation(await Bun.file(short).bytes(), folder)).rejects.toThrow("frame count")
 		} finally {
 			await rm(folder, { recursive: true, force: true })

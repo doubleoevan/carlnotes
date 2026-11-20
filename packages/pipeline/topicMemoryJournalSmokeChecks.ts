@@ -1,35 +1,31 @@
+// the disposable database checks of the Journal's rows: eviction, protected slots, the group count, page order,
+// a stale page, and the membership gate
+
 import { expect, test } from "bun:test"
 import { TOPIC_MEMORY_ACTIVE_LIMIT, TOPIC_MEMORY_PAGE_SIZE } from "@carlnotes/contracts/topicMemories"
-import { TOPIC_MEMORY_PROMPT_LIMIT } from "@carlnotes/contracts/topicMemoryWork"
 import { db } from "@carlnotes/db"
+import { loadRankedTopicMemories } from "@carlnotes/db/rankedTopicMemories"
+import { EMBED_DIMENSIONS } from "@carlnotes/db/schema/scans"
 import { teamMembers, teams } from "@carlnotes/db/schema/teams"
 import { TOPIC_MEMORY_EMBEDDING_MODEL, topicMemories, topicMemoryFeedback } from "@carlnotes/db/schema/topicMemories"
 import { topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
 import {
 	loadMemberTopicMemoriesPage,
-	loadRankedTopicMemories,
 	loadTopicMemoriesPage,
+	toTopicMemoryGroupCount,
+	toVisibleTopicMemoryGroups,
 } from "@carlnotes/db/topicMemories"
 import { saveTopicMemoryFeedback } from "@carlnotes/db/topicMemoryFeedback"
 import { eq } from "drizzle-orm"
-import { loadTopicMemoryFindings, loadTopicMemoryNeighbors } from "./topicMemoryEvidence"
-import { loadTopicMemoryPrompt, toTopicMemoryPromptText } from "./topicMemoryPrompt"
-import {
-	insertBrew,
-	insertUser,
-	loadMemories,
-	signal,
-	vector,
-	withTopic,
-	writeTopicMemory,
-} from "./topicMemorySmokeFixtures"
-import { saveTopicMemoryUpdates } from "./topicMemoryWrites"
+import { isTopicMemoryLimitFilledBySaved } from "./topicMemoryCleanup"
+import { insertBrew, insertUser, loadMemories, vector, withTopic, writeTopicMemory } from "./topicMemorySmokeFixtures"
 
 // Register these cases inside the disposable database suite.
 export function checkTopicMemoryJournal(): void {
 	test("Journal write evicts the weakest row while retaining saved topic memories and corrections", async () => {
 		await withTopic(async ({ topicId }) => {
+			// two Scans, and as many topic memories as the active limit allows
 			const first = await insertBrew(topicId, 1)
 			const second = await insertBrew(topicId, 2)
 			const seeded = await db
@@ -53,6 +49,7 @@ export function checkTopicMemoryJournal(): void {
 			if (!saved || !corrected || !loser) {
 				throw new Error("The eviction fixture is missing rows")
 			}
+			// the owner saves one topic memory and corrects another
 			const { ownerId } = first
 			expect(
 				await saveTopicMemoryFeedback({
@@ -77,56 +74,89 @@ export function checkTopicMemoryJournal(): void {
 		})
 	})
 
-	test("the Journal keeps all 31 ratings and notes while the prompt selects its ranked subset", async () => {
+	test("saved topic memories and corrections that fill the limit leave no slot for a new one", async () => {
 		await withTopic(async ({ topicId, ownerId }) => {
-			// Give each recipe its own group so the prompt budget decides which claims Carl reads.
-			const brew = await insertBrew(topicId, 1)
-			const memories = await db
+			// the owner saves every topic memory of a full Journal except one
+			const first = await insertBrew(topicId, 1)
+			const seeded = await db
 				.insert(topicMemories)
 				.values(
-					Array.from({ length: 31 }, (_, index) => ({
+					Array.from({ length: TOPIC_MEMORY_ACTIVE_LIMIT }, (_, index) => ({
 						topicId,
 						kind: "fact" as const,
 						isAtomic: true,
-						subject: `recipe ${index}`,
-						claimType: "other" as const,
-						value: "filtered water",
-						text: `Recipe ${index} uses filtered water.`,
-						importance: 0.8,
-						findingIds: [brew.findingId],
-						firstScanId: brew.scanId,
-						lastSeenScanId: brew.scanId,
+						text: `Seed topic memory ${index}`,
+						importance: 0.9,
+						findingIds: [first.findingId],
+						firstScanId: first.scanId,
+						lastSeenScanId: first.scanId,
 						embedding: vector(1),
 						embeddingModel: TOPIC_MEMORY_EMBEDDING_MODEL,
 					})),
 				)
-				.returning({ id: topicMemories.id, text: topicMemories.text })
-
-			// The owner endorses every claim through the normal write and attaches a distinct note.
-			for (const memory of memories) {
-				expect(
-					await saveTopicMemoryFeedback({
-						topicId,
-						userId: ownerId,
-						topicMemoryId: memory.id,
-						feedback: { rating: "up", note: memory.text },
-					}),
-				).toBe("saved")
+				.returning({ id: topicMemories.id })
+			const [corrected, ...saved] = seeded
+			if (!corrected) {
+				throw new Error("The protected fixture is missing rows")
 			}
+			// a save on every topic memory but one leaves one slot unprotected
+			await db
+				.insert(topicMemoryFeedback)
+				.values(saved.map(({ id }) => ({ topicMemoryId: id, userId: ownerId, rating: "up" as const })))
+			expect(await isTopicMemoryLimitFilledBySaved(topicId)).toBe(false)
 
-			// Reload every Journal page, including ratings for claims omitted from the ranked prompt.
-			const prompt = await loadRankedTopicMemories({ topicId })
-			expect(prompt).toHaveLength(TOPIC_MEMORY_PROMPT_LIMIT)
-			const promptClaims = new Set(prompt.map(({ text }) => text))
-			const journal = []
-			for (let page = 1; page <= Math.ceil(memories.length / TOPIC_MEMORY_PAGE_SIZE); page++) {
-				const result = await loadTopicMemoriesPage({ topicId, userId: ownerId, page })
-				journal.push(...result.items)
-			}
-			expect(journal).toHaveLength(memories.length)
-			expect(new Set(journal.map(({ id }) => id))).toEqual(new Set(memories.map(({ id }) => id)))
-			expect(journal.every((item) => item.rating === "up" && item.note === item.text)).toBe(true)
-			expect(journal.filter((item) => !promptClaims.has(item.text))).toHaveLength(31 - TOPIC_MEMORY_PROMPT_LIMIT)
+			// a correction on the last one fills the limit, and a new topic memory is then retired as it is added
+			await db
+				.insert(topicMemoryFeedback)
+				.values({ topicMemoryId: corrected.id, userId: ownerId, rating: "down", note: "Only on weekdays." })
+			expect(await isTopicMemoryLimitFilledBySaved(topicId)).toBe(true)
+			// the new topic memory is stored as outdated
+			await writeTopicMemory(await insertBrew(topicId, 2), "A new claim arrives.", vector(0))
+			const outdated = (await loadMemories(topicId)).filter(({ status }) => status === "outdated")
+			expect(outdated).toMatchObject([{ text: "A new claim arrives." }])
+		})
+	})
+
+	test("the Journal count groups only the rows that share a key and counts the rest in SQL", async () => {
+		await withTopic(async ({ topicId, ownerId }) => {
+			// two statements of one fact with near vectors, and two facts that stand alone
+			const brew = await insertBrew(topicId, 1)
+			const toRow = (subject: string, text: string, cosine: number): typeof topicMemories.$inferInsert => ({
+				topicId,
+				kind: "fact" as const,
+				isAtomic: true,
+				subject,
+				claimType: "other" as const,
+				value: "roasts beans",
+				text,
+				importance: 0.8,
+				findingIds: [brew.findingId],
+				firstScanId: brew.scanId,
+				lastSeenScanId: brew.scanId,
+				embedding: vector(cosine),
+				embeddingModel: TOPIC_MEMORY_EMBEDDING_MODEL,
+			})
+			await db
+				.insert(topicMemories)
+				.values([
+					toRow("cafe", "The cafe roasts its own beans.", 1),
+					toRow("cafe", "The cafe roasts beans in house.", 0.95),
+					toRow("bakery", "The bakery roasts beans too.", 1),
+					toRow("market", "The market roasts beans on Sundays.", 1),
+				])
+
+			// the count's read returns the two rows that can group and a count of the two that cannot
+			const [counted] = await db
+				.select({ groups: toVisibleTopicMemoryGroups({ topicId, userId: ownerId, visibility: "private" }) })
+				.from(topics)
+				.where(eq(topics.id, topicId))
+			expect(counted?.groups.ungroupedCount).toBe(2)
+			expect(counted?.groups.groupRows.map(({ subject }) => subject)).toEqual(["cafe", "cafe"])
+			expect(counted?.groups.groupRows.every(({ embedding }) => embedding?.length === EMBED_DIMENSIONS)).toBe(true)
+
+			// the count is the number of groups that the Journal's own pages show
+			expect(toTopicMemoryGroupCount(counted?.groups)).toBe(3)
+			expect((await loadTopicMemoriesPage({ topicId, userId: ownerId, page: 1 })).items).toHaveLength(3)
 		})
 	})
 
@@ -167,6 +197,7 @@ export function checkTopicMemoryJournal(): void {
 			expect(page.pageCount).toBe(lastPage)
 			expect(page.items).toHaveLength(1)
 			expect((await loadMemberTopicMemoriesPage({ topicId, userId: ownerId, page: lastPage + 1 }))?.page).toEqual(page)
+			// the one topic memory on the last page
 			const last = page.items[0]
 			if (!last) {
 				throw new Error("Expected a protected topic memory on the overflow page")
@@ -186,104 +217,6 @@ export function checkTopicMemoryJournal(): void {
 			expect(clamped.items).toHaveLength(TOPIC_MEMORY_PAGE_SIZE)
 			expect(clamped).toEqual(await loadTopicMemoriesPage({ topicId, userId: ownerId, page: lastPage - 1 }))
 			expect((await loadMemberTopicMemoriesPage({ topicId, userId: ownerId, page: lastPage }))?.page).toEqual(clamped)
-		})
-	})
-
-	test("public external facts carry distinct person identities and the saved notes enter Carl's context", async () => {
-		await withTopic(async ({ topicId, ownerId }) => {
-			// use the actual cross-Topic podcast URL shape that used to survive review
-			const ownEpisode = await insertBrew(
-				topicId,
-				1,
-				`https://reader@carlnotes.com./topics/recreated/keeping-up-with-the-chens/episodes/2026/17?journal-integration=${topicId}`,
-			)
-			expect(await loadTopicMemoryFindings(ownEpisode.scanId, topicId)).toEqual([])
-
-			// the vector is deliberately identical to exercise the DB identity guard
-			const first = await insertBrew(topicId, 2)
-			const second = await insertBrew(topicId, 3)
-			for (const [brew, identifyingDetail] of [
-				[first, "Taipei 101 marketing"],
-				[second, "Benedictine University"],
-			] as const) {
-				await saveTopicMemoryUpdates({
-					topicId,
-					scanId: brew.scanId,
-					writes: [
-						{
-							operation: "add",
-							kind: "fact",
-							text: "Wilson Chen began a marketing role.",
-							subject: "Wilson Chen",
-							claimType: "role",
-							value: "marketing",
-							factDate: "2026-09-25",
-							person: { name: "Wilson Chen", identifyingDetail },
-							findingIds: [brew.findingId],
-							importance: 0.8,
-							embedding: vector(1),
-						},
-					],
-					signal,
-				})
-			}
-			const rows = await loadMemories(topicId)
-			expect(rows).toHaveLength(2)
-
-			// keep the positive guidance and the correction private while loading prompt background
-			for (const memory of rows) {
-				const isTaipei =
-					memory.person &&
-					"identifyingDetail" in memory.person &&
-					memory.person.identifyingDetail === "Taipei 101 marketing"
-				expect(
-					await saveTopicMemoryFeedback({
-						topicId,
-						userId: ownerId,
-						topicMemoryId: memory.id,
-						feedback: isTaipei
-							? { rating: "up", note: "Keep the local coverage." }
-							: { rating: "down", note: "The university describes a different role." },
-					}),
-				).toBe("saved")
-			}
-			const prompt = toTopicMemoryPromptText(await loadRankedTopicMemories({ topicId }))
-			expect(prompt).toContain("Thumbs up note: Keep the local coverage.")
-			expect(prompt).toContain("Thumbs down note: The university describes a different role.")
-			expect(await loadRankedTopicMemories({ topicId, isPublicOnly: true })).toEqual([])
-			const neighbors = await loadTopicMemoryNeighbors(topicId, vector(1))
-			expect(neighbors.flatMap(({ feedback }) => feedback)).toEqual(
-				expect.arrayContaining([
-					{ rating: "up", note: "Keep the local coverage." },
-					{ rating: "down", note: "The university describes a different role." },
-				]),
-			)
-		})
-	})
-
-	test("both topic memory thumbs save the optional note and reopen it for the rater", async () => {
-		await withTopic(async ({ topicId, ownerId }) => {
-			const brew = await insertBrew(topicId, 1)
-			await writeTopicMemory(brew, "Check the brew temperature.", vector(1))
-			const [memory] = await loadMemories(topicId)
-			if (!memory) {
-				throw new Error("Missing topic memory fixture")
-			}
-			for (const rating of ["up", "down"] as const) {
-				const note = `Example ${rating} feedback`
-				expect(
-					await saveTopicMemoryFeedback({
-						topicId,
-						topicMemoryId: memory.id,
-						userId: ownerId,
-						feedback: { rating, note },
-					}),
-				).toBe("saved")
-				const page = await loadTopicMemoriesPage({ topicId, userId: ownerId, page: 1 })
-				expect(page.items[0]).toMatchObject({ rating, note, text: memory.text })
-				const visitorPage = await loadTopicMemoriesPage({ topicId, userId: null, page: 1 })
-				expect(visitorPage.items[0]).toMatchObject({ rating: null, note: null, text: memory.text })
-			}
 		})
 	})
 
@@ -340,56 +273,13 @@ export function checkTopicMemoryJournal(): void {
 		})
 	})
 
-	test("both prompt loaders keep Skywork AI editing and Spotify publishing as separate groups", async () => {
-		await withTopic(async ({ topicId, ownerId }) => {
-			// two distinct values share a subject and type. repeated editing evidence shares one group
-			const first = await insertBrew(topicId, 1)
-			const second = await insertBrew(topicId, 2)
-			const third = await insertBrew(topicId, 3)
-			const fourth = await insertBrew(topicId, 4)
-			const generator = { subject: "Skywork AI podcast generator", claimType: "other", factDate: "2025-10-23" } as const
-			const editing = "Skywork AI's podcast generator automates editing."
-			const editingParaphrase = "Skywork AI's podcast generator handles editing automatically."
-			const publishing = "Skywork AI's podcast generator supports direct publishing to Spotify."
-			await writeTopicMemory(first, editing, vector(1), { ...generator, value: "automated editing" })
-			await writeTopicMemory(second, publishing, vector(1), { ...generator, value: "direct spotify publishing" })
-			await writeTopicMemory(third, editingParaphrase, vector(1), { ...generator, value: "automated editing" })
-			await writeTopicMemory(fourth, "The reader bookmarked this podcast generator.", vector(1), {
-				...generator,
-				value: "bookmark",
-			})
-			const [historical] = await db
-				.select({ id: topicMemories.id })
-				.from(topicMemories)
-				.where(eq(topicMemories.lastSeenScanId, fourth.scanId))
-			if (!historical) {
-				throw new Error("The archived fixture is missing")
-			}
-			await db
-				.insert(topicMemoryFeedback)
-				.values({ topicMemoryId: historical.id, userId: ownerId, rating: "up", note: "old review" })
-			await db
-				.update(topicMemories)
-				.set({ status: "outdated", isAtomic: false })
-				.where(eq(topicMemories.id, historical.id))
-
-			// keep both features and one version of the editing claim in both prompt loaders
-			expect((await loadTopicMemoriesPage({ topicId, userId: ownerId, page: 1 })).items).toHaveLength(2)
-			const prompt = await loadTopicMemoryPrompt({ topicId })
-			expect([editing, editingParaphrase].filter((text) => prompt.includes(text))).toHaveLength(1)
-			expect(prompt).toContain(publishing)
-			const neighbors = await loadTopicMemoryNeighbors(topicId, vector(1))
-			expect(neighbors).toHaveLength(2)
-			expect(neighbors.map(({ text }) => text)).toContain(publishing)
-			expect(neighbors.some(({ id }) => id === historical.id)).toBe(false)
-		})
-	})
-
 	test("MCP page and count share the private membership gate in real Postgres", async () => {
 		await withTopic(async ({ topicId, ownerId }) => {
+			// a page read for a user, or for a visitor
 			const runPage = (userId: string | null, page = 1): ReturnType<typeof loadMemberTopicMemoriesPage> =>
 				loadMemberTopicMemoriesPage({ topicId, userId, page })
 			expect((await runPage(ownerId))?.page).toEqual({ items: [], pageCount: 0 })
+			// one topic memory, which a visitor cannot read and the owner can
 			const brew = await insertBrew(topicId, 1)
 			await writeTopicMemory(brew, "One private topic memory.", vector(1))
 			expect(await runPage(null)).toBeNull()
@@ -408,9 +298,11 @@ export function checkTopicMemoryJournal(): void {
 					pageCount: 1,
 					items: [{ text: "One private topic memory." }],
 				})
+				// a member who is no longer active reads nothing
 				await db.update(teamMembers).set({ isActive: false }).where(eq(teamMembers.userId, memberId))
 				expect(await runPage(memberId)).toBeNull()
 			} finally {
+				// remove the team and the member
 				await db.delete(teams).where(eq(teams.id, teamId))
 				await db.delete(users).where(eq(users.id, memberId))
 			}

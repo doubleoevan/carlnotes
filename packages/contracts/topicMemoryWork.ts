@@ -10,12 +10,28 @@ export type TopicMemoryBackfillSummary = { updated: number; skipped: number; pau
 export const TOPIC_MEMORY_ACTIVITY_TIMEOUT_MS = 5 * 60 * 1000
 export const TOPIC_MEMORY_ATTEMPT_DEADLINE_MS = 4 * 60 * 1000
 
+// no model call waits to try again in the attempt's last half minute, which a call started then needs to finish
+export const TOPIC_MEMORY_RETRY_MARGIN_MS = 30 * 1000
+
+// how many attempts one Scan's update gets before its topic memories are left for a later Scan
+export const TOPIC_MEMORY_UPDATE_ATTEMPTS = 3
+
 export const TOPIC_MEMORY_FINDING_GROUP_SIMILARITY = 0.92
 export const TOPIC_MEMORY_GROUP_SIMILARITY = 0.8
 export const TOPIC_MEMORY_GROUP_CANDIDATE_LIMIT = 100
 export const TOPIC_MEMORY_RECENCY_DECAY = 0.9
 export const TOPIC_MEMORY_NEIGHBOR_LIMIT = 5
 export const TOPIC_MEMORY_PROMPT_LIMIT = 20
+
+// how many of the Findings that support a topic memory its row keeps, the newest last
+export const TOPIC_MEMORY_FINDING_LIMIT = 30
+
+/**
+ * Returns a topic memory's Finding ids with the added ones after them, each once, cut to the newest it keeps.
+ */
+export function toNewestTopicMemoryFindingIds(findingIds: string[], addedFindingIds: string[]): string[] {
+	return [...new Set([...findingIds, ...addedFindingIds])].slice(-TOPIC_MEMORY_FINDING_LIMIT)
+}
 
 /** Mutable exact keys require a date and a claim type with a specific slot. */
 export function hasExactTopicMemoryKey(factDate: string | null, claimType: TopicMemoryClaimType | null): boolean {
@@ -36,14 +52,10 @@ type TopicMemoryCombineKey = { subject: string | null; claimType: TopicMemoryCla
 
 /** Requires the same subject and type and a shared complete value before asking the model. */
 export function canModelCombineTopicMemories(first: TopicMemoryCombineKey, second: TopicMemoryCombineKey): boolean {
-	if (
-		!first.subject ||
-		first.subject !== second.subject ||
-		!first.claimType ||
-		first.claimType !== second.claimType ||
-		!first.value ||
-		!second.value
-	) {
+	// both claims need a subject, a type, and a value, and the first two must match
+	const hasSameSubject = Boolean(first.subject) && first.subject === second.subject
+	const hasSameClaimType = Boolean(first.claimType) && first.claimType === second.claimType
+	if (!hasSameSubject || !hasSameClaimType || !first.value || !second.value) {
 		return false
 	}
 

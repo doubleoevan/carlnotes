@@ -38,6 +38,7 @@ test.skipIf(isFfmpegMissing)("only the steam above each mug moves in the host lo
 
 	// Compare decoded pixels across the loop, independently for the background and each plume.
 	const bytes = await runFfmpeg({
+		timeoutMs: 60_000,
 		ffmpegArguments: [
 			"-i",
 			clip,
@@ -54,14 +55,17 @@ test.skipIf(isFfmpegMissing)("only the steam above each mug moves in the host lo
 			"pipe:1",
 		],
 	})
+	// each decoded frame's hash, with its stream's number first
 	const frameHashes = new TextDecoder()
 		.decode(bytes)
 		.split("\n")
 		.filter((line) => /^\d+,/u.test(line))
+	// the frame hashes of one stream
 	const hashesFor = (stream: number): string[] =>
 		frameHashes
 			.filter((line) => line.startsWith(`${stream},`))
 			.map((line) => line.slice(line.lastIndexOf(",") + 1).trim())
+	// the scene without the steam is one picture across 144 frames, and each plume changes
 	expect(hashesFor(0)).toHaveLength(144)
 	expect(new Set(hashesFor(0)).size).toBe(1)
 	expect(new Set(hashesFor(1)).size).toBeGreaterThan(1)
@@ -98,6 +102,7 @@ beforeAll(async () => {
 		return
 	}
 	await runFfmpeg({
+		timeoutMs: 60_000,
 		ffmpegArguments: [
 			...["-y", "-f", "lavfi", "-i", `sine=f=440:d=${DURATION_SECONDS}`],
 			...["-af", "volume=enable='between(mod(t,3),2.8,3)':volume=0", "-ac", "1", "-ar", "44100"],

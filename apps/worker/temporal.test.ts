@@ -1,7 +1,9 @@
-// what the worker starts for films at each film setting: the Worker on the film queue, and the film backfill
+// what the worker starts for films at each film setting: the Worker on the film queue, and the film backfill, and how
+// many activities the Workers on some queues have in progress
 import { afterEach, beforeEach, expect, test } from "bun:test"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
-import { readTopicVideoStartup } from "./temporal"
+import { toInFlightActivityCount } from "./temporal"
+import { readTopicVideoStartup } from "./temporalWorkers"
 import { readWorkerQueueGroup } from "./workerQueueGroup"
 
 // the film settings the tests change
@@ -49,9 +51,21 @@ test("the main queue group leaves film polling to the isolated films queue group
 	expect(readTopicVideoStartup()).toEqual({ isTopicVideoQueuePolled: false, isTopicVideoBackfillStarted: false })
 	Bun.env.WORKER_QUEUE_GROUP = "films"
 	expect(readTopicVideoStartup().isTopicVideoQueuePolled).toBe(true)
+
+	// the queue group setting wins over the older role setting, which still names a group by itself
 	Bun.env.WORKER_ROLE = "main"
 	expect(readWorkerQueueGroup()).toBe("films")
 	delete Bun.env.WORKER_QUEUE_GROUP
 	expect(readWorkerQueueGroup()).toBe("main")
 	expect(() => readWorkerQueueGroup("film")).toThrow()
+})
+
+// a render that waits for a film slot has already been taken by its Worker, so it counts as demand
+test("the activities in progress are summed over the Workers on the asked queues alone", () => {
+	const toWorker = (taskQueue: string, numInFlightActivities: number): never =>
+		({ options: { taskQueue }, getStatus: () => ({ numInFlightActivities }) }) as never
+	const workers = [toWorker("episode-videos", 2), toWorker("episode-video-backfill", 1), toWorker("topic-scans", 5)]
+	expect(toInFlightActivityCount(workers, ["episode-videos", "episode-video-backfill"])).toBe(3)
+	expect(toInFlightActivityCount(workers, ["topic-scans"])).toBe(5)
+	expect(toInFlightActivityCount(workers, ["episode-video-rebuilds"])).toBe(0)
 })

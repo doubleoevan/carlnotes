@@ -11,10 +11,10 @@ import { topicImageModel, topicImageRegenerateModel } from "@carlnotes/models/to
 import { reportError } from "@carlnotes/server/monitoring"
 import { and, eq, ne } from "drizzle-orm"
 import { removePodcastEpisodeImageUpload } from "../podcast/podcastEpisodeImageRenders"
-import { startTopicVideoRebuild } from "../temporalClient"
 import { removeTopicPostImageUpload } from "../topicPosts/topicPostImageRenders"
 import { removeTopicVideoImageUpload } from "../topicVideo/topicVideoImage"
 import { saveImageTopicVideosRendering } from "../topicVideo/topicVideoRows"
+import { startTopicVideoRebuild } from "../topicVideo/topicVideoWorkflowClient"
 import type { UncheckedImageHashSubject } from "../uncheckedImages"
 import { removeTopicImageUpload, startTopicImageRender } from "./topicImageRenders"
 

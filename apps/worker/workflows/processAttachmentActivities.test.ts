@@ -15,7 +15,7 @@ import {
 	toWorkbookFixtureBytes,
 } from "@carlnotes/pipeline/attachTestFixtures"
 import { ApplicationFailure } from "@temporalio/activity"
-import { extractAttachmentText } from "./processAttachmentActivities"
+import { extractAttachmentText, failAttachment } from "./processAttachmentActivities"
 
 // a stored file to stub: its attachment's id, its Topic, its name and type, and its bytes
 type StoredFile = { attachmentId: string; topicId: string; filename: string; contentType: string; bytes: Uint8Array }
@@ -191,4 +191,20 @@ test("a file that waited for a child process until its deadline is tried again",
 	const waitFailure = await extractAttachmentText("attachment-1").catch((error) => error)
 	expect(waitFailure).toBeInstanceOf(attachExtraction.AttachmentExtractionLimitError)
 	expect(waitFailure).not.toBeInstanceOf(ApplicationFailure)
+})
+
+// the workflow fails its own attachment whatever its status, and the reaper must leave one that finished meanwhile
+test("an attachment failed only while pending keeps its file if it finished, and a failed one loses its file", async () => {
+	// a row that finished meanwhile matches no update, so its file stays
+	const deleteStoredObjectSpy = spyOn(store, "deleteStoredObject").mockResolvedValue(true)
+	const sentQueries = stubConnectionPool(() => [])
+	await failAttachment("attachment-1", "the work stopped", true)
+	expect(sentQueries.find(({ text }) => text.startsWith('update "attachments"'))?.values).toContain("pending")
+	expect(deleteStoredObjectSpy).not.toHaveBeenCalled()
+
+	// a pending row is failed, and its stored file is scheduled for deletion and deleted
+	const failedQueries = stubConnectionPool(({ text }) => (text.startsWith('update "attachments"') ? [["a/key"]] : []))
+	await failAttachment("attachment-1", "the work stopped", true)
+	expect(failedQueries.some(({ text }) => text.includes('"pending_object_deletions"'))).toBe(true)
+	expect(deleteStoredObjectSpy).toHaveBeenCalledWith("a/key")
 })

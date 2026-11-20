@@ -11,8 +11,10 @@ import {
 	replacePodcastEpisodeImage,
 } from "@carlnotes/pipeline/podcast/podcastEpisodeImageRenders"
 import {
+	deleteDrawnImage,
 	renderTopicImageOriginal,
 	TopicImageRenderFailure,
+	toDrawnImageKey,
 } from "@carlnotes/pipeline/topicImages/renderTopicImageOriginal"
 import {
 	storePodcastEpisodeImageFiles,
@@ -126,21 +128,25 @@ export async function renderAndStoreTopicImage({
 	}
 	// the original from the scene, wide and always in the film house style for a film, and at 3:2 in the house style
 	// if asked for any other image, on the render's key. a spent budget and a rejection fail for good, and a retryable
-	// failure throws for another attempt
+	// failure throws for another attempt. the drawn bytes are kept under the render's key, so an attempt after a failed
+	// store draws nothing
 	const model = render.model ?? ""
 	const isTopicVideoImage = Boolean(render.topicVideoId)
 	const format = isTopicVideoImage ? TOPIC_VIDEO_IMAGE_FORMAT : undefined
+	const drawnImageKey = toDrawnImageKey("topic-image-render", renderId)
 	const original = await renderTopicImageOriginal({
 		scene,
 		isHouseStyle: isTopicVideoImage || !imagePrompt,
 		model,
 		format,
 		litellmApiKey: await loadRenderLitellmApiKey(render.userId),
+		drawnImageKey,
 	}).catch((error: unknown) => {
 		throw toRenderActivityFailure(error)
 	})
 
-	// store the original and make it the current image of whatever the render drew, then record the event
+	// store the original and make it the current image of whatever the render drew, then let the kept bytes go and
+	// record the event
 	await storeRenderedImage({
 		render,
 		original,
@@ -149,6 +155,7 @@ export async function renderAndStoreTopicImage({
 		imagePrompt,
 		costDollars: topicImageCostDollars(model, format?.drawSize),
 	})
+	await deleteDrawnImage(drawnImageKey)
 	trackRenderEvent(render)
 }
 

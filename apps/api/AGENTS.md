@@ -36,18 +36,19 @@ owns those accounts and `personalSourcesPersistenceSmoke.ts` checks real confirm
 tombstones, retained ciphertext, Source cascades, and the publication race. `mcp/personalSourcesTools.ts` registers
 `send_to_topic` and read-only `suggest_topics` on both MCP routes through the pipeline's shared send service.
 
-Hono server, the `@carlnotes/api` app. Entry `apps/api/index.ts` mounts the route trees; `apps/api/api.ts` aggregates
-the `/api` routes and bounds every body at a megabyte through `toBodyLimit` in `bodyLimit.ts`, except on the chat,
-transcription, upload, and note body save routes, which set their own limits. A chat post's turn is authorized from
-the session and the url in `chat/privateChat.ts` before its body limit, so a rejected turn's body is never read.
-`toBodyAdmission` in `bodyLimit.ts` makes a chat body past `LARGE_CHAT_BODY_BYTES` (3.25 MB) wait its turn, oldest
-first and one at a time for each user, so the large chat bodies in progress stay within
+Hono server, the `@carlnotes/api` app. Entry `apps/api/index.ts` mounts the route trees. Two services start it: `app` as
+the process `api`, and `web` as the process `web`, which `processName.ts` reads from `PROCESS_NAME` (`bun run web` sets
+it, and any other value stops the boot). Both serve every path, and the name tells their gauge lines and warnings apart.
+`apps/api/api.ts` aggregates the `/api` routes and bounds every body at a megabyte through `toBodyLimit` in
+`bodyLimit.ts`, except on the chat, transcription, upload, and note body save routes, which set their own limits. A chat
+post's turn is authorized from the session and the url in `chat/privateChat.ts` before its body limit, so a rejected
+turn's body is never read. `toBodyAdmission` in `bodyLimit.ts` makes a chat body past `LARGE_CHAT_BODY_BYTES` (3.25 MB)
+wait its turn, oldest first and one at a time for each user, so the large chat bodies in progress stay within
 `CHAT_BODY_BYTES_IN_PROGRESS_LIMIT` (104 MB), each until its response ends. A body whose turn does not come in 20
-seconds gets its route's busy response, the private chat's 503 with `Retry-After` or the chat room's 400, and a
-request dropped while it waits is never read. `chat/chatTurnAuthorizationTestFixtures.ts` holds the stubbed rows the chat turn tests share. No app
-imports it as a value:
-`@carlnotes/client` and `apps/web` read `AppType` and the `auth` type from it as types only, and `evals/` and `scripts/`
-at the root import it by name.
+seconds gets its route's busy response, the private chat's 503 with `Retry-After` or the chat room's 400, and a request
+dropped while it waits is never read. `chat/chatTurnAuthorizationTestFixtures.ts` holds the stubbed rows the chat turn
+tests share. No app imports it as a value: `@carlnotes/client` and `apps/web` read `AppType` and the `auth` type from it
+as types only, and `evals/` and `scripts/` at the root import it by name.
 
 `authorization.ts`, `topic/permissions.ts`, and `topic/findingPermissions.ts` retain compatibility exports for the
 shared gate in `@carlnotes/db`. `chat/encryption.ts` keeps chat's plaintext compatibility and SQL length estimate;
@@ -60,22 +61,27 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   duration and the counts. In dev it also logs one line per request with the same numbers and the cache keys that
   missed. `queryBudgets.test.ts` holds the cached routes' query budgets, each a route requested twice against the
   connection pool and Redis stubs. `index.ts` also serves `/api/health`, which the platform polls and which sends no
-  query, `/api/health/deep`, which runs one query and returns the connection pool's counts for a monitor, and
+  query and names the process that answered, so a request on the public domain shows which service a path route reached,
+  `/api/health/deep`, which runs one query and returns the connection pool's counts for a monitor, and
   `/api/health/ready`, the readiness probe, which renders the privacy page through `uiServer.ts` with no cookie and
   responds 503 with a reason if it cannot, reusing one render for five seconds, tested in `readiness.test.ts`. None of
-  them looks up a session. After them, `appVersionGate.ts` runs on every `/api` path ahead of the session lookup: a
-  request whose platform header is `ios` or `android` and whose app version is below that platform's minimum is
-  rejected with 426 and the minimum and the store url, and every other request passes. The minimums live in
-  `mobileMinimumVersions.ts`: one row per platform in `mobile_minimum_versions`, read through a one-minute Redis
-  cache, none on any failure, and written from the admin console. `contractFixtures.ts` holds, for each
-  fixtured route contract key, the route, the user, the request, and the stubbed rows that
+  them looks up a session. `drain.ts` is the drain the entry runs on SIGTERM, as `app` and as `web`: the readiness probe
+  answers 503 `draining`, the replica keeps answering for `API_DRAIN_ROUTING_GRACE_MS` (5 seconds in production and none
+  elsewhere), each open chat room stream ends through `endStreamOnDrain` so its client reconnects, the server stops
+  listening and waits for the requests in flight up to `API_DRAIN_LIMIT_MS` (120 seconds) before it closes them, and
+  telemetry, analytics, and monitoring flush before the pool closes, for up to 10 seconds. `drain.test.ts` starts
+  `drainTestServer.ts` as a process of its own, because a drain is once for a process. After them, `appVersionGate.ts`
+  runs on every `/api` path ahead of the session lookup: a request whose platform header is `ios` or `android` and whose
+  app version is below that platform's minimum is rejected with 426 and the minimum and the store url, and every other
+  request passes. The minimums live in `mobileMinimumVersions.ts`: one row per platform in `mobile_minimum_versions`,
+  read through a one-minute Redis cache, none on any failure, and written from the admin console. `contractFixtures.ts`
+  holds, for each fixtured route contract key, the route, the user, the request, and the stubbed rows that
   `contractCompatibility.test.ts` sends through the registered routes in-process; only tests import it. `index.ts`
-  responds with a json 404 to a path with a NUL byte, percent-encoded or decoded, ahead of every route. Its tests
-  split between `index.test.ts`, for the routing, the health checks, the api's own validation, and the security
-  headers, `pageRender.test.ts`, for the rendered pages, and `pageGuards.test.ts`, for the click id redirect and the
-  render limit, over the fake bundle and requests in `indexTestFixtures.ts`.
-  `index.ts` serves the docs site's static
-  build from `apps/docs/dist` at `/docs`, stripping the prefix to find a file, and the web app's browser bundle from
+  responds with a json 404 to a path with a NUL byte, percent-encoded or decoded, ahead of every route. Its tests split
+  between `index.test.ts`, for the routing, the health checks, the api's own validation, and the security headers,
+  `pageRender.test.ts`, for the rendered pages, and `pageGuards.test.ts`, for the click id redirect and the render
+  limit, over the fake bundle and requests in `indexTestFixtures.ts`. `index.ts` serves the docs site's static build
+  from `apps/docs/dist` at `/docs`, stripping the prefix to find a file, and the web app's browser bundle from
   `apps/web/dist/client`. `nightshift.ts` serves the Nightshift component browser's static Storybook from
   `apps/web/dist/nightshift` at `/nightshift/`. It sets its own frame policy, opener isolation, and `noindex`, gives
   every fixed-name file an `ETag`, and caches only its hashed assets immutably, tested in `nightshift.test.ts`.
@@ -84,20 +90,22 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   that cannot import the build reports the error in the `startup` stage and exits before it listens, tested by booting
   the entry in `uiServer.test.ts`. A page render sets the `DEGRADED_RENDER_HEADER` from `@carlnotes/contracts/seo` if a
   required read fails, and that page returns a 503 with a `Retry-After`, is reported, and is never cached at the edge.
-  Any other page rendered with a 5xx status is reported in the `page-render` stage too.
-  Ahead of a page render, `index.ts` limits a visitor's origin requests by address through `rateLimit.ts` and redirects
-  a page url with a click id (`fbclid`, `gclid`, and the like) permanently to the url without it, which is the one the
-  edge caches. `uiServer.ts` sheds a visitor's render past `RENDER_CONCURRENCY` with a 503 and a two-second retry while
-  the edge serves its stale copy; a signed-in render is never shed. Every response includes the content security policy,
-  `Referrer-Policy`, and `X-Content-Type-Options`, and an unhashed public file from the ui bundle is cached an hour in
-  the browser and a day at the edge under the `rendered` tag. `contentSecurityPolicy.ts` holds
-  `BASELINE_POLICY_DIRECTIVES`, the directives every policy ends with: `object-src 'none'`, and `base-uri` and
-  `form-action` on this origin. Its `toContentSecurityPolicy` builds a policy from a route's own directives and the
-  baseline, for the default policy in `index.ts`, `nightshift.ts`, and `favicons.ts`. It also holds
-  `FRAME_SOURCE_DIRECTIVE`, the frames a page may load: this origin, YouTube's privacy-enhanced player, and Cloudflare's
-  Turnstile challenge. The default policy and the component browser's policy both use it, so a story frames what the app
-  frames. `responseHeaders.ts` holds `NOINDEX_HEADER`, the `X-Robots-Tag: noindex` header that `documents.ts` and
-  `nightshift.ts` set.
+  Any other page rendered with a 5xx status is reported in the `page-render` stage too. Ahead of a page render,
+  `index.ts` limits a visitor's origin requests by address through `rateLimit.ts` and redirects a page url with a click
+  id (`fbclid`, `gclid`, and the like) permanently to the url without it, which is the one the edge caches.
+  `uiServer.ts` sheds a visitor's render past `RENDER_CONCURRENCY` with a 503 and a small page that asks for the same
+  address again after two seconds, while the edge serves its stale copy; a signed-in render is never shed. It counts the
+  renders a minute started and shed, which `apiGauges.ts` puts in the minute line as `renders` beside Redis and
+  `coverChainLength`, the podcast cover draws waiting in the process, and a minute with a shed render crosses the
+  `render-shed` threshold. Every response includes the content security policy, `Referrer-Policy`, and
+  `X-Content-Type-Options`, and an unhashed public file from the ui bundle is cached an hour in the browser and a day at
+  the edge under the `rendered` tag. `contentSecurityPolicy.ts` holds `BASELINE_POLICY_DIRECTIVES`, the directives every
+  policy ends with: `object-src 'none'`, and `base-uri` and `form-action` on this origin. Its `toContentSecurityPolicy`
+  builds a policy from a route's own directives and the baseline, for the default policy in `index.ts`, `nightshift.ts`,
+  and `favicons.ts`. It also holds `FRAME_SOURCE_DIRECTIVE`, the frames a page may load: this origin, YouTube's
+  privacy-enhanced player, and Cloudflare's Turnstile challenge. The default policy and the component browser's policy
+  both use it, so a story frames what the app frames. `responseHeaders.ts` holds `NOINDEX_HEADER`, the `X-Robots-Tag:
+  noindex` header that `documents.ts` and `nightshift.ts` set.
 - Domain folders: `topic/`, `team/`, `chat/`, `invite/`, `note/`, `podcast/`, `social/`, `share/`, `tool/`, `mcp/`,
   `home/`, `dashboard/`. Root
   files
@@ -389,10 +397,8 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   in Redis by its lowercased words and billed to the user's key or the public key, a visitor's embeddings are rate
   limited per address, and a search that may not embed returns its text matches), and `playTokens.ts` (the play token
   an MCP view's audio url includes, which the audio route reads in place of a session).
-  `share/podcastFeed.ts` builds the feed. `share/podcastCover.ts` draws a show cover over its topic's image or
-  `apps/docs/design/podcast/cover-base.png` and renders, encodes, and stores every cover, `share/podcastCoverBands.ts`
-  draws the show cover's two text bands and picks each band's tone from the picture under it,
-  `share/podcastEpisodeCover.ts` draws a podcast episode's own cover and loads the image under it, and
+  `share/podcastFeed.ts` builds the feed. The cover route serves a stored cover, and draws one that is not stored yet
+  through `toCachedPodcastCoverJpeg` in `@carlnotes/pipeline/podcastCover`, where the cover modules live, and
   `share/podcastEpisodeImage.ts` draws a podcast episode page's link-preview card: the podcast episode's image, or its
   topic's, across the top with the title and details under it, the way `share/topicImage.ts` draws a topic's.
   Every card and cover draws through `@carlnotes/pipeline/cardElementPng`, which holds the fonts.
@@ -732,4 +738,5 @@ text and pagination metadata.
 `rate_finding` saves the optional note in the same write as the rating. The view-only
 `read_finding_rating_note` tool restores the connected rater's saved note through private view metadata.
 
-Run `bun test apps/api/topic/findingRating.smoke.ts` against disposable test Postgres to check private Finding rating notes.
+Run `bun test ./apps/api/topic/findingRating.smoke.ts` against disposable test Postgres to check private Finding rating
+notes.

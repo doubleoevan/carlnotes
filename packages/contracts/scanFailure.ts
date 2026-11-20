@@ -79,6 +79,16 @@ export function toWorkflowFailureReason(error: unknown): string {
 	return messages.at(-1) ?? String(error)
 }
 
+/**
+ * Returns whether a workflow's start failed because a workflow with its id is already running.
+ */
+export function isWorkflowAlreadyStarted(error: unknown): boolean {
+	return error instanceof Error && error.name === "WorkflowExecutionAlreadyStartedError"
+}
+
+// the type of the application failure that an activity attempt throws if its worker's shutdown cut it short
+export const WORKER_SHUTDOWN_FAILURE_TYPE = "WorkerShutdown"
+
 // the type and details of the application failure that an activity threw
 export type ActivityApplicationFailure = { type: string; details: unknown[] }
 

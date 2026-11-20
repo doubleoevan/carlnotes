@@ -17,15 +17,17 @@ import {
 	toAttachmentKey,
 	uploadAttachment,
 } from "@carlnotes/db/store"
+import { FIRECRAWL_COST_PER_FETCH } from "@carlnotes/models/budget"
 import { chatModel, cheapModel } from "@carlnotes/models/models"
 // the prompt loader fetches the registry version first, falling back to the bundled markdown
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "@carlnotes/models/prompts/fetch"
 import { writePrompt } from "@carlnotes/models/prompts/write"
+import { type PaidCallResult, runUserPaidCall } from "@carlnotes/models/userPaidCalls"
 import { isHostRejection, toFetchableUrl } from "@carlnotes/server/publicFetch"
 import { generateText } from "ai"
 import { and, desc, eq, isNotNull } from "drizzle-orm"
-import { AttachmentValidationError, isSupportedAttachmentType } from "./attachContentType"
-import { fetchContent } from "./scrape"
+import { AttachmentBudgetSpentError, AttachmentValidationError, isSupportedAttachmentType } from "./attachContentType"
+import { type FetchResult, fetchContent } from "./scrape"
 import { startAttachmentWorkflow } from "./temporalClient"
 
 // a persisted attachment row, and the upload ingestAttachment input
@@ -53,6 +55,9 @@ export type TopicScanContext = {
 // a fetched page is stored as markdown
 const PAGE_EXTENSION = ".md"
 const MAX_PAGE_NAME_CHARS = MAX_KEY_FILENAME_CHARS - PAGE_EXTENSION.length
+
+// how long the page fetch may wait out a rate limit, because the user is waiting on the request
+const PAGE_FETCH_WAIT_MS = 20_000
 
 // the synchronous half of ingestion
 export async function ingestAttachment(attachmentUpload: AttachmentUpload): Promise<Attachment> {
@@ -118,11 +123,15 @@ export async function ingestAttachment(attachmentUpload: AttachmentUpload): Prom
 	}
 }
 
+// the Topic that the page is attached to, the page's url, and the user who adds it, whom the fetch bills
+type UrlAttachmentAdd = { topicId: string; url: string; userId: string }
+
 /**
  * Ingest a URL as an attachment. The page is fetched here, then handed to the same synchronous half a file upload uses,
- * so storage, persistence, and orphan cleanup are the shared path. A url that cannot be fetched is rejected instead of stored
+ * so storage, persistence, and orphan cleanup are the shared path. A url that cannot be fetched is rejected instead of
+ * stored. The fetch is the adding user's spend: a spent monthly budget throws an error before any page is fetched.
  */
-export async function ingestUrlAttachment(topicId: string, url: string): Promise<Attachment> {
+export async function ingestUrlAttachment({ topicId, url, userId }: UrlAttachmentAdd): Promise<Attachment> {
 	// reject a malformed, non-http, or internal url before any request goes out. each rejection names its own reason
 	let fetchableUrl: URL
 	try {
@@ -133,12 +142,35 @@ export async function ingestUrlAttachment(topicId: string, url: string): Promise
 
 	// an attached url names a page to read, so it takes the scrape instead of the caption path a video would.
 	// a page its host refuses is the user's to fix, and any other fetch failure is an infrastructure fault that is rethrown
-	const fetchResult = await fetchContent(fetchableUrl.toString(), "read").catch((error: unknown) => {
-		if (isHostRejection(error)) {
-			throw new AttachmentValidationError(`this page could not be read: ${url}`)
-		}
-		throw error
-	})
+	const fetchPage = async (): Promise<PaidCallResult<FetchResult>> => {
+		const pageFetchResult = await fetchContent(
+			fetchableUrl.toString(),
+			"read",
+			null,
+			Date.now() + PAGE_FETCH_WAIT_MS,
+		).catch((error: unknown) => {
+			if (isHostRejection(error)) {
+				throw new AttachmentValidationError(`this page could not be read: ${url}`)
+			}
+			throw error
+		})
+
+		// the page, and what its fetch cost
+		return { callResult: pageFetchResult, dollars: pageFetchResult.cost }
+	}
+
+	// the fetch is the adding user's spend, and a spent budget fetches nothing
+	const urlAttachmentFetch = {
+		userId,
+		kind: "urlAttachmentFetch",
+		topicId,
+		maxDollars: FIRECRAWL_COST_PER_FETCH,
+	} as const
+	const paidFetch = await runUserPaidCall(urlAttachmentFetch, fetchPage)
+	if (paidFetch.status === "budgetSpent") {
+		throw new AttachmentBudgetSpentError()
+	}
+	const fetchResult = paidFetch.callResult
 
 	// the processing workflow reads this Markdown as a document
 	return ingestAttachment({

@@ -9,8 +9,8 @@ import { restoreConnectionPool, type SentQuery, stubConnectionPool, toTableRow }
 import { uncheckedImages } from "@carlnotes/db/schema/uncheckedImages"
 import * as store from "@carlnotes/db/store"
 import { redrawUnpublishedImageFiles, unpublishTopicUncheckedImages } from "./publishedUncheckedImages"
-import * as temporalClient from "./temporalClient"
 import * as topicCovers from "./topicImages/topicCovers"
+import * as topicVideoWorkflowClient from "./topicVideo/topicVideoWorkflowClient"
 
 // when each unchecked image in these tests was uploaded
 const UPLOADED_AT = new Date("2026-11-13T10:00:00.000Z")
@@ -250,7 +250,7 @@ test("a write that fails throws its error out of the visibility change's transac
 test("the covers and the films drawn from a returned image are drawn again, each film once", async () => {
 	stubConnectionPool(({ text }) => (text.includes('from "topic_videos"') ? [["episode-1"], ["episode-2"]] : []))
 	const forgetTopicCoversSpy = spyOn(topicCovers, "forgetTopicCovers").mockResolvedValue(undefined)
-	const rebuildSpy = spyOn(temporalClient, "startTopicVideoRebuild").mockResolvedValue(undefined)
+	const rebuildSpy = spyOn(topicVideoWorkflowClient, "startTopicVideoRebuild").mockResolvedValue(undefined)
 	await redrawUnpublishedImageFiles("topic-1", [
 		{ subjectKind: "topicImage", subjectId: "topic-1" },
 		{ subjectKind: "podcastEpisodeImage", subjectId: "episode-1" },
@@ -268,7 +268,7 @@ test("the covers and the films drawn from a returned image are drawn again, each
 test("a returned film image starts its film's rebuild once, and a returned Topic Post image starts nothing", async () => {
 	const sentQueries = stubConnectionPool()
 	const forgetTopicCoversSpy = spyOn(topicCovers, "forgetTopicCovers").mockResolvedValue(undefined)
-	const rebuildSpy = spyOn(temporalClient, "startTopicVideoRebuild").mockResolvedValue(undefined)
+	const rebuildSpy = spyOn(topicVideoWorkflowClient, "startTopicVideoRebuild").mockResolvedValue(undefined)
 	await redrawUnpublishedImageFiles("topic-1", [
 		{ subjectKind: "topicPodcastEpisodeVideoImage", subjectId: "episode-1" },
 		{ subjectKind: "topicPostImage", subjectId: "post-1" },

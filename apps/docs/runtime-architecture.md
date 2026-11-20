@@ -81,11 +81,17 @@ Topic's episode page is marked noindex and shows the Topic's gate to anyone who 
 over `apps/docs/design/podcast/cover-base.png`.
 
 `PODCAST_SPEECH_MODEL` set empty turns episodes off, and `PODCAST_RECORDING_CONCURRENCY` (16 by default) limits the
-episode activities on each worker replica. A free Topic gets a 10-minute episode after every scan and keeps only the
-latest short one, while a paid plan gets 30 minutes and keeps every full episode. A scan that finishes while a Topic's
-short episode is still recording makes no episode, and its findings go into the next one. Each plan's monthly budget
-cutoffs in `packages/contracts/plans.ts` turn a paid plan's episodes short, then pause every plan's episodes, so scans
-keep running.
+episode activities on each worker replica. A scheduled scan's chapters record on a queue of their own,
+`episode-scheduled-chapters`, with `PODCAST_SCHEDULED_CHAPTER_CONCURRENCY` slots on a replica (32 by default), because
+each may wait hours for speech capacity and would otherwise hold the slots that a script or a person's own chapter
+needs. The join of an episode's audio runs on `episode-encodes`, with `PODCAST_ENCODE_CONCURRENCY` slots on a replica (2
+by default, one for each core), so episodes that finish recording together wait for a core instead of sharing one. A
+script call or a standard chapter that fails is tried again, 30 seconds later and then twice as long each time, for up
+to an hour, so a model's rate limit delays an episode and does not fail it. A free Topic gets a 10-minute episode after
+every scan and keeps only the latest short one, while a paid plan gets 30 minutes and keeps every full episode. A scan
+that finishes while a Topic's short episode is still recording makes no episode, and its findings go into the next one.
+Each plan's monthly budget cutoffs in `packages/contracts/plans.ts` turn a paid plan's episodes short, then pause every
+plan's episodes, so scans keep running.
 
 ## Chat
 

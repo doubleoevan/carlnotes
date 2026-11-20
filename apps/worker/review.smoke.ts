@@ -1,47 +1,29 @@
-// a live smoke test for one real Scan on a busy feed, reporting time taken, limit overshoot, and whether it kept its
-// best resources. run it with: bun run smoke:review. each run resets its feed, so two REVIEW_CONCURRENCY values compare fairly
+// a live smoke test for real Scans on a busy feed: the first reports time taken, limit overshoot, and whether it kept
+// its best resources, the second scores none of the pages that the Topic's limit removed, the third scores exactly the
+// removed pages that changed, and the fourth reviews everything again after an edited prompt.
+// run it with: bun run smoke:review. each run resets its feed, so two REVIEW_CONCURRENCY values compare fairly
 
 import { db } from "@carlnotes/db"
 import { findings, resources, scans } from "@carlnotes/db/schema/scans"
 import { sources, topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
+import { MAX_SCORED_RESOURCES_PER_SCAN } from "@carlnotes/models/budget"
 import { deleteUserLiteLLMKey } from "@carlnotes/models/litellm"
 import { embedVector } from "@carlnotes/models/models"
 import { shutdownTelemetry, startTelemetry } from "@carlnotes/models/telemetry"
-import { loadResourcesToReview } from "@carlnotes/pipeline/review/filter"
+import { REVIEW_CONCURRENCY } from "@carlnotes/pipeline/review/score"
 import { loadScan } from "@carlnotes/pipeline/scan"
 import { cosineSimilarity } from "ai"
 import { and, eq, inArray, isNotNull, like } from "drizzle-orm"
-import { finishScan, type IngestStageResult, ingestForScan, reviewForScan } from "./workflows/runTopicScanActivities"
+import { checkFilteredFindings, checkReviewAgain, ingestLiveFeed, TOPIC_CONTEXT } from "./reviewAgainChecks"
+import { finishScan, reviewForScan } from "./workflows/runTopicScanActivities"
 
-// a real feed that reliably carries more entries than the limit admits, plus a matching topic context
+// a real feed that reliably includes more entries than the limit admits
 const FEED_URL = "https://simonwillison.net/atom/everything/"
 const FEED_HOST_PATTERN = "%simonwillison.net%"
-const TOPIC_CONTEXT =
-	"Large language models and LLM tooling: building applications with models like Claude and GPT, prompt engineering, embeddings, retrieval, agents, and AI engineering practices."
 
 // the same instruction wrapper the relevance gate embeds its query side with
 const EMBED_QUERY_INSTRUCTION = "Given a topic's interest description, retrieve web resources relevant to it"
-
-// the two knobs under test, read the same way review reads them, so the report names the run's real settings
-const REVIEW_CONCURRENCY = Number(Bun.env.REVIEW_CONCURRENCY ?? "4")
-const MAX_SCORED_RESOURCES_PER_SCAN = Number(Bun.env.MAX_SCORED_RESOURCES_PER_SCAN ?? "30")
-
-// how many times the smoke ingests the live feed before it counts a timed-out feed as a failed Scan
-const INGEST_ATTEMPTS = 3
-
-/**
- * Ingests the smoke topic's feed, trying again while the feed fails. Ingest is safe to run again, and a live feed can
- * time out on one read.
- */
-async function ingestLiveFeed(scanId: string, topicId: string): Promise<IngestStageResult> {
-	let ingestResult = await ingestForScan(scanId, topicId)
-	for (let attempt = 1; attempt < INGEST_ATTEMPTS && ingestResult.status === "failed"; attempt++) {
-		console.log(`the feed failed on attempt ${attempt}, ingesting again`)
-		ingestResult = await ingestForScan(scanId, topicId)
-	}
-	return ingestResult
-}
 
 // clear every cached field on the topic feed's Resources, so the next run redoes all of its work
 async function resetFeedResources(): Promise<number> {
@@ -249,122 +231,6 @@ async function check(topicId: string, ownerId: string): Promise<boolean> {
 }
 
 // reset the feed, seed it, run the checks, then always delete the fake owner
-/**
- * Scans the seeded topic again and reports what that pass reviewed.
- */
-async function scanAgain(topicId: string, ownerId: string): Promise<{ scoredCount: number; cost: number }> {
-	// the row is marked dispatched, so a schedule sweep sharing the database never starts it a second time
-	const [smokeScan] = await db.insert(scans).values({ topicId, ownerId, dispatchedAt: new Date() }).returning()
-	if (!smokeScan) {
-		throw new Error("could not open the second scan")
-	}
-	// drive the stages in order, then read back what the closing stage wrote
-	const ingestResult = await ingestLiveFeed(smokeScan.id, topicId)
-	const reviewResult = await reviewForScan(smokeScan.id, topicId, ownerId, ingestResult, ingestResult.budget)
-	await finishScan(smokeScan.id, topicId, ownerId, ingestResult, reviewResult)
-	const topicScan = await loadScan(smokeScan.id)
-	return {
-		scoredCount: reviewResult.review.scoredResourceIds.length,
-		cost: Number(topicScan?.cost ?? 0),
-	}
-}
-
-/**
- * Checks that a scan reviews again a finding only when the question it was reviewed against changed.
- */
-async function checkReviewAgain(topicId: string, ownerId: string): Promise<boolean> {
-	console.log("\n=== 2. reviewing again ===")
-
-	// read the findings the first scan wrote, and rate one to prove a re-score leaves it alone
-	const firstFindings = await db
-		.select({ id: findings.id, scanId: findings.scanId, reviewedContextHash: findings.reviewedContextHash })
-		.from(findings)
-		.where(eq(findings.topicId, topicId))
-	// the first finding takes a rating and views, which the re-score must leave alone
-	const ratedFinding = firstFindings[0]
-	if (!ratedFinding) {
-		console.log("FAIL  the first scan wrote no finding to review again")
-		return false
-	}
-	await db.update(findings).set({ rating: "up", viewCount: 3 }).where(eq(findings.id, ratedFinding.id))
-	console.log(`findings after scan 1 : ${firstFindings.length}`)
-
-	// whether a surviving finding still names the scan that reviewed it. a resource whose finding the filter
-	// deleted has no finding at all, so every scan reviews it again
-	const isStillReviewedBy = async (findingId: string, scanId: string): Promise<boolean> => {
-		const [row] = await db.select({ scanId: findings.scanId }).from(findings).where(eq(findings.id, findingId))
-		return row?.scanId === scanId
-	}
-
-	// an unchanged prompt leaves every surviving finding alone, so a topic nobody edited never pays to
-	// re-derive an answer it already holds
-	const unchangedPromptScan = await scanAgain(topicId, ownerId)
-	const isStillReviewedByFirstScan = await isStillReviewedBy(ratedFinding.id, ratedFinding.scanId)
-	console.log(
-		`scan 2, prompt unchanged: reviewed ${unchangedPromptScan.scoredCount}, cost $${unchangedPromptScan.cost.toFixed(4)}`,
-	)
-	console.log(`  the rated finding still names scan 1: ${isStillReviewedByFirstScan}`)
-
-	// ask the selector what a scan with nothing discovered would review. a bookmarked or rated finding
-	// outlives the feed it came from
-	const resourcesToReview = await loadResourcesToReview({
-		topicId,
-		discoveredResources: [],
-		topicContextHash: "a-context-nothing-was-reviewed-against",
-	})
-	const resourceIdsToReview = new Set(resourcesToReview.map((resource) => resource.id))
-	// the rated finding's resource, which the resources to review must include
-	const [ratedResource] = await db
-		.select({ id: resources.id })
-		.from(findings)
-		.innerJoin(resources, eq(findings.resourceId, resources.id))
-		.where(eq(findings.id, ratedFinding.id))
-	const isRatedResourceToReview = ratedResource !== undefined && resourceIdsToReview.has(ratedResource.id)
-	console.log(`  the rated finding's resource is still to review with nothing discovered: ${isRatedResourceToReview}`)
-
-	// an edited prompt asks a different question, so every surviving finding is reviewed again
-	await db
-		.update(topics)
-		.set({ prompt: `${TOPIC_CONTEXT} Focus on evaluation and testing above all.` })
-		.where(eq(topics.id, topicId))
-	const editedPromptScan = await scanAgain(topicId, ownerId)
-	const isReviewedAgain = !(await isStillReviewedBy(ratedFinding.id, ratedFinding.scanId))
-	console.log(
-		`scan 3, prompt edited   : reviewed ${editedPromptScan.scoredCount}, cost $${editedPromptScan.cost.toFixed(4)}`,
-	)
-	console.log(`  the rated finding was reviewed again: ${isReviewedAgain}`)
-
-	// what the review did to the rated finding
-	const [ratedFindingAfterEdit] = await db
-		.select({
-			rating: findings.rating,
-			viewCount: findings.viewCount,
-			reviewedContextHash: findings.reviewedContextHash,
-		})
-		.from(findings)
-		.where(eq(findings.id, ratedFinding.id))
-
-	const results: [string, boolean][] = [
-		["the first scan recorded a hash on every finding", firstFindings.every((row) => row.reviewedContextHash !== null)],
-		["an unchanged prompt leaves a surviving finding alone", isStillReviewedByFirstScan],
-		["an edited prompt reviews a surviving finding again", isReviewedAgain],
-		["a finding the scan never rediscovers is still reviewed", isRatedResourceToReview],
-		["the rated finding survived the review", ratedFindingAfterEdit !== undefined],
-		["the rating survived", ratedFindingAfterEdit?.rating === "up"],
-		["the view count survived", ratedFindingAfterEdit?.viewCount === 3],
-		[
-			"the finding reviewed again has a new hash",
-			ratedFindingAfterEdit?.reviewedContextHash !== ratedFinding.reviewedContextHash,
-		],
-	]
-	let isTestPassing = true
-	for (const [label, isPassed] of results) {
-		console.log(`${isPassed ? "PASS" : "FAIL"}  ${label}`)
-		isTestPassing = isTestPassing && isPassed
-	}
-	return isTestPassing
-}
-
 async function smokeTest(): Promise<number> {
 	// every run starts cold, so two runs differ only by their concurrency setting
 	const resetCount = await resetFeedResources()
@@ -374,8 +240,9 @@ async function smokeTest(): Promise<number> {
 	// run the checks against the seeded topic
 	try {
 		const isPassed = await check(topicId, userId)
+		const isFilteredFindingsPassed = await checkFilteredFindings(topicId, userId)
 		const isReviewAgainPassed = await checkReviewAgain(topicId, userId)
-		const isAllPassed = isPassed && isReviewAgainPassed
+		const isAllPassed = isPassed && isFilteredFindingsPassed && isReviewAgainPassed
 		console.log(`\n=== smoke ${isAllPassed ? "PASSED" : "FAILED"} ===`)
 		return isAllPassed ? 0 : 1
 	} finally {

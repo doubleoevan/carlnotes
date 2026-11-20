@@ -85,12 +85,16 @@ export const topicPostDiscussions = pgTable(
 		// when the recording started and when it published
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		publishedAt: timestamp("published_at", { withTimezone: true }),
+		// when the reaper started the recording again after its workflow was gone, null if it never did
+		restartedAt: timestamp("restarted_at", { withTimezone: true }),
 	},
 	// covers a post's newest published recording, and a user's regeneration count and monthly spend sum. a post has
 	// one recording under way at a time
 	(table) => [
 		index("topic_post_discussions_post_published_idx").on(table.topicPostId, table.publishedAt),
 		index("topic_post_discussions_user_kind_created_idx").on(table.userId, table.kind, table.createdAt),
+		// the day's spend sums every user's discussions by their time
+		index("topic_post_discussions_created_idx").on(table.createdAt),
 		uniqueIndex("topic_post_discussions_post_recording_unique")
 			.on(table.topicPostId)
 			.where(sql`${table.status} = 'recording'`),

@@ -42,7 +42,7 @@ const QUERY_PARENT_PROBE_SCRIPT = `
 import * as Sentry from "@sentry/bun"
 import { context, trace } from "@opentelemetry/api"
 import { getLangfuseTracerProvider } from "@langfuse/tracing"
-import { startQuerySpan, traceRequestStage } from "@carlnotes/server/monitoring"
+import { startQuerySpan, traceRequestStage } from "@carlnotes/server/monitoringTracing"
 import { startTelemetry } from "./telemetry"
 
 // Sentry keeps the request's transaction instead of sending it, and Langfuse starts beside it

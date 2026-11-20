@@ -3,6 +3,7 @@ import { UPDATES_RECAP_MAX_CHARS } from "@carlnotes/contracts/updates"
 import { premiumModelCost } from "@carlnotes/models/budget"
 import { LOW_REASONING_PROVIDER_OPTIONS, scoreModel } from "@carlnotes/models/models"
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "@carlnotes/models/prompts/fetch"
+import { loadPromptFragment } from "@carlnotes/models/prompts/fragment"
 import { writePrompt } from "@carlnotes/models/prompts/write"
 import { generateText } from "ai"
 
@@ -31,14 +32,17 @@ type UpdatesRecapInput = { topicNames: string[]; findingTitles: string[] }
  * Builds the recap prompt, with the Topic names and titles fenced as untrusted and limited in count and length.
  */
 export async function buildUpdatesRecapPrompt({ topicNames, findingTitles }: UpdatesRecapInput): Promise<BuiltPrompt> {
-	const { template, registryPrompt } = await fetchPromptTemplate("updates-recap")
+	const [{ template, registryPrompt }, carlWrittenVoiceBlock] = await Promise.all([
+		fetchPromptTemplate("updates-recap"),
+		loadPromptFragment("carl-written-voice"),
+	])
 	const prompt = writePrompt(
 		template,
 		{
 			topicNames: toPromptLines(topicNames, MAX_RECAP_TOPIC_NAMES),
 			findingTitles: toPromptLines(findingTitles, MAX_RECAP_FINDING_TITLES),
 		},
-		{ maxChars: String(UPDATES_RECAP_MAX_CHARS) },
+		{ maxChars: String(UPDATES_RECAP_MAX_CHARS), carlWrittenVoiceBlock },
 	)
 	return { prompt, name: "updates-recap", registryPrompt }
 }

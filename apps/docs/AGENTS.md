@@ -32,7 +32,7 @@ from `apps/docs/dist`, so it runs no process of its own, and nothing imports it.
   reference by raw url (`release-notes.md`), with a README on taking them.
   `public/favicon.svg` is the site's icon.
 - `design/` — design references outside the site: `homepage.html`, and `podcast/` with the player mockups and
-  `cover-base.png`, the illustration `apps/api/share/podcastCover.ts` draws the podcast covers over.
+  `cover-base.png`, the illustration `packages/pipeline/podcastCover.ts` draws the podcast covers over.
   Films use `coffee-break-hosts.jpeg` as the background for the steam rising above both mugs.
   `release-notes.md` is the convention for writing a release's notes, and `ai-scaffolding.md` describes how the repo
   constrains generated code.

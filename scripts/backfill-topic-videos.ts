@@ -1,7 +1,7 @@
 // starts the film backfill on the worker's Temporal, or joins the one running, and waits for its summary. run under
 // doppler: bun run films:backfill
 import { parseArgs } from "node:util"
-import { startTopicVideoBackfillWorkflow } from "@carlnotes/pipeline/temporalClient"
+import { startTopicVideoBackfillWorkflow } from "@carlnotes/pipeline/topicVideo/topicVideoWorkflowClient"
 import { isTopicVideoBackfillEnabled, topicVideoBackfillConcurrency } from "@carlnotes/server/podcastEpisodeSettings"
 import { z } from "zod"
 

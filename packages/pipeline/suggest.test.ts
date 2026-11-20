@@ -1,5 +1,7 @@
 // source suggestion tests: the source key, the option prefix, the topic context, and the web search pages
-import { expect, test } from "bun:test"
+import { expect, mock, spyOn, test } from "bun:test"
+import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
+import * as spendReservations from "@carlnotes/models/spendReservations"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import {
 	loadWebSearchResources,
@@ -166,5 +168,34 @@ test("toWebSearchPages lists each page the search found, and none without a sear
 		// put fetch and the search key back as the environment had them
 		globalThis.fetch = realFetch
 		restoreEnvSettings()
+	}
+})
+
+// the search is a paid call with no row of its own, so a user's is gated and recorded like a chat turn's spend
+test("a user's suggestion search is their spend, and a spent budget searches for nothing", async () => {
+	const realFetch = globalThis.fetch
+	const restoreEnvSettings = saveEnvSettings(["EXA_API_KEY"])
+	const searchFetch = mock(async () => new Response(JSON.stringify({ results: [] })))
+	try {
+		// a user with budget left: the search runs, and its cost is recorded for them
+		Bun.env.EXA_API_KEY = "test-search-key"
+		globalThis.fetch = searchFetch as unknown as typeof fetch
+		const reserveSpy = spyOn(spendReservations, "reserveUserSpend").mockResolvedValue({ release: mock(async () => {}) })
+		const sentQueries = stubConnectionPool(() => [])
+		await loadWebSearchResources(toSuggestionContext({ userId: "user-1" }))
+		expect(searchFetch).toHaveBeenCalledTimes(1)
+		expect(sentQueries[0]?.text).toStartWith('insert into "spends"')
+		expect(sentQueries[0]?.values).toEqual(expect.arrayContaining(["sourceSuggestionSearch", "user-1"]))
+
+		// a user whose budget is spent gets no search, and the suggestion goes on from the Topic's words alone
+		reserveSpy.mockResolvedValue("rejected")
+		expect(await loadWebSearchResources(toSuggestionContext({ userId: "user-1" }))).toEqual([])
+		expect(searchFetch).toHaveBeenCalledTimes(1)
+	} finally {
+		// put fetch, the search key, the pool, and the reservation back
+		globalThis.fetch = realFetch
+		restoreEnvSettings()
+		restoreConnectionPool()
+		mock.restore()
 	}
 })

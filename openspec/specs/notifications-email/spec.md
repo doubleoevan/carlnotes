@@ -8,9 +8,13 @@ replied to their Comments, and where they were mentioned, and it is never sent o
 
 ### Requirement: A person gets at most one notifications email a day, and none on a quiet day
 
-The sweep SHALL send each person at most one notifications email per UTC day, after a fixed UTC hour. It SHALL send
-one only if that person has something to read since their last notifications email, or in the last 24 hours for a
-first one. A person with nothing to read SHALL get no email.
+The sweep SHALL send each person at most one notifications email per UTC day, after a fixed UTC hour. It SHALL send one
+only if that person has something to read since their last notifications email, or in the last 24 hours for a first one.
+A person with nothing to read SHALL get no email. The sweep SHALL record that quiet day for the person, so no later
+sweep that day reads them again, and what happens later that day SHALL be in the next day's email. A quiet day's record
+SHALL NOT count as a notifications email: the next email SHALL cover everything after the last one that was sent. A
+first email SHALL also cover everything after the person's last quiet day's check, if that check is older than 24
+hours.
 
 #### Scenario: Two reactions make one email
 
@@ -31,6 +35,24 @@ first one. A person with nothing to read SHALL get no email.
 
 - **WHEN** the mailer rejects a person's notifications email
 - **THEN** the next sweep that day sends it, with nothing left out
+
+#### Scenario: A quiet person is read once that day
+
+- **GIVEN** a person with nothing to read at the day's first sweep after the fixed hour
+- **WHEN** later sweeps run that day
+- **THEN** none of them reads that person's reactions, comments, replies, or mentions again
+
+#### Scenario: A late reaction waits for the next day's email
+
+- **GIVEN** a person recorded as quiet at 15:00 UTC who gets a reaction at 18:00 UTC
+- **WHEN** the next day's sweep runs after the fixed hour
+- **THEN** their email names that reaction, and nothing after their last sent email is left out
+
+#### Scenario: A first email loses nothing to a later pass
+
+- **GIVEN** a person never sent an email, recorded as quiet at 15:00 UTC, who gets a reaction at 15:01 UTC
+- **WHEN** the next day's first sweep after the fixed hour runs at 15:10 UTC
+- **THEN** their first email names that reaction, though it is older than 24 hours
 
 ### Requirement: The email covers reactions, comments, replies, and mentions
 

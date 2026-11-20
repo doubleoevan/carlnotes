@@ -1,5 +1,6 @@
 // whether a Scan records a Podcast Episode. the checks that stop a recording before it spends,
 // and the Findings that the Podcast Episode narrates
+import type { PodcastEpisodeScript } from "@carlnotes/contracts/podcast"
 import { FULL_PODCAST_EPISODE_FINDINGS, SHORT_PODCAST_EPISODE_FINDINGS } from "@carlnotes/contracts/podcastEpisodes"
 import { db } from "@carlnotes/db"
 import { isUserPastDailySpendCutoff, loadSpendControlSettings } from "@carlnotes/db/dailySpendCutoffs"
@@ -11,13 +12,13 @@ import { runWithRequestMemo } from "@carlnotes/db/requestMemo"
 import { podcastEpisodeChapters, podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { findings, resources, scans } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
-import { loadRankedTopicMemories } from "@carlnotes/db/topicMemories"
 import { podcastEpisodeSpeechModel } from "@carlnotes/server/podcastEpisodeSettings"
 import { and, desc, eq, inArray, isNotNull } from "drizzle-orm"
 import { toCanonicalUrl } from "../ingest/normalize"
 import { loadUrlSourcePageUrls } from "../review/filter"
 import { loadBookmarkedFindingRows } from "../review/scoreExamplePages"
 import { clampScore } from "../review/scorePolicy"
+import { loadBackgroundTopicMemories } from "../topicMemoryPrompt"
 
 // the score bonus that a bookmark, a thumbs up, and a url Source's own page each give a Finding when picking a Podcast
 // Episode's Findings. the three add up, and the score stays at 1 or below
@@ -88,12 +89,25 @@ async function planPodcastEpisodeInMemo({
 		return skipPodcastEpisode({ scanId, skipReason: "personal sources privacy conversion is pending" })
 	}
 
-	// the row that an earlier attempt created, if any, and whether this Podcast Episode is short, which narrates fewer
-	// Findings
+	// the row that an earlier attempt created, if any, with the script it saved
 	const [existingPodcastEpisode] = await db
-		.select({ id: podcastEpisodes.id, status: podcastEpisodes.status, isShort: podcastEpisodes.isShort })
+		.select({
+			id: podcastEpisodes.id,
+			status: podcastEpisodes.status,
+			isShort: podcastEpisodes.isShort,
+			script: podcastEpisodes.script,
+		})
 		.from(podcastEpisodes)
 		.where(eq(podcastEpisodes.scanId, scanId))
+
+	// a recording that already saved its script, as one that the reaper started again may have, narrates that script's
+	// Findings, because its stored chapters were recorded from that script
+	if (existingPodcastEpisode?.status === "recording" && existingPodcastEpisode.script) {
+		const plannedFindings = await loadScriptPlannedFindings(existingPodcastEpisode.script)
+		return { podcastEpisodeId: existingPodcastEpisode.id, plannedFindings }
+	}
+
+	// whether this Podcast Episode is short, which narrates fewer Findings
 	const isShortPodcastEpisode = await isShortPodcastEpisodePlanned({
 		existingPodcastEpisode,
 		ownerId: topic.ownerId,
@@ -315,6 +329,22 @@ async function hasRecordingShortPodcastEpisode(topicId: string): Promise<boolean
 	return recordingShortPodcastEpisode !== undefined
 }
 
+// the Findings that a saved script narrates, in the script's order. a Finding that a later Scan filtered out is left
+// out, and its chapter publishes with no chapter row
+async function loadScriptPlannedFindings(podcastEpisodeScript: PodcastEpisodeScript): Promise<PlannedFinding[]> {
+	const scriptFindingIds = podcastEpisodeScript.segments.flatMap((segment) =>
+		segment.chapters.map((chapter) => chapter.findingId),
+	)
+	const findingRows = await db
+		.select({ findingId: findings.id, resourceId: findings.resourceId, sourceUrl: resources.url })
+		.from(findings)
+		.innerJoin(resources, eq(findings.resourceId, resources.id))
+		.where(inArray(findings.id, scriptFindingIds))
+	return scriptFindingIds.flatMap((scriptFindingId) =>
+		findingRows.filter((findingRow) => findingRow.findingId === scriptFindingId),
+	)
+}
+
 // log why a Scan records no Podcast Episode, and return null as its plan
 function skipPodcastEpisode({ scanId, skipReason }: { scanId: string; skipReason: string }): null {
 	console.log(`scan ${scanId} records no episode: ${skipReason}`)
@@ -342,7 +372,7 @@ async function loadPlannedFindings({
 			.where(eq(podcastEpisodes.topicId, topic.id)),
 		loadBookmarkedFindingRows(topic.id, topic),
 		loadUrlSourcePageUrls(topic.id),
-		loadRankedTopicMemories({ topicId: topic.id, isPublicOnly: true }),
+		loadBackgroundTopicMemories({ topicId: topic.id, isPublicOnly: true }),
 	])
 
 	// load the Topic's Findings, best first, each marked if it is bookmarked

@@ -1,7 +1,10 @@
 // the url Source check activities: fetch the page and mark the Source ready or failed
+import { SCAN_SPENT_BUDGET_LABEL } from "@carlnotes/contracts/scanFailure"
 import { DAY_MS } from "@carlnotes/contracts/time"
 import { db } from "@carlnotes/db"
-import { sources } from "@carlnotes/db/schema/topics"
+import { sources, topics } from "@carlnotes/db/schema/topics"
+import { FIRECRAWL_COST_PER_FETCH } from "@carlnotes/models/budget"
+import { runUserPaidCall } from "@carlnotes/models/userPaidCalls"
 import { type FetchResult, fetchContent } from "@carlnotes/pipeline/scrape"
 import { RETRYABLE_SCREEN_FAILURE_TYPE } from "@carlnotes/pipeline/stageTimeouts"
 import { isRetryableFetchFailure, toFetchableUrl } from "@carlnotes/server/publicFetch"
@@ -25,7 +28,8 @@ const DROPPED_CONNECTION_CODES = new Set([
 
 /**
  * Fetches the page for a url Source, then marks it ready or failed with the reason. The screen judges only whether the
- * page can be read.
+ * page can be read. The fetch is the Topic owner's spend, and an owner whose monthly budget is spent gets the Source
+ * failed with that reason and no fetch.
  * A url that cannot be fetched is a rejection, not a warning: its page produces nothing on every future Scan,
  * and the owner should be told so. A fetch that failed for a reason the next attempt may pass, such as a rate limit or
  * a timeout, is thrown as a retryable failure that the workflow retries.
@@ -45,8 +49,27 @@ export async function screenSource(sourceId: string): Promise<void> {
 		return
 	}
 
-	// reject a malformed, non-http, or internal url before any request goes out, then fetch the page
-	const fetched = await fetchPage(pageUrl)
+	// the fetch is the Topic owner's spend, and a spent monthly budget fetches nothing
+	const [topic] = await db.select({ ownerId: topics.ownerId }).from(topics).where(eq(topics.id, source.topicId))
+	if (!topic) {
+		throw ApplicationFailure.nonRetryable(`source ${sourceId} has no topic`, "SourceNotFound")
+	}
+
+	// a fetch that fails costs nothing, and a fetched page costs what the scrape reports
+	const sourceScreenFetch = { userId: topic.ownerId, kind: "sourceScreenFetch", topicId: source.topicId } as const
+	const paidFetch = await runUserPaidCall({ ...sourceScreenFetch, maxDollars: FIRECRAWL_COST_PER_FETCH }, async () => {
+		const pageFetchResult = await fetchPage(pageUrl)
+		return { callResult: pageFetchResult, dollars: pageFetchResult instanceof Error ? 0 : pageFetchResult.cost }
+	})
+
+	// the owner sees why the page was not checked, and saving the Source again checks it
+	if (paidFetch.status === "budgetSpent") {
+		await failSource(sourceId, `${SCAN_SPENT_BUDGET_LABEL} This page was not checked.`)
+		return
+	}
+
+	// a malformed, non-http, or internal url is rejected before any request goes out
+	const fetched = paidFetch.callResult
 	if (fetched instanceof Error) {
 		// retry a fetch failure that the next attempt may pass within a day of the save, and record any other for the owner
 		if (shouldRetrySourceFetch({ error: fetched, savedAt: source.createdAt, now: new Date() })) {

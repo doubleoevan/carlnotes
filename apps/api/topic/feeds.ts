@@ -7,7 +7,7 @@ import type { TopicFeed, TopicFeedResponse, TopicResponse, TopicSectionKey } fro
 import { db, isPublicAndShown } from "@carlnotes/db"
 import { cacheJson } from "@carlnotes/db/redis"
 import { subscriptions, topics } from "@carlnotes/db/schema/topics"
-import { traceRequestStage } from "@carlnotes/server/monitoring"
+import { traceRequestStage } from "@carlnotes/server/monitoringTracing"
 import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, type SQL } from "drizzle-orm"
 import { toProfileIdentity } from "../avatars"
 import { attachTopicFindingFaviconPaths } from "../favicons"

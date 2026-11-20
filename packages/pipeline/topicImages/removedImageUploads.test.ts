@@ -4,9 +4,9 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as podcastEpisodeImageRenders from "../podcast/podcastEpisodeImageRenders"
-import * as temporalClient from "../temporalClient"
 import * as topicPostImageRenders from "../topicPosts/topicPostImageRenders"
 import * as topicVideoImage from "../topicVideo/topicVideoImage"
+import * as topicVideoWorkflowClient from "../topicVideo/topicVideoWorkflowClient"
 import { regenerateRemovedTopicImage, removeImageUpload } from "./removedImageUploads"
 import * as topicImageRenders from "./topicImageRenders"
 
@@ -44,7 +44,7 @@ test("a removal marks each ready film drawn from the upload rendering before the
 	const sentQueries = stubConnectionPool(({ text }) =>
 		text.startsWith('update "topic_videos"') ? [["episode-1"], ["episode-2"]] : [],
 	)
-	const rebuildSpy = spyOn(temporalClient, "startTopicVideoRebuild").mockResolvedValue(undefined)
+	const rebuildSpy = spyOn(topicVideoWorkflowClient, "startTopicVideoRebuild").mockResolvedValue(undefined)
 
 	// the removal of the upload keeps how many statements were sent before it ran
 	let sentQueryCountAtRemoval = -1

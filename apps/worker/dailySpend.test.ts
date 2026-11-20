@@ -17,6 +17,8 @@ const ONE_DOLLAR_DAILY_SPEND = {
 	podcastEpisodeDollars: 0,
 	personalSourcesDollars: 0,
 	topicImageDollars: 0,
+	otherDollars: 0,
+	platformDollars: 0,
 	totalDollars: 1,
 	newUserCount: 0,
 }
@@ -41,6 +43,8 @@ test("loadDailySpend sums the day's scan, chat, podcast episode, and film costs 
 		topic_image_renders: [["0"]],
 		// a discussion's cost counts with the podcast episodes'
 		topic_post_discussions: [["0.5"]],
+		// the paid calls with no row of their own: twenty cents that bill users, and thirty that are the platform's
+		spends: [["0.2", "0.3"]],
 	}
 	const sentQueries = stubConnectionPool(({ text }) => {
 		const table = Object.keys(rowsByTable).find((name) => text.includes(`"${name}"`))
@@ -56,12 +60,14 @@ test("loadDailySpend sums the day's scan, chat, podcast episode, and film costs 
 		podcastEpisodeDollars: 3,
 		personalSourcesDollars: 0.15,
 		topicImageDollars: 0,
-		totalDollars: 4.9,
+		otherDollars: 0.2,
+		platformDollars: 0.3,
+		totalDollars: 5.4,
 		newUserCount: 7,
 	})
 
 	// every read starts at midnight UTC, which the driver sends as its ISO text
-	expect(sentQueries).toHaveLength(8)
+	expect(sentQueries).toHaveLength(9)
 	for (const sentQuery of sentQueries) {
 		expect(sentQuery.values).toEqual(["2026-10-11T00:00:00.000Z"])
 	}
@@ -91,6 +97,43 @@ test("reportDailySpend reports a failed read and returns null", async () => {
 		}),
 	).toBeNull()
 	expect(reportErrorSpy).toHaveBeenCalledTimes(1)
+})
+
+// the sweep is the day's spend's one reader, so a sweep inside five minutes of a stored read sums nothing
+test("two sweeps read the day's spend once, and a failed read is never stored", async () => {
+	// the report's own lines and error reports stay out of the test output
+	spyOn(console, "log").mockImplementation(() => {})
+	spyOn(console, "error").mockImplementation(() => {})
+	quietErrorReports()
+
+	// an empty Redis, and a database whose reads fail at first
+	const storedValueByKey = stubRedisClient()
+	let isDatabaseDown = true
+	const sentQueries = stubConnectionPool(({ text }) => {
+		if (isDatabaseDown) {
+			throw new Error("database down")
+		}
+		return text.includes('"spends"') ? [["0", "0"]] : [["1"]]
+	})
+
+	// how many of the day's sums were sent
+	const toSumCount = (): number => sentQueries.filter((sentQuery) => sentQuery.text.includes("coalesce(sum(")).length
+
+	// the failed read is returned as null and stores nothing
+	expect(await reportDailySpend({ loadSignups: async () => QUIET_HOURLY_SIGNUPS })).toBeNull()
+	expect([...storedValueByKey.keys()]).toEqual([])
+
+	// the next sweep sums the day's eight tables and stores the spend under the UTC day
+	isDatabaseDown = false
+	sentQueries.length = 0
+	const dailySpend = await reportDailySpend({ loadSignups: async () => QUIET_HOURLY_SIGNUPS })
+	expect(dailySpend).toMatchObject({ scanDollars: 1, newUserCount: 1 })
+	expect(toSumCount()).toBe(8)
+	expect([...storedValueByKey.keys()]).toEqual([`daily-spend:${new Date().toISOString().slice(0, 10)}`])
+
+	// the sweep after it reads the stored spend, and sums nothing
+	expect(await reportDailySpend({ loadSignups: async () => QUIET_HOURLY_SIGNUPS })).toEqual(dailySpend)
+	expect(toSumCount()).toBe(8)
 })
 
 // sixty-four signups in the hour cross the default threshold of fifty, and twelve do not

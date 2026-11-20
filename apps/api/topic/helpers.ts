@@ -40,7 +40,10 @@ export function toTopicGateResponse(
 	return topic.visibility === "invite" ? { error: "forbidden", gatedVisibility: "invite", topicName: topic.name } : null
 }
 
-// the latest succeeded topic scan with its recap and duration
+/**
+ * Returns the latest succeeded topic scan with its duration, and the recap of the newest succeeded topic scan that
+ * wrote one. A scan that reviewed nothing writes no recap, and never blanks the recap of the scan before it.
+ */
 export function toLastTopicScanFields(
 	scanHistory: TopicScan[],
 	scanRows: { id: string; scanSummary: string | null }[],
@@ -51,8 +54,13 @@ export function toLastTopicScanFields(
 		return { lastSucceededTopicScan: null, scanSummary: null, lastScanDurationMs: null }
 	}
 
-	// the topic's last succeeded scanSummary, read from the scan rows already in memory
-	const scanSummary = scanRows.find((scanRow) => scanRow.id === lastSucceededTopicScan.id)?.scanSummary ?? null
+	// the newest recap among the succeeded scans, read from the scan rows already in memory
+	const scanSummaryById = new Map(scanRows.map((scanRow) => [scanRow.id, scanRow.scanSummary]))
+	const scanSummary =
+		scanHistory
+			.filter((topicScan) => topicScan.status === "succeeded")
+			.map((topicScan) => scanSummaryById.get(topicScan.id))
+			.find((succeededScanSummary) => succeededScanSummary) ?? null
 	return { lastSucceededTopicScan, scanSummary, lastScanDurationMs: toScanDurationMs(lastSucceededTopicScan) }
 }
 

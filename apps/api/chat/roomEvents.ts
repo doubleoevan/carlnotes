@@ -5,6 +5,7 @@ import type { SSEStreamingApi } from "hono/streaming"
 import { streamSSE } from "hono/streaming"
 import { auth } from "../auth"
 import { type AppContext, currentUser } from "../currentUser"
+import { endStreamOnDrain } from "../drain"
 import { loadUserBlockedIds } from "../userBlocks"
 import { loadChatRoom } from "./roomAccess"
 import { loadChatRoomDeltas, loadChatRoomMessages } from "./roomMessages"
@@ -38,6 +39,7 @@ async function runChatRoomStream({ context, stream, topicId, teamId }: RunChatRo
 	let heartbeatInterval: ReturnType<typeof setInterval> | undefined
 	let maxAgeTimeout: ReturnType<typeof setTimeout> | undefined
 	let stopListening = (): void => {}
+	let stopEndingOnDrain = (): void => {}
 	await new Promise<void>((resolve) => {
 		// retire listeners, timers and queued deliveries together
 		const endStream = (): void => {
@@ -49,6 +51,7 @@ async function runChatRoomStream({ context, stream, topicId, teamId }: RunChatRo
 			clearInterval(heartbeatInterval)
 			clearTimeout(maxAgeTimeout)
 			stopListening()
+			stopEndingOnDrain()
 			void stream.close()
 			resolve()
 		}
@@ -148,6 +151,9 @@ async function runChatRoomStream({ context, stream, topicId, teamId }: RunChatRo
 			enqueueDelivery(() => deliverChatMessages(chatMessageId, roomToolCalls))
 		})
 		stream.onAbort(endStream)
+
+		// a draining replica ends the stream, and the client reconnects past its cursor to a replica that is staying up
+		stopEndingOnDrain = endStreamOnDrain(endStream)
 	})
 }
 

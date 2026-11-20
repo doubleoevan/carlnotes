@@ -19,7 +19,11 @@ afterEach(() => {
 	mock.restore()
 })
 
-// spy the render row's read, the user's key, the image model, and the event, and return the image model's spy
+// the delete of a render's kept drawn bytes, which every test's store reaches
+let deleteDrawnImage: ReturnType<typeof spyOn>
+
+// spy the render row's read, the user's key, the image model, the kept bytes' delete, and the event, and return the
+// image model's spy
 function spyImageRender(renderRow: Partial<TopicImageRenderRow>): ReturnType<typeof spyOn> {
 	// a pending regenerate that the user pays for
 	spyOn(topicImageRenders, "loadTopicImageRender").mockResolvedValue({
@@ -34,6 +38,7 @@ function spyImageRender(renderRow: Partial<TopicImageRenderRow>): ReturnType<typ
 	} as TopicImageRenderRow)
 	spyOn(litellm, "loadOrProvisionUserLiteLLMKey").mockResolvedValue("sk-user")
 	spyOn(analytics, "trackEvent").mockImplementation(() => {})
+	deleteDrawnImage = spyOn(topicImageOriginals, "deleteDrawnImage").mockResolvedValue(undefined)
 
 	// the image model returns an original at the film's frame size
 	return spyOn(topicImageOriginals, "renderTopicImageOriginal").mockResolvedValue({
@@ -88,4 +93,25 @@ test("a topic's image drawn from an image prompt is sent without the house style
 	// the image prompt replaces the house style, and no film format is set
 	expect(renderOriginal.mock.calls[0]?.[0]).toMatchObject({ scene: SCENE, isHouseStyle: false })
 	expect(renderOriginal.mock.calls[0]?.[0].format).toBeUndefined()
+})
+
+// the draw is the paid step, so its bytes are kept under the render's key until the image is current
+test("a render keeps its drawn bytes under its own key until the image is stored, then deletes them", async () => {
+	// a topic's image whose store fails once
+	const renderImage = spyImageRender({})
+	const storeFiles = spyOn(topicImageFiles, "storeTopicImageFiles")
+		.mockRejectedValueOnce(new Error("the upload timed out"))
+		.mockResolvedValue("topic-image-hash")
+	spyOn(topicImageRenders, "replaceTopicImage").mockResolvedValue(undefined)
+
+	// the failed attempt asks for the bytes to be kept under the render's key, and deletes nothing
+	await expect(renderAndStoreTopicImage({ renderId: "render-1", scene: SCENE })).rejects.toThrow("the upload timed out")
+	expect(renderImage.mock.calls[0]?.[0].drawnImageKey).toBe("drawn-images/topic-image-render/render-1")
+	expect(deleteDrawnImage).not.toHaveBeenCalled()
+
+	// the next attempt names the same key, stores the image, and lets the kept bytes go
+	await renderAndStoreTopicImage({ renderId: "render-1", scene: SCENE })
+	expect(renderImage.mock.calls[1]?.[0].drawnImageKey).toBe("drawn-images/topic-image-render/render-1")
+	expect(storeFiles).toHaveBeenCalledTimes(2)
+	expect(deleteDrawnImage.mock.calls).toEqual([["drawn-images/topic-image-render/render-1"]])
 })

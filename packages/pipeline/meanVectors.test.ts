@@ -180,12 +180,22 @@ test("marking podcast episodes removed returns the chapter image keys for each c
 		`${keyPrefix}.jpg`,
 		...imageNumbers.map((imageNumber) => `${keyPrefix}-${imageNumber}.jpg`),
 	]
+
+	// the current style's images each have an unchecked key and a rejected key, which go with the film too
+	const currentStyleImageKeys = [
+		...toChapterImageKeys("episodes/episode-1/video/chapter-0-image-s2"),
+		...toChapterImageKeys("episodes/episode-1/video/chapter-1-image-s2"),
+	]
+	const checkKeys = currentStyleImageKeys.flatMap((imageKey) => {
+		const keyStem = imageKey.slice(0, -".jpg".length)
+		return [`${keyStem}-unchecked.jpg`, `${keyStem}-rejected`]
+	})
 	expect(filmKeys).toEqual([
 		"film.mp4",
 		...toChapterImageKeys("episodes/episode-1/video/chapter-0-image"),
 		...toChapterImageKeys("episodes/episode-1/video/chapter-1-image"),
-		...toChapterImageKeys("episodes/episode-1/video/chapter-0-image-s2"),
-		...toChapterImageKeys("episodes/episode-1/video/chapter-1-image-s2"),
+		...currentStyleImageKeys,
+		...checkKeys,
 		"episodes/episode-1/video/chapter-0-scene-plan.json",
 		"episodes/episode-1/video/chapter-1-scene-plan.json",
 		"episodes/episode-1/video/picture-motion.json",

@@ -1310,6 +1310,13 @@
       "when": 1795050059577,
       "tag": "0186_scan_search_results",
       "breakpoints": true
+    },
+    {
+      "idx": 187,
+      "version": "7",
+      "when": 1795167745071,
+      "tag": "0187_launch_hardening",
+      "breakpoints": true
     }
   ]
 }

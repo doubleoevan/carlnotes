@@ -1,12 +1,10 @@
 import { afterAll, beforeAll, expect, mock, spyOn, test } from "bun:test"
+import { TOPIC_MEMORY_FINDING_LIMIT } from "@carlnotes/contracts/topicMemoryWork"
 import { db } from "@carlnotes/db"
+import { loadRankedTopicMemories } from "@carlnotes/db/rankedTopicMemories"
 import { scans } from "@carlnotes/db/schema/scans"
 import { topicMemories, topicMemoryFeedback } from "@carlnotes/db/schema/topicMemories"
-import {
-	loadMemberTopicMemoriesPage,
-	loadRankedTopicMemories,
-	loadTopicMemoriesPage,
-} from "@carlnotes/db/topicMemories"
+import { loadMemberTopicMemoriesPage, loadTopicMemoriesPage } from "@carlnotes/db/topicMemories"
 import { saveTopicMemoryFeedback } from "@carlnotes/db/topicMemoryFeedback"
 import * as models from "@carlnotes/models/models"
 import type { LanguageModel } from "ai"
@@ -14,6 +12,7 @@ import * as ai from "ai"
 import { eq, sql } from "drizzle-orm"
 import type { EmbeddedTopicMemoryWrite } from "./applyTopicMemoryWrite"
 import { checkTopicMemoryJournal } from "./topicMemoryJournalSmokeChecks"
+import { checkTopicMemoryRatings } from "./topicMemoryRatingSmokeChecks"
 import { checkTopicMemoryRepairs } from "./topicMemoryRepairSmokeChecks"
 import { reviewTopicMemoryReplacements } from "./topicMemoryReplacements"
 import { checkTopicMemorySearch } from "./topicMemorySearchSmokeChecks"
@@ -26,6 +25,7 @@ import {
 	withTopic,
 	writeTopicMemory,
 } from "./topicMemorySmokeFixtures"
+import { checkTopicMemoryUpdates } from "./topicMemoryUpdateSmokeChecks"
 import { saveTopicMemoryUpdates } from "./topicMemoryWrites"
 
 beforeAll(async () => {
@@ -48,7 +48,9 @@ afterAll(async () => {
 
 checkTopicMemorySearch()
 checkTopicMemoryJournal()
+checkTopicMemoryRatings()
 checkTopicMemoryRepairs()
+checkTopicMemoryUpdates()
 
 test("exact facts combine and reactivate while different values remain active", async () => {
 	await withTopic(async ({ topicId, ownerId }) => {
@@ -65,6 +67,7 @@ test("exact facts combine and reactivate while different values remain active", 
 		if (!previous) {
 			throw new Error("The original topic memory is missing")
 		}
+		// retire the first topic memory, then write the same key from the second Scan
 		await db.update(topicMemories).set({ status: "outdated" }).where(eq(topicMemories.id, previous.id))
 		await writeTopicMemory(second, "A coffee costs $10.", vector(0), key)
 		const combined = await loadMemories(topicId)
@@ -100,6 +103,7 @@ test("exact facts combine and reactivate while different values remain active", 
 		await writeTopicMemory(older, "A coffee costs $11.", vector(1), { ...key, value: "$11" })
 		const rows = await loadMemories(topicId)
 		const current = rows.find(({ value }) => value === "$12")
+		// the newer value is active, one row was replaced, and neither Scan recorded a decision
 		expect(current?.status).toBe("active")
 		expect(rows.filter(({ status }) => status === "active")).toHaveLength(3)
 		expect(rows.filter(({ replacedById }) => replacedById !== null)).toHaveLength(1)
@@ -146,18 +150,21 @@ test.each(["confirmed", "declined", "stale", "tied"] as const)(
 	"a %s model review controls an edition-specific runtime replacement",
 	async (review) => {
 		await withTopic(async ({ topicId }) => {
+			// two Scans, and a runtime claim that the second Scan corrects
 			const first = await insertBrew(topicId, 1)
 			const second = await insertBrew(topicId, 2)
 			const key = { subject: "Festival cut", claimType: "runtime", factDate: "2026-10-01" } as const
 			const earlier = "The original festival cut ran 92 minutes."
 			const newer = "The corrected runtime of the original festival cut was 92 minutes and 15 seconds."
 			await writeTopicMemory(first, earlier, vector(1), { ...key, value: "92 minutes" })
+			// a tied review has both Scans start at the same moment
 			if (review === "tied") {
 				await db
 					.update(scans)
 					.set({ startedAt: sql`(select started_at from ${scans} where ${scans.id} = ${first.scanId})` })
 					.where(eq(scans.id, second.scanId))
 			}
+			// the second Scan's start, which the replacement review reads
 			const [scan] = await db.select({ startedAt: scans.startedAt }).from(scans).where(eq(scans.id, second.scanId))
 			if (!scan) {
 				throw new Error("The second brew is missing")
@@ -183,12 +190,12 @@ test.each(["confirmed", "declined", "stale", "tied"] as const)(
 			try {
 				const replacements = await reviewTopicMemoryReplacements({
 					topicId,
-					scanId: second.scanId,
 					scanStartedAt: scan.startedAt,
 					writes: [write],
 					signal,
 					litellmApiKey: "fixture",
 				})
+				// a tied pair asks no model, and any other review reads both wordings with their dates
 				if (review === "tied") {
 					expect(generate).not.toHaveBeenCalled()
 				} else {
@@ -197,12 +204,14 @@ test.each(["confirmed", "declined", "stale", "tied"] as const)(
 					expect(prompt).toContain(newer)
 					expect(String(prompt).match(/"factDate":"2026-10-01"/g)).toHaveLength(2)
 				}
+				// a stale review finds the earlier wording changed before the save
 				if (review === "stale") {
 					await db
 						.update(topicMemories)
 						.set({ text: "The original festival cut's runtime was reported as 92 minutes." })
 						.where(eq(topicMemories.topicId, topicId))
 				}
+				// only a confirmed review replaces the earlier wording, and it records one decision
 				await saveTopicMemoryUpdates({ topicId, scanId: second.scanId, writes: [write], signal, replacements })
 				const rows = await loadMemories(topicId)
 				expect(rows.filter(({ status }) => status === "active")).toHaveLength(review === "confirmed" ? 1 : 2)
@@ -261,133 +270,43 @@ test("compatible dates combine without letting an undated observation bridge con
 				value: "opened",
 				factDate,
 			})
-			expect(await readDecisionCosines(brew.scanId)).toHaveLength(index === 1 || index === 2 ? 1 : 0)
+			// only the narrower date is a new statement. the same wording and date again adds its evidence alone
+			expect(await readDecisionCosines(brew.scanId)).toHaveLength(index === 1 ? 1 : 0)
 		}
 		const rows = await loadMemories(topicId)
 		expect(rows.filter(({ status }) => status === "active").map(({ factDate }) => factDate)).toEqual(
 			expect.arrayContaining(["2025-07", "2025-08", null]),
 		)
-		expect(rows.filter(({ replacedById }) => replacedById !== null)).toHaveLength(2)
+		expect(rows.filter(({ replacedById }) => replacedById !== null)).toHaveLength(1)
 		const page = await loadTopicMemoriesPage({ topicId, userId: ownerId, page: 1 })
 		expect(page.items).toHaveLength(2)
 		expect(page.items.map(({ factDate }) => factDate)).toContain("2025-08")
 	})
 })
 
-test("a Journal add preserves a distinct claim that shares an exact key", async () => {
+test("a restated topic memory with new evidence archives no copy and keeps its newest Finding ids", async () => {
 	await withTopic(async ({ topicId }) => {
+		// the same wording and key from two Scans is one row with both Findings and no outdated copy
 		const first = await insertBrew(topicId, 1)
 		const second = await insertBrew(topicId, 2)
-		const key = { subject: "Hillary Fazzari", claimType: "role", value: "literary agent", factDate: null } as const
-		await writeTopicMemory(first, "Hillary Fazzari is a literary agent.", vector(1), key)
+		const third = await insertBrew(topicId, 3)
+		const key = { subject: "Cafe", claimType: "price", factDate: "2026-10-01", value: "$10" } as const
+		await writeTopicMemory(first, "A coffee costs $10.", vector(1), key)
+		await writeTopicMemory(second, "A coffee costs $10.", vector(1), key)
+		// one row holds both Findings, and the second Scan recorded no decision
+		const [restated, ...copies] = await loadMemories(topicId)
+		expect(copies).toEqual([])
+		expect(restated).toMatchObject({ status: "active", findingIds: [first.findingId, second.findingId] })
+		expect(await readDecisionCosines(second.scanId)).toEqual([])
 
-		// deliberately reuse the wrong structured key for a separate dated observation
-		const write: EmbeddedTopicMemoryWrite = {
-			...key,
-			operation: "add",
-			kind: "fact",
-			person: null,
-			factDate: "2024-05-01",
-			text: "Hillary Fazzari reopened to queries on May 1, 2024.",
-			importance: 0.85,
-			embedding: vector(1),
-			findingIds: [second.findingId],
-			reconciliation: { operation: "add" },
-		}
-		await saveTopicMemoryUpdates({ topicId, scanId: second.scanId, writes: [write], signal })
-		expect((await loadMemories(topicId)).map(({ status }) => status)).toEqual(["active", "active"])
-	})
-})
-
-test("a surplus Journal candidate survives when the selected wording was rejected", async () => {
-	await withTopic(async ({ topicId }) => {
-		const original = await insertBrew(topicId, 1)
-		const next = await insertBrew(topicId, 2)
-		const rejectedText = "The Acorn Cafe opened."
-		const keptText = "The Acorn Cafe opened to customers."
-		const key = { subject: "Acorn Cafe", claimType: "launch", value: "opening", factDate: "2026-11" } as const
-		await writeTopicMemory(original, rejectedText, vector(1), key)
-		await db.update(topicMemories).set({ status: "rejected" }).where(eq(topicMemories.topicId, topicId))
-
-		// give the writer the model's preferred wording and its checked paraphrase
-		const preferred: EmbeddedTopicMemoryWrite = {
-			...key,
-			operation: "add",
-			kind: "fact",
-			person: null,
-			text: rejectedText,
-			importance: 0.85,
-			embedding: vector(1),
-			findingIds: [next.findingId],
-			reconciliation: { operation: "add" },
-		}
-		const surplus: EmbeddedTopicMemoryWrite = {
-			...preferred,
-			text: keptText,
-			reconciliation: { operation: "add", combineWithExactMatch: true },
-		}
-		await saveTopicMemoryUpdates({ topicId, scanId: next.scanId, writes: [preferred, surplus], signal })
-		expect(await loadMemories(topicId)).toEqual(
-			expect.arrayContaining([
-				expect.objectContaining({ text: rejectedText, status: "rejected" }),
-				expect.objectContaining({ text: keptText, status: "active", findingIds: [next.findingId] }),
-			]),
-		)
-	})
-})
-
-test("a Journal update keeps the original ID, archives the prior wording, and rejects a foreign target", async () => {
-	await withTopic(async ({ topicId }) => {
-		const originalBrew = await insertBrew(topicId, 1)
-		const updateBrew = await insertBrew(topicId, 2)
-		const originalText = "The cafe opened."
-		const fullerText = "The Acorn Cafe opened to the public."
-		await writeTopicMemory(originalBrew, originalText, vector(1))
-		const [original] = await db.select().from(topicMemories).where(eq(topicMemories.topicId, topicId))
-		if (!original) {
-			throw new Error("The original Journal row is missing")
-		}
-
-		// send a confirmed update that would have failed the old exact subject and value guard
-		const write: EmbeddedTopicMemoryWrite = {
-			operation: "add",
-			subject: "Acorn Cafe",
-			value: "public launch",
-			claimType: "launch",
-			kind: "fact",
-			person: null,
-			factDate: "2026-11",
-			text: fullerText,
-			importance: 0.85,
-			embedding: vector(1),
-			findingIds: [updateBrew.findingId],
-			reconciliation: { operation: "update", target: original, useCandidateText: true },
-		}
-		await saveTopicMemoryUpdates({ topicId, scanId: updateBrew.scanId, writes: [write], signal })
-		const rows = await loadMemories(topicId)
-		expect(rows.find(({ id }) => id === original.id)).toMatchObject({
-			text: fullerText,
-			factDate: "2026-11",
-			findingIds: [originalBrew.findingId, updateBrew.findingId],
-			status: "active",
-		})
-		expect(rows.find(({ id }) => id !== original.id)).toMatchObject({
-			text: originalText,
-			status: "outdated",
-			replacedById: original.id,
-			findingIds: [originalBrew.findingId],
-		})
-
-		// a real ID from another Topic can never receive evidence or create a new row here
-		await withTopic(async ({ topicId: foreignTopicId }) => {
-			const foreign = await insertBrew(foreignTopicId, 3)
-			await saveTopicMemoryUpdates({
-				topicId: foreignTopicId,
-				scanId: foreign.scanId,
-				signal,
-				writes: [{ ...write, findingIds: [foreign.findingId] }],
-			})
-			expect(await loadMemories(foreignTopicId)).toEqual([])
-		})
+		// a row at its Finding limit drops its oldest id as a third Scan adds one
+		const fullFindingIds = Array.from({ length: TOPIC_MEMORY_FINDING_LIMIT }, (_, index) => `older-${index}`)
+		await db.update(topicMemories).set({ findingIds: fullFindingIds }).where(eq(topicMemories.topicId, topicId))
+		await writeTopicMemory(third, "A coffee costs $10.", vector(1), key)
+		// the row keeps as many ids as the limit allows, without its oldest and with the newest
+		const [trimmed] = await loadMemories(topicId)
+		expect(trimmed?.findingIds).toHaveLength(TOPIC_MEMORY_FINDING_LIMIT)
+		expect(trimmed?.findingIds[0]).toBe("older-1")
+		expect(trimmed?.findingIds.at(-1)).toBe(third.findingId)
 	})
 })

@@ -1,6 +1,6 @@
 // a topic attachment added by its owner: a page read from a url, or pasted text stored as a plain-text file
 import { ingestAttachment, ingestUrlAttachment } from "@carlnotes/pipeline/attach"
-import { AttachmentValidationError } from "@carlnotes/pipeline/attachContentType"
+import { AttachmentBudgetSpentError, AttachmentValidationError } from "@carlnotes/pipeline/attachContentType"
 import { trackEvent } from "@carlnotes/server/analytics"
 import type { AnalyticsProperties } from "../currentUser"
 import { loadOwnedTopic } from "./permissions"
@@ -13,6 +13,7 @@ export type AddTopicAttachmentResult =
 	| { status: "added"; attachmentId: string; filename: string }
 	| { status: "forbidden" }
 	| { status: "invalid"; reason: string }
+	| { status: "budgetSpent" }
 	| { status: "failed" }
 
 /**
@@ -39,7 +40,7 @@ export async function addTopicAttachment({
 	try {
 		const attachment =
 			topicAttachmentAdd.kind === "url"
-				? await ingestUrlAttachment(topicId, topicAttachmentAdd.url)
+				? await ingestUrlAttachment({ topicId, url: topicAttachmentAdd.url, userId })
 				: await ingestAttachment({
 						topicId,
 						filename: `${topicAttachmentAdd.title}.txt`,
@@ -52,6 +53,11 @@ export async function addTopicAttachment({
 		// a validation error names the owner's own url or text, so it shows as written. anything else is internal
 		if (error instanceof AttachmentValidationError) {
 			return { status: "invalid", reason: error.message }
+		}
+
+		// a url's page costs a fetch, which a spent monthly budget does not start
+		if (error instanceof AttachmentBudgetSpentError) {
+			return { status: "budgetSpent" }
 		}
 		console.error(`${topicAttachmentAdd.kind} attachment ingestion failed for topic ${topicId}`, error)
 		return { status: "failed" }

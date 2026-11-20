@@ -1,8 +1,18 @@
-// fetch tests for the content ttl, the tweet whose snippet is whole, the fields a fetch writes, and the page title
-import { expect, test } from "bun:test"
+// fetch tests for the content ttl, the tweet whose snippet is whole, the fields a fetch writes, the page title, and
+// the snippet that a failed fetch leaves to score
+import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { DAY_MS } from "@carlnotes/contracts/time"
-import { isContentStale } from "../scrape"
-import { isSnippetComplete, toFetchedContentFields, toPageTitleField } from "./fetch"
+import { newBudget } from "@carlnotes/models/budget"
+import * as firecrawlCredit from "../firecrawlCredit"
+import * as scrape from "../scrape"
+import { FirecrawlFaultError, isContentStale, UnreadablePageError } from "../scrape"
+import { fetchResourceContent, isSnippetComplete, toFetchedContentFields, toPageTitleField } from "./fetch"
+import type { Resource } from "./filter"
+
+// put every spy back after each test
+afterEach(() => {
+	mock.restore()
+})
 
 // isContentStale sends stored content back for revalidation once it reaches the ttl window
 test("isContentStale gates on the ttl window", () => {
@@ -51,4 +61,66 @@ test("toPageTitleField writes the page title only over a title from the url", ()
 
 	// a fetch that read no page names no title, so the stored one stands
 	expect(toPageTitleField(urlFallbackResource, null)).toEqual({})
+})
+
+// a page with a snippet and no stored content, so its content is fetched
+const PAGE = {
+	id: "page-1",
+	url: "https://example.com/page",
+	kind: "read",
+	snippet: "The snippet.",
+	contentKey: null,
+	transcriptUrl: null,
+} as Resource
+
+// fetch the page's content with a scrape that fails with the given error, and return what the fetch returned with the
+// error reports and spent credit marks it made
+async function fetchPageWithFailedScrape(scrapeError: Error): Promise<{
+	resourceContent: Awaited<ReturnType<typeof fetchResourceContent>>
+	reportCount: number
+	markCount: number
+	waitDeadlineAt: unknown
+}> {
+	// the scrape fails, and the reports and marks are counted
+	const fetchContentSpy = spyOn(scrape, "fetchContent").mockRejectedValue(scrapeError)
+	const consoleErrorSpy = spyOn(console, "error").mockImplementation(() => {})
+	const markSpy = spyOn(firecrawlCredit, "markFirecrawlCreditSpent").mockResolvedValue(undefined)
+	const budget = { ...newBudget(), modelCallWaitDeadlineAt: 123_456 }
+	const resourceContent = await fetchResourceContent(PAGE, budget)
+	return {
+		resourceContent,
+		reportCount: consoleErrorSpy.mock.calls.length,
+		markCount: markSpy.mock.calls.length,
+		waitDeadlineAt: fetchContentSpy.mock.calls[0]?.[3],
+	}
+}
+
+test("a scrape that fails on Firecrawl's side scores the snippet and marks the fault", async () => {
+	const rateLimit = new FirecrawlFaultError(PAGE.url, 429)
+	const { resourceContent, reportCount, markCount, waitDeadlineAt } = await fetchPageWithFailedScrape(rateLimit)
+	expect(resourceContent).toEqual({ content: "The snippet.", fetchOutcome: "fetched", isPageReadAgain: true })
+
+	// the failure is reported for the page, and the scrape waited inside the review attempt's wait deadline
+	expect({ reportCount, markCount }).toEqual({ reportCount: 1, markCount: 0 })
+	expect(waitDeadlineAt).toBe(123_456)
+})
+
+test("a spent credit is marked for the sweep and reported for no page", async () => {
+	const spentCredit = new FirecrawlFaultError(PAGE.url, 402)
+	const { resourceContent, reportCount, markCount } = await fetchPageWithFailedScrape(spentCredit)
+	expect(resourceContent).toEqual({ content: "The snippet.", fetchOutcome: "fetched", isPageReadAgain: true })
+	expect({ reportCount, markCount }).toEqual({ reportCount: 0, markCount: 1 })
+})
+
+test("a page that Firecrawl could not read scores the snippet with no fault marked", async () => {
+	const unreadPage = new UnreadablePageError(PAGE.url, "returned 403")
+	const { resourceContent, reportCount } = await fetchPageWithFailedScrape(unreadPage)
+	expect(resourceContent).toEqual({ content: "The snippet.", fetchOutcome: "fetched", isPageReadAgain: false })
+	expect(reportCount).toBe(1)
+})
+
+test("a fetch that timed out on this side scores the snippet and reads the page again", async () => {
+	const timeout = new DOMException("The operation timed out.", "TimeoutError")
+	const { resourceContent } = await fetchPageWithFailedScrape(timeout)
+	expect(resourceContent).toEqual({ content: "The snippet.", fetchOutcome: "fetched", isPageReadAgain: true })
 })

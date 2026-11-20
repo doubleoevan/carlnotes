@@ -1,26 +1,34 @@
-// the Temporal calls for a Scan. it starts and cancels a Scan under the Topic's workflow id, and reads the Scan queue's
-// pollers and backlog
+// the Temporal calls for a Scan. it starts a Scan on the queue of its trigger and cancels one under the Topic's
+// workflow id, and reads the Scan queue's pollers and backlog
 
-import type { ThresholdCrossing } from "@carlnotes/server/monitoring"
 import { WorkflowExecutionAlreadyStartedError, WorkflowNotFoundError } from "@temporalio/client"
 import { getClient, withClientDeadline } from "./temporalClient"
+import { type BacklogCrossing, describeTaskQueue, type TaskQueueDescription } from "./temporalTaskQueues"
 
 // what asked for a Scan, which decides what its end announces
 export type ScanTrigger = "manual" | "scheduled" | "creation"
 
-// scans poll their own queue instead of sharing the attachment one
+// scans poll their own queue instead of sharing the attachment one. a scheduled Scan starts on a second queue with
+// slots of its own, so a person's first or manual Scan never waits behind the platform's scheduled ones
 export const SCAN_TASK_QUEUE = "topic-scans"
+export const SCHEDULED_SCAN_TASK_QUEUE = "topic-scans-scheduled"
 const SCAN_WORKFLOW = "runTopicScanWorkflow"
 
-// Temporal's TASK_QUEUE_TYPE_ACTIVITY, the Scan queue's activity side, where a Scan's activities wait for a scan slot
-const ACTIVITY_TASK_QUEUE_TYPE = 2
+/**
+ * Returns the task queue that a Scan's workflow starts on: the scheduled queue for a scheduled Scan, and the Scan queue
+ * for a first or a manual Scan. A Scan's ingest and review run on its workflow's queue, so a Scan that started before a
+ * deploy finishes on the queue it started on.
+ */
+export function toScanTaskQueue(trigger: ScanTrigger): string {
+	return trigger === "scheduled" ? SCHEDULED_SCAN_TASK_QUEUE : SCAN_TASK_QUEUE
+}
 
-// how long the oldest waiting Scan activity may wait for a slot before the backlog is reported
-const SCAN_BACKLOG_ALERT_MS = 15 * 60 * 1000
-
-// the Scan queue's pollers and its activity backlog: how many tasks wait, and how long the oldest one has waited,
-// which is null if the server cannot say
-export type ScanQueueDescription = { pollerCount: number; backlogCount: number; oldestBacklogAgeMs: number | null }
+// the report of the Scan queue's backlog, once its oldest Scan activity has waited over 15 minutes for a slot
+export const SCAN_BACKLOG_CROSSING: BacklogCrossing = {
+	alertMs: 15 * 60 * 1000,
+	condition: "scan-backlog",
+	message: "a scan waited over 15 minutes for a slot",
+}
 
 // whether the Scan was handed to Temporal, and a call that waits for it to end.
 // it is a call, not a promise, so a process that only starts a Scan opens no long-poll and exits on its own
@@ -33,8 +41,8 @@ export type ScanStart = { status: "started"; whenFinished: () => Promise<void> }
 export type ScanCancel = { status: "cancelled"; whenStopped: () => Promise<void> } | { status: "idle" }
 
 /**
- * Start the durable workflow for a Scan row that is already open. Temporal owns the Scan from here,
- * so it runs to a terminal status even if this process goes away.
+ * Starts the durable workflow for a Scan row that is already open, on the queue of its trigger. Temporal owns the Scan
+ * from here, so it runs to a terminal status even if this process goes away.
  */
 export async function startTopicScanWorkflow(
 	scanId: string,
@@ -47,7 +55,7 @@ export async function startTopicScanWorkflow(
 		// the workflow id is derived from the topic
 		const workflowHandle = await withClientDeadline(client, () =>
 			client.workflow.start(SCAN_WORKFLOW, {
-				taskQueue: SCAN_TASK_QUEUE,
+				taskQueue: toScanTaskQueue(trigger),
 				workflowId: `scan-${topicId}`,
 				args: [scanId, topicId, ownerId, trigger],
 			}),
@@ -101,49 +109,6 @@ export async function cancelTopicScanWorkflow(topicId: string): Promise<ScanCanc
  * Describes the Scan queue: how many workers poll it, and how many Scan activities wait for a slot and for how long.
  * Zero pollers means no Scan will run at all, however healthy the api looks.
  */
-export async function describeScanQueue(): Promise<ScanQueueDescription> {
-	const client = await getClient()
-
-	// the stats a current server reports, and the backlog hint an older one returns instead, under the call deadline
-	const queue = await withClientDeadline(client, () =>
-		client.workflowService.describeTaskQueue({
-			namespace: client.options.namespace,
-			taskQueue: { name: SCAN_TASK_QUEUE },
-			taskQueueType: ACTIVITY_TASK_QUEUE_TYPE,
-			reportStats: true,
-			includeTaskQueueStatus: true,
-		}),
-	)
-
-	// a server without stats gives a depth from its hint and no age
-	const pollerCount = queue.pollers?.length ?? 0
-	if (!queue.stats) {
-		return { pollerCount, backlogCount: Number(queue.taskQueueStatus?.backlogCountHint ?? 0), oldestBacklogAgeMs: null }
-	}
-	const backlogAge = queue.stats.approximateBacklogAge
-	return {
-		pollerCount,
-		backlogCount: Number(queue.stats.approximateBacklogCount ?? 0),
-		oldestBacklogAgeMs: backlogAge
-			? Number(backlogAge.seconds ?? 0) * 1000 + Math.round((backlogAge.nanos ?? 0) / 1_000_000)
-			: null,
-	}
-}
-
-/**
- * Returns the Scan queue's backlog as a threshold crossing if its oldest Scan activity
- * has waited over 15 minutes for a slot, and null otherwise, including if the server cannot say how long.
- */
-export function toScanBacklogCrossing({
-	backlogCount,
-	oldestBacklogAgeMs,
-}: ScanQueueDescription): ThresholdCrossing | null {
-	if (oldestBacklogAgeMs === null || oldestBacklogAgeMs <= SCAN_BACKLOG_ALERT_MS) {
-		return null
-	}
-	return {
-		condition: "scan-backlog",
-		message: "a scan waited over 15 minutes for a slot",
-		values: { backlogCount, oldestBacklogAgeMs },
-	}
+export function describeScanQueue(): Promise<TaskQueueDescription> {
+	return describeTaskQueue(SCAN_TASK_QUEUE)
 }

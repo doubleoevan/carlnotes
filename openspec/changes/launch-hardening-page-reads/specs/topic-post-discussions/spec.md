@@ -20,7 +20,7 @@ pass the status read to the shared discussion card, and a card given none SHALL 
 
 #### Scenario: A failed recording stops the poll
 
-- **WHEN** a recording fails, or the sweep closes out one stuck recording, and the next status poll returns failed
+- **WHEN** a recording fails, or the sweep reaps one stuck recording, and the next status poll returns failed
 - **THEN** the page reads the Topic Post once, the card shows no recording state, and no further status read is sent
 
 #### Scenario: An MCP view sends no status read

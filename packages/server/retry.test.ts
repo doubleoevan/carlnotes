@@ -75,4 +75,40 @@ describe("runWithRetries", () => {
 		await expect(run).rejects.toThrow("too long a wait")
 		expect(attemptCount).toBe(1)
 	})
+
+	test("an aborted run ends its wait with the signal's reason and tries nothing again", async () => {
+		// the run is aborted while it waits a minute for its second attempt
+		const abortController = new AbortController()
+		const startedAttempts: number[] = []
+		const run = runWithRetries({
+			attempts: 3,
+			delayMs: 60_000,
+			signal: abortController.signal,
+			runAttempt: async (attempt) => {
+				startedAttempts.push(attempt)
+				throw new Error("not yet")
+			},
+			onRetry: () => abortController.abort(new Error("cancelled")),
+		})
+		await expect(run).rejects.toThrow("cancelled")
+		expect(startedAttempts).toEqual([1])
+	})
+
+	test("a failure of a run that is already aborted is not tried again", async () => {
+		// the attempt fails because its run was aborted, which another attempt cannot fix
+		const abortController = new AbortController()
+		const retriedAttempts: number[] = []
+		const run = runWithRetries({
+			attempts: 3,
+			delayMs: 0,
+			signal: abortController.signal,
+			runAttempt: async () => {
+				abortController.abort()
+				throw new Error("the call was aborted")
+			},
+			onRetry: (attempt) => retriedAttempts.push(attempt),
+		})
+		await expect(run).rejects.toThrow("the call was aborted")
+		expect(retriedAttempts).toEqual([])
+	})
 })

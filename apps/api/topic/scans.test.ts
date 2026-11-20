@@ -3,7 +3,7 @@
 // scan checks the admin's own budget. a scan asked for while the first scan waits, or past the scheduled scans cutoff,
 // waits for the sweep. scan note tests: who gets a source result's cost, reason, and full url label, and
 // which stored results never leave the api
-import { afterEach, expect, type Mock, mock, spyOn, test } from "bun:test"
+import { afterEach, expect, type Mock, spyOn, test } from "bun:test"
 import { MANUAL_SCAN_PAUSED_LABEL, SCAN_SPENT_BUDGET_LABEL } from "@carlnotes/contracts/scanFailure"
 import type { StoredScanSourceResults, StoredSourceResult } from "@carlnotes/contracts/topics"
 import {
@@ -16,7 +16,7 @@ import * as dailySpendCutoffs from "@carlnotes/db/dailySpendCutoffs"
 import * as monthlyBudgetCutoffs from "@carlnotes/db/monthlyBudgetCutoffs"
 import { topics } from "@carlnotes/db/schema/topics"
 import * as litellm from "@carlnotes/models/litellm"
-import { restoreLiteLLMTest, setUpLiteLLMTest } from "@carlnotes/models/litellmTestFixtures"
+import { restoreLiteLLMTest, stubUnreachableProxy } from "@carlnotes/models/litellmTestFixtures"
 import * as scan from "@carlnotes/pipeline/scan"
 import * as staleScans from "@carlnotes/pipeline/staleScans"
 import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
@@ -47,17 +47,17 @@ function stubOwnedTopicRows(): void {
 	})
 }
 
-// the spies on the scan start, the stale scan close-out, and the overage bill
+// the spies on the scan start, the stale scan reaper, and the overage bill
 type ManualScanSpies = {
 	startTopicScanSpy: Mock<typeof scan.startTopicScan>
-	failStaleScansSpy: Mock<typeof staleScans.failStaleScans>
+	reapStaleScansSpy: Mock<typeof staleScans.reapStaleScans>
 	reportManualScanOverageSpy: Mock<typeof billing.reportManualScanOverage>
 	isTopicFirstScanWaitingSpy: Mock<typeof dailySpendCutoffs.isTopicFirstScanWaiting>
 	isManualScanWaitingSpy: Mock<typeof dailySpendCutoffs.isManualScanWaiting>
 }
 
 // stub the gate to allow the scan, the user's spend to be under the whole budget and the manual scans cutoff, and the
-// scan load to return no scan. spy on the scan start, the stale scan close-out, the overage bill, and the waiting checks,
+// scan load to return no scan. spy on the scan start, the stale scan reaper, the overage bill, and the waiting checks,
 // each stubbed as not waiting
 function spyOnManualScan(isOverage: boolean): ManualScanSpies {
 	spyOn(authorization, "loadManualScanAuthorization").mockResolvedValue({
@@ -74,21 +74,11 @@ function spyOnManualScan(isOverage: boolean): ManualScanSpies {
 			scan: { id: "scan-1" } as never,
 			whenFinished: async () => {},
 		}),
-		failStaleScansSpy: spyOn(staleScans, "failStaleScans").mockResolvedValue(0),
+		reapStaleScansSpy: spyOn(staleScans, "reapStaleScans").mockResolvedValue(0),
 		reportManualScanOverageSpy: spyOn(billing, "reportManualScanOverage").mockResolvedValue(undefined),
 		isTopicFirstScanWaitingSpy: spyOn(dailySpendCutoffs, "isTopicFirstScanWaiting").mockResolvedValue(false),
 		isManualScanWaitingSpy: spyOn(dailySpendCutoffs, "isManualScanWaiting").mockResolvedValue(false),
 	}
-}
-
-// set the proxy settings that the budget read needs, swap fetch for a proxy that cannot be reached, and return the stub
-function stubUnreachableProxy(): Mock<() => Promise<Response>> {
-	setUpLiteLLMTest()
-	const fetchMock = mock(async (): Promise<Response> => {
-		throw new TypeError("fetch failed")
-	})
-	globalThis.fetch = fetchMock as unknown as typeof fetch
-	return fetchMock
 }
 
 // request a manual scan of topic-1 as the given user
@@ -96,11 +86,11 @@ async function sendManualScan(userId: string): Promise<Response> {
 	return toSignedInApp(scansRoute, userId).request("/topics/topic-1/scan", { method: "POST" })
 }
 
-// a spent budget rejects the scan with the budget label, before the stale scan close-out, the scan row, or the overage
+// a spent budget rejects the scan with the budget label, before the stale scan reaper, the scan row, or the overage
 test("a manual Scan whose key has spent its budget returns 402 with the budget label and starts nothing", async () => {
 	// an owner past the daily limit with a card on file, whose key has spent its budget
 	stubOwnedTopicRows()
-	const { startTopicScanSpy, failStaleScansSpy, reportManualScanOverageSpy } = spyOnManualScan(true)
+	const { startTopicScanSpy, reapStaleScansSpy, reportManualScanOverageSpy } = spyOnManualScan(true)
 	spyOn(litellm, "isUserLiteLLMKeyBudgetExhausted").mockResolvedValue(true)
 
 	// the scan is rejected with the budget label
@@ -108,8 +98,8 @@ test("a manual Scan whose key has spent its budget returns 402 with the budget l
 	expect(response.status).toBe(402)
 	expect(await response.json()).toEqual({ error: SCAN_SPENT_BUDGET_LABEL })
 
-	// nothing was closed out, started, or billed
-	expect(failStaleScansSpy).not.toHaveBeenCalled()
+	// nothing was reaped, started, or billed
+	expect(reapStaleScansSpy).not.toHaveBeenCalled()
 	expect(startTopicScanSpy).not.toHaveBeenCalled()
 	expect(reportManualScanOverageSpy).not.toHaveBeenCalled()
 })
@@ -138,7 +128,7 @@ test("a manual Scan past the manual scans cutoff returns 402 with the paused lab
 test("a manual Scan with a spent monthly budget returns 402 with the budget label and starts nothing", async () => {
 	// an owner whose spend is at the whole budget, which is past the manual scans cutoff too
 	stubOwnedTopicRows()
-	const { startTopicScanSpy, failStaleScansSpy, reportManualScanOverageSpy } = spyOnManualScan(true)
+	const { startTopicScanSpy, reapStaleScansSpy, reportManualScanOverageSpy } = spyOnManualScan(true)
 	const isMonthlySpendExhaustedSpy = spyOn(authorization, "isMonthlySpendExhausted").mockResolvedValue(true)
 	spyOn(monthlyBudgetCutoffs, "isMonthlyBudgetCutoffPassed").mockResolvedValue(true)
 	const isUserLiteLLMKeyBudgetExhaustedSpy = spyOn(litellm, "isUserLiteLLMKeyBudgetExhausted")
@@ -150,8 +140,8 @@ test("a manual Scan with a spent monthly budget returns 402 with the budget labe
 	expect(isMonthlySpendExhaustedSpy).toHaveBeenCalledWith("owner-1")
 	expect(isUserLiteLLMKeyBudgetExhaustedSpy).not.toHaveBeenCalled()
 
-	// nothing was closed out, started, or billed
-	expect(failStaleScansSpy).not.toHaveBeenCalled()
+	// nothing was reaped, started, or billed
+	expect(reapStaleScansSpy).not.toHaveBeenCalled()
 	expect(startTopicScanSpy).not.toHaveBeenCalled()
 	expect(reportManualScanOverageSpy).not.toHaveBeenCalled()
 })

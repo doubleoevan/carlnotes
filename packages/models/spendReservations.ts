@@ -3,11 +3,13 @@
 // open reservations are below it, so the month can pass the budget by about one call's largest cost. if Redis cannot
 // run a reservation, the call falls back to the check of recorded spend against the budget
 import { userBudgetCents } from "@carlnotes/contracts/plans"
-import { loadUserAccess, monthlySpendDollars, toSpendCents } from "@carlnotes/db/quotas"
+import { loadUserAccess } from "@carlnotes/db/quotas"
+import { monthlySpendDollars, toSpendCents } from "@carlnotes/db/recordedSpend"
 import { runWithRedis } from "@carlnotes/db/redis"
 
 // the kinds of call that reserve: a chat turn, a spoken question's transcription, one spoken part of a reply, a
-// Personal sources summary, and an updates recap
+// Personal sources summary, an updates recap, a topic memory update, and a paid call with no model in it, such as a
+// page fetch or a search
 export type SpendReservationKind =
 	| "chatTurn"
 	| "transcription"
@@ -15,12 +17,14 @@ export type SpendReservationKind =
 	| "personalSourcesContext"
 	| "updatesRecap"
 	| "topicMemories"
+	| "paidCall"
 
 // how long each kind's reservation lasts if nothing releases it: the call's longest run plus a minute
 const RESERVATION_MS_BY_KIND: Record<SpendReservationKind, number> = {
 	personalSourcesContext: 6 * 60 * 1000,
 	topicMemories: 6 * 60 * 1000,
 	updatesRecap: 2 * 60 * 1000,
+	paidCall: 2 * 60 * 1000,
 	chatTurn: 16 * 60 * 1000,
 	transcription: 6 * 60 * 1000,
 	speech: 6 * 60 * 1000,

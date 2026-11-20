@@ -1,5 +1,6 @@
 // the web app's server build as the api runs it: the import at startup, which stops a production boot that cannot
-// render, the page render with its visitor concurrency limit, and the readiness render
+// render, the page render with its visitor concurrency limit and the page a shed visitor gets, the minute's render
+// counts, and the readiness render
 import { resolve } from "node:path"
 import { DEGRADED_RENDER_HEADER } from "@carlnotes/contracts/seo"
 import { withTimeLimit } from "@carlnotes/contracts/time"
@@ -15,8 +16,23 @@ const DEGRADED_RENDER_RETRY_AFTER_SECONDS = 60
 // shed
 const DEFAULT_RENDER_CONCURRENCY = 16
 
-// how long the browser waits before retrying a shed render, in seconds
-const BUSY_RENDER_RETRY_AFTER_SECONDS = 2
+// the shortest and longest wait before the browser retries a shed render, in seconds. each shed response picks a
+// wait between them, so shed visitors do not all return at once
+export const BUSY_RENDER_MIN_RETRY_AFTER_SECONDS = 2
+export const BUSY_RENDER_MAX_RETRY_AFTER_SECONDS = 6
+
+// the page a shed visitor gets: it asks for the same address again after the retry wait, with no script, stays out of
+// search results, and says that the site is busy and that the page will try again
+function toBusyRenderPage(retryAfterSeconds: number): string {
+	const head = [
+		'<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">',
+		`<meta http-equiv="refresh" content="${retryAfterSeconds}">`,
+		'<meta name="color-scheme" content="light dark"><meta name="robots" content="noindex">',
+		"<title>CarlNotes is busy</title>",
+		"<style>body{font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:90vh;margin:0}</style>",
+	].join("")
+	return `<!doctype html><html lang="en"><head>${head}</head><body><main><h1>CarlNotes is busy</h1><p>This page will try again in a moment.</p></main></body></html>`
+}
 
 // the ui's server handler, as the server entry exports it
 type UiServer = { fetch: (request: Request) => Promise<Response> }
@@ -41,6 +57,24 @@ type ReadinessCheck = { uiServerEntryPath: string; startedAtMs: number; renderRe
 
 // how many visitor pages this replica is rendering now
 let activeVisitorRenderCount = 0
+
+// how many page renders this replica started and how many visitor renders it shed since the minute's last reading
+let startedRenderCount = 0
+let shedRenderCount = 0
+
+// the page renders a replica started in a minute, and the visitor renders it shed past its limit
+export type RenderGauges = { startedCount: number; shedCount: number }
+
+/**
+ * Returns the page renders this replica started and the visitor renders it shed since the last reading, and starts
+ * both counts over.
+ */
+export function readAndResetRenderGauges(): RenderGauges {
+	const renderGauges = { startedCount: startedRenderCount, shedCount: shedRenderCount }
+	startedRenderCount = 0
+	shedRenderCount = 0
+	return renderGauges
+}
 
 // the latest readiness check, which every check within five seconds of its start reuses
 let latestReadinessCheck: ReadinessCheck | null = null
@@ -96,18 +130,23 @@ export async function renderUiPage(request: Request): Promise<Response> {
 	}
 	const { uiServer } = uiServerImport
 
-	// shed a visitor's render past the concurrency limit, with a short retry. a signed-in render is never counted or shed.
-	// the page guards mark the 503 private
+	// shed a visitor's render past the concurrency limit, with a page that retries shortly. a signed-in render is never
+	// counted against the limit or shed. the page guards mark the 503 private
 	const isVisitorRender = !getSessionCookie(request)
 	const renderConcurrency = toPositiveInteger(Bun.env.RENDER_CONCURRENCY, DEFAULT_RENDER_CONCURRENCY)
 	if (isVisitorRender && activeVisitorRenderCount >= renderConcurrency) {
-		return new Response("the site is busy, try again in a moment", {
+		shedRenderCount++
+		const retryAfterSeconds =
+			BUSY_RENDER_MIN_RETRY_AFTER_SECONDS +
+			Math.floor(Math.random() * (BUSY_RENDER_MAX_RETRY_AFTER_SECONDS - BUSY_RENDER_MIN_RETRY_AFTER_SECONDS + 1))
+		return new Response(toBusyRenderPage(retryAfterSeconds), {
 			status: 503,
-			headers: { "Retry-After": String(BUSY_RENDER_RETRY_AFTER_SECONDS) },
+			headers: { "Content-Type": "text/html; charset=utf-8", "Retry-After": String(retryAfterSeconds) },
 		})
 	}
 
 	// render the page, counting a visitor's render until the ui's server returns the page's headers
+	startedRenderCount++
 	if (isVisitorRender) {
 		activeVisitorRenderCount++
 	}

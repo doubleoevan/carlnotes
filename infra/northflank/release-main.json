@@ -1,7 +1,7 @@
 {
 	"apiVersion": "v1.2",
 	"name": "release-main",
-	"description": "Build main, run migrate, deploy app, purge the edge's pages, deploy the film and main workers, then embed docs",
+	"description": "Build main, run migrate, deploy app and web, purge the edge's pages, deploy the film and main workers, then embed docs",
 	"spec": {
 		"kind": "Workflow",
 		"spec": {
@@ -45,6 +45,21 @@
 							"build": "${refs.build-image.id}"
 						},
 						"target": { "id": "app", "type": "service" }
+					},
+					"condition": "running",
+					"timeoutDuration": 600
+				},
+				{
+					"kind": "Release",
+					"ref": "deploy-web",
+					"spec": {
+						"type": "build",
+						"origin": {
+							"id": "build",
+							"branch": "${refs.build-image.branch}",
+							"build": "${refs.build-image.id}"
+						},
+						"target": { "id": "web", "type": "service" }
 					},
 					"condition": "running",
 					"timeoutDuration": 600

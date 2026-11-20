@@ -133,7 +133,8 @@ Carl checks your text before it posts. If he declines it, he says so and keeps y
 
 The daily email is off until you turn it on. Once it is on, Carl emails you once a day with what happened since the
 last email: hot takes and reactions on your topics, replies and reactions to your hot takes, and mentions of you. A day
-with nothing sends nothing.
+with nothing sends nothing. Carl looks once a day, after 15:00 UTC, so anything later that day is in the next day's
+email.
 
 Turn it on or off with **Daily notifications email** under **Notifications** in Account. The link at the foot of any
 of these emails also turns it off.

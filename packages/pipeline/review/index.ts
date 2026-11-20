@@ -1,22 +1,22 @@
 // review turns a Scan's discovered Resources into topic findings
 
 import { db } from "@carlnotes/db"
-import { findings, resources, type scans } from "@carlnotes/db/schema/scans"
-import { topics } from "@carlnotes/db/schema/topics"
+import { findings, type scans } from "@carlnotes/db/schema/scans"
 import { loadSharedCommentTexts } from "@carlnotes/db/sharedComments"
 import type { Budget } from "@carlnotes/models/budget"
 import { traceStage } from "@carlnotes/models/telemetry"
-import { eq, inArray, isNotNull, sql } from "drizzle-orm"
+import { eq } from "drizzle-orm"
 import { buildTopicScanContext } from "../attach"
-import type { DiscoveredResource } from "../ingest/ingester"
+import type { ResourceDiscovery } from "../ingest/ingester"
 import { considerReviewLink, loadPersonalSourcesReviewLinks } from "../personalSources/linkQueue"
 import { loadTopicMemoryPrompt } from "../topicMemoryPrompt"
 import { dedupeResources } from "./dedupe"
 import { gateResources, loadResourcesToReview, loadUrlSourcePageUrls, rankBySimilarity } from "./filter"
+import { deleteFilteredFindings } from "./filteredFindings"
+import { filterTopicFindings } from "./maxTopicFindings"
 import { isCarlNotesGeneratedContentUrl, isOwnTopicPageUrl } from "./ownTopicPages"
-import { loadFindingIdsWithComments } from "./reactionSignals"
 import { fetchAndScoreResources } from "./score"
-import { loadBookmarkedFindingRows, loadScoreExamplePages } from "./scoreExamplePages"
+import { loadScoreExamplePages } from "./scoreExamplePages"
 import { type ScannedSource, summarizeTopicScan, toTopicScanSummary } from "./summarize"
 import { loadTopicContext, toReviewContextHash } from "./topicContext"
 import {
@@ -41,7 +41,7 @@ type Scan = typeof scans.$inferSelect
 export async function reviewScan(
 	scan: Scan,
 	topicId: string,
-	discoveredResources: DiscoveredResource[],
+	discoveredResources: ResourceDiscovery[],
 	scannedSources: ScannedSource[],
 	budget: Budget,
 	litellmApiKey?: string,
@@ -63,8 +63,8 @@ export async function reviewScan(
 	const topicScanContext = await buildTopicScanContext({ topicId, purpose: "review" })
 	const topicContextHash = toReviewContextHash(topicScanContext)
 
-	// select what this Scan has to review: never reviewed, reviewed against another context, or older content, and
-	// never one of the topic's own pages that an earlier Finding holds
+	// select what this Scan has to review: never reviewed, reviewed against another context, or older content, a page
+	// filtered before that an open place takes, and never one of the topic's own pages that an earlier Finding holds
 	const resourcesToReview = (
 		await loadResourcesToReview({
 			topicId,
@@ -168,12 +168,20 @@ export async function reviewScan(
 		budget,
 		() =>
 			dedupeResources({
+				topicId,
 				relevantResources: rankedResources,
 				candidateIds: resourceIdsToReview,
 				reviewOutcome,
 				urlSourcePageIds,
 			}),
 		(toScore) => ({ relevantCount: relevantResources.length, toScoreCount: toScore.length }),
+	)
+
+	// a page that goes to the model holds its place no longer: one that ends with no Finding leaves no filtered finding,
+	// and the filter writes a new one for a Finding that it removes again
+	await deleteFilteredFindings(
+		topicId,
+		resourcesToScore.map((resource) => resource.id),
 	)
 
 	// the paid stage: fetch each of those Resources and score it under the Scan's limits.
@@ -235,76 +243,4 @@ export async function reviewScan(
 		resourceIdsToScore: resourcesToScore.map((resource) => resource.id),
 		scoredResourceIds,
 	}
-}
-
-// keep only the topic's top maxTopicFindings findings by relevance score, except for the exempt ones: a finding that
-// is bookmarked or rated, or that has a Comment
-async function filterTopicFindings(
-	topicId: string,
-): Promise<{ keptFindingUrls: Set<string>; filteredFindingCount: number }> {
-	// the topic's limit on kept findings, and what the access check needs
-	const [topic] = await db
-		.select({ maxTopicFindings: topics.maxTopicFindings, ownerId: topics.ownerId, teamId: topics.teamId })
-		.from(topics)
-		.where(eq(topics.id, topicId))
-	if (!topic) {
-		return { keptFindingUrls: new Set(), filteredFindingCount: 0 }
-	}
-
-	// the findings bookmarked by someone who still has access, and the ones that hold someone's comment, which a
-	// re-score must never delete
-	const [bookmarkedFindingRows, findingIdsWithComments] = await Promise.all([
-		loadBookmarkedFindingRows(topicId, topic),
-		loadFindingIdsWithComments(topicId, topic.ownerId),
-	])
-	const exemptFindingIds = [...bookmarkedFindingRows.map(({ findingId }) => findingId), ...findingIdsWithComments]
-
-	// the topic's findings with their ranking scores, when each was found, the url it points at,
-	// and whether it is exempt from the limit
-	const findingRows = await db
-		.select({
-			id: findings.id,
-			relevanceScore: findings.relevanceScore,
-			createdAt: findings.createdAt,
-			url: resources.url,
-			isExempt: sql<boolean>`(${inArray(findings.id, exemptFindingIds)} or ${isNotNull(findings.rating)})`.mapWith(
-				Boolean,
-			),
-		})
-		.from(findings)
-		.innerJoin(resources, eq(findings.resourceId, resources.id))
-		.where(eq(findings.topicId, topicId))
-
-	// decide which findings fall outside the limit. a re-score can lower a score,
-	// and filtering by score alone would delete a finding its user bookmarked or wrote on
-	const filteredIds = findingIdsToFilter(findingRows, topic.maxTopicFindings)
-	if (filteredIds.length > 0) {
-		await db.delete(findings).where(inArray(findings.id, filteredIds))
-	}
-
-	// return the urls of the findings that remain, and how many were filtered out
-	const filteredIdSet = new Set(filteredIds)
-	const keptFindingUrls = new Set(
-		findingRows.filter((findingRow) => !filteredIdSet.has(findingRow.id)).map((findingRow) => findingRow.url),
-	)
-	return { keptFindingUrls, filteredFindingCount: filteredIds.length }
-}
-
-/**
- * The topic's finding ids that are not exempt, ranked beyond maxTopicFindings by relevance score,
- * which need filtering. A tie goes to the newer finding, so a Topic already full of top-scored ones can
- * still update from a later Scan.
- */
-export function findingIdsToFilter(
-	findingRows: { id: string; relevanceScore: number; createdAt: Date; isExempt: boolean }[],
-	maxTopicFindings: number,
-): string[] {
-	// rank the rows that are not exempt and drop everything past the limit
-	const rankedFilterableRows = findingRows
-		.filter((findingRow) => !findingRow.isExempt)
-		.sort(
-			(first, second) =>
-				second.relevanceScore - first.relevanceScore || second.createdAt.getTime() - first.createdAt.getTime(),
-		)
-	return rankedFilterableRows.slice(maxTopicFindings).map((findingRow) => findingRow.id)
 }

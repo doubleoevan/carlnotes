@@ -8,7 +8,7 @@ import { reportError } from "@carlnotes/server/monitoring"
 import sharp from "sharp"
 import { loadOrGenerateAnimation } from "./generatedAnimationStorage"
 import { isGeneratedChapterImageAllowed } from "./generatedChapterImages"
-import { recordPictureAnimationCost } from "./topicVideoRows"
+import { recordPictureAnimationCost, recordPlatformTopicVideoSpend } from "./topicVideoRows"
 import type { VideoSegmentImage } from "./videoParts"
 import { checkVideoSceneOutput } from "./videoSceneOutput"
 import type { VideoScenePlan } from "./videoScenePlan"
@@ -33,6 +33,7 @@ export async function applyGeneratedPictureAnimation(options: {
 	isRetry: boolean
 	signal?: AbortSignal
 }): Promise<string | undefined> {
+	// a chapter with no picture to animate keeps its montage
 	const { plan, images, directory, ownerId, isRetry, signal } = options
 	const region = selectGeneratedAnimation(plan)
 	if (!region) {
@@ -68,6 +69,8 @@ export async function applyGeneratedPictureAnimation(options: {
 					if (!apiKey) {
 						throw Error("The platform film model key is missing")
 					}
+
+					// the picture at the clip's size, and the prompt for its effect
 					const jpeg = await sharp(await image.loadStillPng(1280))
 						.resize(1280, 720)
 						.jpeg({ quality: 90 })
@@ -86,7 +89,12 @@ export async function applyGeneratedPictureAnimation(options: {
 							wasSubmitted = true
 						},
 						recordCost: allowance.platformPays
-							? undefined
+							? (dollars) =>
+									recordPlatformTopicVideoSpend({
+										podcastEpisodeId: plan.episode,
+										kind: "topicVideoAnimation",
+										dollars,
+									})
 							: (dollars) => recordPictureAnimationCost(plan.episode, dollars),
 					})
 					return await screenGeneratedAnimation(generated.video, directory, plan.episode, plan.position, signal)

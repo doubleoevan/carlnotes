@@ -1,56 +1,106 @@
-// tests for the max-results filter that closes every Scan
-import { expect, test } from "bun:test"
-import { findingIdsToFilter } from "./index"
+// the review's order around the paid stage, with every stage stubbed: a page's filtered finding is deleted just before
+// the page goes to the model, and the max-results filter runs after the scores are in
+import { afterEach, expect, mock, spyOn, test } from "bun:test"
+import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
+import type { scans } from "@carlnotes/db/schema/scans"
+import * as sharedComments from "@carlnotes/db/sharedComments"
+import { newBudget } from "@carlnotes/models/budget"
+import * as attach from "../attach"
+import * as linkQueue from "../personalSources/linkQueue"
+import * as topicMemoryPrompt from "../topicMemoryPrompt"
+import * as dedupe from "./dedupe"
+import * as filter from "./filter"
+import * as filteredFindings from "./filteredFindings"
+import { reviewScan } from "./index"
+import * as maxTopicFindings from "./maxTopicFindings"
+import { toTestResource } from "./reviewTestFixtures"
+import * as score from "./score"
+import * as scoreExamplePages from "./scoreExamplePages"
+import * as summarize from "./summarize"
+import * as topicContext from "./topicContext"
 
-// a topic finding row with just the fields that findingIdsToFilter reads. the caller folds a bookmark and a
-// rating into the one flag the filter reads
-function findingRow(
-	id: string,
-	relevanceScore: number,
-	isExempt = false,
-	foundAt = 0,
-): { id: string; relevanceScore: number; createdAt: Date; isExempt: boolean } {
-	return { id, relevanceScore, createdAt: new Date(2026, 0, 1 + foundAt), isExempt }
+// put the pool and every spy back after each test
+afterEach(() => {
+	restoreConnectionPool()
+	mock.restore()
+})
+
+// stub every stage of a review that finds the given Resources worth scoring, and return the steps in the order they
+// ran
+function stubReviewStages(resourceIds: string[]): string[] {
+	// a Topic with no personal link, no Finding yet, and a context to review against
+	const steps: string[] = []
+	const resourcesToReview = resourceIds.map((id) => ({ ...toTestResource(id), url: `https://example.com/${id}` }))
+	stubConnectionPool(() => [])
+
+	// the personal links pass the discovered Resources through
+	spyOn(linkQueue, "loadPersonalSourcesReviewLinks").mockImplementation(async ({ discoveredResources }) => ({
+		discoveredResources,
+		personalSourceScoreBonuses: new Map(),
+		claimedUrls: new Set(),
+	}))
+	spyOn(attach, "buildTopicScanContext").mockResolvedValue({ name: "Grinders", context: "Burr grinders." })
+
+	// what the score prompt reads beside the context
+	spyOn(scoreExamplePages, "loadScoreExamplePages").mockResolvedValue({
+		likedOrBookmarkedPages: [],
+		ratedDownPages: [],
+	})
+	spyOn(sharedComments, "loadSharedCommentTexts").mockResolvedValue([])
+	spyOn(topicMemoryPrompt, "loadTopicMemoryPrompt").mockResolvedValue("")
+	spyOn(topicContext, "loadTopicContext").mockResolvedValue({
+		...{ name: "Grinders", text: "Grinders", embedding: [1, 0], contextHash: "context-1", scoreText: "Grinders" },
+	})
+
+	// the unpaid stages let every Resource through
+	spyOn(filter, "loadResourcesToReview").mockResolvedValue(resourcesToReview)
+	spyOn(filter, "loadUrlSourcePageUrls").mockResolvedValue([])
+	spyOn(filter, "gateResources").mockResolvedValue(
+		resourcesToReview.map((resource) => ({ resource, embedding: [1, 0], similarity: 0.9 })),
+	)
+	spyOn(dedupe, "dedupeResources").mockResolvedValue(resourcesToReview)
+
+	// the three steps whose order the tests read
+	spyOn(filteredFindings, "deleteFilteredFindings").mockImplementation(async (_topicId, deletedResourceIds) => {
+		steps.push(`delete the filtered findings of ${deletedResourceIds.join(", ")}`)
+	})
+	spyOn(score, "fetchAndScoreResources").mockImplementation(async () => {
+		steps.push("score")
+		return resourceIds
+	})
+
+	// the filter removes nothing, and no recap is written
+	spyOn(maxTopicFindings, "filterTopicFindings").mockImplementation(async () => {
+		steps.push("filter")
+		return { keptFindingUrls: new Set<string>(), filteredFindingCount: 0 }
+	})
+	spyOn(summarize, "toTopicScanSummary").mockResolvedValue("")
+	return steps
 }
 
-// under the limit nothing filters. over it the lowest-ranked findings no user bookmarked or rated go
-test("findingIdsToFilter keeps the top maxTopicFindings by relevance", () => {
-	// three rows under a limit of five keep everything
-	expect(findingIdsToFilter([findingRow("a", 0.9), findingRow("b", 0.5), findingRow("c", 0.7)], 5)).toEqual([])
-	// a limit of two drops the lowest-ranked row
-	expect(findingIdsToFilter([findingRow("a", 0.9), findingRow("b", 0.5), findingRow("c", 0.7)], 2)).toEqual(["b"])
+// a page judged again that ends with no Finding must leave no filtered finding, so the row goes before the paid stage
+test("a page's filtered finding is deleted just before the paid stage, and the filter closes the review", async () => {
+	const steps = stubReviewStages(["held-page", "new-page"])
+	const scan = { id: "scan-1" } as typeof scans.$inferSelect
+	const discoveredResources = [{ url: "https://example.com/held-page" }, { url: "https://example.com/new-page" }]
+
+	// both pages reach the paid stage
+	const reviewSummary = await reviewScan(
+		scan,
+		"topic-1",
+		discoveredResources as Parameters<typeof reviewScan>[2],
+		[],
+		newBudget(),
+	)
+	expect(steps).toEqual(["delete the filtered findings of held-page, new-page", "score", "filter"])
+	expect(reviewSummary.scoredResourceIds).toEqual(["held-page", "new-page"])
 })
 
-// a row a user bookmarked or rated never gets filtered and never consumes a limit slot
-test("findingIdsToFilter spares bookmarked and rated rows past the limit", () => {
-	// the bookmarked low scorer survives, and the lowest row with neither bookmark nor rating goes instead
-	const rows = [findingRow("a", 0.9), findingRow("b", 0.1, true), findingRow("c", 0.7), findingRow("d", 0.3)]
-	expect(findingIdsToFilter(rows, 2)).toEqual(["d"])
-})
-
-// a scorer that gives many findings the same top score would otherwise let the first arrivals hold every slot
-test("findingIdsToFilter gives a tie to the newer finding", () => {
-	const rows = [findingRow("old", 1, false, 0), findingRow("new", 1, false, 5)]
-	expect(findingIdsToFilter(rows, 1)).toEqual(["old"])
-
-	// the incoming order must not decide it either
-	expect(findingIdsToFilter([...rows].reverse(), 1)).toEqual(["old"])
-})
-
-// a lower-scored newer finding still loses to a higher-scored older one, so that recency only settles ties
-test("findingIdsToFilter puts score ahead of recency", () => {
-	const rows = [findingRow("better", 0.9, false, 0), findingRow("newer", 0.4, false, 5)]
-	expect(findingIdsToFilter(rows, 1)).toEqual(["newer"])
-})
-
-// an edited prompt can re-score a finding lower than it was, and filtering by score alone would delete it
-// and cascade away the rating, read state, and feedback on it
-test("findingIdsToFilter spares a finding a user rated after a re-score lowered it", () => {
-	// the rated finding was re-scored to the bottom of the ranking and still survives the filter
-	const rows = [findingRow("kept-a", 0.9), findingRow("kept-b", 0.8), findingRow("rated", 0.05, true)]
-	expect(findingIdsToFilter(rows, 2)).toEqual([])
-
-	// a finding with no bookmark or rating re-scored just as low is the one that goes
-	const withUnrated = [...rows, findingRow("unrated", 0.04)]
-	expect(findingIdsToFilter(withUnrated, 2)).toEqual(["unrated"])
+// a Scan that rediscovers only pages it already judged scores nothing and writes no recap, and still filters
+test("a review with nothing to score still runs the filter, and writes no recap", async () => {
+	const steps = stubReviewStages([])
+	const scan = { id: "scan-1" } as typeof scans.$inferSelect
+	const reviewSummary = await reviewScan(scan, "topic-1", [], [], newBudget())
+	expect(steps).toEqual(["filter"])
+	expect(reviewSummary).toMatchObject({ keptCount: 0, scanSummary: "", scoredResourceIds: [] })
 })

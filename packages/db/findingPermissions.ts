@@ -3,7 +3,7 @@
 
 import { and, eq, inArray } from "drizzle-orm"
 import { toTopicRoleFilter } from "./contentFilters"
-import { db } from "./index"
+import { type DbHandle, db } from "./index"
 import { hasUnconvertedPersonalSources } from "./personalSourcesAuthority"
 import { loadUserAccess } from "./quotas"
 import { findings, scans } from "./schema/scans"
@@ -15,7 +15,7 @@ import {
 	isVisibleAfterActivation,
 	loadSubscribedTopicIds,
 	subscriptionActivatedAt,
-	type TopicRole,
+	toTopicEditRole,
 	toTopicRole,
 } from "./topicPermissions"
 
@@ -40,9 +40,17 @@ export async function canRateTopic(
 	return isSubscriberRatable(topic.visibility) && hasSubscription(userId, topic.id)
 }
 
-/** Whether this Topic role may steer the Journal. */
-export function canRateTopicMemories(role: TopicRole): boolean {
-	return role === "owner" || role === "leader"
+/**
+ * Returns whether the user may rate a Topic's memories: the Topic's owner, and a leader of the owning team while the
+ * owner is still on it. A team that only holds a share never rates.
+ */
+export async function canRateTopicMemories(
+	userId: string | null,
+	topic: Pick<typeof topics.$inferSelect, "ownerId" | "teamId">,
+	handle: DbHandle = db,
+): Promise<boolean> {
+	const editRole = await toTopicEditRole(userId, topic, handle)
+	return editRole === "owner" || editRole === "leader"
 }
 
 /**

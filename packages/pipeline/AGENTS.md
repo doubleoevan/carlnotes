@@ -57,13 +57,30 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
   Waiting Scan with no workflow as stopped, and `scanTopic` and `failUnstartedScan` are what the sweep calls for a row
   it dispatches or fails. `temporalClient.ts` is the Temporal client: the task queue names and the workflow starts, each
   giving up after ten seconds, with `startChatMentionPushWorkflow`, which the api calls after a room post saved mention
-  rows and which ignores a second start for the same message. `scanWorkflowClient.ts` holds a Scan's calls on that
-  client: the `ScanTrigger` type (`manual`, `scheduled`, or `creation`), the Scan queue's name, the Scan's start and
-  cancel, and `describeScanQueue`, which the worker's minute line and the sweep's backlog report read.
-  `stageTimeouts.ts` is how long each Scan stage may run and how many attempts it gets, and the review's 20-minute model
-  call wait deadline, which the workflows import. `staleScans.ts` is the close-out of a scan that outran its stages or
-  never started, which the sweep and the manual scan route run. `screen.ts` starts the url Source screen workflow, which
-  fetches the page and marks the Source ready or failed, for every Source still waiting on one.
+  rows and which ignores a second start for the same message. `temporalTaskQueues.ts` reads a task queue's pollers and
+  activity backlog on that client (`describeTaskQueue`) and returns a backlog that waited past its alert time as a
+  threshold crossing (`toBacklogCrossing`). `scanWorkflowClient.ts` holds a Scan's calls on that client: the
+  `ScanTrigger` type (`manual`, `scheduled`, or `creation`), the two scan queues' names, `toScanTaskQueue`, which starts
+  a scheduled Scan on `topic-scans-scheduled` and any other on `topic-scans`, the Scan's start and cancel, and
+  `describeScanQueue`, which the worker's minute line and the sweep's backlog report read.
+  `stageTimeouts.ts` is how long each Scan stage may run and how many attempts it gets, the review's 20-minute model
+  call wait deadline, and the timeouts and retry policies of a podcast episode's recording, a film's render, a Topic
+  Post Discussion's recording, a topic image render, and an attachment's processing. It is the one copy of these
+  numbers: the workflows import their activity options from it, and the reaper derives each limit from the same values,
+  as `MAX_PODCAST_EPISODE_RECORDING_MS`, `MAX_TOPIC_VIDEO_RENDER_MS`, `MAX_TOPIC_POST_DISCUSSION_RECORDING_MS`,
+  `MAX_TOPIC_IMAGE_RENDER_MS`, or `MAX_ATTACHMENT_PROCESSING_MS` plus `REAPER_MARGIN_MS`. `toLongestActivityRunMs` is
+  the longest an activity runs across its attempts. `staleScans.ts` is the reaper of a scan that outran its stages or
+  never started, `reapStaleScans`, which the sweep and the manual scan route run. `temporalClient.ts` also reads whether
+  a workflow still runs (`isWorkflowRunning`), terminates one, and starts a recording again under its Scan's id
+  (`startPodcastEpisodeRecordingWorkflow`). `topicVideo/topicVideoWorkflowClient.ts` starts a film's render again under
+  its podcast episode's id (`startTopicVideoRenderWorkflow`). The reaper's kinds in `apps/worker/reapedKinds.ts` call
+  both beside the starts of a discussion, a topic image render, and an attachment. Each of those names its workflow
+  through its own id function, such as `toTopicImageWorkflowId`. A topic image render whose workflow does not start
+  takes its row back, as a discussion's does, and `failTopicPostDiscussion` reports the discussion it closes. A failed
+  connect throws a `TemporalConnectError`, and `isTemporalTransportFailure` says whether a call failed because the
+  server could not be reached in time, which the sweep's starts stop at. `screen.ts` starts the url Source screen
+  workflow, which fetches the page and marks the Source ready or failed, for every Source still waiting on one, and
+  stops at a start that cannot reach Temporal.
 - `attach.ts` ingests a topic attachment and builds a topic's scan context, over `attachContentType.ts` (the canonical
   content type and what each type is), `attachText.ts` (the text extracted from an attachment's bytes, a PDF read one
   page at a time, and `extractTextUpTo`, which stops once its text passes the caller's `maxChars`), and `attachTable.ts`
@@ -73,51 +90,66 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
   declares more than 1 GB unpacked, and reads the records a streaming unzip needs. `attachWorkbook.ts` reads a
   workbook's rows as lines: whole if it declares 4 MB or less unpacked, else as a stream that holds only the rows the
   table text keeps, with each part written to the stream reader under its name with no leading slash.
-  `attachExtraction.ts` runs an extraction in a child process of its own, at the lowest priority, under a 640 MB
+  `attachExtraction.ts` runs an extraction in a child process of its own, at the lowest priority, under a 512 MB
   memory limit, two at a time, one per sender, with the waiting files taken in turn by sender. Of the parent's
   environment a child gets `MAX_CHUNKS` and `CHUNK_CHARS` alone, and its temporary files go to a folder of its own,
-  removed with it. `attachExtractionChild.ts` is the child's entry and
+  removed with it. Its child runs through `runChildProcessRequest` in `@carlnotes/server/childProcessRequest`, as the
+  card element draw's does. `attachExtractionChild.ts` is the child's entry and
   `attachExtractionWatchdog.ts` the thread that ends a child past the limit, so one file's read ends alone. The api's
   chat attachments and the worker's Topic attachments both extract through it. `attachTestFixtures.ts` builds the
   files that the pipeline, api, and worker tests share. `chunk.ts` splits a long document's text into bounded chunks
   for parallel summarization.
 - `ingest/` — one ingester per Source kind: `rss.ts`, `youtube.ts`, `reddit.ts`, `x.ts`, `bluesky.ts`, `podcast.ts`,
   `url.ts`, and `search.ts`, over `feed.ts` for the feeds that need no key and `normalize.ts` for the url, title, and
-  kind a Resource gets before it is stored. `index.ts` reads a topic's Sources oldest first, runs and times each through
-  its ingester, and stores what they find. Its `toScanSummary` dedupes the Resources by canonical url, credits each to
+  kind a Resource gets before it is stored, and `toLimitedSnippet`, which cuts a snippet to `MAX_SNIPPET_CHARS`, 8,000.
+  `index.ts` reads a topic's Sources oldest first, runs and times each through its ingester, and stores what they find.
+  Its `toScanSummary` dedupes the Resources by canonical url, credits each to
   the first Source that returned it as the Resource's `sourceId`, and returns one source result per Source in that
   order, labeled by `toSourceResultLabel` from the Source's row as it stands after the ingesters ran. The insert strips
   `sourceId`, which the worker's closing write reads for each Source's kept count. `toScannedSource` narrows an outcome
-  to the four fields the scan report reads, for the payload the worker passes between stages. A Source's fallback mode
+  to the four fields the scan report reads, for the payload the worker passes between stages, and `toResourceDiscovery`
+  in `ingester.ts` narrows a found Resource to a `ResourceDiscovery`: its url, its Source, and the flags that are set,
+  which is all the review and the closing write read of it. A Source's fallback mode
   comes from `@carlnotes/contracts/sources`. `ingester.ts` is the interface, whose optional `ingestContext` includes the
-  Scan owner's key: the Topic owner's for a scheduled Scan and the starting user's for a manual one. The search
-  ingester bills query generation to that key. `topicMemorySearch.ts` supplies up to one extra query beyond the five default queries.
-  Its words come from a cited public Finding. `ingest/selectTopicMemorySearchQuery.ts` uses rating notes to choose
-  among those queries by number. `review/` — filtering and scoring
-  (`ownTopicPages.ts` the topic's own CarlNotes pages that a Scan drops first, `filter.ts` the relevance gate,
-  `topicContext.ts` the public/private review context, hash, and query embedding, `scoreExamplePages.ts` the pages
-  Carl reads as examples, `reactionSignals.ts` a Finding's reaction signal, `dedupe.ts`
-  the content hash and near-duplicate pass, `fetch.ts` the content fetch for a Resource to score, `score.ts` the scoring
-  and the finding writes, each Resource reserving its largest cost before its paid section, `track.ts` what became of
-  each Resource, `summarize.ts` the scan report, and `index.ts` the stage over them, with `reviewTestFixtures.ts` beside
-  their tests). Every scoring call, public and private, the embedding batch, the query embedding, and the scan report go
-  through `runModelCall` in `@carlnotes/models/modelCallRetry`, which waits out a rate limit, a 5xx, or a timeout until
-  the Budget's `modelCallWaitDeadlineAt` and fails a spent budget or a rejection at once. `chat/` — Carl's streamed chat
-  replies (`index.ts` streams a reply, `podcastReply.ts` streams a podcast question's reply as one structured call whose
-  speaker, `host` or `cohost`, comes before the answer, `chatMessages.ts` shapes a conversation into the model messages
-  a turn sends, `chatPrompts.ts` builds each chat's system prompt from its template, `podcastEpisodeQuestionPrompt.ts`
-  the topic chat prompt's blocks for a question asked from the podcast player, `search.ts` the live web search tool a
-  signed-in chat turn may call, and `agreement.ts` checks whether a user's message agrees to the proposal it answers,
-  reading only the user's words and the proposal, `chatTurnCost.ts` the largest cost of one chat turn, which the api
-  reserves before the turn runs, with `chatModelTestFixtures.ts` for the fake models their tests stream from, and
-  `chatContextTestFixtures.ts` and `podcastEpisodeChapterTestFixtures.ts` for the chat context and the chapter their
-  tests read) and their retrieval (`retrieve.ts`, whose topic ranking collects the topics' findings in a materialized
-  common table expression and ranks that set, `retrieveDocs.ts` for the docs sections a question about the app reads and
-  `embedRetrievalQuery`, which embeds a question or a search query with the query instruction, `retrieveTeam.ts` for a
-  team chat room turn's context, and `retrievePodcastEpisodeChapter.ts` for the chapter a podcast question was asked
-  during, with its lines and its Finding). The prompts the builders fill live in `@carlnotes/models/prompts/`, and every
-  model call goes through `@carlnotes/models/models` on a key from `@carlnotes/models/litellm`. `favicons.ts` — a host's
-  favicon, fetched once when review reads a page on it.
+  Scan owner's key: the Topic owner's for a scheduled Scan and the starting user's for a manual one. The search ingester
+  bills query generation to that key. `topicMemorySearch.ts` supplies up to one extra query beyond the five default
+  queries. Its words come from a cited public Finding. `ingest/selectTopicMemorySearchQuery.ts` uses rating notes to
+  choose among those queries by number. `review/` — filtering and scoring (`ownTopicPages.ts` the topic's own CarlNotes
+  pages that a Scan drops first, `filter.ts` the selection of the pages worth scoring and the relevance gate,
+  `topicContext.ts` the public/private review context, hash, and query embedding, `scoreExamplePages.ts` the pages Carl
+  reads as examples, `reactionSignals.ts` a Finding's reaction signal, `dedupe.ts` the content hash and near-duplicate
+  pass, which compares a candidate with the pages its own Topic has judged and never with a page that only another Topic
+  stored, `fetch.ts` the content fetch for a Resource to score, which scores the snippet after a failed fetch and
+  marks a fault on Firecrawl's side so the Finding records no context hash and the next Scan reads the page again,
+  `score.ts` the scoring and the finding writes, each
+  Resource reserving its largest cost before its paid section, `maxTopicFindings.ts` the max-results filter that closes
+  a Scan and the open places a Scan fills, `filteredFindings.ts` the row a removed Finding leaves and whether it still
+  holds, `track.ts` what became of each Resource, `summarize.ts` the scan report, and `index.ts` the stage over them,
+  with `reviewTestFixtures.ts` beside their tests). `filterTopicFindings` writes a `filtered_findings` row for each
+  Finding it removes, in the transaction that deletes it. `loadResourcesToReview` skips a rediscovered page whose row
+  still holds: the same Topic context hash, the same content hash, at least the bonus that the Scan requires, and no
+  chapter rating that waits for the page's next Finding. A url Source's own page is read whatever its row says. A filtered
+  page that ranks inside `max_results` among the Topic's Findings, by `findingIdsToFilter` with the filtered page as the
+  oldest row, goes back to the model, and `deleteFilteredFindings` deletes the row of every page just before the paid
+  stage. A Scan that rediscovers only judged pages scores nothing, writes no recap, and still filters. Topic memories
+  are in no hash, so a new one sends no page back. Every scoring call, public and private, the embedding batch, the
+  query embedding, and the scan report go through `runModelCall` in `@carlnotes/models/modelCallRetry`, which waits out
+  a rate limit, a 5xx, or a timeout until the Budget's `modelCallWaitDeadlineAt` and fails a spent budget or a rejection
+  at once. `chat/` — Carl's streamed chat replies (`index.ts` streams a reply, `podcastReply.ts` streams a podcast
+  question's reply as one structured call whose speaker, `host` or `cohost`, comes before the answer, `chatMessages.ts`
+  shapes a conversation into the model messages a turn sends, `chatPrompts.ts` builds each chat's system prompt from its
+  template, `podcastEpisodeQuestionPrompt.ts` the topic chat prompt's blocks for a question asked from the podcast
+  player, `search.ts` the live web search tool a signed-in chat turn may call, and `agreement.ts` checks whether a
+  user's message agrees to the proposal it answers, reading only the user's words and the proposal, `chatTurnCost.ts`
+  the largest cost of one chat turn, which the api reserves before the turn runs, with `chatModelTestFixtures.ts` for
+  the fake models their tests stream from, and `chatContextTestFixtures.ts` and `podcastEpisodeChapterTestFixtures.ts`
+  for the chat context and the chapter their tests read) and their retrieval (`retrieve.ts`, whose topic ranking
+  collects the topics' findings in a materialized common table expression and ranks that set, `retrieveDocs.ts` for the
+  docs sections a question about the app reads and `embedRetrievalQuery`, which embeds a question or a search query with
+  the query instruction, `retrieveTeam.ts` for a team chat room turn's context, and `retrievePodcastEpisodeChapter.ts`
+  for the chapter a podcast question was asked during, with its lines and its Finding). The prompts the builders fill
+  live in `@carlnotes/models/prompts/`, and every model call goes through `@carlnotes/models/models` on a key from
+  `@carlnotes/models/litellm`. `favicons.ts` — a host's favicon, fetched once when review reads a page on it.
 - Every scan stage charges the Scan's one Budget, `@carlnotes/models/budget`.
 - `notify.ts` plans a topic scan email's batches and sends one batch or one report, recording the accepted sends with
   the Scan's id, so a retry never mails anyone twice; the worker's `sendScanEmail` workflow runs it.
@@ -145,41 +177,42 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
   the Team, the Topic still held, the author not blocked, the message not reported, never the author. Each push names
   its Topic or room and opens it through `data.url`, with the recipient's id for the app's account check, and a mention
   push never includes the message text. `pushDelivery.ts` sets each push's app icon badge to the recipient's update
-  count from `@carlnotes/db/updateCounts`, loaded per chunk for that chunk's recipients alone, and a count that fails to
-  load is reported and leaves that badge out instead of failing the push. `pushNotificationCopy.ts` holds the words. In
-  `pushDelivery.ts`, each accepted ticket is recorded in `push_notification_sends` as its chunk returns, so a retry
-  sends only to unrecorded phones; a crash between the service's acceptance and the record repeats at most one chunk. A
-  `DeviceNotRegistered` ticket deletes the phone, `MessageRateExceeded`, `ExpoError`, and `ProviderError` tickets and a
-  429, 5xx, or unanswered request are retryable, and anything else is final. A chunk the service rejects for mixing Expo
-  projects (`PUSH_TOO_MANY_EXPERIENCE_IDS`) retires the tokens of every project other than
+  count from `@carlnotes/db/updateCounts`, counted once a chunk for that chunk's accounts together, and counts that fail
+  to load are reported and leave the chunk's badges out instead of failing the push. `pushNotificationCopy.ts` holds the
+  words. In `pushDelivery.ts`, each accepted ticket is recorded in `push_notification_sends` as its chunk returns, so a
+  retry sends only to unrecorded phones; a crash between the service's acceptance and the record repeats at most one
+  chunk. A `DeviceNotRegistered` ticket deletes the phone, `MessageRateExceeded`, `ExpoError`, and `ProviderError`
+  tickets and a 429, 5xx, or unanswered request are retryable, and anything else is final. A chunk the service rejects
+  for mixing Expo projects (`PUSH_TOO_MANY_EXPERIENCE_IDS`) retires the tokens of every project other than
   `MOBILE_APP_EXPO_PROJECT_NAME` and is sent again, and any other rejected chunk is kept as the send's error while the
-  later chunks still go. A send takes a `PushProgress`, which the worker's activity turns into a heartbeat after each
-  chunk and a stop between chunks once Temporal cancels the attempt. `pushReceipts.ts`'s `checkPushReceipts` reads an
-  event's receipts once the workflow's wait ends, records them with one write per outcome, retires `DeviceNotRegistered`
-  phones, and reports any other code, a missing receipt included, without the token. The service's limits: 100 messages
-  per send request, 4096 bytes per payload, 600 notifications a second per project, receipts in chunks of 300, usually
-  ready within 15 minutes and kept for 24 hours. The SDK retries a 429 itself.
+  later chunks still go. A send takes a `PushProgress`, which the worker's activity turns into a heartbeat before each
+  chunk's first read and after its send, and a stop between chunks once Temporal cancels the attempt.
+  `pushReceipts.ts`'s `checkPushReceipts` reads an event's receipts once the workflow's wait ends, records them with one
+  write per outcome, retires `DeviceNotRegistered` phones, and reports any other code, a missing receipt included,
+  without the token. The service's limits: 100 messages per send request, 4096 bytes per payload, 600 notifications a
+  second per project, receipts in chunks of 300, usually ready within 15 minutes and kept for 24 hours. The SDK retries
+  a 429 itself.
 - `podcast/` — the steps of the worker's `recordPodcastEpisode` workflow. `planPodcastEpisode.ts` runs the checks that
-  stop a recording before it spends anything, inside one request memo, picks the Findings, and marks the podcast
-  episode short on a free Topic or past the billed user's full podcast episodes cutoff. It records nothing new while
-  the spend control settings pause new podcast episodes.
-  `podcastEpisodeSharedComments.ts` takes the comments shared with the podcast by reactions, runs the classification on
-  them, and places each one in a chapter or the closing turns. `writePodcastEpisodeScript.ts` writes and saves the
-  script. Each segment's prompt lists its chapters' shared comments, and the last segment's also lists the closing ones.
-  `generatePodcastEpisodeScript.ts` makes its outline and segment calls on `score-model`, and `podcastEpisodeHosts.ts`
-  writes the hosts block that those prompts and the podcast question's chat prompt splice. `podcastEpisodeOutline.ts`
-  holds the outline's shape and checks each outline draft, and `podcastEpisodeScript.ts` holds the segments' shape,
-  checks each segment draft, and builds the script, with `podcastEpisodeScriptFixtures.ts` for their tests.
-  `podcastEpisodeAudio.ts` records each chapter through `@carlnotes/models/speech`, stores its audio in object storage,
-  and joins the chapters with ffmpeg. `podcastEpisodeTheme.ts` mixes the theme song's intro and outro under the talk in
-  that same pass, from the clips committed in `assets/podcast/`, and shifts the chapter times by the intro's lead.
-  `publishPodcastEpisode.ts` publishes or fails the row, and a short podcast episode's publish replaces the Topic's
-  earlier short ones. `removePodcastEpisode.ts` removes a Podcast Episode and deletes its audio and its vector.
-  Both clear the cached unseen Comment Mentions of the users the deleted Comments mentioned, after their commit,
-  through `@carlnotes/db/unseenCommentMentions`.
-  `podcastEpisodeChapters.ts` gives a new Finding the newest rating of the chapters that narrated its Resource, and
-  links those chapters to it. The review's `upsertFinding` calls both. `podcastEpisodeSmokeFixtures.ts` seeds the rows
-  for the worker's podcast episode smoke.
+  stop a recording before it spends anything, inside one request memo, picks the Findings, and marks the podcast episode
+  short on a free Topic or past the billed user's full podcast episodes cutoff. It records nothing new while the spend
+  control settings pause new podcast episodes. `podcastEpisodeSharedComments.ts` takes the comments shared with the
+  podcast by reactions, runs the classification on them, and places each one in a chapter or the closing turns.
+  `writePodcastEpisodeScript.ts` writes and saves the script. Each segment's prompt lists its chapters' shared comments,
+  and the last segment's also lists the closing ones. `generatePodcastEpisodeScript.ts` makes its outline and segment
+  calls on `score-model`, and `podcastEpisodeHosts.ts` writes the hosts block that those prompts and the podcast
+  question's chat prompt splice. `podcastEpisodeOutline.ts` holds the outline's shape and checks each outline draft, and
+  `podcastEpisodeScript.ts` holds the segments' shape, checks each segment draft, and builds the script, with
+  `podcastEpisodeScriptFixtures.ts` for their tests. `podcastEpisodeAudio.ts` records each chapter through
+  `@carlnotes/models/speech`, stores its audio in object storage, and joins the chapters with ffmpeg. `joinChapterFiles`
+  runs the join under `AUDIO_JOIN_TIMEOUT_MS`, eight minutes, and `encodePodcastEpisode` passes its `signal` to the
+  downloads, the join, and the upload, so a cancelled attempt leaves no encoder running. `podcastEpisodeTheme.ts` mixes
+  the theme song's intro and outro under the talk in that same pass, from the clips committed in `assets/podcast/`, and
+  shifts the chapter times by the intro's lead. `publishPodcastEpisode.ts` publishes or fails the row, and a short
+  podcast episode's publish replaces the Topic's earlier short ones. `removePodcastEpisode.ts` removes a Podcast Episode
+  and deletes its audio and its vector. Both clear the cached unseen Comment Mentions of the users the deleted Comments
+  mentioned, after their commit, through `@carlnotes/db/unseenCommentMentions`. `podcastEpisodeChapters.ts` gives a new
+  Finding the newest rating of the chapters that narrated its Resource, and links those chapters to it. The review's
+  `upsertFinding` calls both. `podcastEpisodeSmokeFixtures.ts` seeds the rows for the worker's podcast episode smoke.
 - `podcast/podcastEpisodeImage.ts` draws a published podcast episode's own image from its title, description, topic
   tags, and chapter titles, in the topic image's house style and at its sizes, billed with the episode. The root
   `podcast-episode-images:backfill` script draws one for every published podcast episode that has none.
@@ -189,20 +222,22 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
 - `topicImages/` — the steps of the worker's `renderTopicImage` workflow. `writeTopicImageScene.ts` has the prompt
   writer's input (the topic's name, prompt, tags, and up to five finding titles, fenced as untrusted) and the image
   prompt with a house style appended, the topic image's unless another style prompt is named.
-  `renderTopicImageOriginal.ts` draws a scene through the image model and returns the original in its
-  `TopicImageFormat` (the style prompt, the aspect ratio, and the pixel size: 3:2 at 1264 by 848 unless a format is
-  given), or throws a `TopicImageRenderFailure` naming whether the budget is spent, the render was rejected, or another
-  attempt is worth it. `topicImageFiles.ts` decodes an upload by its bytes under a pixel limit, center-crops to the
-  format's ratio with sharp, derives the three sizes at 1x and 2x as webp, and stores them under the original's hash.
-  `topicImageRenders.ts` writes a render row, naming a podcast episode, a Topic Post, or a film for one that draws its
-  image, and starts its
-  workflow, replaces a topic's image (the row, `topics.image_hash`, and the old files' pending deletions), removes an
-  upload, and marks a render failed; a change to a public topic's image purges its files at the edge. `topicCovers.ts`
-  drops a topic's cached podcast feeds and the stored covers drawn over its image after a change.
-  `removedImageUploads.ts` removes an uploaded image and draws it again on the platform's budget, for a Topic, a
-  Podcast Episode, a Topic Post, and a film. An admin's removal of a reported image and the sweep's removal of a
-  flagged upload on a private Topic both go through it. The sweep's `removeImageUpload` first marks each ready film
-  drawn from the upload rendering, then starts those films' rebuilds.
+  `renderTopicImageOriginal.ts` draws a scene through the image model and returns the original in its `TopicImageFormat`
+  (the style prompt, the aspect ratio, and the pixel size: 3:2 at 1264 by 848 unless a format is given), or throws a
+  `TopicImageRenderFailure` naming whether the budget is spent, the render was rejected, or another attempt is worth it.
+  Given a `drawnImageKey` from `toDrawnImageKey`, it keeps the model's bytes under that key once they have made an
+  original, with a pending deletion two days out, and an attempt that finds them draws nothing. The caller deletes them
+  with `deleteDrawnImage` once the image is current: a topic image render's activity, a published podcast episode's
+  first image, and a film's first image each do. `topicImageFiles.ts` decodes an upload by its bytes under a pixel
+  limit, center-crops to the format's ratio with sharp, derives the three sizes at 1x and 2x as webp, and stores them
+  under the original's hash. `topicImageRenders.ts` writes a render row, naming a podcast episode, a Topic Post, or a
+  film for one that draws its image, and starts its workflow, replaces a topic's image (the row, `topics.image_hash`,
+  and the old files' pending deletions), removes an upload, and marks a render failed; a change to a public topic's
+  image purges its files at the edge. `topicCovers.ts` drops a topic's cached podcast feeds and the stored covers drawn
+  over its image after a change. `removedImageUploads.ts` removes an uploaded image and draws it again on the platform's
+  budget, for a Topic, a Podcast Episode, a Topic Post, and a film. An admin's removal of a reported image and the
+  sweep's removal of a flagged upload on a private Topic both go through it. The sweep's `removeImageUpload` first marks
+  each ready film drawn from the upload rendering, then starts those films' rebuilds.
 - `uncheckedImages.ts` — the unchecked images: an upload whose image moderation could not run.
   `publishOrSaveUncheckedImage` publishes an upload that passed its check. An unchecked upload on an invite or public
   Topic is saved as unchecked: its files are stored, its `unchecked_images` row is written, and the subject's current
@@ -232,51 +267,52 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
 - `avatarImages.ts` — `toStoredAvatar` reads an uploaded avatar's pixel size from its header, rejects one past 4,096
   pixels a side, and stores it resized within 512 pixels, a jpeg as a jpeg and anything else as a png.
   `toCardAvatarPng` resizes any avatar to the size a share card draws before the card inlines it.
-- `topicVideo/` — a published podcast episode's film, the steps of the worker's film workflows.
-  `videoTimeline.ts` turns the chapter times into frame-exact segments, `videoCaptions.ts` writes the WebVTT captions
-  from the script, timed with the pauses in the audio, `videoHotTakes.ts` finds where the hosts turn to the Comments,
-  and `videoFrames.ts` draws the stills and lower thirds. `videoShots.ts` plans a segment's montage: shots of 5 to 8
-  seconds that loop through the segment's images, each cut moved to a caption break within a second, no image twice in a
-  row, a move (zoom in, zoom out, pan left, or pan right) that differs from the move of the shot before it, and the zoom
-  an image's size holds without blur. It also plans the intro's and the sign-off's shots. `videoEncode.ts` encodes one
-  shot at a
-  time with its move, its crossfade from the shot before, and the lower third. `videoParts.ts` renders the chapters
-  part, `videoFilm.ts` joins the film, and `videoImageParts.ts` renders the intro, which opens on the film's image and cuts through
-  each chapter's first image, and the sign-off, which cuts through them and pulls back from the film's image, each
-  under a lower third that stays. `videoAudio.ts` downloads the audio and returns its length, the timeline, and the
-  captions that the render and the rebuild share.
-  `topicVideoInputs.ts` reads the podcast episode, the image its film shows (the film's own, or else the
-  podcast episode's, its topic's, or the podcast card) with its larger original, and each chapter's Resource.
-  `videoChapterImages.ts` settles each chapter's images before the chapters are encoded: its Resource's images from
-  `resourceImages/`, then the generated images that bring it to one distinct image for every 30 seconds, at most 12 a
-  chapter and the film's limit across its chapters, which it takes from the spend control settings at each render,
-  then the podcast card. A chapter with no image and the Comments
-  segment cut between the podcast card and the film's own image. `generatedChapterImages.ts` draws a generated image by
-  the film image's own draw from the Finding's title and public relevance explanation alone, checks it with the image
-  moderation, stores it beside the film's parts, where a second attempt reuses it, and bills it to the film's row unless
-  the platform pays. A failed draw leaves the chapter on the images it has. `chapterImageTestFixtures.ts` holds the
-  stubbed draws and chapter reads that the tests of `videoChapterImages.ts` and `generatedChapterImages.ts` share.
-  `topicVideoImage.ts` holds the
-  film's own image: its 16:9 format, the first draw at 2K, the scene input for an editor's regeneration, and the replace
-  in two steps. `storeTopicVideoImage` stores the jpeg and its larger original beside the film's
-  parts, and `publishTopicVideoImage` swaps the hash and starts the rebuild, so an unchecked upload
-  stores its files and rebuilds nothing. `removeTopicVideoImageUpload` removes an uploaded image.
-  `renderTopicVideo.ts` draws the film's image if it has none, falling back to the podcast episode's on a
-  failed draw, then renders, uploads, and bills a film, writing a failed row for missing inputs. A recorded podcast
-  episode's film renders in full whatever its owner's spend. Its owner was under the podcast episodes cutoff when the
-  podcast episode was planned. A ready film below the current render version renders again under versioned keys while it
-  keeps playing, and one guarded update swaps it in. `rebuildTopicVideo.ts` renders the intro and sign-off for a new
-  image and retains the published narration and captions. `rebuildVideoChapters.ts` copies verified chapters or uses
-  the full chapter encoder with the approved pictures and cached animation. It
-  also rebuilds a film marked rendering that still has its files, whatever its owner spent, and marks it ready. A film
-  draws no unchecked upload: `loadTopicVideoPodcastEpisode` shows the next checked image in the film's order, and
-  the rebuild skips a film that plays while an unchecked upload would be its image. Its
-  swap takes the Topic's image visibility lock, shared, and throws an error if the film's image changed meanwhile.
-  `renderFilmFiles.ts` produces the parts, captions and finished film. `topicVideoLock.ts` serializes private scene plan and animation writes with episode removal.
-  `topicVideoRows.ts` is the film row both of them write: the render version, the skipped, rendering,
-  ready, re-rendered, and failed writes, the render state read, the upload that records its pending deletion first, and
-  what a film's rendered minutes cost. `saveImageTopicVideosRendering` marks each ready film drawn from
-  an image rendering, so a film that shows an unpublished or rejected image plays as audio until its rebuild.
+- `topicVideo/` — a published podcast episode's film, the steps of the worker's film workflows. `videoTimeline.ts` turns
+  the chapter times into frame-exact segments, `videoCaptions.ts` writes the WebVTT captions from the script, timed with
+  the pauses in the audio, `videoHotTakes.ts` finds where the hosts turn to the Comments, and `videoFrames.ts` draws the
+  stills and lower thirds. `videoShots.ts` plans a segment's montage: shots of 5 to 8 seconds that loop through the
+  segment's images, each cut moved to a caption break within a second, no image twice in a row, a move (zoom in, zoom
+  out, pan left, or pan right) that differs from the move of the shot before it, and the zoom an image's size holds
+  without blur. It also plans the intro's and the sign-off's shots. `videoEncode.ts` encodes one shot at a time with its
+  move, its crossfade from the shot before, and the lower third. `videoParts.ts` renders the chapters part,
+  `videoFilm.ts` joins the film, and `videoImageParts.ts` renders the intro, which opens on the film's image and cuts
+  through each chapter's first image, and the sign-off, which cuts through them and pulls back from the film's image,
+  each under a lower third that stays. `videoAudio.ts` downloads the audio and returns its length, the timeline, and the
+  captions that the render and the rebuild share. `topicVideoInputs.ts` reads the podcast episode, the image its film
+  shows (the film's own, or else the podcast episode's, its topic's, or the podcast card) with its larger original, and
+  each chapter's Resource. `videoChapterImages.ts` settles each chapter's images before the chapters are encoded: its
+  Resource's images from `resourceImages/`, then the generated images that bring it to one distinct image for every 30
+  seconds, at most 12 a chapter and the film's limit across its chapters, which it takes from the spend control settings
+  at each render, then the podcast card. A chapter with no image and the Comments segment cut between the podcast card
+  and the film's own image. `generatedChapterImages.ts` draws a generated image by the film image's own draw from the
+  Finding's title and public relevance explanation alone, bills it to the film's row unless the platform pays, keeps it
+  under its unchecked key, which is never served, checks it with the image moderation, and on a pass stores it beside
+  the film's parts, where a second attempt reuses it. A rejection leaves a marker under the image's rejected key, so no
+  later render draws that image again, and a check that fails to run leaves the image unchecked for the next attempt,
+  which checks it with no second draw. A failed draw leaves the chapter on the images it has.
+  `chapterImageTestFixtures.ts` holds the stubbed draws and chapter reads that the tests of `videoChapterImages.ts` and
+  `generatedChapterImages.ts` share. `topicVideoImage.ts` holds the film's own image: its 16:9 format, the first draw at
+  2K, the scene input for an editor's regeneration, and the replace in two steps. `storeTopicVideoImage` stores the jpeg
+  and its larger original beside the film's parts, and `publishTopicVideoImage` swaps the hash and starts the rebuild,
+  so an unchecked upload stores its files and rebuilds nothing. `removeTopicVideoImageUpload` removes an uploaded image.
+  `renderTopicVideo.ts` draws the film's image if it has none, falling back to the podcast episode's on a failed draw,
+  then renders, uploads, and bills a film, writing a failed row for missing inputs. A recorded podcast episode's film
+  renders in full whatever its owner's spend. Its owner was under the podcast episodes cutoff when the podcast episode
+  was planned. A ready film below the current render version renders again under versioned keys while it keeps playing,
+  and one guarded update swaps it in. `rebuildTopicVideo.ts` renders the intro and sign-off for a new image and retains
+  the published narration and captions. `rebuildVideoChapters.ts` copies verified chapters or uses the full chapter
+  encoder with the approved pictures and cached animation. It also rebuilds a film marked rendering that still has its
+  files, whatever its owner spent, and marks it ready. A film draws no unchecked upload: `loadTopicVideoPodcastEpisode`
+  shows the next checked image in the film's order, and the rebuild skips a film that plays while an unchecked upload
+  would be its image. Its swap takes the Topic's image visibility lock, shared, and throws an error if the film's image
+  changed meanwhile. `renderFilmFiles.ts` produces the parts, captions and finished film. `topicVideoLock.ts` serializes
+  private scene plan and animation writes with episode removal. `topicVideoRows.ts` is the film row both of them write:
+  the render version, the skipped, rendering, ready, and re-rendered writes, the render state read, the upload that
+  records its pending deletion first, and what a film's rendered minutes cost. `topicVideoFailures.ts` records a failed
+  render: the failed render version that a ready film keeps, the failed row with its report and analytics event, and the
+  delete of the shots that a render kept. `topicVideoWorkflowClient.ts` starts a film's render again, its rebuild, and
+  the backfill on the Temporal client. `saveImageTopicVideosRendering` marks each ready film drawn from an image
+  rendering, so a film that shows an unpublished or rejected image plays as audio until its rebuild.
   `topicVideo.test.ts` renders a fixture podcast episode with ffmpeg.
 - `uprightImageSize.ts` — an image's pixel size as it shows, read from its metadata, which the film's stills, the
   topic image originals, and the Resource Images share.
@@ -296,6 +332,17 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
   `resourceImageTestFixtures.ts` draws the test pictures its tests share.
 - `cardElementPng.ts` lays out an element with satori and rasterizes it with resvg in the fonts under
   `assets/fonts/`: the api's share cards and podcast covers and the film's lower thirds draw through it.
+  `cardElementPngProcess.ts` runs the same draw in a child process, `cardElementPngChild.ts`, that exits once it has
+  replied, for an image as large as a cover: forty 3000-pixel draws in one process left it at over a gigabyte, and a
+  worker thread returned none of it.
+- `podcastCover.ts` draws a podcast cover once at 3000 pixels, a show cover over its topic's image or
+  `apps/docs/design/podcast/cover-base.png`, encodes it at both sizes with ffmpeg, and stores both.
+  `toCachedPodcastCoverJpeg` is the cover route's read, which draws only a cover that is not stored,
+  `storePodcastEpisodeCovers` is what the worker's podcast episode image step calls once the image is settled, and
+  `readPodcastCoverChainLength` counts the draws a process has waiting, one at a time. `podcastCoverRows.ts` loads
+  the cover of a Topic's show or of a podcast episode, `podcastCoverBands.ts` draws the show cover's two text bands
+  and picks each band's tone from the picture under it, and `podcastEpisodeCover.ts` draws a podcast episode's own
+  cover and loads the image under it. `fixtures/` holds the sample image their tests and the api's preview test read.
 - `meanVectors.ts` saves the vectors that rank related topics, related podcast episodes, and the podcast episode search,
   each the mean of the current model's resource embeddings behind it, computed in SQL: a Topic's after every Scan ends,
   succeeded, stopped, or failed, after a save that changes its visibility, and after a rating, from its kept Findings,
@@ -314,6 +361,8 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
   `fetchPublicUrl` in `@carlnotes/server/publicFetch`. Content safety starts at ingest: the Reddit, X, and Bluesky
   ingesters skip a post their platform marks adult or sensitive, and the scorer's `isUnsafe` marks a Resource that gets
   no new Finding. `scrape.ts` reads a reddit thread from reddit's own api and scrapes any other page through Firecrawl,
+  trying a 429 or a 5xx four times inside the caller's wait deadline and throwing a `FirecrawlFaultError` for a fault
+  on Firecrawl's side. `firecrawlCredit.ts` marks a spent credit in Redis for the sweep's one report of it.
   `transcripts.ts` reads a video's captions from YouTube, Vimeo, or Dailymotion and a declared transcript over that
   path, and `linkPreview.ts` reads a chat link's preview on it.
 - `suggest.ts` suggests a Topic's Sources, and `suggestedSourceChecks.ts` resolves each suggested Source to the value
@@ -353,44 +402,66 @@ labels.
 
 Topic Post Discussions and the Topic Post chat: `topicPosts/topicPostDiscussionScript.ts` builds the
 `write-topic-post-discussion` prompt with the hosts block and the post, its Comments, and the starter's note each
-fenced, asks for a length that follows the post's length and the Comments read (`toDiscussionWordCounts`), writes
-drafts until one passes, and checks a draft in code: both hosts speak, the script stays inside seven minutes, and each
-Comment given is credited by username. `topicPosts/topicPostDiscussions.ts` writes a discussion's
-row and starts its workflow, starts a published post's first discussion once, screens each Comment and the author's
-username before the script is written, records the script as one speech call encoded with no theme, stores the audio
-under the post, and closes a row as failed. `topicPosts/topicPostImageRenders.ts` also removes an uploaded image and
-purges a public topic's post page at the edge after an image change. `chat/retrieveTopicPost.ts` loads what a chat
-turn reads of a Topic Post, its text and its shared Comments the reader may see, and
-`chat/topicPostQuestionPrompt.ts` builds the `chat-topic-post` fragment and the fenced post block the topic chat
-prompt splices on that turn alone.
+fenced, asks for a length that follows the post's length and the Comments read (`toDiscussionWordCounts`), writes drafts
+until one passes, and checks a draft in code: both hosts speak, the script stays inside seven minutes, and each Comment
+given is credited by username. `topicPosts/topicPostDiscussions.ts` writes a discussion's row and starts its workflow,
+starts a published post's first discussion once, screens each Comment and the author's username before the script is
+written, and closes a row as failed. `topicPosts/topicPostDiscussionAudio.ts` records the script as one speech call
+encoded with no theme, stores the audio under the post, and publishes the row. The speech is stored under
+`toTopicPostDiscussionSpeechKey` before the encode, with a pending deletion two days out, so a retry after a failed
+encode reads it and makes no second speech call. It is deleted once the row publishes or fails.
+`topicPosts/topicPostImageRenders.ts` also removes an uploaded image and purges a public topic's post page at the edge
+after an image change. `chat/retrieveTopicPost.ts` loads what a chat turn reads of a Topic Post, its text and its shared
+Comments the reader may see, and `chat/topicPostQuestionPrompt.ts` builds the `chat-topic-post` fragment and the fenced
+post block the topic chat prompt splices on that turn alone.
 
-`updateTopicMemories.ts` groups similar public Findings and sends them through claim checks and reconciliation.
-`topicMemoryDrafts.ts` builds the extraction prompt and bills each attempt with reported usage. An empty
-result for a positively rated or promoted Finding can use one 20-second premium attempt, up to three per Scan.
-`topicMemoryClaimReview.ts` checks one claim per topic memory and verifies split claims against their public Findings.
-`topicMemorySubjects.ts` loads each Topic’s canonical names and evidence-backed aliases for extraction. People match on the resolved name and identifying detail.
-`topicMemoryReconciliation.ts` matches checked claims and split pieces against the active Journal, with a token-budget fallback to neighbors.
-It allows the writer to combine a surplus candidate after checking for the same structured fact in storage.
-`applyTopicMemoryJournalUpdate.ts` checks the approved ID under the Topic lock and keeps replaced wording and evidence in history.
-`topicMemoryEmbeddings.ts` embeds checked claim text. `repairTopicMemoryClaims.ts` powers `topic-memories:repair-dev`.
-Pass `--compound-ids <json-file>` to repair the topic memories marked compound by a dev audit. The file contains an array of row IDs.
-Pass `--audit <json-file>` with a map of row IDs to compound, incomplete, or nonclaim to repair a reviewed batch. Incomplete
-claims use their linked Findings for a rewrite. Nonclaims move to history with their feedback.
-`topicMemoryEvidence.ts` selects eligible Findings with their public review explanations, relevance scores, and positive ratings.
-It excludes weak namesake matches without a positive rating and reads neighboring topic memories.
-`topicMemoryWrites.ts` commits a completed Scan's
-drafts, eviction, and completion marker in one transaction. `topicMemorySpend.ts` records model charges when each
-call finishes. `applyTopicMemoryWrite.ts` applies a checked claim and can reactivate matching history.
-`topicMemoryReplacements.ts` asks the model whether a newer runtime or air date corrects the same event and edition.
-`topicMemoryCleanup.ts` limits ready active rows and copies feedback for splits. The 100-row target applies through
-eviction of unprotected rows. Saved topic memories and corrections stay active even if they alone exceed the target.
-Queued repairs are outside the ready set. Exact matches require the same value. The
-write rechecks an approved replacement under the Topic lock before moving its predecessor to history.
-`packages/db/topicMemoryGroups.ts` owns the reversible grouping used by the Journal, MCP view, and label export.
-`topicMemoryPrompt.ts` builds the shared untrusted prompt slice from one ranked claim per group.
-That slice gives each claim's event date precision and last-seen Scan date.
-Run `bun run smoke:topic-memories` against disposable Postgres with pgvector to exercise the write transaction and
-MCP membership gate. `evals/topic-memories/` replays dev Findings through the same production proposal and write paths.
+`updateTopicMemories.ts` groups similar public Findings and sends them through claim checks and reconciliation. A Topic
+whose saved topic memories and corrections fill its limit gets its Scan marked updated with no model call, because a new
+topic memory would be retired in the write that adds it. `topicMemoryModelCall.ts` holds what every model call of an
+update is given and `runTopicMemoryModelCall`, which sends a call through the retry runner in
+`packages/models/modelCallRetry.ts`: a rate limit, a failing provider, or a timeout waits and tries again inside the
+attempt, no wait ends past the activity's wait deadline, and a cancelled update ends its wait at once.
+`topicMemoryDrafts.ts` builds the extraction prompt and bills each attempt with reported usage. The prompt gets a rated
+topic memory's thumbs and never its note. An empty result for a positively rated or promoted Finding can use one
+20-second premium attempt, up to three per Scan, and that optional pass is never tried again. `topicMemoryOperations.ts`
+keeps a claim's wording, subject, value, and person on one line. `topicMemoryClaimReview.ts` checks one claim per topic
+memory and verifies split claims against their public Findings. `topicMemoryClaimPrompts.ts` builds its
+`check-topic-memory-claims` and `split-topic-memory` prompts. `topicMemorySubjects.ts` loads each Topic’s canonical
+names and evidence-backed aliases for extraction, and resolves an update's claims against one index of that list. People
+match on the resolved name and identifying detail. `topicMemoryReconciliation.ts` matches checked claims and split
+pieces against the active Journal, with a token-budget fallback to neighbors. Past the token budget, each batch of
+fifteen claims is matched in one call against the union of its claims' nearest rows. Each match call has a one-minute
+timeout of its own. It allows the writer to combine a surplus candidate after checking for the same structured fact in
+storage. `applyTopicMemoryJournalUpdate.ts` checks the approved ID under the Topic lock and keeps replaced wording and
+evidence in history. It takes the candidate's wording only for a row that no one has rated, from a Scan no older than
+the row's last one. A rated row keeps the wording its rater saw and still gains the evidence. `topicMemoryEmbeddings.ts`
+embeds checked claim text. `repairTopicMemoryClaims.ts` powers `topic-memories:repair-dev`. Pass `--compound-ids
+<json-file>` to repair the topic memories marked compound by a dev audit. The file contains an array of row IDs. Pass
+`--audit <json-file>` with a map of row IDs to compound, incomplete, or nonclaim to repair a reviewed batch. Incomplete
+claims use their linked Findings for a rewrite. Nonclaims move to history with their feedback. `topicMemoryEvidence.ts`
+selects eligible Findings with their public review explanations, relevance scores, and positive ratings. It excludes
+weak namesake matches without a positive rating and reads neighboring topic memories. `topicMemoryWrites.ts` commits a
+completed Scan's drafts, eviction, and completion marker in one transaction. It reads the Topic's rejected wording once
+for all of a Scan's writes and saves their subjects in one statement after the last write, so the Topic lock is held for
+about two statements a write. `topicMemorySpend.ts` keeps one update's running spend: each model call adds its cost in
+memory, the Scan row takes the total once a stage and once more as the update ends, and an update that reaches the 12
+cents it reserved starts no further model call, commits what it checked, and reports the stop.
+`applyTopicMemoryWrite.ts` applies a checked claim and can reactivate matching history. A row keeps its newest
+`TOPIC_MEMORY_FINDING_LIMIT` Finding ids, and a statement is archived as an outdated row only if its wording or its date
+is new: the same wording and date again adds its evidence alone, as does a model-confirmed update that only adds
+evidence. `topicMemoryReplacements.ts` asks the model whether a newer runtime or air date corrects the same event and
+edition. `topicMemoryCleanup.ts` limits ready active rows and copies feedback for splits. The 100-row target applies
+through eviction of unprotected rows. Saved topic memories and corrections stay active even if they alone exceed the
+target. Queued repairs are outside the ready set. Exact matches require the same value. The write rechecks an approved
+replacement under the Topic lock before moving its predecessor to history. `packages/db/topicMemoryGroups.ts` owns the
+reversible grouping used by the Journal, MCP view, and label export. `topicMemoryPrompt.ts` builds the shared untrusted
+prompt slice from one ranked claim per group. Its `loadBackgroundTopicMemories` is the read behind the review's, the
+podcast script's, and the Topic Post Discussion script's slice and behind the podcast episode plan: a failed read is
+reported and returns no topic memory, so the Journal never fails a Scan, a script, or a plan. That slice gives each
+claim's event date precision and last-seen Scan date. Each claim and each note is one line, and a claim too long for the
+slice is left out while the shorter ones after it stay in. Run `bun run smoke:topic-memories` against disposable
+Postgres with pgvector to exercise the write transaction and MCP membership gate. `evals/topic-memories/` replays dev
+Findings through the same production proposal and write paths.
 
 A version 4 Finding chapter saves the approved image hashes, reviewed animation file hashes, camera moves and exclusive
 frame endpoints in its private scene plan. `videoSceneStorage.ts` serializes writes under the episode’s film row
@@ -404,18 +475,34 @@ planning reservation. Retries reuse the validated regions. `pictureAnimation.ts`
 before `videoEncode.ts` applies the camera move and transition. `storedChapterImages.ts` recovers the same generated pictures on retry. The Three.js page and its
 supervised offline browser capture are tools for reviewing visual treatments. A published film uses FFmpeg.
 
-`topicVideo/benchmarkVideoScenes.ts` replays a reviewed local fixture through both encoders. It verifies the
-manifest hashes and writes the silent parts, two narrated clips and the plan to a new private directory.
-`videoScene.smoke.ts` exercises the runtime browser, encoder and cancellation. `topicVideoSlot.ts` shares the
-worker allocation with image rebuilds. The publication of the replacement film rechecks the public Finding association and fetched images.
-Each new version 4 chapters key identifies the ordered plans that encoded the retained pictures and their approved
-sources. A poster rebuild verifies that key before copying chapters. When the check fails or an older version 4 film
-lacks the binding, the rebuild encodes and swaps a new chapters part. Only the bookends count toward the owner's render cost. A superseded rebuild leaves its uploads pending deletion and records no rebuild event.
+`topicVideo/benchmarkVideoScenes.ts` replays a reviewed local fixture through both encoders. It verifies the manifest
+hashes and writes the silent parts, two narrated clips and the plan to a new private directory. `videoScene.smoke.ts`
+exercises the runtime browser, encoder and cancellation. `topicVideoSlot.ts` holds a worker process's render slots,
+`TOPIC_VIDEO_CONCURRENCY` of them, which a new film's render and a backfill's render wait for in one line, oldest first.
+A render's 3.8-hour deadline starts once it holds a slot, and `runOutsideSlot` gives the slot back while the render
+waits on a provider for its own image, its chapters' images, a chapter's plan, or a clip. A rebuild has one slot of its
+own. `videoShotStore.ts` keeps each shot that a render encodes under `toTopicVideoShotKey`, named by a hash of ffmpeg's
+arguments with each input file's content hash in place of its path. A render lists its stored shots once and runs inside
+that listing, so `encodeVideoShots`, which every segment's encode goes through, downloads a stored shot instead of
+encoding it, and stores each shot it encodes with a deletion date two days out. A rebuild keeps no shots.
+`deleteStoredVideoShots` in `topicVideoFailures.ts` deletes them once the film is saved, once its render fails for good,
+and once its podcast episode is removed. `renderTopicVideo` ends as skipped if its podcast episode stopped being
+published while it rendered. A platform-billed render leaves the film row's cost as it is and records what the platform
+paid through `recordPlatformTopicVideoSpend` in `topicVideoRows.ts`: the render's minutes, each generated chapter image,
+the film's own image, and each animation plan. A Free owner's first animated picture of the month is recorded the same
+way. The publication of the replacement film rechecks the public Finding association and fetched images. Each new
+version 4 chapters key identifies the ordered plans that encoded the retained pictures and their approved sources. A
+poster rebuild verifies that key before copying chapters. When the check fails or an older version 4 film lacks the
+binding, the rebuild encodes and swaps a new chapters part. Only the bookends count toward the owner's render cost. A
+superseded rebuild leaves its uploads pending deletion and records no rebuild event.
 
 `generatedPictureAnimation.ts` uses the account’s monthly allowance for at most one planner-selected generated illustration in a new episode. It strips provider audio and checks all 120 video frames. `generatedAnimationStorage.ts` reserves the request before sending it and binds the reusable silent video to the source image hash. Episode deletion includes both objects. Chapters share eight local effects. The paid animation and the host steam have separate slots.
 
 `topicVideo/videoRenderResourceLimits.ts` enforces the memory and working-directory limits on film renders, rebuilds and the offline chapter capture.
 
-The disposable Postgres Journal smoke suite shares `topicMemorySmokeFixtures.ts`. Its Journal checks live in `topicMemoryJournalSmokeChecks.ts`; its claim repair checks live in `topicMemoryRepairSmokeChecks.ts`.
+The disposable Postgres Journal smoke suite, `topicMemoryWrites.smoke.ts`, shares `topicMemorySmokeFixtures.ts`. Its
+Journal row checks live in `topicMemoryJournalSmokeChecks.ts`, its rating checks in `topicMemoryRatingSmokeChecks.ts`,
+its add and update checks in `topicMemoryUpdateSmokeChecks.ts`, and its claim repair checks in
+`topicMemoryRepairSmokeChecks.ts`.
 
 Web search reserves a Scan in `ingest/scanSearchResult.ts` before contacting paid providers. Ingest retries reuse its public Resources and cost. Review releases the cached payload after Temporal accepts the result.

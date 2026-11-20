@@ -2,10 +2,12 @@
 // and the podcast covers
 
 import type { PodcastEpisodeFormat } from "@carlnotes/contracts/podcast"
-import { PODCAST_COVER_SIZES, type PodcastCover, toPodcastEpisodeCover } from "@carlnotes/contracts/podcastEpisodes"
+import { PODCAST_COVER_SIZES } from "@carlnotes/contracts/podcastEpisodes"
 import { db } from "@carlnotes/db"
-import { podcastEpisodeListens, podcastEpisodes } from "@carlnotes/db/schema/podcast"
+import { podcastEpisodeListens } from "@carlnotes/db/schema/podcast"
 import { topics } from "@carlnotes/db/schema/topics"
+import { toCachedPodcastCoverJpeg } from "@carlnotes/pipeline/podcastCover"
+import { loadPodcastCover } from "@carlnotes/pipeline/podcastCoverRows"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { toLatestPodcastCoverKey, toPodcastCoverKey } from "@carlnotes/server/podcastCoverPaths"
 import { eq, sql } from "drizzle-orm"
@@ -18,7 +20,6 @@ import {
 	PRIVATE_NO_STORE_CACHE_CONTROL,
 	toVersionedImageHeaders,
 } from "../edgeCache"
-import { toCachedPodcastCoverJpeg } from "../share/podcastCover"
 import {
 	toPodcastEpisodeAudioResponse,
 	toPodcastEpisodeChaptersResponse,
@@ -37,58 +38,6 @@ const PODCAST_EPISODE_FORMAT_BY_FILE_NAME: Record<string, PodcastEpisodeFormat |
 
 // a cover's file name, made of its key and its size
 const PODCAST_COVER_FILE_NAME_PATTERN = /^([0-9a-f]{32})-(\d+)\.jpg$/
-
-// the kind of cover that a url names, and the id of its Topic or its podcast episode
-type LoadPodcastCoverOptions = { kind: string; id: string }
-
-/**
- * Loads the cover that a url names and whether its Topic is public, or null if no such cover exists.
- */
-async function loadPodcastCover({
-	kind,
-	id,
-}: LoadPodcastCoverOptions): Promise<{ podcastCover: PodcastCover; isPublic: boolean } | null> {
-	// a show cover's id names its Topic
-	if (kind === "show") {
-		const [topic] = await db.select().from(topics).where(eq(topics.id, id))
-		const podcastCover = {
-			kind: "show" as const,
-			id,
-			title: topic?.name ?? "",
-			topicId: id,
-			topicImageHash: topic?.imageHash ?? null,
-		}
-		return topic ? { podcastCover, isPublic: topic.visibility === "public" } : null
-	}
-
-	// a podcast episode cover's id names a podcast episode
-	const [podcastEpisodeRow] = await db
-		.select({
-			title: podcastEpisodes.title,
-			status: podcastEpisodes.status,
-			season: podcastEpisodes.season,
-			episodeNumber: podcastEpisodes.episodeNumber,
-			imageHash: podcastEpisodes.imageHash,
-			visibility: topics.visibility,
-			topicId: topics.id,
-			topicName: topics.name,
-			topicImageHash: topics.imageHash,
-		})
-		.from(podcastEpisodes)
-		.innerJoin(topics, eq(podcastEpisodes.topicId, topics.id))
-		.where(eq(podcastEpisodes.id, id))
-
-	// an unknown kind, a removed podcast episode, and a podcast episode with no title yet have no cover
-	if (kind !== "episode" || !podcastEpisodeRow?.title || podcastEpisodeRow.status === "removed") {
-		return null
-	}
-	const { title, topicId, topicName, topicImageHash } = podcastEpisodeRow
-	const podcastCover = toPodcastEpisodeCover(
-		{ ...podcastEpisodeRow, id, title },
-		{ id: topicId, name: topicName, imageHash: topicImageHash },
-	)
-	return { podcastCover, isPublic: podcastEpisodeRow.visibility === "public" }
-}
 
 // the podcast feed and cover routes
 export const podcastFeedsRoute = new Hono<AppEnv>()

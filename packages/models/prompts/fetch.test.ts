@@ -53,10 +53,12 @@ test("fetchPromptTemplate reports a prompt's variable drift once per process and
 			expect(promptTemplate.registryPrompt).toBeUndefined()
 		}
 
-		// every call logs, and each prompt name reports once
-		expect(consoleErrorSpy).toHaveBeenCalledTimes(3)
-		expect(reportErrorSpy).toHaveBeenCalledTimes(2)
-		expect(reportErrorSpy.mock.calls.map((call) => call[2]?.prompt)).toEqual(["chat-conduct", "chat-docs-guide"])
+		// every call logs, and each prompt name reports once. only the registry's own lines are counted, because an
+		// earlier test file's late error line can reach the same log
+		const registryLogLines = consoleErrorSpy.mock.calls.filter((call) => String(call[0]).startsWith("registry prompt"))
+		expect(registryLogLines).toHaveLength(3)
+		const reportedPrompts = reportErrorSpy.mock.calls.flatMap((call) => call[2]?.prompt ?? [])
+		expect(reportedPrompts).toEqual(["chat-conduct", "chat-docs-guide"])
 	} finally {
 		// put the registry, the log, the report, and the keys back, even if the test threw
 		promptGetSpy.mockRestore()

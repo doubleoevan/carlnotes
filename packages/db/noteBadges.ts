@@ -1,6 +1,7 @@
 // the unread note badge counts. what changed in a note since a user last opened it, and the read that clears it
 import type { NoteBadge } from "@carlnotes/contracts/notes"
-import { and, count, eq, gt, inArray, isNull, ne, or } from "drizzle-orm"
+import { and, count, eq, gt, inArray, isNotNull, isNull, ne, or, type SQL, type SQLWrapper, sql } from "drizzle-orm"
+import { union } from "drizzle-orm/pg-core"
 import { toNotUserBlockedAuthorFilter } from "./contentFilters"
 import { db } from "./index"
 import { noteComments, noteReads, notes } from "./schema/notes"
@@ -15,10 +16,8 @@ export async function loadNoteBadges(userId: string | null): Promise<NoteBadge[]
 	return userId ? loadPageNoteBadges(userId, await loadBadgedPages(userId)) : []
 }
 
-/**
- * The note badges on pages the caller already loaded with `loadBadgedPages`.
- */
-export async function loadPageNoteBadges(
+// the note badges on a user's pages
+async function loadPageNoteBadges(
 	userId: string,
 	{ topicIds, teamIds, teamIdsByTopicId }: BadgedPages,
 ): Promise<NoteBadge[]> {
@@ -110,6 +109,99 @@ export function toUnreadEdits(
 	return !note.readAt || note.bodyEditedAt > note.readAt ? 1 : 0
 }
 
+/**
+ * Loads how many unread note edits and comments each given user has, summed across every note they may see, in one
+ * grouped read. A user with none is left out.
+ */
+export async function loadNoteCounts(userIds: string[]): Promise<Map<string, number>> {
+	// each user's active teams
+	const memberTeams = db.$with("member_teams").as(
+		db
+			.select({ userId: teamMembers.userId, teamId: teamMembers.teamId })
+			.from(teamMembers)
+			.where(and(inArray(teamMembers.userId, userIds), eq(teamMembers.isActive, true))),
+	)
+
+	// a note the user may see, with what its edit count reads. a private note is its owner's alone
+	const viewableNoteColumns = {
+		userId: memberTeams.userId,
+		noteId: notes.id,
+		bodyEditedAt: notes.bodyEditedAt,
+		lastEditorUserId: notes.lastEditorUserId,
+	}
+	const isViewable = or(ne(notes.visibility, "private"), eq(notes.ownerUserId, memberTeams.userId))
+
+	// the notes on each user's pages, each once however many of the user's teams hold its page: the teams' own notes,
+	// and the notes of the topics that those teams own or hold a share of
+	const viewableNotes = db
+		.$with("viewable_notes")
+		.as(
+			union(
+				db
+					.select(viewableNoteColumns)
+					.from(memberTeams)
+					.innerJoin(notes, eq(notes.teamId, memberTeams.teamId))
+					.where(isViewable),
+				db
+					.select(viewableNoteColumns)
+					.from(memberTeams)
+					.innerJoin(topics, eq(topics.teamId, memberTeams.teamId))
+					.innerJoin(notes, eq(notes.topicId, topics.id))
+					.where(isViewable),
+				db
+					.select(viewableNoteColumns)
+					.from(memberTeams)
+					.innerJoin(teamTopics, eq(teamTopics.teamId, memberTeams.teamId))
+					.innerJoin(notes, eq(notes.topicId, teamTopics.topicId))
+					.where(isViewable),
+			),
+		)
+
+	// the comments a note received from somebody else since the user last read it, a blocked person's left out. a
+	// closed account leaves a null author
+	const unreadCommentCountQuery = db
+		.select({ unreadCommentCount: count() })
+		.from(noteComments)
+		.where(
+			and(
+				eq(noteComments.noteId, viewableNotes.noteId),
+				or(isNull(noteComments.authorUserId), ne(noteComments.authorUserId, viewableNotes.userId)),
+				toNotUserBlockedAuthorFilter(viewableNotes.userId, noteComments.authorUserId),
+				or(isNull(noteReads.readAt), gt(noteComments.createdAt, noteReads.readAt)),
+			),
+		)
+
+	// a user's count: their notes with an unread edit, plus every note's unread comments
+	const unreadEditCount = sql`count(*) filter (where ${toUnreadEditFilter(viewableNotes)})`
+	const unreadCommentCount = sql`coalesce(sum((${unreadCommentCountQuery})), 0)`
+
+	// sum each user's notes against their own read time of each
+	const noteCountRows = await db
+		.with(memberTeams, viewableNotes)
+		.select({
+			userId: viewableNotes.userId,
+			noteCount: sql<number>`(${unreadEditCount} + ${unreadCommentCount})::int`,
+		})
+		.from(viewableNotes)
+		.leftJoin(noteReads, and(eq(noteReads.noteId, viewableNotes.noteId), eq(noteReads.userId, viewableNotes.userId)))
+		.groupBy(viewableNotes.userId)
+	return new Map(noteCountRows.flatMap(({ userId, noteCount }) => (noteCount > 0 ? [[userId, noteCount]] : [])))
+}
+
+// the rule of `toUnreadEdits` as a filter on a user's note beside their read of it: somebody else's edit that the
+// user has not opened the note since
+function toUnreadEditFilter(viewableNote: {
+	userId: SQLWrapper
+	bodyEditedAt: SQLWrapper
+	lastEditorUserId: SQLWrapper
+}): SQL | undefined {
+	return and(
+		isNotNull(viewableNote.bodyEditedAt),
+		sql`${viewableNote.lastEditorUserId} is distinct from ${viewableNote.userId}`,
+		or(isNull(noteReads.readAt), gt(viewableNote.bodyEditedAt, noteReads.readAt)),
+	)
+}
+
 // the teams a note's page belongs to. a team note has its own, a topic note has every team holding the topic
 function toPageTeamIds(
 	note: { topicId: string | null; teamId: string | null },
@@ -122,12 +214,10 @@ function toPageTeamIds(
 }
 
 // the pages a badge can name: the user's teams, the topics those teams own or hold, and the teams holding each topic
-export type BadgedPages = { topicIds: string[]; teamIds: string[]; teamIdsByTopicId: Map<string, string[]> }
+type BadgedPages = { topicIds: string[]; teamIds: string[]; teamIdsByTopicId: Map<string, string[]> }
 
-/**
- * The pages whose notes and chat rooms a user is badged for: their teams, and the topics those teams own or hold.
- */
-export async function loadBadgedPages(userId: string): Promise<BadgedPages> {
+// the pages whose notes a user is badged for: their teams, and the topics those teams own or hold
+async function loadBadgedPages(userId: string): Promise<BadgedPages> {
 	// the teams the user is an active member of
 	const memberRows = await db
 		.select({ teamId: teamMembers.teamId })

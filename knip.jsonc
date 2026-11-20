@@ -75,7 +75,10 @@
 				"resetMonthlyBudgets.ts",
 				// the schedule, reset:monthly-budgets, db:migrate, docs:embed, and edge:purge scripts run their jobs through it
 				"runMonitoredJob.ts",
-				// temporal.ts passes each workflow file to Temporal as `new URL(...)`, not as an import
+				// temporalWorkers.ts names each workflow file in createWorker and passes it to Temporal as a path, not as an import
+				"workflows/receivePersonalSourcesEmail.ts",
+				"workflows/summarizePersonalSourcesContext.ts",
+				"workflows/buildDashboardSnapshots.ts",
 				"workflows/processAttachment.ts",
 				"workflows/topicMemories.ts",
 				"workflows/runTopicScan.ts",
@@ -86,6 +89,8 @@
 				"workflows/renderTopicImage.ts",
 				"workflows/backfillTopicImages.ts",
 				"workflows/screenSource.ts",
+				// workflows/topicMemories.test.ts passes this interceptor file to its test worker by path
+				"workflows/failingTopicMemoryStartTestFixtures.ts",
 				// the smoke:* scripts and scripts/smoke-coverage.sh
 				"scan.smoke.ts",
 				"links.smoke.ts",

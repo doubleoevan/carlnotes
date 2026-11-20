@@ -1,7 +1,9 @@
 // moderation tests: no proxy skips the check, the call sees the text fenced as data and returns the verdict through the
-// schema, a verdict outside the schema fails, a failed call fails without throwing, and the image check maps OpenAI's
-// flags onto Carl's categories
-import { afterEach, expect, mock, test } from "bun:test"
+// schema, a verdict outside the schema fails, a failed call fails without throwing, a text's verdict is kept for a day
+// and each call that runs is the platform's spend, and the image check maps OpenAI's flags onto Carl's categories
+import { afterEach, beforeEach, expect, mock, test } from "bun:test"
+import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
+import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import { toChatCompletionResponse } from "./chatCompletionTestFixtures"
 import { buildModerationPrompt, classifyImage, classifyUserText, MODERATION_TEXT_MAX_CHARS } from "./moderation"
@@ -26,9 +28,18 @@ function stubProxyReply(content: string | Error): void {
 	}) as unknown as typeof fetch
 }
 
-// put back the proxy settings, fetch, and the spies, and forget the recorded requests
+// each test starts with no kept verdict and no recorded spend, over an in-memory Redis and a stubbed pool
+let sentQueries: SentQuery[]
+beforeEach(() => {
+	stubRedisClient()
+	sentQueries = stubConnectionPool(() => [])
+})
+
+// put back the proxy settings, fetch, Redis, the pool, and the spies, and forget the recorded requests
 afterEach(() => {
 	restoreEnvSettings()
+	restoreRedisClient()
+	restoreConnectionPool()
 	mock.restore()
 	globalThis.fetch = originalFetch
 	sentRequestBodies.length = 0
@@ -56,6 +67,28 @@ test("a violation comes back with its category", async () => {
 })
 
 // a verdict the schema does not accept, and a call that throws, both fail without throwing
+// an autosave and an edit that leaves a paragraph as it was send the same text again
+test("a text saved again within a day is classified once, and each call that runs is the platform's spend", async () => {
+	// the first save classifies the text, and its cost is a spends row with no user
+	stubProxyReply(JSON.stringify({ isViolation: false, category: null }))
+	const note = { text: "Flat burrs keep fines low.", textKind: "a note's body" } as const
+	const firstClassification = await classifyUserText(note)
+	expect(sentRequestBodies).toHaveLength(1)
+	expect(sentQueries).toHaveLength(1)
+	expect(sentQueries[0]?.text).toStartWith('insert into "spends"')
+	expect(sentQueries[0]?.values).toContain("textModeration")
+
+	// the same text saved again returns the kept verdict, with no call and no spend
+	expect(await classifyUserText(note)).toEqual(firstClassification)
+	expect(sentRequestBodies).toHaveLength(1)
+	expect(sentQueries).toHaveLength(1)
+
+	// an edited text, and the same words as another kind of text, are each classified
+	await classifyUserText({ ...note, text: "Conical burrs keep fines low." })
+	await classifyUserText({ ...note, textKind: "a chat room message" })
+	expect(sentRequestBodies).toHaveLength(3)
+})
+
 test("an off-schema verdict and a thrown call both fail", async () => {
 	stubProxyReply(JSON.stringify({ isViolation: true, category: "spam" }))
 	expect((await classifyUserText({ text: "x", textKind: "a note's body" })).outcome).toBe("failed")

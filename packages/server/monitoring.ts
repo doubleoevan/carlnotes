@@ -1,10 +1,10 @@
-// error monitoring and request tracing through Sentry
+// error monitoring through Sentry: its start, the error reports and their hourly limit, and the threshold warnings
 
 import type { ClientTelemetry } from "@carlnotes/contracts/clientTelemetry"
 import { HOUR_MS } from "@carlnotes/contracts/time"
-import type { Span } from "@sentry/bun"
 import * as Sentry from "@sentry/bun"
 import { redactEvent, redactTransaction, withoutUrlSecrets } from "./monitoringRedaction"
+import { toTracesSampleRate } from "./monitoringTracing"
 
 /**
  * Labels request errors with isolated client telemetry.
@@ -20,9 +20,6 @@ export function withRequestTelemetry<Result>(properties: ClientTelemetry, run: (
 		return run()
 	})
 }
-
-// Sentry's span type, so a caller can type a span without importing Sentry
-export type { Span }
 
 // the fraction of traces sampled when tracing is on. the environment can override it
 const DEFAULT_TRACES_SAMPLE_RATE = 0.1
@@ -60,20 +57,14 @@ export type DecideErrorReportOptions = {
 // the error report windows of this process, keyed by stage and message
 const errorReportWindows = new Map<string, ErrorReportWindow>()
 
-// the paths never traced: the health checks, which the platform and a monitor poll all day
-const UNTRACED_PATHS = new Set(["/api/health", "/api/health/deep", "/api/health/ready"])
+// takes a report's slot in a store that outlives the process, by the report's key, and returns whether to send the
+// report
+export type TakeReportSlot = (reportKey: string) => Promise<boolean>
 
-// the path prefixes never traced: the built assets, the docs site, and the screenshots the ui serves as files
-const UNTRACED_PATH_PREFIXES = ["/assets/", "/docs", "/screenshots/"]
-
-// the files at the site root that the api builds from the database, which are traced like any other request
-const TRACED_ROOT_FILES = new Set(["/sitemap.xml", "/feed.xml", "/llms.txt", "/llms-full.txt"])
-
-// the badge polls every open tab sends, the most frequent requests and the least varied
-const BADGE_POLL_PATHS = new Set(["/api/rooms/mention-count", "/api/note-badges", "/api/invites/topics/pending"])
-
-// how many times less often a badge poll is traced than any other request
-const BADGE_POLL_SAMPLE_DIVISOR = 10
+// the slot that each report of this process takes before it is sent, or null in a process that runs long enough for
+// its own hourly counts to hold, and the reports still waiting on their slot
+let takeReportSlot: TakeReportSlot | null = null
+const waitingReports = new Set<Promise<void>>()
 
 /**
  * Starts error monitoring in production when `SENTRY_DSN` is set, and no-ops everywhere else.
@@ -128,95 +119,11 @@ export function isMonitoringStarted(): boolean {
 	return Sentry.isInitialized()
 }
 
-// what a sample rate is decided from: the span's name, which starts with a request's method and path, and the rate
-type ToTracesSampleRateOptions = { spanName: string; tracesSampleRate: number }
-
 /**
  * Returns the release a report is tagged with: SENTRY_RELEASE, or the commit SHA Northflank deployed, or none.
  */
 export function toSentryRelease(env: Record<string, string | undefined>): string | undefined {
 	return env.SENTRY_RELEASE || env.NF_DEPLOYMENT_SHA || undefined
-}
-
-/**
- * Returns the share of spans traced for a span's name. The health checks and the static files are never traced,
- * the badge polls are traced at a tenth of the rate, and every other span at the rate.
- */
-export function toTracesSampleRate({ spanName, tracesSampleRate }: ToTracesSampleRateOptions): number {
-	// a request's span is named by its method and its path, and any other span's name reads as a path of its own
-	const path = spanName.slice(spanName.indexOf(" ") + 1)
-
-	// the health checks, the static prefixes, and a file at the site root the api does not build are never traced
-	const isRootFile = path.lastIndexOf("/") === 0 && path.includes(".")
-	const isUntraced =
-		UNTRACED_PATHS.has(path) ||
-		UNTRACED_PATH_PREFIXES.some((prefix) => path.startsWith(prefix)) ||
-		(isRootFile && !TRACED_ROOT_FILES.has(path))
-	if (isUntraced) {
-		return 0
-	}
-
-	// a badge poll is traced at a tenth of the rate, and anything else at the rate
-	return BADGE_POLL_PATHS.has(path) ? tracesSampleRate / BADGE_POLL_SAMPLE_DIVISOR : tracesSampleRate
-}
-
-/**
- * Returns the span of the request running now, the one Sentry's Bun integration opened, or undefined if nothing is traced.
- */
-export function readRequestSpan(): Span | undefined {
-	const activeSpan = Sentry.getActiveSpan()
-	return activeSpan ? Sentry.getRootSpan(activeSpan) : undefined
-}
-
-// the transaction to name, the request's method and route, and the measurements it ends with
-type CompleteRequestTransactionOptions = {
-	requestSpan: Span
-	method: string
-	route: string
-	measurements: Record<string, { value: number; unit: "none" | "millisecond" }>
-}
-
-/**
- * Names a request's transaction by its route and attaches its measurements.
- */
-export function completeRequestTransaction({
-	requestSpan,
-	method,
-	route,
-	measurements,
-}: CompleteRequestTransactionOptions): void {
-	// the route replaces the url in the name, so the name includes no id and no query string
-	Sentry.updateSpanName(requestSpan, `${method} ${route}`)
-	requestSpan.setAttributes({ "http.route": route, "sentry.source": "route" })
-
-	// Sentry can query each measurement and alert on it per route
-	for (const [measurementName, { value, unit }] of Object.entries(measurements)) {
-		Sentry.setMeasurement(measurementName, value, unit, requestSpan)
-	}
-}
-
-/**
- * Runs one stage of a traced request inside its own span, or just runs it if no request is traced.
- */
-export function traceRequestStage<Result>(stageName: string, runStage: () => Result): Result {
-	return Sentry.startSpan({ name: stageName, op: "function", onlyIfParent: true }, runStage)
-}
-
-/**
- * Starts the span of one database statement inside a request, under the stage that sent it or the request's own span,
- * and returns the call that ends it. The statement names the span, and its parameter values never reach it.
- */
-export function startQuerySpan(statement: string, requestSpan: Span): () => void {
-	// the active span is the parent if its root is the request's span, which a stage's span has and a Langfuse span never has
-	const activeSpan = Sentry.getActiveSpan()
-	const parentSpan = activeSpan && Sentry.getRootSpan(activeSpan) === requestSpan ? activeSpan : requestSpan
-	const querySpan = Sentry.startInactiveSpan({
-		name: statement,
-		op: "db",
-		attributes: { "db.system": "postgresql" },
-		parentSpan,
-	})
-	return () => querySpan.end()
 }
 
 // the pipeline stages that report a failure, named so Sentry can group them the way the pipeline reads
@@ -259,9 +166,10 @@ export type ReportedStage = (typeof reportedStages)[number]
  */
 export function reportError(error: unknown, stage: ReportedStage, extra?: Record<string, string>): void {
 	// decide from the error's window, and send the skipped count with the report that reopens a window
+	const errorReportKey = toErrorReportKey(stage, error)
 	const errorReportDecision = decideErrorReport({
 		errorReportWindowByKey: errorReportWindows,
-		key: toErrorReportKey(stage, error),
+		key: errorReportKey,
 		nowMs: Date.now(),
 	})
 	if (!errorReportDecision.isSent) {
@@ -273,27 +181,84 @@ export function reportError(error: unknown, stage: ReportedStage, extra?: Record
 		errorReportDecision.skippedCount > 0
 			? { ...extra, skippedReportCount: String(errorReportDecision.skippedCount) }
 			: extra
-	Sentry.captureException(error, { tags: { stage }, extra: reportedExtra })
+	sendReport({
+		reportKey: `error:${errorReportKey}`,
+		send: () => Sentry.captureException(error, { tags: { stage }, extra: reportedExtra }),
+	})
+
+	// the report that reaches the hour's limit also warns that the stage's error is looping. the ten reports alone stay
+	// under an error rate alert, and the alert on threshold warnings hears this one
+	if (errorReportDecision.isLimitReached) {
+		reportThresholdCrossing({
+			condition: "error-loop",
+			message: "one stage's error repeated to the hourly report limit",
+			values: { sentReportCount: ERROR_REPORTS_PER_WINDOW },
+			stage,
+		})
+	}
 }
 
 /**
- * Decides whether one error report is sent, and with how many reports its key's previous hour skipped.
+ * Makes each report and threshold warning of this process take a slot before it is sent, or stops that with null.
+ * A process that is new on every run sets it, because the hourly counts in its memory start from zero each time.
+ */
+export function limitReportsBySlot(nextTakeReportSlot: TakeReportSlot | null): void {
+	takeReportSlot = nextTakeReportSlot
+}
+
+/**
+ * Forgets what this process has reported: each error's window and when each condition last sent its alert.
+ */
+export function clearReportHistory(): void {
+	errorReportWindows.clear()
+	thresholdAlertSentAt.clear()
+}
+
+// a report's key, and the call that sends the report to Sentry
+type SendReportOptions = { reportKey: string; send: () => void }
+
+// send a report at once, or once it has taken its slot in a process that takes one. a report whose slot another report
+// holds is not sent, and a report whose slot could not be asked for is sent
+function sendReport({ reportKey, send }: SendReportOptions): void {
+	if (!takeReportSlot) {
+		send()
+		return
+	}
+
+	// ask for the slot, and keep the wait so a shutdown finishes it before it flushes
+	const waitingReport: Promise<void> = takeReportSlot(reportKey)
+		.catch(() => true)
+		.then((isSlotTaken) => {
+			// the report that took the slot, or that could not ask, is sent
+			if (isSlotTaken) {
+				send()
+			}
+		})
+		.finally(() => waitingReports.delete(waitingReport))
+	waitingReports.add(waitingReport)
+}
+
+/**
+ * Decides whether one error report is sent, with how many reports its key's previous hour skipped, and whether it is
+ * the report that reaches the hour's limit.
  */
 export function decideErrorReport({ errorReportWindowByKey, key, nowMs }: DecideErrorReportOptions): {
 	isSent: boolean
 	skippedCount: number
+	isLimitReached: boolean
 } {
 	// a report inside an open hour is sent up to the window's limit and skipped past it
 	const errorReportWindow = errorReportWindowByKey.get(key)
 	if (errorReportWindow && nowMs - errorReportWindow.startedAt < ERROR_REPORT_WINDOW_MS) {
 		if (errorReportWindow.sentCount < ERROR_REPORTS_PER_WINDOW) {
 			errorReportWindow.sentCount++
-			return { isSent: true, skippedCount: 0 }
+			const isLimitReached = errorReportWindow.sentCount === ERROR_REPORTS_PER_WINDOW
+			return { isSent: true, skippedCount: 0, isLimitReached }
 		}
 
 		// past the limit, the report is skipped and counted
 		errorReportWindow.skippedCount++
-		return { isSent: false, skippedCount: 0 }
+		return { isSent: false, skippedCount: 0, isLimitReached: false }
 	}
 
 	// a report that opens an hour is sent with what the hour before skipped. a new error drops the oldest window once the
@@ -303,7 +268,7 @@ export function decideErrorReport({ errorReportWindowByKey, key, nowMs }: Decide
 	}
 	errorReportWindowByKey.delete(key)
 	errorReportWindowByKey.set(key, { startedAt: nowMs, sentCount: 1, skippedCount: 0 })
-	return { isSent: true, skippedCount: errorReportWindow?.skippedCount ?? 0 }
+	return { isSent: true, skippedCount: errorReportWindow?.skippedCount ?? 0, isLimitReached: false }
 }
 
 // the key one stage's one error counts under: the stage and the start of the error's message
@@ -312,21 +277,34 @@ function toErrorReportKey(stage: ReportedStage, error: unknown): string {
 	return `${stage}:${message.slice(0, ERROR_REPORT_MESSAGE_CHARS)}`
 }
 
-// a gauge that crossed its threshold: the condition that names its issue, the message, and the measured values
-export type ThresholdCrossing = { condition: string; message: string; values: Record<string, number | null> }
+// a gauge that crossed its threshold: the condition that names its issue, the message, the measured values, and, for
+// a looping error, the stage that reported it, which has an hour of its own
+export type ThresholdCrossing = {
+	condition: string
+	message: string
+	values: Record<string, number | null>
+	stage?: ReportedStage
+}
 
 /**
  * Sends one Sentry warning for a crossed threshold, grouped as its condition's own issue and tagged for the alert rule,
- * at most once an hour per condition. Returns whether it sent one.
+ * at most once an hour per condition. Returns whether this process's own hour let the warning through, which a process
+ * that takes a slot then sends only if the warning takes its condition's slot.
  */
 export function reportThresholdCrossing(thresholdCrossing: ThresholdCrossing, now = Date.now()): boolean {
-	// a condition that alerted within the hour stays quiet, so an hour of waiting requests sends one warning, not sixty
-	const sentAt = thresholdAlertSentAt.get(thresholdCrossing.condition)
+	// a condition that alerted within the hour stays quiet, so an hour of waiting requests sends one warning, not sixty.
+	// a condition with a stage is quiet for that stage alone
+	const { condition, stage } = thresholdCrossing
+	const alertKey = stage ? `${condition}:${stage}` : condition
+	const sentAt = thresholdAlertSentAt.get(alertKey)
 	if (sentAt !== undefined && now - sentAt < THRESHOLD_ALERT_QUIET_MS) {
 		return false
 	}
-	thresholdAlertSentAt.set(thresholdCrossing.condition, now)
-	Sentry.captureMessage(thresholdCrossing.message, toThresholdCaptureContext(thresholdCrossing))
+	thresholdAlertSentAt.set(alertKey, now)
+	sendReport({
+		reportKey: `condition:${alertKey}`,
+		send: () => Sentry.captureMessage(thresholdCrossing.message, toThresholdCaptureContext(thresholdCrossing)),
+	})
 	return true
 }
 
@@ -334,7 +312,7 @@ export function reportThresholdCrossing(thresholdCrossing: ThresholdCrossing, no
  * Returns how a threshold warning is sent: its level, the fingerprint that groups it by condition,
  * the tags an alert rule matches, and the measured values.
  */
-export function toThresholdCaptureContext({ condition, values }: ThresholdCrossing): {
+export function toThresholdCaptureContext({ condition, values, stage }: ThresholdCrossing): {
 	level: "warning"
 	fingerprint: string[]
 	tags: Record<string, string>
@@ -343,7 +321,7 @@ export function toThresholdCaptureContext({ condition, values }: ThresholdCrossi
 	return {
 		level: "warning",
 		fingerprint: ["performance", condition],
-		tags: { alert: "performance", condition },
+		tags: { alert: "performance", condition, ...(stage ? { stage } : {}) },
 		extra: values,
 	}
 }
@@ -352,6 +330,9 @@ export function toThresholdCaptureContext({ condition, values }: ThresholdCrossi
  * Flushes pending reports before a short-lived process exits. Safe to call whether the monitoring started or not.
  */
 export async function shutdownMonitoring(): Promise<void> {
+	// a report still waiting on its slot is sent or dropped first, so the flush includes it
+	await Promise.allSettled(waitingReports)
+
 	// a flush failure must never flip the outcome the run earned
 	try {
 		await Sentry.flush(SHUTDOWN_FLUSH_MS)

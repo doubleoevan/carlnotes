@@ -1,6 +1,7 @@
 // a Podcast Episode's script as its workflow's activities write it. the outline, each segment, the saved script,
 // and what each call cost
 
+import type { PodcastEpisodeScript } from "@carlnotes/contracts/podcast"
 import { FULL_PODCAST_EPISODE_MINUTES, SHORT_PODCAST_EPISODE_MINUTES } from "@carlnotes/contracts/podcastEpisodes"
 import { toHostWithoutWww } from "@carlnotes/contracts/seo"
 import { db, isCurrentModelEmbedding, isFindingShown } from "@carlnotes/db"
@@ -49,13 +50,38 @@ export type WritePodcastEpisodeSegmentOptions = PodcastEpisodeScriptCallOptions 
 	segmentIndex: number
 }
 
+// the script that an earlier run of the recording saved on the row, with the outline's title and description, or null
+// for a row with no saved script
+async function loadSavedPodcastEpisodeScript(
+	podcastEpisodeId: string,
+): Promise<{ title: string | null; description: string | null; script: PodcastEpisodeScript } | null> {
+	const [savedPodcastEpisode] = await db
+		.select({
+			title: podcastEpisodes.title,
+			description: podcastEpisodes.description,
+			script: podcastEpisodes.script,
+		})
+		.from(podcastEpisodes)
+		.where(eq(podcastEpisodes.id, podcastEpisodeId))
+	return savedPodcastEpisode?.script ? { ...savedPodcastEpisode, script: savedPodcastEpisode.script } : null
+}
+
 /**
  * Writes the Podcast Episode's outline on the billed user's key and saves its title and description on the row.
- * Throws a RejectedScriptError if the last draft does not match the outline's shape or plans nothing to narrate.
+ * A recording that already saved its script, as one that the reaper started again may have, writes nothing and
+ * returns an outline with no segment, so no segment is written either. Throws a RejectedScriptError if the last draft
+ * does not match the outline's shape or plans nothing to narrate.
  */
 export async function outlinePodcastEpisode(
 	scriptCallOptions: PodcastEpisodeScriptCallOptions,
 ): Promise<PodcastEpisodeOutline> {
+	// a saved script is kept, because the chapters that the recording already stored were recorded from it
+	const savedPodcastEpisode = await loadSavedPodcastEpisodeScript(scriptCallOptions.podcastEpisodeId)
+	if (savedPodcastEpisode) {
+		const { title, description } = savedPodcastEpisode
+		return { title: title ?? "", description: description ?? "", segments: [] }
+	}
+
 	// write the outline's drafts, and record each draft's cost before the draft is checked
 	const scriptInput = await loadScriptInput(scriptCallOptions)
 	const topicMemoryPrompt = await loadPodcastTopicMemoryPrompt(scriptCallOptions)
@@ -151,8 +177,9 @@ function toSegmentSharedComments({
 }
 
 /**
- * Builds the whole script from its segments, saves it on the row, and returns how many chapters it has.
- * Throws a RejectedScriptError if the script has no chapter.
+ * Builds the whole script from its segments, saves it on the row, and returns how many chapters it has. A script that
+ * the row already holds stays as it is, and its chapter count is returned. Throws a RejectedScriptError if the script
+ * has no chapter.
  */
 export async function savePodcastEpisodeScript(
 	podcastEpisodeId: string,
@@ -160,6 +187,12 @@ export async function savePodcastEpisodeScript(
 ): Promise<number> {
 	// stop queued script writes after personal sources activation
 	await assertPodcastPersonalSourcesConverted({ podcastEpisodeId })
+
+	// a saved script is never written over, because the chapters that the recording already stored were recorded from it
+	const savedPodcastEpisode = await loadSavedPodcastEpisodeScript(podcastEpisodeId)
+	if (savedPodcastEpisode) {
+		return toChapterTurns(savedPodcastEpisode.script).length
+	}
 	const podcastEpisodeScript = toPodcastEpisodeScript(segments)
 	await db.update(podcastEpisodes).set({ script: podcastEpisodeScript }).where(eq(podcastEpisodes.id, podcastEpisodeId))
 

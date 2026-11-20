@@ -9,7 +9,7 @@ import { cacheJson } from "@carlnotes/db/redis"
 import { loadOrProvisionUserLiteLLMKey } from "@carlnotes/models/litellm"
 import { suggestSources } from "@carlnotes/pipeline/suggest"
 import { trackEvent } from "@carlnotes/server/analytics"
-import { traceRequestStage } from "@carlnotes/server/monitoring"
+import { traceRequestStage } from "@carlnotes/server/monitoringTracing"
 import { zValidator } from "@hono/zod-validator"
 import { type Context, Hono } from "hono"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
@@ -31,9 +31,10 @@ import { loadTopicPage } from "./topics"
 // how long Redis caches a topic page for poll reloads
 const TOPIC_PAGE_POLL_TTL_MS = 2000
 
-// the topic routes: create, source suggestions, read, update, and delete
+// the topic routes: create, source suggestions, read, update, and delete. a create, an update, and a suggestion each
+// count against the tool callers' limit, because a saved url Source and a suggestion each start a paid fetch or search
 export const topicsRoute = new Hono<AppEnv>()
-	.post("/topics", zValidator("json", updateTopicPayload), async (context) => {
+	.post("/topics", toolCallerRateLimiter, zValidator("json", updateTopicPayload), async (context) => {
 		// reject a signed-out visitor
 		const userId = currentUser(context)
 		if (!userId) {
@@ -86,6 +87,7 @@ export const topicsRoute = new Hono<AppEnv>()
 			// propose sources from the topic's own text
 			const { name, prompt, attachmentContext, excludeSources, limit } = context.req.valid("json")
 			const suggestedSources = await suggestSources({
+				userId,
 				name,
 				prompt,
 				attachmentContext,
@@ -149,7 +151,7 @@ export const topicsRoute = new Hono<AppEnv>()
 			? context.json({ relatedTopics: await loadRelatedTopics(topic, userId) })
 			: toHiddenTopicResponse(context, topicId)
 	})
-	.patch("/topics/:id", zValidator("json", updateTopicPayload), async (context) => {
+	.patch("/topics/:id", toolCallerRateLimiter, zValidator("json", updateTopicPayload), async (context) => {
 		// reject a signed-out visitor
 		const userId = currentUser(context)
 		if (!userId) {

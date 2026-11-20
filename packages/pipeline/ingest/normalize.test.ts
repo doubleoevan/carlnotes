@@ -1,6 +1,13 @@
-// tests for url canonicalization, title fallback, and resource kind detection
+// tests for url canonicalization, title fallback, the snippet's length limit, and resource kind detection
 import { expect, test } from "bun:test"
-import { isTitleFromUrlFallback, toCanonicalUrl, toFallbackTitle, toResourceKind } from "./normalize"
+import {
+	isTitleFromUrlFallback,
+	MAX_SNIPPET_CHARS,
+	toCanonicalUrl,
+	toFallbackTitle,
+	toLimitedSnippet,
+	toResourceKind,
+} from "./normalize"
 
 // a host ignores case, so two links that differ only there are the same page
 test("toCanonicalUrl lowercases the host and drops the fragment", () => {
@@ -116,4 +123,22 @@ test("isTitleFromUrlFallback holds only for a title the url itself gives", () =>
 	// a bare host gives no title, so an untitled Resource on one counts as a title from the url
 	expect(isTitleFromUrlFallback(null, "https://example.com/")).toBe(true)
 	expect(isTitleFromUrlFallback(null, "https://example.com/blog/agent-evals")).toBe(false)
+})
+
+// a feed that puts a whole article in its description would store the article as the snippet
+test("toLimitedSnippet keeps a snippet within the limit and cuts a longer one to it", () => {
+	// a snippet at the limit, an empty one, and none are returned as they are
+	const snippetAtLimit = "a".repeat(MAX_SNIPPET_CHARS)
+	expect(toLimitedSnippet(snippetAtLimit)).toBe(snippetAtLimit)
+	expect(toLimitedSnippet("")).toBe("")
+	expect(toLimitedSnippet(null)).toBeNull()
+	expect(toLimitedSnippet(undefined)).toBeUndefined()
+
+	// a longer snippet keeps its start
+	const longSnippet = `${"a".repeat(MAX_SNIPPET_CHARS)}${"b".repeat(67_000)}`
+	expect(toLimitedSnippet(longSnippet)).toBe(snippetAtLimit)
+
+	// a character that the cut would split in two is left out whole
+	const splitSnippet = `${"a".repeat(MAX_SNIPPET_CHARS - 1)}\u{1F600}tail`
+	expect(toLimitedSnippet(splitSnippet)).toBe("a".repeat(MAX_SNIPPET_CHARS - 1))
 })

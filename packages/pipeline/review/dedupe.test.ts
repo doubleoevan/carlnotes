@@ -1,9 +1,16 @@
-// dedupe tests for the hashing and the near-duplicate decisions, and the url Source page the dedupe passes through
-import { expect, test } from "bun:test"
+// dedupe tests for the hashing and the near-duplicate decisions, the url Source page the dedupe passes through, and
+// the stored pages a candidate is compared with, which are the Topic's own
+import { afterEach, expect, test } from "bun:test"
+import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import { dedupeResources, hasNearDuplicateKey, normalizeText, toContentHash } from "./dedupe"
 import { rankBySimilarity } from "./filter"
 import { toTestResource } from "./reviewTestFixtures"
 import { emptyReviewOutcome } from "./track"
+
+// put the connection pool back after each test
+afterEach(() => {
+	restoreConnectionPool()
+})
 
 // normalizeText lowercases and collapses whitespace, so that formatting noise doesn't change the hash
 test("normalizeText lowercases and collapses whitespace", () => {
@@ -62,6 +69,8 @@ test("the surviving member of a near-duplicate set is the higher-scoring one", (
 		if (!relevantResource.embedding) {
 			throw new Error("Expected an embedded ordinary candidate")
 		}
+
+		// a near-duplicate of one already kept is dropped
 		if (hasNearDuplicateKey(dedupeKeys, relevantResource.embedding)) {
 			continue
 		}
@@ -86,6 +95,7 @@ test("the dedupe passes a url Source's own page through untouched", async () => 
 		similarity: 0.2,
 	}))
 	const resourcesToScore = await dedupeResources({
+		topicId: "topic-1",
 		relevantResources,
 		candidateIds: ["first-page", "second-page"],
 		reviewOutcome: emptyReviewOutcome(),
@@ -104,6 +114,7 @@ test("a personal link without an embedding still reaches paid scoring", async ()
 		personalSourceScoreBonus: 0.1 as const,
 	}
 	const candidates = await dedupeResources({
+		topicId: "topic-1",
 		relevantResources: [{ resource, embedding: null, similarity: 0 }],
 		candidateIds: [resource.id],
 		reviewOutcome: emptyReviewOutcome(),
@@ -126,10 +137,74 @@ test("different personal pages with the same URL-derived title both reach scorin
 		similarity: 0,
 	}))
 	const candidates = await dedupeResources({
+		topicId: "topic-1",
 		relevantResources,
 		candidateIds: relevantResources.map(({ resource }) => resource.id),
 		reviewOutcome: emptyReviewOutcome(),
 		urlSourcePageIds: new Set(),
 	})
 	expect(candidates).toHaveLength(2)
+})
+
+// an ordinary candidate with a title, a snippet, and a vector, which both stored reads look for a duplicate of
+const STORY = {
+	resource: { ...toTestResource("story"), title: "Burr grinders compared", snippet: "Twelve grinders.", kind: "read" },
+	embedding: [1, 0],
+	similarity: 0.6,
+} as Parameters<typeof dedupeResources>[0]["relevantResources"][number]
+
+// the judged pages of a Topic: the ones it holds a Finding for, and the ones whose Finding its limit removed
+const JUDGED_RESOURCES_FILTER =
+	'"resources"."id" in ((select "resource_id" from "findings" where "findings"."topic_id" = $3) union (select "resource_id" from "filtered_findings" where "filtered_findings"."topic_id" = $4))'
+
+// one Topic never loses a story because another Topic's Scan stored it first
+test("a story that only another Topic stored is still scored for this one", async () => {
+	// no page that this Topic judged has the story's hash or sits near its vector
+	const sentQueries = stubConnectionPool(() => [])
+	const resourcesToScore = await dedupeResources({
+		topicId: "topic-1",
+		relevantResources: [STORY],
+		candidateIds: ["story"],
+		reviewOutcome: emptyReviewOutcome(),
+		urlSourcePageIds: new Set(),
+	})
+	expect(resourcesToScore.map((resource) => resource.id)).toEqual(["story"])
+
+	// the hash read looks among the Topic's judged pages alone, without this Scan's candidates
+	const [hashRead, nearDuplicateRead] = sentQueries.filter((sentQuery) => sentQuery.text.startsWith("select"))
+	expect(hashRead?.text).toContain(
+		`where ("resources"."content_hash" = $1 and "resources"."id" not in ($2) and ${JUDGED_RESOURCES_FILTER})`,
+	)
+	expect(hashRead?.values).toEqual([
+		toContentHash("Burr grinders compared", "Twelve grinders."),
+		"story",
+		"topic-1",
+		"topic-1",
+		1,
+	])
+
+	// the near-duplicate read measures the distance over those pages, with no order for an index to walk
+	expect(nearDuplicateRead?.text).toContain('"resources"."id" in ((select "resource_id" from "findings"')
+	expect(nearDuplicateRead?.text).toContain('"resources"."embedding" <=> $')
+	expect(nearDuplicateRead?.text).not.toContain("order by")
+})
+
+test("a page that the Topic judged before drops its copy and its near-duplicate", async () => {
+	// the Topic holds a Finding or a filtered finding for a page with the story's hash
+	const reviewOutcome = emptyReviewOutcome()
+	stubConnectionPool(({ text }) => (text.includes('"resources"."content_hash" = $1') ? [["judged-page"]] : []))
+	const dedupeOptions = {
+		topicId: "topic-1",
+		candidateIds: ["story"],
+		reviewOutcome,
+		urlSourcePageIds: new Set<string>(),
+	}
+	expect(await dedupeResources({ ...dedupeOptions, relevantResources: [STORY] })).toEqual([])
+	expect(reviewOutcome.filteredCounts["duplicate content"]).toBe(1)
+
+	// another hash, and a judged page within the near-duplicate distance of the story's vector
+	restoreConnectionPool()
+	stubConnectionPool(({ text }) => (text.includes("<=>") ? [["judged-page"]] : []))
+	expect(await dedupeResources({ ...dedupeOptions, relevantResources: [STORY] })).toEqual([])
+	expect(reviewOutcome.filteredCounts["near-duplicate"]).toBe(1)
 })

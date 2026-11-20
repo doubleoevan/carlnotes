@@ -1,9 +1,12 @@
 // the day's spend across every user, logged and reported against an alert threshold, and the past hour's signups
 // reported against the signup alert threshold
 
+import { DAY_MS, toUtcDay } from "@carlnotes/contracts/time"
 import { db } from "@carlnotes/db"
 import { countHourlySignups, loadSpendControlSettings } from "@carlnotes/db/dailySpendCutoffs"
-import { loadSpendSince, type RecordedSpend, startOfUtcDay, toSpendCents } from "@carlnotes/db/quotas"
+import { startOfUtcDay } from "@carlnotes/db/quotas"
+import { loadSpendSince, type RecordedSpend, toSpendCents } from "@carlnotes/db/recordedSpend"
+import { cacheJson } from "@carlnotes/db/redis"
 import { users } from "@carlnotes/db/schema/users"
 import { readDollarSetting } from "@carlnotes/server/envSettings"
 import { reportError, reportThresholdCrossing } from "@carlnotes/server/monitoring"
@@ -11,6 +14,9 @@ import { gte, sql } from "drizzle-orm"
 
 // the dollars of spend in one UTC day past which a warning is sent. unset sends none
 const GLOBAL_DAILY_SPEND_ALERT_USD = readDollarSetting("GLOBAL_DAILY_SPEND_ALERT_USD", 0)
+
+// how long a sweep reads the day's spend from the cache before it is summed again
+const DAILY_SPEND_CACHE_TTL_MS = 5 * 60 * 1000
 
 // the day's spend by what spent it, the total, and how many accounts the day created
 export type DailySpend = RecordedSpend & { totalDollars: number; newUserCount: number }
@@ -35,6 +41,17 @@ export async function loadDailySpend(now = new Date()): Promise<DailySpend> {
 	}
 }
 
+// the day's spend through a cache that is named for the UTC day and never outlives it. a failed read throws an error
+// and stores nothing, so the next sweep reads again
+function loadCachedDailySpend(now = new Date()): Promise<DailySpend> {
+	const nextDayStartMs = startOfUtcDay(now).getTime() + DAY_MS
+	return cacheJson({
+		key: `daily-spend:${toUtcDay(now)}`,
+		ttlMs: Math.min(DAILY_SPEND_CACHE_TTL_MS, nextDayStartMs - now.getTime()),
+		load: () => loadDailySpend(now),
+	})
+}
+
 /**
  * Loads how many accounts the past hour created, and the signup alert threshold from the spend control settings, or
  * its default if the settings read failed.
@@ -45,7 +62,7 @@ export async function loadHourlySignups(now = new Date()): Promise<HourlySignups
 	return { hourlySignupCount, hourlySignupAlertCount: settings.hourlySignupAlertCount }
 }
 
-// the loaders the report reads, each defaulting to the database
+// the loaders the report reads: the day's spend through its cache by default, and the signups from the database
 export type ReportDailySpendOptions = {
 	loadSpend?: () => Promise<DailySpend>
 	loadSignups?: () => Promise<HourlySignups>
@@ -53,11 +70,11 @@ export type ReportDailySpendOptions = {
 
 /**
  * Warns if the past hour's signups reach the signup alert threshold, then logs the day's spend and warns past its
- * threshold, and returns the spend, or null if the spend read failed. A failed signup count is reported and the
- * report goes on.
+ * threshold, and returns the spend, or null if the spend read failed. The spend is summed at most once in five
+ * minutes. A failed signup count is reported and the report goes on.
  */
 export async function reportDailySpend({
-	loadSpend = loadDailySpend,
+	loadSpend = loadCachedDailySpend,
 	loadSignups = loadHourlySignups,
 }: ReportDailySpendOptions = {}): Promise<DailySpend | null> {
 	// warn about the past hour's signups first, so a failed spend read never hides them

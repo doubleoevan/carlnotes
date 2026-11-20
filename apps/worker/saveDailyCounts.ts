@@ -4,6 +4,8 @@
 import { toChunks } from "@carlnotes/contracts/arrays"
 import { type DbTransaction, db } from "@carlnotes/db"
 import {
+	clearFailedDailyCountSweeps,
+	countFailedDailyCountSweep,
 	type DailyCountEntry,
 	type DailyPlayCountRow,
 	type DailyViewCountRow,
@@ -11,9 +13,8 @@ import {
 	mergeTakenDailyCountSketches,
 	returnDailyCountEntries,
 	takeDailyCountEntries,
-	toPlaceColumns,
-	toPlaceKey,
 } from "@carlnotes/db/dailyCountBuffer"
+import { toPlaceColumns, toPlaceKey } from "@carlnotes/db/dailyCountPlaces"
 import { dailyPlayCounts, dailyViewCounts } from "@carlnotes/db/schema/dailyCounts"
 import { podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { reportError } from "@carlnotes/server/monitoring"
@@ -36,16 +37,21 @@ type PlayRowKeyColumns = { podcastEpisodeId: string; format: string; day: string
 
 /**
  * Takes every buffered daily count row and adds it to Postgres a batch at a time. A batch whose save fails is put back
- * in the buffer for the next sweep, and a play of a deleted podcast episode is dropped.
+ * in the buffer for the next sweep and reported with how many sweeps in a row have failed one, and a play of a deleted
+ * podcast episode is dropped. A take that Redis could not run is reported, and so is a batch that could not be put back.
  */
 export async function saveDailyCounts(): Promise<void> {
+	// a take that Redis could not run leaves the buffer as it is, and is reported
 	const dailyCountEntries = await takeDailyCountEntries()
-	if (!dailyCountEntries || dailyCountEntries.length === 0) {
+	if (!dailyCountEntries) {
+		console.error("could not take the daily counts from Redis")
+		reportError(new Error("the sweep could not take the daily counts from Redis"), "database")
 		return
 	}
 
 	// drop the plays of podcast episodes deleted since, which have no row to add to
 	const savableEntries = await dropDeletedPodcastEpisodePlays(dailyCountEntries)
+	let failedSweepCount: number | null | undefined
 	for (const dailyCountBatch of toChunks(savableEntries, SAVE_BATCH_SIZE)) {
 		// save the batch's views and plays in one transaction, then drop its taken sketches
 		try {
@@ -67,11 +73,33 @@ export async function saveDailyCounts(): Promise<void> {
 			})
 			await deleteTakenDailyCountSketches(dailyCountBatch)
 		} catch (error) {
-			// report the failed batch and put it back for the next sweep
+			// count this sweep once among the sweeps in a row that failed a batch, then report the failed batch
 			console.error("could not save the daily counts", error)
-			reportError(error, "database", { dailyCountRowCount: String(dailyCountBatch.length) })
-			await returnDailyCountEntries(dailyCountBatch)
+			failedSweepCount ??= await countFailedDailyCountSweep()
+			reportError(error, "database", toFailedBatchReport(dailyCountBatch.length, failedSweepCount))
+
+			// put the batch back for the next sweep. a batch that Redis could not put back is lost, and is reported
+			if (!(await returnDailyCountEntries(dailyCountBatch))) {
+				console.error("could not put a failed daily count batch back in Redis")
+				reportError(new Error("the sweep could not put a failed daily count batch back in Redis"), "database", {
+					dailyCountRowCount: String(dailyCountBatch.length),
+				})
+			}
 		}
+	}
+
+	// a sweep that saved every batch it took ends the count of failed sweeps in a row
+	if (failedSweepCount === undefined) {
+		await clearFailedDailyCountSweeps()
+	}
+}
+
+// what a failed batch's report says: how many rows the batch held, and how many sweeps in a row have failed a batch,
+// left out if Redis could not count them
+function toFailedBatchReport(dailyCountRowCount: number, failedSweepCount: number | null): Record<string, string> {
+	return {
+		dailyCountRowCount: String(dailyCountRowCount),
+		...(failedSweepCount === null ? {} : { failedSweepCount: String(failedSweepCount) }),
 	}
 }
 

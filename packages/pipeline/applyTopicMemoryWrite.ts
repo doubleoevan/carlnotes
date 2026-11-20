@@ -4,6 +4,7 @@ import {
 	canModelCombineTopicMemories,
 	hasExactTopicMemoryKey,
 	toMostPreciseTopicMemoryDate,
+	toNewestTopicMemoryFindingIds,
 } from "@carlnotes/contracts/topicMemoryWork"
 import { type DbHandle, type DbTransaction, db } from "@carlnotes/db"
 import { scans } from "@carlnotes/db/schema/scans"
@@ -30,6 +31,7 @@ export type EmbeddedTopicMemoryWrite = TopicMemoryWrite & {
 }
 export type TopicMemoryMergedPair = { candidate: string; matched: string; cosine: number | null; source: string }
 
+// one checked claim to write, the Scan it came from, and the Topic it belongs to
 export type ApplyTopicMemoryWriteOptions = {
 	write: EmbeddedTopicMemoryWrite
 	scanId: string
@@ -37,9 +39,13 @@ export type ApplyTopicMemoryWriteOptions = {
 	firstScan?: { id: string; startedAt: Date }
 	topicId: string
 	now: Date
+	// the merged pairs to add to, a reviewed replacement, and the stored row if the claim is one already
 	mergedPairs?: TopicMemoryMergedPair[]
 	replacement?: TopicMemoryReplacementCandidate
 	existingRowId?: string
+	// whether the Topic's rejected topic memories already withhold this write, if its caller read that for a whole
+	// Scan's writes at once
+	isRejected?: boolean
 }
 
 /** Combines an exact value and only replaces a claim with a current semantic approval. */
@@ -52,10 +58,14 @@ export async function applyTopicMemoryWrite(
 	const personMatchKey = toTopicMemoryPersonMatchKey(write.person)
 	const subject = toTopicMemorySubject(write.subject, write.person)
 	const value = normalizeTopicMemoryValue(write.value)
-	if (await isRejectedTopicMemoryText(transaction, { topicId, personMatchKey, text: write.text })) {
+	// a rejected topic memory withholds the claim, read here unless the caller read it for all of a Scan's writes
+	const isRejected =
+		options.isRejected ?? (await loadRejectedTopicMemoryWrites(transaction, topicId, [write])).has(write)
+	if (isRejected) {
 		return
 	}
 
+	// a model-confirmed update goes to the row it names
 	if (write.reconciliation?.operation === "update") {
 		return applyTopicMemoryJournalUpdate(transaction, options, write.reconciliation)
 	}
@@ -77,6 +87,7 @@ export async function applyTopicMemoryWrite(
 	if (existing && canCombine) {
 		return combineTopicMemoryEvidence(transaction, options, existing, isNewerTopicMemoryObservation(options, existing))
 	}
+	// a stored row with no exact match stays as it is
 	if (options.existingRowId) {
 		return options.existingRowId
 	}
@@ -100,6 +111,7 @@ export async function loadTopicMemoryReplacementCandidate(
 	{ write, topicId, startedAt }: ReplacementInput,
 	handle: DbHandle = db,
 ): Promise<TopicMemoryReplacementCandidate | undefined> {
+	// only a dated runtime or air date names one edition's single value
 	const { claimType, factDate } = write
 	if (
 		(claimType !== "runtime" && claimType !== "airDate") ||
@@ -108,6 +120,7 @@ export async function loadTopicMemoryReplacementCandidate(
 	) {
 		return
 	}
+	// the stored forms of the claim's subject and value
 	const subject = toTopicMemorySubject(write.subject, write.person)
 	const value = normalizeTopicMemoryValue(write.value)
 
@@ -141,14 +154,16 @@ export async function loadTopicMemoryReplacementCandidate(
 			),
 		)
 		.limit(2)
+	// the one predecessor qualifies if its value differs, the two may combine, and this Scan is the newer one
 	const [candidate] = candidates
-	return candidates.length === 1 &&
+	const isPredecessor =
+		candidates.length === 1 &&
 		candidate &&
 		candidate.value !== value &&
 		canModelCombineTopicMemories(candidate, { subject, claimType, value }) &&
 		startedAt > candidate.lastSeenAt
-		? candidate
-		: undefined
+	// any other claim is added beside the stored rows
+	return isPredecessor ? candidate : undefined
 }
 
 function isNewerTopicMemoryObservation(
@@ -166,6 +181,7 @@ function isSameReplacementCandidate(
 		previous.id === current.id &&
 		previous.text === current.text &&
 		previous.factDate === current.factDate &&
+		// neither its value nor its evidence moved since the review
 		previous.value === current.value &&
 		previous.lastSeenScanId === current.lastSeenScanId &&
 		previous.updatedAt.getTime() === current.updatedAt.getTime()
@@ -179,12 +195,18 @@ async function combineTopicMemoryEvidence(
 	isNewer: boolean,
 ): Promise<string> {
 	const { write, scanId, startedAt, firstScan = { id: scanId, startedAt }, now } = options
-	// keep both original statements and union their evidence on the survivor
-	const findingIds = [...new Set([...existing.findingIds, ...write.findingIds])]
+	// keep both original statements and union their evidence on the survivor, which keeps its newest Finding ids
+	const findingIds = toNewestTopicMemoryFindingIds(existing.findingIds, write.findingIds)
 	const factDate = toMostPreciseTopicMemoryDate(existing.factDate, write.factDate)
-	const sameEvidence = findingIds.length === existing.findingIds.length && factDate === existing.factDate
+	const hasNewEvidence = write.findingIds.some((findingId) => !existing.findingIds.includes(findingId))
+	// a statement is archived only if its wording or its date is new: the survivor's own wording with more evidence
+	// is not, and neither is a wording that this Scan already archived
+	const isSameStatement = write.text === existing.text && factDate === existing.factDate
 	const revisited =
-		sameEvidence && (write.text === existing.text || (await hasArchivedObservation(transaction, options, existing.id)))
+		isSameStatement ||
+		(!hasNewEvidence &&
+			factDate === existing.factDate &&
+			(await hasArchivedObservation(transaction, options, existing.id)))
 	// save the actual incoming claim with its own evidence before promoting its contents to the survivor
 	if (options.existingRowId) {
 		await transaction
@@ -194,6 +216,7 @@ async function combineTopicMemoryEvidence(
 		await copyTopicMemoryFeedback(transaction, { targetId: existing.id, sourceIds: [options.existingRowId] })
 		await saveExactDecision(transaction, options, existing, existing.id, "merge", options.existingRowId)
 	} else if (!revisited) {
+		// a new statement of the fact is kept as an outdated row under the survivor
 		const archived = await insertTopicMemoryValue(transaction, options, {
 			subject: toTopicMemorySubject(write.subject, write.person),
 			value: normalizeTopicMemoryValue(write.value),
@@ -205,6 +228,7 @@ async function combineTopicMemoryEvidence(
 		}
 		await saveExactDecision(transaction, options, existing, existing.id, "merge", archived)
 	}
+	// the survivor takes the union of the evidence, the more precise date, and the wider Scan range
 	await transaction
 		.update(topicMemories)
 		.set({
@@ -407,23 +431,32 @@ async function saveExactDecision(
 	}
 }
 
-// compare the rejected statement for the same person, ignoring case and whitespace
-async function isRejectedTopicMemoryText(
+/**
+ * Returns the writes that a rejected topic memory of the Topic withholds: one with the same wording for the same
+ * person, ignoring case and whitespace. One read covers every write of a Scan.
+ */
+export async function loadRejectedTopicMemoryWrites(
 	transaction: DbTransaction,
-	{ topicId, personMatchKey, text }: { topicId: string; personMatchKey: string | null; text: string },
-): Promise<boolean> {
-	const [rejected] = await transaction
-		.select({ id: topicMemories.id })
-		.from(topicMemories)
-		.where(
-			and(
-				eq(topicMemories.topicId, topicId),
-				eq(topicMemories.status, "rejected"),
-				sql`${topicMemories.personMatchKey} is not distinct from ${personMatchKey}`,
-				sql`lower(regexp_replace(trim(${topicMemories.text}), '[[:space:]]+', ' ', 'g')) =
-		lower(regexp_replace(trim(${text}), '[[:space:]]+', ' ', 'g'))`,
-			),
-		)
-		.limit(1)
-	return rejected !== undefined
+	topicId: string,
+	writes: EmbeddedTopicMemoryWrite[],
+): Promise<Set<EmbeddedTopicMemoryWrite>> {
+	if (writes.length === 0) {
+		return new Set()
+	}
+	// each write's place in the list, its wording, and its person, as one json value
+	const claims = JSON.stringify(
+		writes.map(({ text, person }, index) => ({ index, text, personMatchKey: toTopicMemoryPersonMatchKey(person) })),
+	)
+	// a rejected row withholds a claim with its wording for the same person. both sides are normalized in sql
+	const hasSameWording = sql`${topicMemories.personMatchKey} is not distinct from claim."personMatchKey"
+		and lower(regexp_replace(trim(${topicMemories.text}), '[[:space:]]+', ' ', 'g')) =
+			lower(regexp_replace(trim(claim.text), '[[:space:]]+', ' ', 'g'))`
+	// one statement compares every write with the Topic's rejected rows
+	const { rows } = await transaction.execute<{ index: number }>(sql`
+		select distinct claim.index
+		from jsonb_to_recordset(${claims}::jsonb) as claim(index int, text text, "personMatchKey" text)
+		inner join ${topicMemories} on ${topicMemories.topicId} = ${topicId}
+			and ${topicMemories.status} = 'rejected' and ${hasSameWording}
+	`)
+	return new Set(rows.flatMap(({ index }) => writes[index] ?? []))
 }

@@ -6,7 +6,7 @@ import { toOwnerImageDataUri } from "./previewImage"
 
 // the size a card draws an avatar at, and a photo of 1264 by 848 pixels, far larger than that
 const CARD_AVATAR_PIXELS = 56
-const LARGE_PHOTO_URL = new URL("./fixtures/home-espresso-lite.jpg", import.meta.url)
+const LARGE_PHOTO_URL = new URL("../../../packages/pipeline/fixtures/home-espresso-lite.jpg", import.meta.url)
 
 // the network each test replaces
 const originalFetch = globalThis.fetch

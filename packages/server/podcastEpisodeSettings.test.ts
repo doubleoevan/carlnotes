@@ -1,10 +1,11 @@
-// the film settings: how many films render at once, how many the backfill renders, whether the backfill runs, and how
-// many generated images one film draws by default
+// the podcast episode settings: how many of a scheduled Scan's chapters record at once, how many films render at once,
+// how many the backfill renders, whether the backfill runs, and how many generated images one film draws by default
 import { afterEach, beforeEach, expect, test } from "bun:test"
 import {
 	generatedChapterImageLimit,
 	isTopicVideoBackfillEnabled,
 	newTopicVideoRenderVersion,
+	podcastScheduledChapterConcurrency,
 	topicVideoBackfillConcurrency,
 	topicVideoConcurrency,
 } from "./podcastEpisodeSettings"
@@ -14,7 +15,13 @@ import { saveEnvSettings } from "./savedEnvSettings"
 const CONCURRENCY_SETTING = "TOPIC_VIDEO_CONCURRENCY"
 const BACKFILL_CONCURRENCY_SETTING = "TOPIC_VIDEO_BACKFILL_CONCURRENCY"
 const LIMIT_SETTING = "TOPIC_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT"
-const TOPIC_VIDEO_SETTINGS = [CONCURRENCY_SETTING, BACKFILL_CONCURRENCY_SETTING, LIMIT_SETTING]
+const SCHEDULED_CHAPTER_SETTING = "PODCAST_SCHEDULED_CHAPTER_CONCURRENCY"
+const TOPIC_VIDEO_SETTINGS = [
+	CONCURRENCY_SETTING,
+	BACKFILL_CONCURRENCY_SETTING,
+	LIMIT_SETTING,
+	SCHEDULED_CHAPTER_SETTING,
+]
 
 // each test starts with no setting set, and the settings are put back after it
 const restoreEnvSettings = saveEnvSettings(TOPIC_VIDEO_SETTINGS)
@@ -43,6 +50,22 @@ function expectSettingValues({ settingName, readSetting, expectedSettingValues }
 		expect(readSetting()).toBe(expectedNumber)
 	}
 }
+
+// capacity must never shrink to nothing, so zero reads as the default, as an unset or unreadable value does
+test("the scheduled chapter concurrency defaults to 32, reads zero as 32, and reads a whole number above zero", () => {
+	expectSettingValues({
+		settingName: SCHEDULED_CHAPTER_SETTING,
+		readSetting: podcastScheduledChapterConcurrency,
+		expectedSettingValues: [
+			[undefined, 32],
+			["", 32],
+			["0", 32],
+			["48", 48],
+			["-1", 32],
+			["many", 32],
+		],
+	})
+})
 
 // unset, empty, and an unreadable value keep 40 images, a whole number is used, and zero turns generated images off
 test("the limit defaults to 40, reads a whole number, and reads zero as off", () => {
@@ -109,18 +132,22 @@ test("a film concurrency of zero turns the backfill off too", () => {
 })
 
 test("stopping and resuming animated admissions changes only the version selected for the next recording", () => {
+	// the setting as it was, to put back after the test
 	const before = Bun.env.TOPIC_VIDEO_ANIMATED_CHAPTERS
 	try {
+		// with the setting unset, a new recording gets version 4
 		delete Bun.env.TOPIC_VIDEO_ANIMATED_CHAPTERS
-		expect(newTopicVideoRenderVersion()).toBe(3)
-		Bun.env.TOPIC_VIDEO_ANIMATED_CHAPTERS = "true"
 		const admitted = newTopicVideoRenderVersion()
-		delete Bun.env.TOPIC_VIDEO_ANIMATED_CHAPTERS
+		expect(admitted).toBe(4)
+		// a recording admitted before the setting turned off keeps version 4, and the next one gets version 3
+		Bun.env.TOPIC_VIDEO_ANIMATED_CHAPTERS = "false"
 		expect(newTopicVideoRenderVersion()).toBe(3)
 		expect(admitted).toBe(4)
+		// with the setting on again, the next recording gets version 4
 		Bun.env.TOPIC_VIDEO_ANIMATED_CHAPTERS = "true"
 		expect(newTopicVideoRenderVersion()).toBe(4)
 	} finally {
+		// put the setting back
 		if (before === undefined) {
 			delete Bun.env.TOPIC_VIDEO_ANIMATED_CHAPTERS
 		} else {

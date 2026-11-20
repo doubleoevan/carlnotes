@@ -6,8 +6,8 @@ import { reportThresholdCrossing, type ThresholdCrossing } from "./monitoring"
 // how often a process logs its gauges
 const REPORT_INTERVAL_MS = 60_000
 
-// the api's event loop delays that send a warning, in milliseconds. one stall past 2 seconds, or a 99th percentile past
-// 100 ms, which only repeated stalls reach
+// the event loop delays that send a warning from the api or the web service, in milliseconds. one stall past
+// 2 seconds, or a 99th percentile past 100 ms, which only repeated stalls reach
 const EVENT_LOOP_STALL_ALERT_MS = 2000
 const EVENT_LOOP_P99_ALERT_MS = 100
 
@@ -17,12 +17,25 @@ export type PoolGauges = { totalCount: number; idleCount: number; waitingCount: 
 // what a process adds to its minute line, such as the worker's scan queue, with the thresholds it crossed
 export type ExtraGaugesReading = { gauges: Record<string, unknown>; thresholdCrossings: ThresholdCrossing[] }
 
+// the name a process logs its gauges under: the app service's api, the web service, or the worker
+type RuntimeProcessName = "api" | "web" | "worker"
+
+// what a stalled event loop's warning says, for each process that serves requests. the worker has none, because its
+// delays only go in its minute line
+const EVENT_LOOP_STALL_MESSAGES: Partial<Record<RuntimeProcessName, string>> = {
+	api: "the api's event loop stalled",
+	web: "the web service's event loop stalled",
+}
+
 // the process a reporter logs for, how it reads its pool, and what it adds each minute
 type RuntimeGaugesOptions = {
-	processName: "api" | "worker"
+	processName: RuntimeProcessName
 	readPoolGauges: () => PoolGauges
 	readExtraGauges?: () => Promise<ExtraGaugesReading>
 }
+
+// the bytes in the megabyte that the line's resident memory is counted in
+const BYTES_PER_MB = 1024 * 1024
 
 /**
  * Starts the event loop delay histogram and logs the process's gauges once a minute.
@@ -58,11 +71,13 @@ export async function reportRuntimeGauges({
 	)
 
 	// log the line, then warn for each threshold that the minute crossed.
-	// the instance field names the replica by its host name
+	// the instance field names the replica by its host name, and the resident memory is the process's own, without
+	// its child processes
 	const line = {
 		gauges: "runtime",
 		process: processName,
 		instance: hostname(),
+		residentMemoryMb: Math.round(process.memoryUsage.rss() / BYTES_PER_MB),
 		pool,
 		eventLoopDelayMs: eventLoopDelay,
 		...extraGauges.gauges,
@@ -87,7 +102,7 @@ type RuntimeThresholdOptions = {
 
 /**
  * Returns the thresholds a minute's pool and event loop delay crossed: a request waiting for a connection,
- * and on the api a stall past 2 seconds or a 99th percentile delay past 100 ms.
+ * and on the api and the web service a stall past 2 seconds or a 99th percentile delay past 100 ms.
  */
 export function toRuntimeThresholdCrossings({
 	processName,
@@ -100,18 +115,15 @@ export function toRuntimeThresholdCrossings({
 			? [{ condition: "pool-waiting", message: "a request waited for a database connection", values: { ...pool } }]
 			: []
 
-	// a delay this long stalls every request the api is serving. the worker's delays only go in its minute line
+	// a delay this long stalls every request the process is serving
 	const isEventLoopStalled =
 		eventLoopDelay.maxMs > EVENT_LOOP_STALL_ALERT_MS || eventLoopDelay.p99Ms > EVENT_LOOP_P99_ALERT_MS
+
+	// only a process that serves requests has a message, so only it warns
+	const eventLoopStallMessage = EVENT_LOOP_STALL_MESSAGES[processName]
 	const eventLoopCrossings: ThresholdCrossing[] =
-		processName === "api" && isEventLoopStalled
-			? [
-					{
-						condition: "event-loop-delay",
-						message: "the api's event loop stalled",
-						values: { ...eventLoopDelay },
-					},
-				]
+		eventLoopStallMessage && isEventLoopStalled
+			? [{ condition: "event-loop-delay", message: eventLoopStallMessage, values: { ...eventLoopDelay } }]
 			: []
 	return [...poolCrossings, ...eventLoopCrossings]
 }

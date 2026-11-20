@@ -23,11 +23,13 @@ test("the stale filter measures a picked-up scan from its pickup and a queued sc
 	expect(sql).toContain('"scans"."picked_up_at" is not null and "scans"."picked_up_at" <')
 	expect(sql).toContain('"scans"."picked_up_at" is null and "scans"."dispatched_at" <')
 
+	// the running status is written into the SQL, so the partial index of the running Scans holds under any plan
+	expect(sql).toContain(`"scans"."status" = 'running'`)
+
 	// the pickup cutoff is the stale window, and the dispatch cutoff is the queued stage bound plus the margin.
 	// a comparison against a timestamp column sends its date as an iso string
 	const staleScanMarginMs = 15 * 60 * 1000
 	expect(params).toEqual([
-		"running",
 		new Date(now.getTime() - staleScanWindowMs()).toISOString(),
 		new Date(now.getTime() - (QUEUED_STAGE_TIMEOUT_MS + staleScanMarginMs)).toISOString(),
 	])
@@ -44,9 +46,9 @@ test("the stale scan window clears the longest a Scan may legally run", () => {
 	expect(staleScanWindowMs()).toBeGreaterThan(MAX_SCAN_DURATION_MS)
 })
 
-// a waiting scan is a running row with no dispatch time, so the close-out never matches one however old it is
-test("a six-hour-old waiting scan is never closed out as stale", () => {
+// a waiting scan is a running row with no dispatch time, so the reaper never matches one however old it is
+test("a six-hour-old waiting scan is never reaped as stale", () => {
 	const sixHoursFromNow = new Date(Date.now() + 6 * HOUR_MS)
 	const { sql } = db.select({ id: scans.id }).from(scans).where(toStaleScanFilter(sixHoursFromNow)).toSQL()
-	expect(sql).toContain('where ("scans"."status" = $1 and "scans"."dispatched_at" is not null and (')
+	expect(sql).toContain(`where ("scans"."status" = 'running' and "scans"."dispatched_at" is not null and (`)
 })

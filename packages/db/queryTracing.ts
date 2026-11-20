@@ -1,7 +1,7 @@
 // the per-request query count, cache reads, and the span of each statement a request sends, kept in the request's
 // async context
 import { AsyncLocalStorage } from "node:async_hooks"
-import { type Span, startQuerySpan } from "@carlnotes/server/monitoring"
+import { type Span, startQuerySpan } from "@carlnotes/server/monitoringTracing"
 import type { Pool, PoolClient } from "@neondatabase/serverless"
 import { clearRequestMemo } from "./requestMemo"
 

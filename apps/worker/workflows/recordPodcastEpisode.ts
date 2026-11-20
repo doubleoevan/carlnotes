@@ -2,6 +2,10 @@
 // and publish. a succeeded Scan starts the recording as a child workflow that outlives the scan workflow
 
 // a relative import. temporal bundles workflow code with webpack, which has no @shared alias
+import {
+	PODCAST_EPISODE_ENCODE_TASK_QUEUE,
+	PODCAST_EPISODE_SCHEDULED_CHAPTER_TASK_QUEUE,
+} from "@carlnotes/contracts/podcastEpisodeWork"
 import { toWorkflowFailureReason } from "@carlnotes/contracts/scanFailure"
 import {
 	TOPIC_VIDEO_TASK_QUEUE,
@@ -9,7 +13,24 @@ import {
 	toTopicVideoWorkflowId,
 } from "@carlnotes/contracts/topicVideoWork"
 import type { SpeechTier } from "@carlnotes/models/budget"
-import type { ScanTrigger } from "@carlnotes/pipeline/scanWorkflowClient"
+// the timeouts and retry policies of this workflow's activities, which the reaper's limit is derived from
+import {
+	FLEX_CHAPTER_TIMEOUT_MS,
+	FLEX_CHAPTER_TOTAL_TIMEOUT_MS,
+	HEARTBEAT_TIMEOUT_MS,
+	PODCAST_CHAPTER_RETRY_POLICY,
+	PODCAST_ENCODE_ATTEMPTS,
+	PODCAST_ENCODE_TIMEOUT_MS,
+	PODCAST_IMAGE_RETRY_POLICY,
+	PODCAST_IMAGE_TIMEOUT_MS,
+	PODCAST_SCRIPT_TIMEOUT_MS,
+	PODCAST_SCRIPT_TOTAL_TIMEOUT_MS,
+	PODCAST_WRITE_ATTEMPTS,
+	PODCAST_WRITE_TIMEOUT_MS,
+	STANDARD_CHAPTER_TIMEOUT_MS,
+	STANDARD_CHAPTER_TOTAL_TIMEOUT_MS,
+} from "@carlnotes/pipeline/stageTimeouts"
+import type { RecordPodcastEpisodeWorkflowInput } from "@carlnotes/pipeline/temporalClient"
 import {
 	getExternalWorkflowHandle,
 	ParentClosePolicy,
@@ -20,43 +41,20 @@ import {
 import type * as podcastEpisodeActivities from "./recordPodcastEpisodeActivities"
 import { podcastEpisodeOutlineSettledSignal } from "./sendScanEmail"
 
-// the task queue that this workflow and its activities run on, kept apart from the scan activities' slots
-export const PODCAST_EPISODE_TASK_QUEUE = "episode-recordings"
-
 // the Topic Post Discussion's recording runs on this same queue, and one bundle holds both workflows
 export { recordTopicPostDiscussionWorkflow } from "./recordTopicPostDiscussion"
-
-// the plan, the saved script, the publish, and the failure are short writes
-const WRITE_TIMEOUT_MS = 2 * 60 * 1000
-const WRITE_ATTEMPTS = 3
-
-// one attempt of a script activity has time to write up to three drafts, and the activity gets three attempts
-const SCRIPT_TIMEOUT_MS = 10 * 60 * 1000
-const SCRIPT_ATTEMPTS = 3
-
-// the podcast episode image's scene and render get three minutes an attempt, backing off from 15 seconds over three attempts
-const IMAGE_TIMEOUT_MS = 3 * 60 * 1000
-const IMAGE_RETRY_POLICY = { initialInterval: 15 * 1000, backoffCoefficient: 2, maximumAttempts: 3 }
-
-// a chapter's retries back off from 30 seconds, doubling up to 15 minutes apart
-const CHAPTER_RETRY_POLICY = { initialInterval: 30 * 1000, backoffCoefficient: 2, maximumInterval: 15 * 60 * 1000 }
-
-// a standard chapter gets five attempts, each with a minute more than the speech call's three-minute timeout
-const STANDARD_CHAPTER_TIMEOUT_MS = 4 * 60 * 1000
-const STANDARD_CHAPTER_ATTEMPTS = 5
-
-// a flex chapter's attempt gets a minute more than the speech call's twelve-minute timeout.
-// a flex chapter waits for capacity for up to six hours
-const FLEX_CHAPTER_TIMEOUT_MS = 13 * 60 * 1000
-const FLEX_CHAPTER_TOTAL_TIMEOUT_MS = 6 * 60 * 60 * 1000
-
-// the encode reads and writes a whole Podcast Episode's audio, and gets three attempts
-const ENCODE_TIMEOUT_MS = 10 * 60 * 1000
-const ENCODE_ATTEMPTS = 3
 
 // the patch that starts the film after the image, which recordings already running before it skip on replay. the patch id
 // must not change, because workflow histories record it
 const TOPIC_VIDEO_PATCH = "topic-podcast-episode-video"
+
+// the patch that moves a scheduled Scan's chapters to their own queue. a recording that scheduled its chapters before
+// it replays them on the recording queue. the patch id must not change, because workflow histories record it
+const SCHEDULED_CHAPTER_QUEUE_PATCH = "scheduled-chapter-queue"
+
+// the patch that moves the encode to its own queue. a recording that scheduled its encode before it replays the
+// encode on the recording queue. the patch id must not change, because workflow histories record it
+const ENCODE_QUEUE_PATCH = "podcast-episode-encode-queue"
 
 // the writes and the films setting's read are idempotent, so they may retry
 const {
@@ -67,48 +65,64 @@ const {
 	isTopicPodcastEpisodeVideoEnabled,
 	selectNewTopicVideoRenderVersion,
 } = proxyActivities<typeof podcastEpisodeActivities>({
-	startToCloseTimeout: WRITE_TIMEOUT_MS,
-	retry: { maximumAttempts: WRITE_ATTEMPTS },
+	startToCloseTimeout: PODCAST_WRITE_TIMEOUT_MS,
+	retry: { maximumAttempts: PODCAST_WRITE_ATTEMPTS },
 })
 
-// a script activity fails for good on a spent budget or on a script rejected on every draft. any other failure retries
+// a script activity fails for good on a spent budget or on a script rejected on every draft. any other failure
+// retries with the chapter's backoff until an hour after the activity was scheduled, so a model's rate limit delays
+// the podcast episode
 const { outlinePodcastEpisode, writePodcastEpisodeSegment } = proxyActivities<typeof podcastEpisodeActivities>({
-	startToCloseTimeout: SCRIPT_TIMEOUT_MS,
-	retry: { maximumAttempts: SCRIPT_ATTEMPTS },
+	startToCloseTimeout: PODCAST_SCRIPT_TIMEOUT_MS,
+	scheduleToCloseTimeout: PODCAST_SCRIPT_TOTAL_TIMEOUT_MS,
+	retry: PODCAST_CHAPTER_RETRY_POLICY,
 })
 
-// a chapter's activity fails for good on a rejection and retries a failure that another attempt can fix
+// a chapter's activity fails for good on a rejection and retries a failure that another attempt can fix, until an
+// hour after the chapter was scheduled
 const { recordPodcastEpisodeChapter: recordStandardChapter } = proxyActivities<typeof podcastEpisodeActivities>({
 	startToCloseTimeout: STANDARD_CHAPTER_TIMEOUT_MS,
-	retry: { ...CHAPTER_RETRY_POLICY, maximumAttempts: STANDARD_CHAPTER_ATTEMPTS },
+	scheduleToCloseTimeout: STANDARD_CHAPTER_TOTAL_TIMEOUT_MS,
+	retry: PODCAST_CHAPTER_RETRY_POLICY,
 })
 
 // a flex chapter has no attempt limit. the six-hour limit across its attempts ends its wait
 const { recordPodcastEpisodeChapter: recordFlexChapter } = proxyActivities<typeof podcastEpisodeActivities>({
 	startToCloseTimeout: FLEX_CHAPTER_TIMEOUT_MS,
 	scheduleToCloseTimeout: FLEX_CHAPTER_TOTAL_TIMEOUT_MS,
-	retry: CHAPTER_RETRY_POLICY,
+	retry: PODCAST_CHAPTER_RETRY_POLICY,
+})
+
+// a scheduled Scan's flex chapter on the scheduled chapter queue, with the same timeouts and retries
+const { recordPodcastEpisodeChapter: recordScheduledQueueChapter } = proxyActivities<typeof podcastEpisodeActivities>({
+	taskQueue: PODCAST_EPISODE_SCHEDULED_CHAPTER_TASK_QUEUE,
+	startToCloseTimeout: FLEX_CHAPTER_TIMEOUT_MS,
+	scheduleToCloseTimeout: FLEX_CHAPTER_TOTAL_TIMEOUT_MS,
+	retry: PODCAST_CHAPTER_RETRY_POLICY,
 })
 
 // the podcast episode image draws after the publish, and a failure leaves the podcast episode without one
 const { drawPodcastEpisodeImageActivity } = proxyActivities<typeof podcastEpisodeActivities>({
-	startToCloseTimeout: IMAGE_TIMEOUT_MS,
-	retry: IMAGE_RETRY_POLICY,
+	startToCloseTimeout: PODCAST_IMAGE_TIMEOUT_MS,
+	retry: PODCAST_IMAGE_RETRY_POLICY,
 })
 
-// the encode starts over from the chapters in object storage, so the encode may retry
-const { encodePodcastEpisode } = proxyActivities<typeof podcastEpisodeActivities>({
-	startToCloseTimeout: ENCODE_TIMEOUT_MS,
-	retry: { maximumAttempts: ENCODE_ATTEMPTS },
-})
-
-// the Scan whose Podcast Episode this is, its Topic, the user that the Scan billed, and what asked for the Scan
-export type RecordPodcastEpisodeWorkflowInput = {
-	scanId: string
-	topicId: string
-	billedUserId: string
-	trigger: ScanTrigger
+// the encode starts over from the chapters in object storage, so the encode may retry. it heartbeats, so an encode
+// whose worker was killed is tried again after two minutes instead of ten
+const ENCODE_ACTIVITY_OPTIONS = {
+	startToCloseTimeout: PODCAST_ENCODE_TIMEOUT_MS,
+	heartbeatTimeout: HEARTBEAT_TIMEOUT_MS,
+	retry: { maximumAttempts: PODCAST_ENCODE_ATTEMPTS },
 }
+
+// the encode on its own queue, where it waits for a core with no limit on the wait, and the encode on the recording
+// queue for a recording from before the encode queue
+const { encodePodcastEpisode: encodeOnEncodeQueue } = proxyActivities<typeof podcastEpisodeActivities>({
+	...ENCODE_ACTIVITY_OPTIONS,
+	taskQueue: PODCAST_EPISODE_ENCODE_TASK_QUEUE,
+})
+const { encodePodcastEpisode: encodeOnRecordingQueue } =
+	proxyActivities<typeof podcastEpisodeActivities>(ENCODE_ACTIVITY_OPTIONS)
 
 /**
  * Records one Scan's Podcast Episode and signals the Scan's email workflow once the outline is settled.
@@ -150,10 +164,13 @@ export async function recordPodcastEpisodeWorkflow({
 		)
 		const chapterCount = await savePodcastEpisodeScript(podcastEpisodeId, podcastEpisodeSegments)
 
-		// a scheduled Scan's chapters are recorded on the flex tier, and any other Scan's on the standard tier
+		// a scheduled Scan's chapters are recorded on the flex tier, on their own queue unless the recording is from before
+		// that queue, and any other Scan's on the standard tier
 		const isScheduledScan = trigger === "scheduled"
 		const speechTier: SpeechTier = isScheduledScan ? "flex" : "standard"
-		const recordChapter = isScheduledScan ? recordFlexChapter : recordStandardChapter
+		const recordScheduledChapter =
+			isScheduledScan && patched(SCHEDULED_CHAPTER_QUEUE_PATCH) ? recordScheduledQueueChapter : recordFlexChapter
+		const recordChapter = isScheduledScan ? recordScheduledChapter : recordStandardChapter
 		const chapterPositions = Array.from({ length: chapterCount }, (_, position) => position)
 
 		// record every chapter in parallel. a chapter whose speech fails for good is left out,
@@ -172,7 +189,9 @@ export async function recordPodcastEpisodeWorkflow({
 			throw firstChapterError
 		}
 
-		// join the chapters' audio from object storage, then publish the Podcast Episode
+		// join the chapters' audio from object storage, on the encode queue unless the recording is from before that
+		// queue, then publish the Podcast Episode
+		const encodePodcastEpisode = patched(ENCODE_QUEUE_PATCH) ? encodeOnEncodeQueue : encodeOnRecordingQueue
 		const encodedPodcastEpisode = await encodePodcastEpisode(podcastEpisodeId, recordedChapters)
 		const chapterAttemptCounts = recordedChapters.map((recordedChapter) => recordedChapter.attemptCount)
 		const recordedChapterPositions = recordedChapters.map((recordedChapter) => recordedChapter.position)
@@ -201,15 +220,21 @@ export async function recordPodcastEpisodeWorkflow({
 // start the podcast episode's film if films are on. a film already started, or a failed start, leaves no film
 async function startTopicVideo(podcastEpisodeId: string): Promise<void> {
 	try {
+		// a recording from before version 4 reads the films setting, and a newer one records the render version it was
+		// admitted at
 		const usesVersionedScenes = patched("topic-video-chapter-scenes-v4")
 		const renderVersion = usesVersionedScenes
 			? await selectNewTopicVideoRenderVersion()
 			: (await isTopicPodcastEpisodeVideoEnabled())
 				? 3
 				: false
+
+		// films that are off or paused start no film
 		if (!renderVersion) {
 			return
 		}
+
+		// the film's own workflow id rejects a second render of the same film
 		await startChild(TOPIC_VIDEO_WORKFLOW, {
 			workflowId: toTopicVideoWorkflowId(podcastEpisodeId),
 			taskQueue: TOPIC_VIDEO_TASK_QUEUE,

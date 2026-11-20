@@ -1,34 +1,94 @@
-// podcast episode film activities: the render, the rebuild, and the failure mark. they run in the worker process, not
-// the sandbox. the render and the rebuild heartbeat on an interval and stop once Temporal cancels the attempt. the
-// activity names must not change, because a workflow under way replays them by name
+// podcast episode film activities: the row written once a render is queued, the render, the rebuild, and the failure
+// mark. they run in the worker process, not the sandbox. the render and the rebuild heartbeat on an interval and stop
+// once Temporal cancels the attempt. the activity names must not change, because a workflow under way replays them by
+// name
 
+import { WORKER_SHUTDOWN_FAILURE_TYPE } from "@carlnotes/contracts/scanFailure"
+import { TOPIC_VIDEO_BACKFILL_TASK_QUEUE, type TopicVideoRenderVersion } from "@carlnotes/contracts/topicVideoWork"
 import { type RebuildTopicVideoResult, rebuildTopicVideo } from "@carlnotes/pipeline/topicVideo/rebuildTopicVideo"
 import { type RenderTopicVideoResult, renderTopicVideo } from "@carlnotes/pipeline/topicVideo/renderTopicVideo"
-import { markTopicVideoFailed } from "@carlnotes/pipeline/topicVideo/topicVideoRows"
-import { Context } from "@temporalio/activity"
+import {
+	type MarkTopicVideoFailedOptions,
+	markTopicVideoFailed,
+} from "@carlnotes/pipeline/topicVideo/topicVideoFailures"
+import { isPodcastEpisodePublished, saveQueuedTopicVideoRendering } from "@carlnotes/pipeline/topicVideo/topicVideoRows"
+import { ApplicationFailure, Context } from "@temporalio/activity"
+import { runWithHeartbeat } from "../activityHeartbeat"
 
-// how often a render or a rebuild heartbeats while it runs
-const HEARTBEAT_INTERVAL_MS = 30_000
+/**
+ * Writes a film's row as rendering once its render is queued, so the film shows as rendering while it waits for a film
+ * slot.
+ */
+export function saveTopicPodcastEpisodeVideoRenderingActivity(podcastEpisodeId: string): Promise<void> {
+	return saveQueuedTopicVideoRendering(podcastEpisodeId)
+}
 
-// the podcast episode, and whether the platform pays for its film, as the backfill does
+// the podcast episode, whether the platform pays for its film, as the backfill does, whether an earlier run of the
+// render may have stored its images, as one that the reaper or the workflow started again has, and whether the
+// workflow schedules the render again if the worker's shutdown cuts an attempt short
 export type RenderTopicVideoActivityInput = {
 	podcastEpisodeId: string
 	isPlatformBilled?: boolean
-	renderVersion?: 3 | 4
+	renderVersion?: TopicVideoRenderVersion
+	isRestart?: boolean
+	isShutdownRescheduled?: boolean
 }
 
 /**
- * Renders a podcast episode's film, heartbeating every 30 seconds, and stops the render once the attempt is cancelled.
+ * Renders a podcast episode's film, heartbeating every 30 seconds, and stops the render once the attempt is cancelled
+ * or its podcast episode is removed. A later attempt of a version 4 render, and a render started again, reuse what an
+ * earlier run stored. An attempt that the worker's shutdown cut short fails with the worker shutdown type and its
+ * attempt number, if its workflow schedules it again.
  */
-export function renderTopicPodcastEpisodeVideoActivity({
+export async function renderTopicPodcastEpisodeVideoActivity({
 	podcastEpisodeId,
 	isPlatformBilled,
 	renderVersion,
+	isRestart = false,
+	isShutdownRescheduled = false,
 }: RenderTopicVideoActivityInput): Promise<RenderTopicVideoResult> {
-	const isRetry = renderVersion === 4 && Context.current().info.attempt > 1
-	return runWithHeartbeat((signal) =>
-		renderTopicVideo({ podcastEpisodeId, isPlatformBilled, renderVersion, isRetry, signal }),
-	)
+	// a render on the backfill's queue waits behind a new film for a slot
+	const activityContext = Context.current()
+	const { attempt, taskQueue } = activityContext.info
+	const isRetry = renderVersion === 4 && (isRestart || attempt > 1)
+	const isBackfillRender = taskQueue === TOPIC_VIDEO_BACKFILL_TASK_QUEUE
+
+	// a removal found on the heartbeat timer stops the render, which then ends as a skip
+	const removal = new AbortController()
+	const stopRemovedRender = async (): Promise<void> => {
+		if (!(await isPodcastEpisodePublished(podcastEpisodeId))) {
+			removal.abort(new Error("the podcast episode was removed"))
+		}
+	}
+
+	// render under a signal that aborts once Temporal cancels the attempt or the podcast episode is removed
+	try {
+		return await runWithHeartbeat(
+			(cancellationSignal) => {
+				const signal = AbortSignal.any([cancellationSignal, removal.signal])
+				return renderTopicVideo({
+					podcastEpisodeId,
+					isPlatformBilled,
+					isBackfillRender,
+					renderVersion,
+					isRetry,
+					signal,
+				})
+			},
+			{ checkOnHeartbeat: stopRemovedRender },
+		)
+	} catch (error) {
+		// a shutdown is no fault of the render, so the workflow schedules the render again and counts no attempt for it
+		if (isShutdownRescheduled && activityContext.cancellationDetails?.workerShutdown) {
+			throw ApplicationFailure.create({
+				message: "the worker shut down during the render",
+				type: WORKER_SHUTDOWN_FAILURE_TYPE,
+				nonRetryable: true,
+				details: [attempt],
+			})
+		}
+		throw error
+	}
 }
 
 /**
@@ -39,30 +99,11 @@ export function rebuildTopicPodcastEpisodeVideoActivity(podcastEpisodeId: string
 	return runWithHeartbeat((signal) => rebuildTopicVideo(podcastEpisodeId, signal))
 }
 
-// run a film step with the activity's cancellation signal, heartbeating on an interval until the step ends
-async function runWithHeartbeat<StepResult>(
-	runStep: (signal: AbortSignal) => Promise<StepResult>,
-): Promise<StepResult> {
-	// heartbeat while the step runs, however long one ffmpeg run takes
-	const activityContext = Context.current()
-	const heartbeatInterval = setInterval(() => activityContext.heartbeat(), HEARTBEAT_INTERVAL_MS)
-	try {
-		return await runStep(activityContext.cancellationSignal)
-	} finally {
-		clearInterval(heartbeatInterval)
-	}
-}
-
-// the podcast episode whose film failed, and the failure's reason
-export type MarkTopicVideoFailedInput = { podcastEpisodeId: string; reason: string; renderVersion?: 3 | 4 }
-
 /**
- * Marks a podcast episode's film failed after its last attempt.
+ * Marks a podcast episode's film failed after its last attempt, or after a cancellation ended its first render.
  */
-export function markTopicPodcastEpisodeVideoFailedActivity({
-	podcastEpisodeId,
-	reason,
-	renderVersion,
-}: MarkTopicVideoFailedInput): Promise<void> {
-	return markTopicVideoFailed(podcastEpisodeId, reason, renderVersion)
+export function markTopicPodcastEpisodeVideoFailedActivity(
+	markTopicVideoFailedOptions: MarkTopicVideoFailedOptions,
+): Promise<void> {
+	return markTopicVideoFailed(markTopicVideoFailedOptions)
 }

@@ -28,6 +28,11 @@ test("reportRuntimeGauges logs one line with the pool, the delay, and the extra 
 		pool: HEALTHY_POOL,
 		scanQueue: { pollerCount: 1 },
 	})
+
+	// the line holds the process's resident memory in whole megabytes, within a megabyte of a reading taken now
+	const residentMemoryMb = (line as { residentMemoryMb?: number }).residentMemoryMb ?? 0
+	expect(Number.isInteger(residentMemoryMb)).toBe(true)
+	expect(Math.abs(residentMemoryMb - process.memoryUsage.rss() / 1024 / 1024)).toBeLessThan(64)
 	expect(consoleLogSpy).toHaveBeenCalledTimes(1)
 	expect(JSON.parse(String(consoleLogSpy.mock.calls[0]?.[0]))).toEqual(line)
 })
@@ -65,6 +70,19 @@ test("toRuntimeThresholdCrossings warns on the api's slow minute and skips a sho
 		)
 	expect(toConditions({ p99Ms: 150, maxMs: 400 })).toEqual(["event-loop-delay"])
 	expect(toConditions({ p99Ms: 3, maxMs: 1300 })).toEqual([])
+})
+
+// the web service serves requests as the api does, so its slow minute warns under the same condition, in its own words
+test("toRuntimeThresholdCrossings warns on the web service's stalled event loop, and its line names it", async () => {
+	const eventLoopDelay = { p99Ms: 150, maxMs: 400 }
+	expect(toRuntimeThresholdCrossings({ processName: "web", pool: HEALTHY_POOL, eventLoopDelay })).toEqual([
+		{ condition: "event-loop-delay", message: "the web service's event loop stalled", values: eventLoopDelay },
+	])
+
+	// the web service's minute line says web, apart from the api's
+	spyOn(console, "log").mockImplementation(() => {})
+	const { line } = await reportRuntimeGauges({ processName: "web", readPoolGauges: () => HEALTHY_POOL })
+	expect(line).toMatchObject({ gauges: "runtime", process: "web" })
 })
 
 // the worker's event loop never warns, and its waiting pool still does

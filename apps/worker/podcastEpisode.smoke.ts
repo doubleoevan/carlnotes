@@ -2,7 +2,7 @@
 // script, record, publish, and remove it. bun run smoke:podcast-episode needs carl-up, GEMINI_API_KEY, S3, and ffmpeg
 
 import { db } from "@carlnotes/db"
-import { monthlySpendDollars } from "@carlnotes/db/quotas"
+import { monthlySpendDollars } from "@carlnotes/db/recordedSpend"
 import { podcastEpisodeChapters, podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { resources } from "@carlnotes/db/schema/scans"
 import { users } from "@carlnotes/db/schema/users"

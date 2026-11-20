@@ -1,6 +1,7 @@
 // the durable Scan: it runs the pipeline's three stages as activities
 
-import { toWorkflowFailureReason } from "@carlnotes/contracts/scanFailure"
+import { PODCAST_EPISODE_TASK_QUEUE, toPodcastEpisodeWorkflowId } from "@carlnotes/contracts/podcastEpisodeWork"
+import { isWorkflowAlreadyStarted, toWorkflowFailureReason } from "@carlnotes/contracts/scanFailure"
 import { TOPIC_MEMORY_TASK_QUEUE } from "@carlnotes/contracts/topicMemoryWork"
 import { PUSH_TASK_QUEUE } from "@carlnotes/pipeline/pushWorkflows"
 import type { ScanTrigger } from "@carlnotes/pipeline/scanWorkflowClient"
@@ -15,6 +16,7 @@ import {
 	REVIEW_ATTEMPTS,
 	REVIEW_TIMEOUT_MS,
 } from "@carlnotes/pipeline/stageTimeouts"
+import type { RecordPodcastEpisodeWorkflowInput } from "@carlnotes/pipeline/temporalClient"
 import {
 	CancellationScope,
 	getExternalWorkflowHandle,
@@ -25,12 +27,8 @@ import {
 	proxyActivities,
 	startChild,
 } from "@temporalio/workflow"
-// the workflow that records a succeeded Scan's Podcast Episode, and the queue that it runs on
-import {
-	PODCAST_EPISODE_TASK_QUEUE,
-	type RecordPodcastEpisodeWorkflowInput,
-	recordPodcastEpisodeWorkflow,
-} from "./recordPodcastEpisode"
+// the workflow that records a succeeded Scan's Podcast Episode
+import { recordPodcastEpisodeWorkflow } from "./recordPodcastEpisode"
 import type * as scanActivities from "./runTopicScanActivities"
 // the workflow that pushes a scheduled Scan's new Findings to phones
 import { sendScanPushWorkflow } from "./sendPushNotifications"
@@ -55,8 +53,9 @@ const { ingestForScan } = proxyActivities<typeof scanActivities>({
 	retry: { maximumAttempts: INGEST_ATTEMPTS },
 })
 
-// review pays for the fetches and the model calls, so it gets one retry and no more. it waits for a scan slot behind
-// the other Scans' ingests, so its schedule-to-close bound covers that wait too
+// review pays for the fetches and the model calls, so it gets two retries and no more, which cover two worker
+// shutdowns close together. it waits for a scan slot behind the other Scans' ingests, so its schedule-to-close bound
+// covers that wait too
 const { reviewForScan } = proxyActivities<typeof scanActivities>({
 	startToCloseTimeout: REVIEW_TIMEOUT_MS,
 	scheduleToCloseTimeout: QUEUED_STAGE_TIMEOUT_MS,
@@ -73,6 +72,7 @@ const {
 	reportScanEmailNotStarted,
 	reportScanPushNotStarted,
 	reportPodcastEpisodeRecordingNotStarted,
+	reportTopicMemoriesNotStarted,
 } = proxyActivities<typeof scanActivities>({
 	taskQueue: SCAN_CLOSING_TASK_QUEUE,
 	startToCloseTimeout: FINISH_TIMEOUT_MS,
@@ -116,7 +116,7 @@ export async function runTopicScanWorkflow(
 		}
 
 		// record the failure. if the record itself fails, fail the workflow with the error that failed the Scan, and leave
-		// the row to the sweep's stale close-out
+		// the row to the sweep's reaper
 		try {
 			await failScan(scanId, toWorkflowFailureReason(error), spentBudget)
 		} catch {
@@ -182,7 +182,7 @@ async function startScanEmail(scanEmailWorkflowInput: ScanEmailWorkflowInput): P
 		})
 	} catch (error) {
 		// a child with this id is the Scan's email, already on its way
-		if (error instanceof Error && error.name === "WorkflowExecutionAlreadyStartedError") {
+		if (isWorkflowAlreadyStarted(error)) {
 			return
 		}
 		await reportScanEmailNotStarted(scanEmailWorkflowInput.scanId, toWorkflowFailureReason(error))
@@ -211,7 +211,7 @@ async function startScanPush({ scanId, trigger, finishedScanStatus }: StartScanP
 		})
 	} catch (error) {
 		// a child with this id is the Scan's push, already on its way
-		if (error instanceof Error && error.name === "WorkflowExecutionAlreadyStartedError") {
+		if (isWorkflowAlreadyStarted(error)) {
 			return
 		}
 		await reportScanPushNotStarted(scanId, toWorkflowFailureReason(error))
@@ -240,7 +240,7 @@ async function startPodcastEpisodeRecording(
 ): Promise<boolean> {
 	try {
 		await startChild(recordPodcastEpisodeWorkflow, {
-			workflowId: `episode-${recordPodcastEpisodeWorkflowInput.scanId}`,
+			workflowId: toPodcastEpisodeWorkflowId(recordPodcastEpisodeWorkflowInput.scanId),
 			taskQueue: PODCAST_EPISODE_TASK_QUEUE,
 			parentClosePolicy: ParentClosePolicy.ABANDON,
 			args: [recordPodcastEpisodeWorkflowInput],
@@ -248,7 +248,7 @@ async function startPodcastEpisodeRecording(
 		return true
 	} catch (error) {
 		// a child with this id is the Scan's Podcast Episode, already recording
-		if (error instanceof Error && error.name === "WorkflowExecutionAlreadyStartedError") {
+		if (isWorkflowAlreadyStarted(error)) {
 			return true
 		}
 		await reportPodcastEpisodeRecordingNotStarted(
@@ -275,8 +275,26 @@ async function startTopicMemories(
 			args: [scanId],
 		})
 	} catch (error) {
-		if (!(error instanceof Error && error.name === "WorkflowExecutionAlreadyStartedError")) {
-			log.warn("could not start the topic memory update", { scanId })
+		// a child with this id is the Scan's update, already on its way
+		if (isWorkflowAlreadyStarted(error)) {
+			return
 		}
+		await reportTopicMemoriesStartFailure(scanId, error)
+	}
+}
+
+// report a topic memory child that could not start. a Scan replaying from before the patch only logged it, and a
+// report that fails is logged, so the Scan's podcast episode, email, and push still start
+async function reportTopicMemoriesStartFailure(scanId: string, error: unknown): Promise<void> {
+	if (!patched("topic-memory-start-report")) {
+		log.warn("could not start the topic memory update", { scanId })
+		return
+	}
+
+	// report it through an activity, since a workflow cannot report by itself
+	try {
+		await reportTopicMemoriesNotStarted(scanId, toWorkflowFailureReason(error))
+	} catch {
+		log.warn("could not report a topic memory update that did not start", { scanId })
 	}
 }

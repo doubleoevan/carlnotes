@@ -30,10 +30,12 @@ const fixtureSchema = z.object({
 		)
 		.max(67),
 })
+// the fixture's folder and the folder to write to, from the command line
 const [source, target] = process.argv.slice(2)
 if (!source || !target) {
 	throw Error("Expected a private fixture directory and a new output directory")
 }
+// the fixture, and how many frames its chapter spans
 const fixture = fixtureSchema.parse(await Bun.file(join(source, "fixture.json")).json())
 const frameCount = Math.round(fixture.end * FPS) - Math.round(fixture.start * FPS)
 if (frameCount < 1 || frameCount > 3600 * FPS) {
@@ -49,12 +51,14 @@ if (
 ) {
 	throw Error("The fixture must list each file once and include its narration and captions")
 }
+// make the output folder, and stop if a file differs from its hash in the fixture
 await mkdir(target, { mode: 0o700 })
 for (const file of fixture.files) {
 	if (sha256Hash(await Bun.file(join(source, file.name)).bytes()) !== file.sha256) {
 		throw Error("Frozen input changed: " + file.name)
 	}
 }
+// the fixture's images, the Resource images first and the generated ones after
 const images: VideoSegmentImage[] = []
 for (const file of fixture.files.filter((file) => file.name.startsWith("image-"))) {
 	const bytes = await Bun.file(join(source, file.name)).bytes()
@@ -122,10 +126,12 @@ for (const version of [3, 4]) {
 			throw Error("Chapter produced no frames")
 		}
 		await checkVideoSceneOutput(part, frameCount)
+		// time the render, then keep the silent file under its version's name
 		const seconds = (performance.now() - start) / 1000
 		const silent = join(target, `v${version}-silent.mp4`)
 		await rename(part, silent)
 		await runFfmpeg({
+			timeoutMs: 10 * 60_000,
 			ffmpegArguments: [
 				"-i",
 				silent,

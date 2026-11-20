@@ -83,16 +83,23 @@ test("the writer returns the scene on one line and throws on an empty one", asyn
 	).rejects.toThrow("the scene writer returned nothing")
 })
 
-test("the image prompt is the scene followed by the house style paragraph", async () => {
+test("the image prompt is the scene followed by the shared limits and the house style paragraph", async () => {
 	const imagePrompt = await toTopicImagePrompt("A car on a coastal road at dawn.")
-	expect(imagePrompt.startsWith("A car on a coastal road at dawn.\n\nEditorial illustration")).toBe(true)
-	expect(imagePrompt).toContain("No text, letters, numbers, logos, watermarks, or human faces.")
+	expect(
+		imagePrompt.startsWith(
+			"A car on a coastal road at dawn.\n\nNo text, letters, numbers, logos, watermarks, or human faces.\n\nEditorial illustration",
+		),
+	).toBe(true)
 	expect(imagePrompt).not.toContain("---")
 })
 
-test("a film's image prompt is the scene followed by the film house style paragraph", async () => {
+test("a film's image prompt is the scene followed by the shared limits and the film house style paragraph", async () => {
 	const imagePrompt = await toTopicImagePrompt("A harbor at dusk.", "topic-video-image-style")
-	expect(imagePrompt.startsWith("A harbor at dusk.\n\nA wide cinematic film still")).toBe(true)
+	expect(
+		imagePrompt.startsWith(
+			"A harbor at dusk.\n\nNo text, letters, numbers, logos, watermarks, or human faces.\n\nA wide cinematic film still",
+		),
+	).toBe(true)
 
 	// the frame is full to the bottom edge, in the palette, with no text
 	expect(imagePrompt).toContain("no paper edge, border, frame, vignette, or letterbox bars")

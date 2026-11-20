@@ -15,6 +15,8 @@ type RetryOptions<Result> = RetryDelay & {
 	isRetryable?: (error: unknown) => boolean
 	// runs after a failed attempt that will be tried again, before the wait
 	onRetry?: (attempt: number, error: unknown, delayMs: number) => void
+	// ends the run once it is aborted: a failed attempt is not tried again, and a wait ends with the signal's reason
+	signal?: AbortSignal
 }
 
 /**
@@ -28,13 +30,14 @@ export async function runWithRetries<Result>({
 	runAttempt,
 	isRetryable = () => true,
 	onRetry,
+	signal,
 }: RetryOptions<Result>): Promise<Result> {
 	for (let attempt = 1; ; attempt++) {
 		try {
 			return await runAttempt(attempt)
 		} catch (error) {
-			// a failure that is not retryable, or the last attempt's failure, ends the run
-			if (!isRetryable(error) || attempt >= attempts) {
+			// a failure of an aborted run, one that is not retryable, or the last attempt's failure ends the run
+			if (signal?.aborted || !isRetryable(error) || attempt >= attempts) {
 				throw error
 			}
 
@@ -46,7 +49,30 @@ export async function runWithRetries<Result>({
 
 			// report the failure, wait, and try again
 			onRetry?.(attempt, error, nextDelayMs)
-			await Bun.sleep(nextDelayMs)
+			await waitUnlessAborted(nextDelayMs, signal)
 		}
+	}
+}
+
+// wait, or throw the signal's reason as soon as the run is aborted
+async function waitUnlessAborted(delayMs: number, signal: AbortSignal | undefined): Promise<void> {
+	if (!signal) {
+		await Bun.sleep(delayMs)
+		return
+	}
+
+	// a promise that rejects once the signal aborts, and its listener to take off again
+	signal.throwIfAborted()
+	let rejectOnAbort = (): void => {}
+	const aborted = new Promise<never>((_resolve, reject) => {
+		rejectOnAbort = () => reject(signal.reason)
+		signal.addEventListener("abort", rejectOnAbort, { once: true })
+	})
+
+	// whichever ends first ends the wait
+	try {
+		await Promise.race([Bun.sleep(delayMs), aborted])
+	} finally {
+		signal.removeEventListener("abort", rejectOnAbort)
 	}
 }

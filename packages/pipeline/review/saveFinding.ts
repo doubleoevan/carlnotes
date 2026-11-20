@@ -21,18 +21,19 @@ type FindingReviewFields = {
 	scanId: string
 	relevanceScore: number
 	relevanceExplanation: string
-	reviewedContextHash: string
+	reviewedContextHash: string | null
 	reviewedContentHash: string | null
 }
 
 /**
- * Returns the columns a re-score decides, so upserting one leaves a user's rating and view count untouched.
+ * Returns the columns a re-score decides, so upserting one leaves a user's rating and view count untouched. A review
+ * with no context hash scored less than the page, and the next Scan that finds the page reviews it again.
  */
 export function toFindingReviewFields(review: {
 	scanId: string
 	score: number
 	relevanceExplanation: string
-	topicContextHash: string
+	topicContextHash: string | null
 	contentHash: string | null
 }): FindingReviewFields {
 	return {
@@ -51,7 +52,8 @@ type UpsertFindingOptions = {
 	resource: Resource
 	score: number
 	relevanceExplanation: string
-	topicContextHash: string
+	// the Topic context that the review read, or null if the review could not read the page
+	topicContextHash: string | null
 	// whether a custom Source found the resource in this Scan
 	isFromCustomSource: boolean
 	personalSourceScoreBonus?: PersonalSourceScoreBonus
@@ -157,6 +159,7 @@ function toSourceScoreBonus({
 	personalSourceScoreBonus: PersonalSourceScoreBonus
 	isFromCustomSource: boolean
 }): number {
+	// a Personal source's bonus comes before a custom Source's
 	if (personalSourceScoreBonus > 0) {
 		return personalSourceScoreBonus
 	}
@@ -178,10 +181,13 @@ async function saveAnnotations({
 	personalSources: UpsertFindingOptions["personalSources"]
 }): Promise<void> {
 	for (const annotation of annotations ?? []) {
+		// an annotation needs the context of the user who sent it
 		const context = personalSources?.find((context) => context.userId === annotation.userId)
 		if (!context) {
 			throw new Error("Finding annotation has no matching sender context")
 		}
+
+		// store the annotation's text encrypted
 		await transaction.insert(findingPersonalAnnotations).values({
 			findingId: findingId,
 			topicId,

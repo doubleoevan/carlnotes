@@ -10,7 +10,8 @@ import { applyGeneratedPictureAnimation } from "./generatedPictureAnimation"
 import { acceptLocalPictureAnimation, FILM_LOCAL_ANIMATION_LIMIT } from "./pictureAnimation"
 import { planPictureAnimation } from "./planPictureAnimation"
 import { loadReviewedAnimation } from "./reviewedAnimation"
-import { recordPictureAnimationCost } from "./topicVideoRows"
+import { recordPictureAnimationCost, recordPlatformTopicVideoSpend } from "./topicVideoRows"
+import { type RunOutsideSlot, runWithoutSlot } from "./topicVideoSlot"
 import type { VideoCaptionCue } from "./videoCaptions"
 import { loadPodcastCardStillPng, toVideoStillPng } from "./videoFrames"
 import { joinVideoPartShots, renderSegmentShots, type VideoChapterImages, type VideoSegmentImage } from "./videoParts"
@@ -19,6 +20,8 @@ import { planVideoScenes, sha256Hash, toStoredVideoScenePlan } from "./videoScen
 import { saveVideoScenePlan } from "./videoSceneStorage"
 import { VIDEO_FRAMES_PER_SECOND, type VideoSegment } from "./videoTimeline"
 
+// one chapter's render: its podcast episode, the render's temp folder, the chapter's images, timeline segment, and
+// captions, whether the attempt is a retry, what animations it may use and who pays, and how its plan is saved
 type RenderVideoSceneOptions = {
 	podcastEpisodeId: string
 	workDirectory: string
@@ -26,10 +29,13 @@ type RenderVideoSceneOptions = {
 	segment: Extract<VideoSegment, { kind: "chapter" }>
 	captions: VideoCaptionCue[]
 	isRetry: boolean
+	// the pictures already animated in this film, and the animation's billing
 	localAnimationAssets?: Set<string>
 	animationBilling?: { ownerId: string; isPlatformBilled: boolean; isStoredAnimationOnly?: boolean }
 	resolvePlan?: typeof saveVideoScenePlan
 	onEncodedPlan?: (planHash: string) => void
+	// runs the planner's call and a paid clip's generation outside the render's slot
+	runOutsideSlot?: RunOutsideSlot
 	signal?: AbortSignal
 }
 
@@ -45,6 +51,7 @@ export async function renderVideoScene({
 	onEncodedPlan,
 	localAnimationAssets = new Set<string>(),
 	animationBilling,
+	runOutsideSlot = runWithoutSlot,
 	signal,
 }: RenderVideoSceneOptions): Promise<string> {
 	const directory = await mkdtemp(join(workDirectory, "scene-"))
@@ -82,22 +89,28 @@ export async function renderVideoScene({
 						const candidates = videoSceneImages.flatMap((asset, index) => {
 							const origin = asset.origin
 							const image = images[index]
-							if (
-								!image ||
-								origin === "house" ||
-								asset.animationFileHash ||
-								!expected.beats.some((beat) => beat.sourceImageHash === asset.sourceImageHash) ||
-								videoSceneImages.findIndex((entry) => entry.sourceImageHash === asset.sourceImageHash) !== index
-							) {
+							const { sourceImageHash } = asset
+
+							// leave out a picture that is not shown, already has a loop, or was listed earlier
+							const isShown = expected.beats.some((beat) => beat.sourceImageHash === sourceImageHash)
+							const firstIndex = videoSceneImages.findIndex((entry) => entry.sourceImageHash === sourceImageHash)
+							if (!image || origin === "house" || asset.animationFileHash || !isShown || firstIndex !== index) {
 								return []
 							}
+
+							// the picture as a candidate, with the loader of its thumbnail
 							return [{ ...asset, origin, thumbnail: image.loadStillPng }]
 						})
+
+						// ask the planner outside the render's slot, and keep the montage if it fails
 						try {
 							const recordCost = animationBilling.isPlatformBilled
-								? undefined
+								? (dollars: number) =>
+										recordPlatformTopicVideoSpend({ podcastEpisodeId, kind: "topicVideoAnimationPlan", dollars })
 								: (dollars: number) => recordPictureAnimationCost(podcastEpisodeId, dollars)
-							return await planPictureAnimation(candidates, { ...animationBilling, recordCost }, signal)
+							return await runOutsideSlot(() =>
+								planPictureAnimation(candidates, { ...animationBilling, recordCost }, signal),
+							)
 						} catch (error) {
 							signal?.throwIfAborted()
 							console.warn("Film picture animation planning failed", {
@@ -114,14 +127,16 @@ export async function renderVideoScene({
 		// A paid animation uses the owner's monthly allowance. Approved host loops have their own artwork.
 		const animatedSourceImageHash =
 			chapter.hasPublicSceneSource && animationBilling && !animationBilling.isPlatformBilled
-				? await applyGeneratedPictureAnimation({
-						plan,
-						images,
-						directory,
-						ownerId: animationBilling.ownerId,
-						isRetry: isRetry || !!animationBilling.isStoredAnimationOnly,
-						signal,
-					})
+				? await runOutsideSlot(() =>
+						applyGeneratedPictureAnimation({
+							plan,
+							images,
+							directory,
+							ownerId: animationBilling.ownerId,
+							isRetry: isRetry || !!animationBilling.isStoredAnimationOnly,
+							signal,
+						}),
+					)
 				: undefined
 
 		// Allocate local effects in chapter order. Repeated shots of one picture use the same slot.
@@ -129,6 +144,7 @@ export async function renderVideoScene({
 			const region = plan.pictureAnimations?.find(
 				(choice) => choice.sourceImageHash === videoSceneImages[index]?.sourceImageHash,
 			)
+			// the paid clip's picture takes no local effect, and a film takes eight local effects at most
 			if (
 				region &&
 				region.sourceImageHash !== animatedSourceImageHash &&
@@ -174,6 +190,8 @@ async function prepareVideoSceneImages(input: VideoSegmentImage[], directory: st
 		const original = image.loadSceneImage ? await image.loadSceneImage() : await image.loadStillPng()
 		const sourceImageHash = sha256Hash(original)
 		const info = toUprightImageSize(await sharp(original, { limitInputPixels: 40_000_000 }).metadata())
+
+		// the reviewed loop of this exact picture, if one exists, written beside the chapter's files
 		const clip = await loadReviewedAnimation(original, image.loadStillPng === loadPodcastCardStillPng)
 		const animationFileHash = clip ? sha256Hash(clip) : undefined
 		const reviewedAnimationPath = animationFileHash ? join(directory, `${animationFileHash}.webm`) : undefined

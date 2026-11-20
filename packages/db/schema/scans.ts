@@ -10,6 +10,7 @@ import {
 	jsonb,
 	numeric,
 	pgTable,
+	primaryKey,
 	real,
 	text,
 	timestamp,
@@ -91,6 +92,11 @@ export const scans = pgTable(
 	(table) => [
 		index("scans_topic_started_idx").on(table.topicId, table.startedAt),
 		index("scans_owner_started_idx").on(table.ownerId, table.startedAt),
+		// the day's spend sums every owner's Scans by their start time
+		index("scans_started_idx").on(table.startedAt),
+		// the few Scans still running, oldest first, which the sweep reads for the ones no worker was sent and the
+		// reaper for the ones that went quiet
+		index("scans_running_started_idx").on(table.startedAt, table.id).where(sql`${table.status} = 'running'`),
 	],
 )
 
@@ -249,6 +255,38 @@ export const findings = pgTable(
 		index("findings_found_scan_id_idx").on(table.foundScanId),
 		// a topic's findings by when they arrived, for the new finding count and the reads that take a topic's latest findings
 		index("findings_topic_created_idx").on(table.topicId, table.createdAt),
+	],
+)
+
+// a filtered finding is the record that a topic's max-results filter removed its finding of a resource. it holds what
+// the page was scored against and how it scored, and no text. while it holds, a later scan skips the page
+export const filteredFindings = pgTable(
+	"filtered_findings",
+	{
+		// the topic whose filter removed the finding, and the resource that the finding judged
+		topicId: text("topic_id")
+			.notNull()
+			.references(() => topics.id, { onDelete: "cascade" }),
+		resourceId: text("resource_id")
+			.notNull()
+			.references(() => resources.id, { onDelete: "cascade" }),
+		// what the removed finding was reviewed against. the row holds only while both still match
+		reviewedContextHash: text("reviewed_context_hash").notNull(),
+		reviewedContentHash: text("reviewed_content_hash"),
+		// the removed finding's stored score, which ranks the page for an open place, and its personal source bonus
+		relevanceScore: real("relevance_score").notNull(),
+		personalSourceScoreBonus: real("personal_source_score_bonus")
+			.$type<PersonalSourceScoreBonus>()
+			.notNull()
+			.default(0),
+		// when the filter removed the finding
+		filteredAt: timestamp("filtered_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	// one row per topic and resource, which a later filter of the same page writes over. the resource index serves the
+	// delete of a resource
+	(table) => [
+		primaryKey({ columns: [table.topicId, table.resourceId] }),
+		index("filtered_findings_resource_id_idx").on(table.resourceId),
 	],
 )
 

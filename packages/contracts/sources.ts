@@ -54,6 +54,8 @@ export type CustomSourceOption = {
 	label: string
 	// what carl calls this source in a sentence, where label is the name the editor shows
 	promptLabel: string
+	// the value carl writes for this source, in a few words with no comma
+	promptValue: string
 	placeholder: string
 	toConfig: (value: string) => Record<string, unknown> | null
 }
@@ -83,6 +85,7 @@ export const CUSTOM_SOURCE_OPTIONS: CustomSourceOption[] = [
 		sourceKind: "url",
 		label: "url",
 		promptLabel: "a page",
+		promptValue: "a page url",
 		placeholder: "page url…",
 		toConfig: (value) => ({ url: value }),
 	},
@@ -91,6 +94,7 @@ export const CUSTOM_SOURCE_OPTIONS: CustomSourceOption[] = [
 		sourceKind: "rss",
 		label: "rss",
 		promptLabel: "an RSS feed",
+		promptValue: "a feed url",
 		placeholder: "feed url…",
 		toConfig: (value) => ({ url: value }),
 	},
@@ -100,6 +104,7 @@ export const CUSTOM_SOURCE_OPTIONS: CustomSourceOption[] = [
 		sourceKind: "rss",
 		label: "Google News",
 		promptLabel: "a news publisher",
+		promptValue: "a publisher's bare domain",
 		placeholder: "publisher domain…",
 		toConfig: toGoogleNewsSourceConfig,
 	},
@@ -109,6 +114,7 @@ export const CUSTOM_SOURCE_OPTIONS: CustomSourceOption[] = [
 		sourceKind: "reddit",
 		label: "reddit",
 		promptLabel: "a subreddit",
+		promptValue: "a subreddit name without the leading r/",
 		placeholder: "subreddit…",
 		toConfig: (value) => ({ subreddit: value.replace(/^r\//, "") }),
 	},
@@ -118,6 +124,7 @@ export const CUSTOM_SOURCE_OPTIONS: CustomSourceOption[] = [
 		sourceKind: "youtube",
 		label: "youtube",
 		promptLabel: "a YouTube channel",
+		promptValue: "a channel handle",
 		placeholder: "channel or playlist id…",
 		toConfig: toYouTubeConfig,
 	},
@@ -127,6 +134,7 @@ export const CUSTOM_SOURCE_OPTIONS: CustomSourceOption[] = [
 		sourceKind: "podcast",
 		label: "podcast",
 		promptLabel: "a podcast",
+		promptValue: "a show's published name",
 		placeholder: "podcast id…",
 		toConfig: (value) => ({ podcastId: value }),
 	},
@@ -136,6 +144,7 @@ export const CUSTOM_SOURCE_OPTIONS: CustomSourceOption[] = [
 		sourceKind: "bluesky",
 		label: "bluesky",
 		promptLabel: "a Bluesky account",
+		promptValue: "an account handle",
 		placeholder: "account handle…",
 		toConfig: (value) => ({ handle: value.replace(/^@/, "") }),
 	},
@@ -146,6 +155,7 @@ export const CUSTOM_SOURCE_OPTIONS: CustomSourceOption[] = [
 		sourceKind: "x",
 		label: "x",
 		promptLabel: "an X account",
+		promptValue: "an account handle without the leading @",
 		placeholder: "account handle…",
 		toConfig: (value) => {
 			const handle = toXHandle(value)
@@ -163,6 +173,13 @@ export function toSourceOptionsSentence(): string {
 	const promptLabels = [...DEFAULT_SOURCES, ...CUSTOM_SOURCE_OPTIONS].map((sourceOption) => sourceOption.promptLabel)
 	const lastPromptLabel = promptLabels.at(-1)
 	return `${promptLabels.slice(0, -1).join(", ")}, or ${lastPromptLabel}`
+}
+
+/**
+ * The value each custom source option takes, one markdown list line per option.
+ */
+export function toSourceValueLines(): string {
+	return CUSTOM_SOURCE_OPTIONS.map((option) => `- **${option.key}**: ${option.promptValue}`).join("\n")
 }
 
 /**

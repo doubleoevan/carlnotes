@@ -216,7 +216,7 @@ Facts the design rests on:
   the editor swaps in (`apps/api/topic/topicImagesRoute.ts:84-101`).
 - **Every status write of a film is in one pipeline module** (`topicVideoRows.ts:45-229`) **and every one
   of a discussion in another** (`topicPostDiscussions.ts:63-313`), so a Redis delete there changes no workflow, and
-  the live render, the backfill, and the close-out all get it. The render already deletes the film feeds' cache at
+  the live render, the backfill, and the reaper all get it. The render already deletes the film feeds' cache at
   the ready write.
 - **`cacheJson` already falls back to the row**: a failed Redis read runs the load and stores nothing.
 - **The film's page changes in five places when a film lands** (the card, the film feed url, the films list, an
@@ -247,7 +247,7 @@ Found outside the items:
   counts, and `pickedUpAt` alone (`apps/api/mcp/scanResults.ts:140-146`).
 - **Medium: the scan poll reads the whole topic page for hours while a podcast episode records** on the flex tier.
 - **Medium: a queued film shows nothing and starts no poll** (above), and a film whose workflow is lost before its
-  first row write has no row for a close-out to find.
+  first row write has no row for the reaper to find.
 - **Medium if the wave is signed in: the badge poll's query cost barely drops with one route.** The note badges' 4
   queries and the invitations' 2 stay: ten thousand open signed-in tabs are about 1,800 queries a second.
 - **Low to medium: visitors behind one address share the scan poll's rate limit** of 1,800 requests a minute.

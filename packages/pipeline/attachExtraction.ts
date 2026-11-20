@@ -6,13 +6,15 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { setPriority, tmpdir } from "node:os"
 import { join } from "node:path"
 import { ATTACHMENT_NO_TEXT_REASON, MAX_ATTACHMENT_CONTEXT_CHARS } from "@carlnotes/contracts/topics"
+import { runChildProcessRequest, toChildProcessEnvironment } from "@carlnotes/server/childProcessRequest"
 import { AttachmentValidationError } from "./attachContentType"
 import { CHUNK_CHARS, chunk, MAX_CHUNKS } from "./chunk"
 
-// the most resident memory an extraction's child process may take. the largest reads measured, a 10 MB PDF read to
-// its last page and a 9 MB workbook of text, took under 500 MB, and two child processes at this limit fit in the
-// api's 2 GB beside the api
-const EXTRACTION_MEMORY_LIMIT_BYTES = 640 * 1024 * 1024
+// the most resident memory an extraction's child process may take. the largest reads measured in the production
+// image, an 11 MB PDF of 12,000 pages read to its last page and a 30 MB workbook, took under 384 MB and under 256 MB,
+// and under 448 MB on a developer's machine. two child processes at this limit fit in the api's 2 GB beside the
+// api's own 600 MB under load, its large chat bodies, and a podcast cover's draw
+const EXTRACTION_MEMORY_LIMIT_BYTES = 512 * 1024 * 1024
 
 // how many child processes read files at once in one process
 const MAX_CHILD_PROCESSES = 2
@@ -252,74 +254,32 @@ function takeWaitingExtraction(): WaitingExtraction | undefined {
 
 // read one file in a child process of its own, and return what the child process extracts. the child process ends
 // with its file, whether it replied, ran past the file's deadline, or exited
-function readInChildProcess({ request, deadline }: WaitingExtraction): Promise<string | ExtractedAttachment> {
-	return new Promise((resolve, reject) => {
-		// a folder of the child process's own for any file a reader writes while it unpacks, removed with the child
-		// process, because a child process that is killed removes nothing itself
-		const temporaryFolder = mkdtempSync(join(tmpdir(), "attachment-extraction-"))
-
-		// settle with whichever comes first: the reply, the deadline, or the exit
-		let isSettled = false
-		const settle = (settlePromise: () => void): void => {
-			if (isSettled) {
-				return
-			}
-
-			// stop the deadline's timer and the child process, and remove what it wrote
-			isSettled = true
-			clearTimeout(deadlineTimer)
-			childProcess.kill("SIGKILL")
-			rmSync(temporaryFolder, { recursive: true, force: true })
-			settlePromise()
-		}
-
-		// send the request once the child process is ready for it. a request that cannot be sent rejects
-		const sendRequest = (): void => {
-			try {
-				childProcess.send(request)
-			} catch (error) {
-				settle(() => reject(error instanceof Error ? error : new Error(String(error))))
-			}
-		}
-
-		// settle with what the child process extracted, or with why it did not
-		const settleWithReply = (reply: Exclude<AttachmentExtractionReply, { status: "ready" }>): void =>
-			settle(() => (reply.status === "extracted" ? resolve(reply.extraction) : reject(toReplyError(reply))))
-
-		// the child process says it is ready, then replies, or exits without a reply. it reads a stranger's file, so of
-		// this process's environment, which holds every secret, it gets its own settings alone
-		const childProcess = Bun.spawn([process.execPath, CHILD_PROCESS_PATH], {
-			env: toChildProcessEnvironment(temporaryFolder),
-			stdio: ["ignore", "inherit", "inherit"],
-			serialization: "advanced",
-			ipc: (reply: AttachmentExtractionReply) => (reply.status === "ready" ? sendRequest() : settleWithReply(reply)),
+async function readInChildProcess({ request, deadline }: WaitingExtraction): Promise<string | ExtractedAttachment> {
+	// a folder of the child process's own for any file a reader writes while it unpacks, removed after the child
+	// process is stopped, because a child process that is killed removes nothing itself
+	const temporaryFolder = mkdtempSync(join(tmpdir(), "attachment-extraction-"))
+	try {
+		// the child process reads a stranger's file, so of this process's environment, which holds every secret, it
+		// gets its own settings alone
+		return await runChildProcessRequest({
+			scriptPath: CHILD_PROCESS_PATH,
+			request,
+			env: toChildProcessEnvironment(temporaryFolder, CHILD_PROCESS_SETTING_NAMES),
+			timeLimitMs: deadline - performance.now(),
+			killSignal: "SIGKILL",
+			toResult: (reply: Exclude<AttachmentExtractionReply, { status: "ready" }>) => {
+				if (reply.status !== "extracted") {
+					throw toReplyError(reply)
+				}
+				return reply.extraction
+			},
+			toTimeLimitError: () => new AttachmentExtractionLimitError("time"),
+			toExitError,
+			afterSpawn: (childProcess) => lowerChildProcessPriority(childProcess.pid),
 		})
-
-		// a child process still reading at the file's deadline is stopped
-		const deadlineTimer = setTimeout(
-			() => settle(() => reject(new AttachmentExtractionLimitError("time"))),
-			deadline - performance.now(),
-		)
-		lowerChildProcessPriority(childProcess.pid)
-
-		// the exit is read from the child process's promise, which settles after the timer and the child process are
-		// set. an exit callback may run before the spawn returns
-		void childProcess.exited.then(() => settle(() => reject(toExitError(childProcess))))
-	})
-}
-
-// a child process's environment: the folder its temporary files go to, and the settings it reads if they are set
-function toChildProcessEnvironment(temporaryFolder: string): Record<string, string> {
-	const childProcessEnvironment: Record<string, string> = { TMPDIR: temporaryFolder }
-
-	// pass each setting on that this process has
-	for (const settingName of CHILD_PROCESS_SETTING_NAMES) {
-		const setting = Bun.env[settingName]
-		if (setting !== undefined) {
-			childProcessEnvironment[settingName] = setting
-		}
+	} finally {
+		rmSync(temporaryFolder, { recursive: true, force: true })
 	}
-	return childProcessEnvironment
 }
 
 // run a child process at the lowest priority. a system that does not allow the change leaves the priority as it is,
@@ -339,7 +299,7 @@ function toReplyError(reply: { status: "rejected" | "failed"; reason: string }):
 
 // the error a child process that exited without a reply rejects with. a kill is the memory watchdog's, or the
 // kernel's for a process that takes too much memory, and any other exit is a failed read
-function toExitError(exitedProcess: Pick<Bun.Subprocess, "exitCode" | "signalCode">): Error {
+function toExitError(exitedProcess: { exitCode: number; signalCode: Bun.Subprocess["signalCode"] }): Error {
 	if (exitedProcess.signalCode === "SIGKILL") {
 		return new AttachmentExtractionLimitError("memory")
 	}

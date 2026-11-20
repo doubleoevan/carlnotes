@@ -17,6 +17,13 @@ export const PLUS_USER_ACCESS_ROW = ["user", "plus", null]
 export const ADMIN_USER_ACCESS_ROW = ["admin", "free", null]
 
 /**
+ * Returns the updates of the named table among the queries that a test sent.
+ */
+export function toTableUpdates(sentQueries: SentQuery[], tableName: string): SentQuery[] {
+	return sentQueries.filter((sentQuery) => sentQuery.text.startsWith(`update "${tableName}"`))
+}
+
+/**
  * Returns a spend sum's one row, with the dollars given for the table that the query's from clause names, or "0" for
  * any other table.
  */

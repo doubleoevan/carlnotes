@@ -7,6 +7,7 @@ import { db } from "@carlnotes/db"
 import { podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import {
 	downloadPodcastEpisodeFile,
+	loadStoredObjectByteSize,
 	toPodcastEpisodeAudioKey,
 	toPodcastEpisodeChapterKey,
 	uploadAttachment,
@@ -63,7 +64,8 @@ export class SpeechFailedError extends Error {
 
 /**
  * Records one chapter as one two-speaker speech call on the billed user's key and writes its audio to object storage.
- * Throws a SpeechFailedError if the call recorded no audio.
+ * A chapter whose audio an earlier attempt stored is returned as it is, with no speech call and no cost. Throws a
+ * SpeechFailedError if the call recorded no audio, or if the row is no longer recording.
  */
 export async function recordPodcastEpisodeChapter({
 	podcastEpisodeId,
@@ -71,14 +73,27 @@ export async function recordPodcastEpisodeChapter({
 	position,
 	speechTier,
 }: RecordPodcastEpisodeChapterOptions): Promise<RecordedChapter> {
-	// read the chapter's turns from the script saved on the row
+	// read the row's status and the script saved on it. a row that failed or was removed while its workflow went on
+	// records nothing more
 	const [podcastEpisode] = await db
-		.select({ script: podcastEpisodes.script })
+		.select({ status: podcastEpisodes.status, script: podcastEpisodes.script })
 		.from(podcastEpisodes)
 		.where(eq(podcastEpisodes.id, podcastEpisodeId))
-	const turns = podcastEpisode?.script ? toChapterTurns(podcastEpisode.script)[position] : undefined
+	if (podcastEpisode?.status !== "recording") {
+		throw new SpeechFailedError(`episode ${podcastEpisodeId} is no longer recording`, false)
+	}
+
+	// the chapter's turns from the script
+	const turns = podcastEpisode.script ? toChapterTurns(podcastEpisode.script)[position] : undefined
 	if (!turns) {
 		throw new SpeechFailedError(`episode ${podcastEpisodeId} has no chapter ${position} to record`, false)
+	}
+
+	// audio that an earlier attempt stored is the chapter, so a retry pays for no second speech call
+	const chapterKey = toPodcastEpisodeChapterKey(podcastEpisodeId, position)
+	const storedByteSize = await loadStoredObjectByteSize(chapterKey)
+	if (storedByteSize !== null) {
+		return { position, chapterKey, byteSize: storedByteSize }
 	}
 
 	// record the chapter's speech on the billed user's key. only a retryable failure is worth another attempt
@@ -96,18 +111,18 @@ export async function recordPodcastEpisodeChapter({
 
 	// store the audio under the Podcast Episode's temporary chapter prefix
 	await assertPodcastPersonalSourcesConverted({ podcastEpisodeId })
-	const chapterKey = toPodcastEpisodeChapterKey(podcastEpisodeId, position)
 	await uploadAttachment(chapterKey, recordSpeechResult.audioBytes, "audio/wav")
 	return { position, chapterKey, byteSize: recordSpeechResult.audioBytes.byteLength }
 }
 
 /**
  * Joins the recorded chapters into one normalized MP3 on temporary files and stores it.
- * Returns the stored file with each chapter's times.
+ * Returns the stored file with each chapter's times. An aborted signal stops the downloads, the join, and the upload.
  */
 export async function encodePodcastEpisode(
 	podcastEpisodeId: string,
 	recordedChapters: RecordedChapter[],
+	signal?: AbortSignal,
 ): Promise<EncodedPodcastEpisode> {
 	// download the chapters in Podcast Episode order to a temporary directory that only this call uses
 	await assertPodcastPersonalSourcesConverted({ podcastEpisodeId })
@@ -119,7 +134,7 @@ export async function encodePodcastEpisode(
 		)
 		await Promise.all(
 			orderedChapters.map((recordedChapter, i) =>
-				downloadPodcastEpisodeFile({ key: recordedChapter.chapterKey, filePath: chapterPaths[i] ?? "" }),
+				downloadPodcastEpisodeFile({ key: recordedChapter.chapterKey, filePath: chapterPaths[i] ?? "", signal }),
 			),
 		)
 
@@ -130,11 +145,11 @@ export async function encodePodcastEpisode(
 
 		// join, mix in the theme, normalize, and encode in one ffmpeg pass that reads and writes files
 		const audioPath = join(temporaryDirectory, "audio.mp3")
-		await joinChapterFiles({ temporaryDirectory, chapterPaths, audioPath, themeClips, speechSeconds })
+		await joinChapterFiles({ temporaryDirectory, chapterPaths, audioPath, themeClips, speechSeconds, signal })
 
 		// store the finished file
 		const audioKey = toPodcastEpisodeAudioKey(podcastEpisodeId)
-		await uploadPodcastEpisodeFile({ key: audioKey, filePath: audioPath, contentType: "audio/mpeg" })
+		await uploadPodcastEpisodeFile({ key: audioKey, filePath: audioPath, contentType: "audio/mpeg", signal })
 
 		// the chapters' times shifted by the intro's lead, and the Podcast Episode's length with the outro's tail
 		const { chapterTimes, durationSeconds } = toThemedEpisodeTimes(speechChapterTimes, themeClips)
@@ -163,21 +178,26 @@ export function toChapterTimes(wavByteSizes: number[]): ChapterTime[] {
 	})
 }
 
+// how long the join may run before it is killed. a full podcast episode's join took under two minutes on one core
+const AUDIO_JOIN_TIMEOUT_MS = 8 * 60 * 1000
+
 // one join. the temporary directory that the join works in, the chapter files in order, the file that the join writes,
-// the theme clips that exist, the talk's length that places the outro, and whether the theme is mixed in, which a
-// Podcast Episode does and a Topic Post Discussion does not
+// the theme clips that exist, the talk's length that places the outro, whether the theme is mixed in, which a
+// Podcast Episode does and a Topic Post Discussion does not, and a signal that kills the join once it aborts
 export type JoinChapterFilesOptions = {
 	temporaryDirectory: string
 	chapterPaths: string[]
 	audioPath: string
+	// what the join mixes in, and what stops it
 	themeClips: ThemeClips
 	speechSeconds: number
 	hasThemeMix?: boolean
+	signal?: AbortSignal
 }
 
 /**
  * Runs ffmpeg's concat demuxer over the chapter files, mixing in the theme clips, normalizing the loudness,
- * and encoding the MP3.
+ * and encoding the MP3. The join is killed after eight minutes or once the signal aborts.
  */
 export async function joinChapterFiles({
 	temporaryDirectory,
@@ -186,6 +206,7 @@ export async function joinChapterFiles({
 	themeClips,
 	speechSeconds,
 	hasThemeMix,
+	signal,
 }: JoinChapterFilesOptions): Promise<void> {
 	// the concat demuxer reads its inputs from a list file
 	const chapterListPath = join(temporaryDirectory, "chapters.txt")
@@ -193,7 +214,7 @@ export async function joinChapterFiles({
 
 	// run ffmpeg over the chapters and the theme clips, which writes the MP3 at the audio path
 	const joinArguments = toJoinArguments({ chapterListPath, audioPath, themeClips, speechSeconds, hasThemeMix })
-	await runFfmpeg({ ffmpegArguments: joinArguments })
+	await runFfmpeg({ ffmpegArguments: joinArguments, timeoutMs: AUDIO_JOIN_TIMEOUT_MS, signal })
 }
 
 // one join's arguments: the join's own options, with the chapters' list file in place of the chapter files

@@ -1,10 +1,10 @@
 import type { StoredScanSourceResults, StoredSourceResult } from "@carlnotes/contracts/topics"
-import type { DiscoveredResource } from "@carlnotes/pipeline/ingest/ingester"
+import type { ResourceDiscovery } from "@carlnotes/pipeline/ingest/ingester"
 
 // a Source's result as ingest returns it, the Resources the Scan discovered, and the urls of the Scan's kept Findings
 type ToScanSourceResultsOptions = {
 	ingestSourceResults: StoredSourceResult[]
-	discoveredResources: DiscoveredResource[]
+	discoveredResources: ResourceDiscovery[]
 	keptFindingUrls: string[]
 	// the Resources the review read again from the topic's earlier findings, which no Source returned this Scan
 	earlierFoundCount: number

@@ -18,6 +18,7 @@ test.skipIf(!Bun.which("ffmpeg") || !Bun.which("ffprobe"))(
 		try {
 			const path = join(directory, "scene.mp4")
 			await runFfmpeg({
+				timeoutMs: 60_000,
 				ffmpegArguments: [
 					"-f",
 					"lavfi",
@@ -49,6 +50,7 @@ test.skipIf(!Bun.which("ffmpeg") || !Bun.which("ffprobe"))(
 			])
 			const { packets } = JSON.parse(stdout)
 			expect(packets).toHaveLength(24)
+			// zero the last packet's bytes, and the check rejects the file
 			const packet = packets.at(-1)
 			const bytes = await Bun.file(path).bytes()
 			bytes.fill(0, Number(packet.pos), Number(packet.pos) + Number(packet.size))

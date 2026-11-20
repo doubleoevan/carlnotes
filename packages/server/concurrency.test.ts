@@ -71,6 +71,28 @@ test("a take with room still waits behind an older take", async () => {
 	expect(startedTakes).toEqual(["older", "lighter"])
 })
 
+test("a take marked ahead waits in front of the older takes not marked ahead", async () => {
+	// one slot taken, an older take waiting, then a take marked ahead
+	const takeWeight = createWeightLimiter(1)
+	const startedTakes: string[] = []
+	const releaseFirstWeight = await takeWeight(1)
+	const olderTake = takeWeight(1).then((release) => {
+		startedTakes.push("older")
+		release()
+	})
+
+	// the take marked ahead joins the line after the older one
+	const aheadTake = takeWeight(1, undefined, true).then((release) => {
+		startedTakes.push("ahead")
+		release()
+	})
+
+	// the release starts the take marked ahead first
+	releaseFirstWeight()
+	await Promise.all([olderTake, aheadTake])
+	expect(startedTakes).toEqual(["ahead", "older"])
+})
+
 test("a weight above the limit is taken alone", async () => {
 	// 25 under a limit of 10 starts at once, and a take of 5 waits for it
 	const takeWeight = createWeightLimiter(10)

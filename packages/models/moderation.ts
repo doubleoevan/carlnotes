@@ -1,6 +1,7 @@
 // the classification of what a user shares with other users. text takes one cheap call that returns a schema-locked
-// verdict on the operator's key, with no text in its trace. images use OpenAI moderation through the same proxy.
-// failed checks publish a status without the submitted content
+// verdict on the operator's key, with no text in its trace. a text's verdict is kept for a day by the text's hash, so a
+// text saved again is classified once, and each call that runs is recorded as the platform's spend. images use OpenAI
+// moderation through the same proxy. failed checks publish a status without the submitted content
 
 import {
 	imageModerationResponse,
@@ -8,7 +9,11 @@ import {
 	moderationVerdict,
 	toImageModerationCategory,
 } from "@carlnotes/contracts/moderation"
+import { DAY_MS } from "@carlnotes/contracts/time"
+import { readRedisJson, saveRedisJson } from "@carlnotes/db/redis"
+import { recordSpend } from "@carlnotes/db/spends"
 import { APICallError, generateText, Output } from "ai"
+import { CHEAP_COST_PER_MILLION_TOKENS, tokenCost } from "./budget"
 import { cheapModel, fetchLiteLLMModel } from "./models"
 import { type BuiltPrompt, fetchPromptTemplate } from "./prompts/fetch"
 import { writePrompt } from "./prompts/write"
@@ -18,6 +23,9 @@ export const MODERATION_TEXT_MAX_CHARS = 8000
 
 // how long a classification may take before it fails open, shorter than any posting request's own timeout
 const MODERATION_TIMEOUT_MS = 4000
+
+// how long a text's verdict is kept, so the same text saved again is not classified again
+const KEPT_VERDICT_MS = DAY_MS
 
 // what the text is, said in the prompt. the model reads a topic prompt as a prompt and a message as a message
 export type ModeratedTextKind =
@@ -54,7 +62,8 @@ export type ClassifyUserTextOptions = { text: string; textKind: ModeratedTextKin
 
 /**
  * Classifies one text a user wrote for other users. Returns skipped with no proxy url set, and failed on a call that
- * errors, times out, or returns a verdict outside the schema.
+ * errors, times out, or returns a verdict outside the schema. A text classified in the past day returns its kept
+ * verdict with no call, so an autosave or an edit that leaves a paragraph as it was pays for nothing.
  */
 export async function classifyUserText({ text, textKind }: ClassifyUserTextOptions): Promise<ModerationClassification> {
 	// a development stack with no proxy runs without the check, and reports nothing per call
@@ -62,10 +71,17 @@ export async function classifyUserText({ text, textKind }: ClassifyUserTextOptio
 		return { outcome: "skipped" }
 	}
 
+	// the verdict of the same text as the same kind, if it was classified in the past day
+	const verdictKey = toVerdictKey({ text, textKind })
+	const keptVerdict = moderationVerdict.safeParse(await readRedisJson<unknown>(verdictKey))
+	if (keptVerdict.success) {
+		return { outcome: "classified", verdict: keptVerdict.data }
+	}
+
 	// one cheap call on the operator's key, with the text fenced as data and nothing of it recorded in the trace
 	try {
 		const moderationPrompt = await buildModerationPrompt({ text, textKind })
-		const { output } = await generateText({
+		const { output, usage } = await generateText({
 			model: cheapModel(),
 			output: Output.object({ schema: moderationVerdict }),
 			prompt: moderationPrompt.prompt,
@@ -77,10 +93,26 @@ export async function classifyUserText({ text, textKind }: ClassifyUserTextOptio
 				recordOutputs: false,
 			},
 		})
-		return { outcome: "classified", verdict: moderationVerdict.parse(output) }
+
+		// the call is the platform's spend, so the day's total shows what moderation costs. a failed write is logged
+		const dollars = tokenCost(usage.totalTokens ?? 0, CHEAP_COST_PER_MILLION_TOKENS)
+		await recordSpend({ kind: "textModeration", dollars }).catch((error: unknown) =>
+			console.error("could not record a text moderation's spend", error),
+		)
+
+		// keep the verdict for a day, by the text's hash and never by the text
+		const verdict = moderationVerdict.parse(output)
+		await saveRedisJson({ key: verdictKey, value: verdict, ttlMs: KEPT_VERDICT_MS })
+		return { outcome: "classified", verdict }
 	} catch (error) {
 		return { outcome: "failed", error: toReportableError(error) }
 	}
+}
+
+// the key a text's verdict is kept under: a hash of what the text is and the part of it that the classification reads
+function toVerdictKey({ text, textKind }: ClassifyUserTextOptions): string {
+	const classifiedText = `${textKind}\n${text.slice(0, MODERATION_TEXT_MAX_CHARS)}`
+	return `moderation-verdict:${new Bun.CryptoHasher("sha256").update(classifiedText).digest("hex")}`
 }
 
 // keep the status code only. the SDK error can include both the request and echoed text
@@ -150,6 +182,7 @@ export async function classifyImage({ dataUrl }: ClassifyImageOptions): Promise<
 			: { isViolation: false, category: null }
 		return { outcome: "classified", verdict }
 	} catch {
+		// a response outside the schema fails the check without the response's text
 		return { outcome: "failed", error: new Error("the image moderation response could not be read") }
 	}
 }

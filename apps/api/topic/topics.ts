@@ -2,14 +2,15 @@ import { toTopicImageUrlsOrNull } from "@carlnotes/contracts/topicImages"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { toAttachmentFailureMessage } from "@carlnotes/contracts/topics"
 import { db } from "@carlnotes/db"
-import { canRateTopicMemories } from "@carlnotes/db/findingPermissions"
 import { scans } from "@carlnotes/db/schema/scans"
 import { attachments, sources, type topics } from "@carlnotes/db/schema/topics"
 import { loadTopicImageForUser } from "@carlnotes/db/topicImages"
-import { toVisibleTopicMemoryGroupRows, type VisibleTopicMemoryGroupRow } from "@carlnotes/db/topicMemories"
-import { groupTopicMemories } from "@carlnotes/db/topicMemoryGroups"
-import { toTopicRole } from "@carlnotes/db/topicPermissions"
-import { traceRequestStage } from "@carlnotes/server/monitoring"
+import {
+	toTopicMemoryGroupCount,
+	toVisibleTopicMemoryGroups,
+	type VisibleTopicMemoryGroups,
+} from "@carlnotes/db/topicMemories"
+import { traceRequestStage } from "@carlnotes/server/monitoringTracing"
 import { desc, eq, sql } from "drizzle-orm"
 import { isAllowed, loadUserAccess } from "../authorization"
 import { loadTopicChatMentions } from "../chat/mentions"
@@ -70,7 +71,7 @@ export async function loadTopicPage(
 		// topics
 		isDailyFrequencyPaused,
 		canRate,
-		topicRole,
+		canRateTopicMemories,
 		canEdit,
 		canViewOwnerDetails,
 		{ podcast, latestPodcastEpisode, topicPodcastEpisodeVideoCards, podcastEpisodeByScanId },
@@ -107,7 +108,7 @@ export async function loadTopicPage(
 			// whether the owner's daily topics outgrew their plan, and what this user may do here
 			toDailyFrequencyPaused(topic, isTopicOwner),
 			isAllowed(userId, "topic:rate", topic),
-			toTopicRole(userId, topic),
+			isAllowed(userId, "topicMemory:rate", topic),
 			isAllowed(userId, "topic:edit", topic),
 			isAllowed(userId, "topic:viewOwnerDetails", topic),
 			// the topic's podcast, and each scan's podcast episode for the scan history
@@ -188,8 +189,8 @@ export async function loadTopicPage(
 		attachments: attachmentRows,
 		sources: visibleTopicSourceRows.flatMap(toTopicSourceSummary),
 		scans: scanHistory,
-		topicMemoryCount: groupTopicMemories(scanRows[0]?.topicMemoryGroupRows ?? []).length,
-		canRateTopicMemories: canRateTopicMemories(topicRole),
+		topicMemoryCount: toTopicMemoryGroupCount(scanRows[0]?.topicMemoryGroups),
+		canRateTopicMemories,
 		podcast,
 		topicPodcastEpisodeVideoCards,
 		latestPodcastEpisode,
@@ -273,11 +274,11 @@ type TopicScanRow = Pick<
 async function loadTopicScanRows(
 	{ id: topicId, visibility }: Pick<typeof topics.$inferSelect, "id" | "visibility">,
 	userId: string | null,
-): Promise<(TopicScanRow & { topicMemoryGroupRows: VisibleTopicMemoryGroupRow[] | null })[]> {
+): Promise<(TopicScanRow & { topicMemoryGroups: VisibleTopicMemoryGroups | null })[]> {
 	// read the visible group inputs once with the newest scan
-	const groupRows = sql<VisibleTopicMemoryGroupRow[] | null>`case when
+	const topicMemoryGroups = sql<VisibleTopicMemoryGroups | null>`case when
 		row_number() over (order by ${scans.startedAt} desc, ${scans.id}) = 1
-		then ${toVisibleTopicMemoryGroupRows({ topicId, userId, visibility })} end`
+		then ${toVisibleTopicMemoryGroups({ topicId, userId, visibility })} end`
 	return db
 		.select({
 			id: scans.id,
@@ -291,7 +292,7 @@ async function loadTopicScanRows(
 			cost: scans.cost,
 			error: scans.error,
 			scanSummary: scans.scanSummary,
-			topicMemoryGroupRows: groupRows,
+			topicMemoryGroups,
 		})
 		.from(scans)
 		.where(eq(scans.topicId, topicId))

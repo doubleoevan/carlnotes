@@ -5,7 +5,7 @@ import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connect
 import * as monthlyBudgetCutoffs from "@carlnotes/db/monthlyBudgetCutoffs"
 import * as redisRateLimits from "@carlnotes/db/redisRateLimits"
 import * as storage from "@carlnotes/db/store"
-import * as temporalClient from "@carlnotes/pipeline/temporalClient"
+import * as topicVideoWorkflowClient from "@carlnotes/pipeline/topicVideo/topicVideoWorkflowClient"
 import * as viewerCounts from "../counts/viewerCounts"
 import { toSignedInApp } from "../testSession"
 import { toPlayToken } from "./playTokens"
@@ -58,7 +58,7 @@ function spyFilmRequest(): { count: ReturnType<typeof spyOn>; rebuild: ReturnTyp
 	spyOn(redisRateLimits, "takeRateLimitSlot").mockResolvedValue(0)
 	spyOn(monthlyBudgetCutoffs, "isMonthlyBudgetCutoffPassed").mockResolvedValue(false)
 	const count = spyOn(viewerCounts, "countWithinRateLimit").mockResolvedValue(undefined)
-	const rebuild = spyOn(temporalClient, "startTopicVideoRebuild").mockResolvedValue(undefined)
+	const rebuild = spyOn(topicVideoWorkflowClient, "startTopicVideoRebuild").mockResolvedValue(undefined)
 	return { count, rebuild }
 }
 
@@ -179,22 +179,29 @@ test("opaque frames can read captions only with a valid play token and continuin
 	const original = Bun.env.BETTER_AUTH_SECRET
 	Bun.env.BETTER_AUTH_SECRET = "caption-test-secret"
 	try {
-		// The episode lookup models an authorized reader until membership is revoked.
+		// the podcast episode lookup returns an allowed reader until their membership is revoked
 		const access = spyOn(episodeRows, "loadAccessiblePodcastEpisode").mockResolvedValue({ podcastEpisodeRow, topic })
 		stubConnectionPool(() => [toReadyFilmRow("image-new")])
 		spyOn(storage, "attachmentStream").mockImplementation(() => new Blob(["WEBVTT"]).stream())
+
+		// an opaque frame's caption request, with and without a play token
 		const app = toSignedInApp(topicVideosRoute, "listener")
 		const uri = "/episodes/episode-1/captions.vtt"
 		const request = (suffix: string) => app.request(uri + suffix, { headers: { Origin: "null" } })
 		const token = encodeURIComponent(toPlayToken({ podcastEpisodeId: "episode-1", userId: "reader" }))
-		expect((await request("?play=" + token)).headers.get("Access-Control-Allow-Origin")).toBe("null")
+
+		// only a valid token opens the captions to the frame
+		expect((await request(`?play=${token}`)).headers.get("Access-Control-Allow-Origin")).toBe("null")
 		expect((await request("")).headers.has("Access-Control-Allow-Origin")).toBe(false)
 		expect((await request("?play=invalid")).status).toBe(404)
+
+		// a revoked membership closes them, token or not
 		access.mockResolvedValue(null)
-		const denied = await request("?play=" + token)
+		const denied = await request(`?play=${token}`)
 		expect(denied.status).toBe(404)
 		expect(denied.headers.has("Access-Control-Allow-Origin")).toBe(false)
 	} finally {
+		// restore the auth secret for the tests that follow
 		if (original === undefined) {
 			delete Bun.env.BETTER_AUTH_SECRET
 		} else {

@@ -8,16 +8,20 @@ import {
 	PERSONAL_SOURCES_TASK_QUEUE,
 } from "@carlnotes/contracts/personalSourcesWork"
 import {
-	TOPIC_VIDEO_BACKFILL_TASK_QUEUE,
-	TOPIC_VIDEO_BACKFILL_WORKFLOW,
-	TOPIC_VIDEO_BACKFILL_WORKFLOW_ID,
-	TOPIC_VIDEO_REBUILD_WORKFLOW,
-	TOPIC_VIDEO_TASK_QUEUE,
-	type TopicVideoBackfillSummary,
-	toTopicVideoRebuildWorkflowId,
-} from "@carlnotes/contracts/topicVideoWork"
-import { Client, Connection, WorkflowExecutionAlreadyStartedError } from "@temporalio/client"
+	PODCAST_EPISODE_TASK_QUEUE,
+	PODCAST_EPISODE_WORKFLOW,
+	toPodcastEpisodeWorkflowId,
+} from "@carlnotes/contracts/podcastEpisodeWork"
+import {
+	Client,
+	Connection,
+	isGrpcDeadlineError,
+	isGrpcServiceError,
+	WorkflowExecutionAlreadyStartedError,
+	WorkflowNotFoundError,
+} from "@temporalio/client"
 import { CHAT_MENTION_PUSH_WORKFLOW, PUSH_TASK_QUEUE } from "./pushWorkflows"
+import type { ScanTrigger } from "./scanWorkflowClient"
 
 // the task queue the attachment worker polls, and the workflow it runs started by name
 export const ATTACHMENT_TASK_QUEUE = "attachment-processing"
@@ -28,7 +32,6 @@ export const SOURCE_TASK_QUEUE = "source-screening"
 const SOURCE_WORKFLOW = "screenSourceWorkflow"
 
 // a Topic Post Discussion records on the podcast recordings' queue, which the worker's recording slots limit
-const RECORDING_TASK_QUEUE = "episode-recordings"
 const TOPIC_POST_DISCUSSION_WORKFLOW = "recordTopicPostDiscussionWorkflow"
 
 // the topic post workflows' queue and names
@@ -122,9 +125,11 @@ type StartWorkflowOnceOptions = {
 	workflowIdReusePolicy?: "ALLOW_DUPLICATE_FAILED_ONLY"
 }
 
-// start one workflow under its id, under the call deadline. a workflow already started under that id needs no second
-// start, and anything else is a real failure
-async function startWorkflowOnce({ workflow, ...workflowOptions }: StartWorkflowOnceOptions): Promise<void> {
+/**
+ * Starts one workflow under its id, under the call deadline. A workflow already started under that id needs no second
+ * start, and anything else is a real failure.
+ */
+export async function startWorkflowOnce({ workflow, ...workflowOptions }: StartWorkflowOnceOptions): Promise<void> {
 	const client = await getClient()
 	try {
 		await withClientDeadline(client, () => client.workflow.start(workflow, workflowOptions))
@@ -136,6 +141,13 @@ async function startWorkflowOnce({ workflow, ...workflowOptions }: StartWorkflow
 	}
 }
 
+/**
+ * Returns the workflow id of an attachment's processing.
+ */
+export function toAttachmentWorkflowId(attachmentId: string): string {
+	return `attachment-${attachmentId}`
+}
+
 // start the durable processing workflow for a freshly stored attachment
 export async function startAttachmentWorkflow(attachmentId: string): Promise<void> {
 	// the workflow id is derived from the attachment id
@@ -143,7 +155,7 @@ export async function startAttachmentWorkflow(attachmentId: string): Promise<voi
 	await withClientDeadline(client, () =>
 		client.workflow.start(ATTACHMENT_WORKFLOW, {
 			taskQueue: ATTACHMENT_TASK_QUEUE,
-			workflowId: `attachment-${attachmentId}`,
+			workflowId: toAttachmentWorkflowId(attachmentId),
 			args: [attachmentId],
 		}),
 	)
@@ -184,6 +196,13 @@ export function startTopicPostSummaryWorkflow(topicPostId: string): Promise<void
 type StartTopicPostDiscussionWorkflowOptions = { discussionId: string; hint?: string }
 
 /**
+ * Returns the workflow id of a Topic Post Discussion's recording.
+ */
+export function toTopicPostDiscussionWorkflowId(discussionId: string): string {
+	return `topic-post-discussion-${discussionId}`
+}
+
+/**
  * Starts a Topic Post Discussion's recording, named by its row so a second start for the row is ignored.
  */
 export async function startTopicPostDiscussionWorkflow({
@@ -192,9 +211,33 @@ export async function startTopicPostDiscussionWorkflow({
 }: StartTopicPostDiscussionWorkflowOptions): Promise<void> {
 	await startWorkflowOnce({
 		workflow: TOPIC_POST_DISCUSSION_WORKFLOW,
-		taskQueue: RECORDING_TASK_QUEUE,
-		workflowId: `topic-post-discussion-${discussionId}`,
+		taskQueue: PODCAST_EPISODE_TASK_QUEUE,
+		workflowId: toTopicPostDiscussionWorkflowId(discussionId),
 		args: [{ discussionId, hint }],
+	})
+}
+
+// the Scan whose Podcast Episode a recording is, its Topic, the user that the Scan billed, and what asked for the Scan
+export type RecordPodcastEpisodeWorkflowInput = {
+	scanId: string
+	topicId: string
+	billedUserId: string
+	trigger: ScanTrigger
+}
+
+/**
+ * Starts a Scan's podcast episode recording from outside its Scan's workflow, as the reaper does for a row whose
+ * workflow is gone: the same workflow, id, queue, and input as the Scan's own child start. A recording that runs under
+ * the id is left alone.
+ */
+export async function startPodcastEpisodeRecordingWorkflow(
+	recordPodcastEpisodeWorkflowInput: RecordPodcastEpisodeWorkflowInput,
+): Promise<void> {
+	await startWorkflowOnce({
+		workflow: PODCAST_EPISODE_WORKFLOW,
+		taskQueue: PODCAST_EPISODE_TASK_QUEUE,
+		workflowId: toPodcastEpisodeWorkflowId(recordPodcastEpisodeWorkflowInput.scanId),
+		args: [recordPodcastEpisodeWorkflowInput],
 	})
 }
 
@@ -209,6 +252,13 @@ function startTopicPostWorkflow(workflow: string, workflowId: string, topicPostI
 }
 
 /**
+ * Returns the workflow id of a topic image render.
+ */
+export function toTopicImageWorkflowId(renderId: string): string {
+	return `topic-image-${renderId}`
+}
+
+/**
  * Starts a topic image render, named by its render row so a second start for the row is ignored.
  */
 export async function startTopicImageWorkflow({
@@ -219,7 +269,7 @@ export async function startTopicImageWorkflow({
 	await startWorkflowOnce({
 		workflow: TOPIC_IMAGE_WORKFLOW,
 		taskQueue: TOPIC_IMAGE_TASK_QUEUE,
-		workflowId: `topic-image-${renderId}`,
+		workflowId: toTopicImageWorkflowId(renderId),
 		args: [{ topicId, renderId, imagePrompt }],
 	})
 }
@@ -257,57 +307,6 @@ export async function startTopicImageBackfillWorkflow({
 }
 
 /**
- * Starts the rebuild of a podcast episode's film for its current image, named by the podcast episode so a second
- * start while one runs is ignored.
- */
-export async function startTopicVideoRebuild(podcastEpisodeId: string): Promise<void> {
-	await startWorkflowOnce({
-		workflow: TOPIC_VIDEO_REBUILD_WORKFLOW,
-		taskQueue: TOPIC_VIDEO_TASK_QUEUE,
-		workflowId: toTopicVideoRebuildWorkflowId(podcastEpisodeId),
-		args: [{ podcastEpisodeId }],
-	})
-}
-
-// the started or joined film backfill, and a call that waits for its summary. it is a call, so a worker that only
-// starts the backfill opens no long-poll
-export type TopicVideoBackfillStart = {
-	whenFinished: () => Promise<TopicVideoBackfillSummary>
-}
-
-/**
- * Starts the film backfill at a concurrency, or joins the one running.
- */
-export async function startTopicVideoBackfillWorkflow(
-	concurrency: number,
-	selectedEpisodeId?: string,
-): Promise<TopicVideoBackfillStart> {
-	// A selected upgrade joins its own retry independently of the boot backfill.
-	const workflowId = selectedEpisodeId
-		? `${TOPIC_VIDEO_BACKFILL_WORKFLOW_ID}-v4-${selectedEpisodeId}`
-		: TOPIC_VIDEO_BACKFILL_WORKFLOW_ID
-	const client = await getClient()
-	const toBackfillStart = (): TopicVideoBackfillStart => ({
-		whenFinished: () => client.workflow.getHandle(workflowId).result(),
-	})
-	try {
-		await withClientDeadline(client, () =>
-			client.workflow.start(TOPIC_VIDEO_BACKFILL_WORKFLOW, {
-				taskQueue: TOPIC_VIDEO_BACKFILL_TASK_QUEUE,
-				workflowId,
-				args: [selectedEpisodeId ? { concurrency: 1, selectedEpisodeId } : { concurrency }],
-			}),
-		)
-	} catch (error) {
-		// a backfill already running is joined, and anything else is a real failure
-		if (!(error instanceof WorkflowExecutionAlreadyStartedError)) {
-			throw error
-		}
-	}
-	return toBackfillStart()
-}
-
-/**
  * Starts the push of a room message's chat mentions, named by the message so a second start for it is ignored.
  */
 export async function startChatMentionPushWorkflow(chatMessageId: number): Promise<void> {
@@ -319,9 +318,75 @@ export async function startChatMentionPushWorkflow(chatMessageId: number): Promi
 	})
 }
 
+/**
+ * Returns whether the workflow under an id still runs. A workflow that closed however it ended, or that the server
+ * does not hold, does not run. Throws an error if Temporal cannot be read, so a caller never takes an unreachable
+ * server for a missing workflow.
+ */
+export async function isWorkflowRunning(workflowId: string): Promise<boolean> {
+	const client = await getClient()
+	try {
+		// the latest run under the id, read under the call deadline
+		const { status } = await withClientDeadline(client, () => client.workflow.getHandle(workflowId).describe())
+		return status.name === "RUNNING"
+	} catch (error) {
+		// only a missing workflow is a result, and anything else is a failed read
+		if (error instanceof WorkflowNotFoundError) {
+			return false
+		}
+		throw error
+	}
+}
+
+/**
+ * Terminates the workflow that runs under an id, with the reason in its history. A workflow that already closed, or is
+ * not found, has nothing to terminate.
+ */
+export async function terminateWorkflow(workflowId: string, reason: string): Promise<void> {
+	const client = await getClient()
+	try {
+		await withClientDeadline(client, () => client.workflow.getHandle(workflowId).terminate(reason))
+	} catch (error) {
+		// a workflow that is gone has already stopped
+		if (!(error instanceof WorkflowNotFoundError)) {
+			throw error
+		}
+	}
+}
+
 // run one client call under the call deadline, so a server that never answers fails the call instead of the request
 export function withClientDeadline<Result>(client: Client, runCall: () => Promise<Result>): Promise<Result> {
 	return client.connection.withDeadline(Date.now() + CLIENT_CALL_TIMEOUT_MS, runCall)
+}
+
+// the gRPC status of a call that reached no Temporal server able to take it
+const GRPC_UNAVAILABLE_STATUS = 14
+
+/**
+ * The failure of a call that could not connect to the Temporal server at all.
+ */
+export class TemporalConnectError extends Error {
+	constructor(cause: unknown) {
+		super("could not connect to the Temporal server", { cause })
+		this.name = "TemporalConnectError"
+	}
+}
+
+/**
+ * Returns whether a Temporal call failed because the server could not be reached in time: a failed connect, an
+ * unavailable server, or a deadline, on the error or on its cause. The next call of the same run would fail the same way.
+ */
+export function isTemporalTransportFailure(error: unknown): boolean {
+	if (error instanceof TemporalConnectError || isGrpcDeadlineError(error)) {
+		return true
+	}
+	// an unavailable server, on the error or on any of its causes, as a start wraps the gRPC error
+	for (let failure = error; failure instanceof Error; failure = failure.cause) {
+		if (isGrpcServiceError(failure) && failure.code === GRPC_UNAVAILABLE_STATUS) {
+			return true
+		}
+	}
+	return false
 }
 
 // the reused Temporal client instance, connected to the TEMPORAL_ADDRESS endpoint on first use
@@ -332,7 +397,7 @@ export function getClient(): Promise<Client> {
 		.then((connection) => new Client({ connection }))
 		.catch((error: unknown) => {
 			clientPromise = undefined
-			throw error
+			throw new TemporalConnectError(error)
 		})
 	return clientPromise
 }

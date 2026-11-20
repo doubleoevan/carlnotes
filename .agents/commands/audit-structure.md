@@ -332,7 +332,8 @@ Check for:
      `screen-source-activities.ts`, and `stage-timeouts.ts` (now `worker/temporalClient.ts`, `runTopicScan.ts`,
      `runTopicScanActivities.ts`, `processAttachment.ts`, `processAttachmentActivities.ts`, `screenSource.ts`,
      `screenSourceActivities.ts`, and `stageTimeouts.ts`)
-   - `monthlySpendDollars` in `api/authorization.ts` (now in `db/quotas.ts`, re-exported by `api/authorization.ts`), and
+   - `monthlySpendDollars` in `api/authorization.ts` (then `db/quotas.ts`, now `db/recordedSpend.ts`, re-exported by
+     `api/authorization.ts`), and
      `updateTopicFieldsPayload.shape` as a tool's input (now `toUpdateTopicFieldsShape()` in `api/tool/topicTools.ts`)
    - `isUniqueViolation` in `api/usernames.ts` (now in `db/index.ts`)
    - `loadUserLiteLLMKey` (now `loadOrProvisionUserLiteLLMKey` in `worker/litellm.ts`), and `ToolCaller`'s
@@ -1049,6 +1050,23 @@ Check for:
      `FILMS_NAME`, `PodcastEpisodesCardFilmList`, `PodcastEpisodeRow`'s `filmPlay`, the web route's `filmSeason`, and
      `apps/web/src/components/podcast/PodcastEpisodesCard.films.test.tsx` (now the topic read's
      `topicPodcastEpisodeVideoCards` and `TopicVideoSection`'s `FilmCard`)
+   - close-out, close out, and closed out for what the sweep does with a row left in progress (now reaper, reap,
+     and reaped), and the `stale-work-close-out` capability folder of the `launch-hardening` change (now
+     `stale-work-reaper`), with `failStaleScans` in `packages/pipeline/staleScans.ts` (now `reapStaleScans`) and
+     `RECORDING_TASK_QUEUE` in `packages/pipeline/temporalClient.ts` (now `PODCAST_EPISODE_TASK_QUEUE` in
+     `packages/contracts/podcastEpisodeWork.ts`, which the recording workflow file no longer exports)
+   - `apps/api/share/podcastCover.ts`, `podcastCoverBands.ts`, `podcastEpisodeCover.ts`, and their tests (now the
+     same names in `packages/pipeline/`), `toPodcastCoverJpeg` (now `toPodcastCoverJpegs`), `loadPodcastCover` in
+     `apps/api/podcast/podcastFeeds.ts` (now `packages/pipeline/podcastCoverRows.ts`), and
+     `apps/api/share/fixtures/home-espresso-lite.jpg` (now `packages/pipeline/fixtures/`)
+   - `toScheduledTopicFilter(now)` with its own subquery (now `toScheduledTopicFilter(now, lastCompletedScanStartedAt)`
+     over `toLastCompletedScans()` in `apps/worker/scheduledTopicFilter.ts`)
+   - `loadUpdateCount` (now `loadUpdateCounts` in `packages/db/updateCounts.ts`), `toVisibleTopicMemoryGroupRows` (now
+     `toVisibleTopicMemoryGroups` in `packages/db/topicMemories.ts`), `recordTopicMemorySpend` (now
+     `newTopicMemorySpend`, `chargeTopicMemorySpend`, and `saveTopicMemorySpend` in
+     `packages/pipeline/topicMemorySpend.ts`), `saveTopicMemorySubject` (now `saveTopicMemorySubjects`),
+     `ScanQueueDescription` (now `TaskQueueDescription`), `MarkTopicVideoFailedInput` (removed), and
+     `findingIdsToFilter` in `packages/pipeline/review/index.ts` (now `packages/pipeline/review/maxTopicFindings.ts`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

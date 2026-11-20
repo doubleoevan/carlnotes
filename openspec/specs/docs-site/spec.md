@@ -118,19 +118,24 @@ The app image SHALL build the docs in its build stage and copy the built output 
 
 ### Requirement: The app server serves the built docs under /docs ahead of the ui
 
-The app service SHALL serve `apps/docs/dist` under `/docs` through Hono's Bun `serveStatic`, from the same process that serves the API and the ui. Because Astro's `base` prefixes generated links without nesting the build output, the handler SHALL rewrite the incoming request path to strip the `/docs` prefix before resolving a file.
+The app service and the web service SHALL each serve `apps/docs/dist` under `/docs` through Hono's Bun `serveStatic`,
+from the same process that serves the API and the ui, so routing `/docs` to either service gives the same response.
+Because Astro's `base` prefixes generated links without nesting the build output, the handler SHALL rewrite the
+incoming request path to strip the `/docs` prefix before resolving a file.
 
-The docs handler SHALL sit ahead of the ui's built client files and the ui's server handler, so no `/docs` path is rendered by the ui.
+The docs handler SHALL sit ahead of the ui's built client files and the ui's server handler, so no `/docs` path is
+rendered by the ui.
 
 #### Scenario: A docs page is served
 
 - **WHEN** a user opens `/docs/how-carlnotes-works/`
-- **THEN** the app responds 200 with that page's built HTML from `apps/docs/dist`
+- **THEN** the service that receives the request responds 200 with that page's built HTML from `apps/docs/dist`
 
 #### Scenario: A docs asset is served
 
 - **WHEN** a request arrives for a built docs asset under `/docs/_astro/`
-- **THEN** the app responds 200 with that file's bytes, the `/docs` prefix having been stripped to resolve it
+- **THEN** the service that receives the request responds 200 with that file's bytes, the `/docs` prefix having been
+  stripped to resolve it
 
 #### Scenario: A docs path never reaches the ui
 

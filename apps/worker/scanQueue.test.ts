@@ -1,20 +1,17 @@
-// scan queue tests: the undispatched Scans the sweep dispatches, the waiting scans it starts, the queue report, the
-// backlog crossing, and the scan dispatch limit
+// scan queue dispatch tests: the undispatched Scans the sweep dispatches, the waiting scans it starts, the dispatch
+// that cannot reach Temporal, and the waiting scans that a scan dispatch limit of zero still starts
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import { SCHEDULED_SCAN_SPENT_BUDGET_REASON } from "@carlnotes/contracts/scanFailure"
 import { restoreConnectionPool, stubConnectionPool, toTableRow } from "@carlnotes/db/connectionPoolStub"
 import type { DailySpendCutoffState } from "@carlnotes/db/dailySpendCutoffs"
 import { toDailySpendCutoffState } from "@carlnotes/db/dailySpendCutoffTestFixtures"
-import * as quotas from "@carlnotes/db/quotas"
 import { scans } from "@carlnotes/db/schema/scans"
 import * as litellm from "@carlnotes/models/litellm"
 import * as scan from "@carlnotes/pipeline/scan"
-import { toScanBacklogCrossing } from "@carlnotes/pipeline/scanWorkflowClient"
+import { TemporalConnectError } from "@carlnotes/pipeline/temporalClient"
 import * as monitoring from "@carlnotes/server/monitoring"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
-import { reportScanQueue, startUndispatchedScans, toDispatchableScanCount } from "./scanQueue"
-import { startScheduledTopicScans } from "./schedule"
-import { toScheduledTopic } from "./scheduledTopicTestFixtures"
+import { startUndispatchedScans, toDispatchableScanCount } from "./scanQueue"
 
 // each test starts with the scan dispatch limit unset
 const restoreEnvSettings = saveEnvSettings(["SCAN_DISPATCH_LIMIT"])
@@ -273,82 +270,29 @@ test("undispatched Scans past the dispatchable count wait for the next sweep", a
 // a Scan queue with a worker polling it and nothing waiting
 const HEALTHY_SCAN_QUEUE = { pollerCount: 1, backlogCount: 0, oldestBacklogAgeMs: 0 }
 
-// the sweep reports a queue nothing polls, and a backlog whose oldest Scan waited past 15 minutes
-test("reportScanQueue reports a queue nothing polls and a backlog past its limit", async () => {
-	const consoleErrorSpy = spyOn(console, "error").mockImplementation(() => {})
-	await reportScanQueue(async () => HEALTHY_SCAN_QUEUE)
-	expect(consoleErrorSpy).not.toHaveBeenCalled()
-
-	// a queue nothing polls
-	await reportScanQueue(async () => ({ ...HEALTHY_SCAN_QUEUE, pollerCount: 0 }))
-	expect(String(consoleErrorSpy.mock.calls.at(-1)?.[0])).toContain("no temporal worker is polling the scan queue")
-
-	// a queue whose oldest Scan has waited 20 minutes
-	await reportScanQueue(async () => ({ pollerCount: 1, backlogCount: 12, oldestBacklogAgeMs: 20 * 60 * 1000 }))
-	expect(consoleErrorSpy.mock.calls.at(-1)).toEqual([
-		"a scan waited over 15 minutes for a slot",
-		{ backlogCount: 12, oldestBacklogAgeMs: 20 * 60 * 1000 },
-	])
-})
-
-// a describe that fails is logged and reads as no description, which leaves the sweep the whole dispatch limit, and the
-// sweep goes on
-test("reportScanQueue never fails the sweep", async () => {
-	const consoleErrorSpy = spyOn(console, "error").mockImplementation(() => {})
-	await expect(reportScanQueue(() => Promise.reject(new Error("temporal unreachable")))).resolves.toBeNull()
-	expect(consoleErrorSpy.mock.calls[0]?.[0]).toBe("could not read the scan task queue")
-})
-
-// an older server gives a depth and no age, so its backlog is never reported as past the limit
-test("toScanBacklogCrossing needs a known age past 15 minutes", () => {
-	const backedUpQueue = { pollerCount: 1, backlogCount: 40 }
-	expect(toScanBacklogCrossing({ ...backedUpQueue, oldestBacklogAgeMs: null })).toBeNull()
-	expect(toScanBacklogCrossing({ ...backedUpQueue, oldestBacklogAgeMs: 15 * 60 * 1000 })).toBeNull()
-	expect(toScanBacklogCrossing({ ...backedUpQueue, oldestBacklogAgeMs: 16 * 60 * 1000 })?.condition).toBe(
-		"scan-backlog",
+// every later dispatch would wait out its own deadline against the same server, so the first such failure ends them
+test("a dispatch that cannot reach Temporal is the sweep's last, and the rows after it stay undispatched", async () => {
+	// three orphaned rows, a start that never connects, and a quiet console
+	stubConnectionPool(({ text }) =>
+		text.startsWith("select")
+			? ["scan-1", "scan-2", "scan-3"].map((id) => toUndispatchedScanRow({ id, isManual: true }))
+			: [["scan-1"]],
 	)
-})
-
-// the dispatchable scan count is the limit minus the backlog, never below zero, and the whole limit for an unread queue
-test("toDispatchableScanCount subtracts the backlog from the limit and keeps the limit for an unread queue", () => {
-	expect(toDispatchableScanCount({ pollerCount: 2, backlogCount: 30, oldestBacklogAgeMs: null })).toBe(70)
-	expect(toDispatchableScanCount({ pollerCount: 2, backlogCount: 500, oldestBacklogAgeMs: null })).toBe(0)
-	expect(toDispatchableScanCount(null)).toBe(100)
-})
-
-// the limit is read on every sweep, so a set value replaces the default and zero leaves nothing to start
-test("toDispatchableScanCount reads the scan dispatch limit that is set, and zero leaves no Scan to start", () => {
-	// a limit of 40 with a backlog of 30 leaves 10
-	Bun.env.SCAN_DISPATCH_LIMIT = "40"
-	expect(toDispatchableScanCount({ pollerCount: 2, backlogCount: 30, oldestBacklogAgeMs: null })).toBe(10)
-
-	// a limit of zero leaves none, with an empty queue and with an unread one
-	Bun.env.SCAN_DISPATCH_LIMIT = "0"
-	expect(toDispatchableScanCount(HEALTHY_SCAN_QUEUE)).toBe(0)
-	expect(toDispatchableScanCount(null)).toBe(0)
-})
-
-// a scan dispatch limit of zero starts no scheduled Scan and writes no Scan row, so every Topic stays scheduled
-test("a scan dispatch limit of zero starts no scheduled Scan, and every Topic stays scheduled", async () => {
-	// 40 scheduled Topics of one owner with scans left today and a spent key budget, and an empty scan queue
-	Bun.env.SCAN_DISPATCH_LIMIT = "0"
-	const scheduledTopics = Array.from({ length: 40 }, (_, i) => toScheduledTopic(`topic-${i}`))
-	spyOn(quotas, "scansRemainingToday").mockResolvedValue(1000)
-	const startTopicScanSpy = spyOn(scan, "startTopicScan").mockResolvedValue({ status: "running" })
-	const sentQueries = stubConnectionPool()
-
-	// start the scheduled Topics' Scans as the sweep does
-	const topicSweepSummary = await startScheduledTopicScans({
-		scheduledTopics,
-		dailyTopicIdsByOwner: new Map(),
-		budgetExhaustedOwnerIds: new Set(["owner-1"]),
-		dispatchableScanCount: toDispatchableScanCount(HEALTHY_SCAN_QUEUE),
+	spyOn(console, "log").mockImplementation(() => {})
+	spyOn(console, "error").mockImplementation(() => {})
+	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
+	const connectFailure = new TemporalConnectError(new Error("Failed to connect before the deadline"))
+	const scanTopicSpy = spyOn(scan, "scanTopic").mockRejectedValue(connectFailure)
+	await startUndispatchedScans({
+		cutoffState: UNAVAILABLE_CUTOFF_STATE,
+		dispatchableScanCount: DISPATCHABLE_SCAN_COUNT,
 	})
 
-	// no Scan started, every Topic is left for a later sweep, and no Scan row was read or written
-	expect(startTopicScanSpy).not.toHaveBeenCalled()
-	expect(topicSweepSummary).toMatchObject({ scheduled: 40, started: 0, skippedOverBacklog: 40, skippedOverBudget: 0 })
-	expect(sentQueries).toEqual([])
+	// one attempt and one report
+	expect(scanTopicSpy).toHaveBeenCalledTimes(1)
+	expect(reportErrorSpy.mock.calls.map((reportCall) => reportCall.slice(1))).toEqual([
+		["scheduled-scan", { scanId: "scan-1" }],
+	])
 })
 
 // a scan dispatch limit of zero leaves the waiting scans to the first scan dispatch limit

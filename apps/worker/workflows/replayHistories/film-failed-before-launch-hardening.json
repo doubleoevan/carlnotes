@@ -1,0 +1,307 @@
+{
+	"events": [
+		{
+			"eventId": "1",
+			"eventTime": "2036-11-17T05:02:55.973Z",
+			"eventType": "EVENT_TYPE_WORKFLOW_EXECUTION_STARTED",
+			"workflowExecutionStartedEventAttributes": {
+				"workflowType": {
+					"name": "renderTopicPodcastEpisodeVideoWorkflow"
+				},
+				"taskQueue": {
+					"name": "before-film-failed",
+					"kind": "TASK_QUEUE_KIND_NORMAL"
+				},
+				"input": {
+					"payloads": [
+						{
+							"metadata": {
+								"encoding": "anNvbi9wbGFpbg=="
+							},
+							"data": "eyJwb2RjYXN0RXBpc29kZUlkIjoiZXBpc29kZS0xIiwicmVuZGVyVmVyc2lvbiI6NH0="
+						}
+					]
+				},
+				"workflowExecutionTimeout": "315360000s",
+				"workflowRunTimeout": "315360000s",
+				"workflowTaskTimeout": "10s",
+				"originalExecutionRunId": "5e2be068-6276-4aed-a6b3-e2b33912e7e0",
+				"identity": "history-recorder",
+				"firstExecutionRunId": "5e2be068-6276-4aed-a6b3-e2b33912e7e0",
+				"attempt": 1,
+				"firstWorkflowTaskBackoff": "0s",
+				"header": {}
+			}
+		},
+		{
+			"eventId": "2",
+			"eventTime": "2036-11-17T05:02:55.973Z",
+			"eventType": "EVENT_TYPE_WORKFLOW_TASK_SCHEDULED",
+			"workflowTaskScheduledEventAttributes": {
+				"taskQueue": {
+					"name": "before-film-failed",
+					"kind": "TASK_QUEUE_KIND_NORMAL"
+				},
+				"startToCloseTimeout": "10s",
+				"attempt": 1
+			}
+		},
+		{
+			"eventId": "3",
+			"eventTime": "2036-11-17T05:02:55.973Z",
+			"eventType": "EVENT_TYPE_WORKFLOW_TASK_STARTED",
+			"workflowTaskStartedEventAttributes": {
+				"scheduledEventId": "2",
+				"identity": "history-recorder",
+				"historySizeBytes": "354"
+			}
+		},
+		{
+			"eventId": "4",
+			"eventTime": "2036-11-17T05:02:55.986Z",
+			"eventType": "EVENT_TYPE_WORKFLOW_TASK_COMPLETED",
+			"workflowTaskCompletedEventAttributes": {
+				"scheduledEventId": "2",
+				"identity": "history-recorder",
+				"binaryChecksum": "@temporalio/worker@1.25.0+c211cb1b85d30785e48fb82490c66ab0d79b18e48214b76bfd5c2d34da4f46c2",
+				"sdkMetadata": {
+					"coreUsedFlags": [3, 2, 1, 4],
+					"sdkName": "temporal-typescript",
+					"sdkVersion": "1.25.0"
+				},
+				"meteringMetadata": {}
+			}
+		},
+		{
+			"eventId": "5",
+			"eventTime": "2036-11-17T05:02:55.986Z",
+			"eventType": "EVENT_TYPE_ACTIVITY_TASK_SCHEDULED",
+			"activityTaskScheduledEventAttributes": {
+				"activityId": "1",
+				"activityType": {
+					"name": "renderTopicPodcastEpisodeVideoActivity"
+				},
+				"taskQueue": {
+					"name": "before-film-failed",
+					"kind": "TASK_QUEUE_KIND_NORMAL"
+				},
+				"header": {},
+				"input": {
+					"payloads": [
+						{
+							"metadata": {
+								"encoding": "anNvbi9wbGFpbg=="
+							},
+							"data": "eyJwb2RjYXN0RXBpc29kZUlkIjoiZXBpc29kZS0xIiwicmVuZGVyVmVyc2lvbiI6NH0="
+						}
+					]
+				},
+				"scheduleToCloseTimeout": "315360000s",
+				"scheduleToStartTimeout": "315360000s",
+				"startToCloseTimeout": "14400s",
+				"heartbeatTimeout": "600s",
+				"workflowTaskCompletedEventId": "3",
+				"retryPolicy": {
+					"initialInterval": "1s",
+					"backoffCoefficient": 2,
+					"maximumInterval": "100s",
+					"maximumAttempts": 3
+				}
+			}
+		},
+		{
+			"eventId": "6",
+			"eventTime": "2036-11-17T05:02:58.990Z",
+			"eventType": "EVENT_TYPE_ACTIVITY_TASK_STARTED",
+			"activityTaskStartedEventAttributes": {
+				"scheduledEventId": "5",
+				"identity": "history-recorder",
+				"attempt": 3
+			}
+		},
+		{
+			"eventId": "7",
+			"eventTime": "2036-11-17T05:02:58.990Z",
+			"eventType": "EVENT_TYPE_ACTIVITY_TASK_FAILED",
+			"activityTaskFailedEventAttributes": {
+				"failure": {
+					"message": "ffmpeg exited with code 1",
+					"source": "TypeScriptSDK",
+					"stackTrace": "",
+					"applicationFailureInfo": {
+						"type": "Error"
+					}
+				},
+				"scheduledEventId": "5",
+				"startedEventId": "6",
+				"identity": "history-recorder",
+				"retryState": "RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED"
+			}
+		},
+		{
+			"eventId": "8",
+			"eventTime": "2036-11-17T05:02:58.990Z",
+			"eventType": "EVENT_TYPE_WORKFLOW_TASK_SCHEDULED",
+			"workflowTaskScheduledEventAttributes": {
+				"taskQueue": {
+					"name": "before-film-failed",
+					"kind": "TASK_QUEUE_KIND_NORMAL"
+				},
+				"startToCloseTimeout": "10s",
+				"attempt": 1
+			}
+		},
+		{
+			"eventId": "9",
+			"eventTime": "2036-11-17T05:02:58.990Z",
+			"eventType": "EVENT_TYPE_WORKFLOW_TASK_STARTED",
+			"workflowTaskStartedEventAttributes": {
+				"scheduledEventId": "8",
+				"identity": "history-recorder",
+				"historySizeBytes": "1242"
+			}
+		},
+		{
+			"eventId": "10",
+			"eventTime": "2036-11-17T05:02:58.994Z",
+			"eventType": "EVENT_TYPE_WORKFLOW_TASK_COMPLETED",
+			"workflowTaskCompletedEventAttributes": {
+				"scheduledEventId": "8",
+				"identity": "history-recorder",
+				"binaryChecksum": "@temporalio/worker@1.25.0+c211cb1b85d30785e48fb82490c66ab0d79b18e48214b76bfd5c2d34da4f46c2",
+				"sdkMetadata": {},
+				"meteringMetadata": {}
+			}
+		},
+		{
+			"eventId": "11",
+			"eventTime": "2036-11-17T05:02:58.994Z",
+			"eventType": "EVENT_TYPE_ACTIVITY_TASK_SCHEDULED",
+			"activityTaskScheduledEventAttributes": {
+				"activityId": "2",
+				"activityType": {
+					"name": "markTopicPodcastEpisodeVideoFailedActivity"
+				},
+				"taskQueue": {
+					"name": "before-film-failed",
+					"kind": "TASK_QUEUE_KIND_NORMAL"
+				},
+				"header": {},
+				"input": {
+					"payloads": [
+						{
+							"metadata": {
+								"encoding": "anNvbi9wbGFpbg=="
+							},
+							"data": "eyJwb2RjYXN0RXBpc29kZUlkIjoiZXBpc29kZS0xIiwicmVhc29uIjoiZmZtcGVnIGV4aXRlZCB3aXRoIGNvZGUgMSIsInJlbmRlclZlcnNpb24iOjR9"
+						}
+					]
+				},
+				"scheduleToCloseTimeout": "315360000s",
+				"scheduleToStartTimeout": "315360000s",
+				"startToCloseTimeout": "120s",
+				"heartbeatTimeout": "0s",
+				"workflowTaskCompletedEventId": "9",
+				"retryPolicy": {
+					"initialInterval": "1s",
+					"backoffCoefficient": 2,
+					"maximumInterval": "100s",
+					"maximumAttempts": 3
+				}
+			}
+		},
+		{
+			"eventId": "12",
+			"eventTime": "2036-11-17T05:02:58.994Z",
+			"eventType": "EVENT_TYPE_ACTIVITY_TASK_STARTED",
+			"activityTaskStartedEventAttributes": {
+				"scheduledEventId": "11",
+				"identity": "history-recorder",
+				"attempt": 1
+			}
+		},
+		{
+			"eventId": "13",
+			"eventTime": "2036-11-17T05:02:58.994Z",
+			"eventType": "EVENT_TYPE_ACTIVITY_TASK_COMPLETED",
+			"activityTaskCompletedEventAttributes": {
+				"result": {
+					"payloads": [
+						{
+							"metadata": {
+								"encoding": "YmluYXJ5L251bGw="
+							}
+						}
+					]
+				},
+				"scheduledEventId": "11",
+				"startedEventId": "12",
+				"identity": "history-recorder"
+			}
+		},
+		{
+			"eventId": "14",
+			"eventTime": "2036-11-17T05:02:58.994Z",
+			"eventType": "EVENT_TYPE_WORKFLOW_TASK_SCHEDULED",
+			"workflowTaskScheduledEventAttributes": {
+				"taskQueue": {
+					"name": "before-film-failed",
+					"kind": "TASK_QUEUE_KIND_NORMAL"
+				},
+				"startToCloseTimeout": "10s",
+				"attempt": 1
+			}
+		},
+		{
+			"eventId": "15",
+			"eventTime": "2036-11-17T05:02:58.994Z",
+			"eventType": "EVENT_TYPE_WORKFLOW_TASK_STARTED",
+			"workflowTaskStartedEventAttributes": {
+				"scheduledEventId": "14",
+				"identity": "history-recorder",
+				"historySizeBytes": "1897"
+			}
+		},
+		{
+			"eventId": "16",
+			"eventTime": "2036-11-17T05:02:58.996Z",
+			"eventType": "EVENT_TYPE_WORKFLOW_TASK_COMPLETED",
+			"workflowTaskCompletedEventAttributes": {
+				"scheduledEventId": "14",
+				"identity": "history-recorder",
+				"binaryChecksum": "@temporalio/worker@1.25.0+c211cb1b85d30785e48fb82490c66ab0d79b18e48214b76bfd5c2d34da4f46c2",
+				"sdkMetadata": {},
+				"meteringMetadata": {}
+			}
+		},
+		{
+			"eventId": "17",
+			"eventTime": "2036-11-17T05:02:58.996Z",
+			"eventType": "EVENT_TYPE_WORKFLOW_EXECUTION_FAILED",
+			"workflowExecutionFailedEventAttributes": {
+				"failure": {
+					"message": "Activity task failed",
+					"cause": {
+						"message": "ffmpeg exited with code 1",
+						"source": "TypeScriptSDK",
+						"stackTrace": "",
+						"applicationFailureInfo": {
+							"type": "Error"
+						}
+					},
+					"activityFailureInfo": {
+						"scheduledEventId": "5",
+						"startedEventId": "6",
+						"identity": "history-recorder",
+						"activityType": {
+							"name": "renderTopicPodcastEpisodeVideoActivity"
+						},
+						"activityId": "1",
+						"retryState": "RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED"
+					}
+				},
+				"workflowTaskCompletedEventId": "15"
+			}
+		}
+	]
+}

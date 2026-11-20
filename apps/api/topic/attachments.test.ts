@@ -1,9 +1,11 @@
-// attachment tests for the context edit, the stored file's headers, and the uploads' rate limit
+// attachment tests for the context edit, the stored file's headers, the uploads' rate limit, and a url whose owner's
+// monthly budget is spent
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { attachmentContextPayload } from "@carlnotes/contracts/topicPayloads"
 import { MAX_ATTACHMENT_CONTEXT_CHARS } from "@carlnotes/contracts/topics"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
 import * as attach from "@carlnotes/pipeline/attach"
+import { AttachmentBudgetSpentError } from "@carlnotes/pipeline/attachContentType"
 import * as analytics from "@carlnotes/server/analytics"
 import { CALLER_RATE_LIMIT } from "../rateLimit"
 import { toJsonRequest, toSignedInApp } from "../testSession"
@@ -94,4 +96,18 @@ test("an attachment upload past the tool callers' rate limit is rejected with a 
 	expect((await addUrl()).status).toBe(429)
 	expect(ingestAttachmentSpy).toHaveBeenCalledTimes(CALLER_RATE_LIMIT / 2)
 	expect(ingestUrlAttachmentSpy).toHaveBeenCalledTimes(CALLER_RATE_LIMIT / 2)
+})
+
+// a url's page costs a fetch, so the route answers a spent budget the way a chat turn's route does
+test("a url attachment whose owner's monthly budget is spent is rejected with a 402, and nothing is added", async () => {
+	stubRedisClient()
+	spyOn(permissions, "loadOwnedTopic").mockResolvedValue({ id: "topic-1" } as never)
+	spyOn(attach, "ingestUrlAttachment").mockRejectedValue(new AttachmentBudgetSpentError())
+
+	// the owner adds a url, and the route answers that the budget is spent
+	const app = toSignedInApp(topicAttachmentsRoute, "user-1")
+	const addUrlRequest = toJsonRequest({ url: "https://example.com/notes" })
+	const budgetResponse = await app.request("/topics/topic-1/attachments/url", addUrlRequest)
+	expect(budgetResponse.status).toBe(402)
+	expect(await budgetResponse.json()).toEqual({ error: "budget exhausted" })
 })

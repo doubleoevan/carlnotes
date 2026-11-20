@@ -1,7 +1,7 @@
 // the topic feed response: the feed's sections with the user's topic quotas merged in. a signed-out visitor reads the
 // shared visitor feed and has no quota
 import type { TopicFeedResponse } from "@carlnotes/contracts/topics"
-import { traceRequestStage } from "@carlnotes/server/monitoring"
+import { traceRequestStage } from "@carlnotes/server/monitoringTracing"
 import { loadDailyTopicQuota, topicLimit, topicsRemaining } from "../authorization"
 import { buildTopicFeeds, readVisitorTopicFeeds } from "./feeds"
 

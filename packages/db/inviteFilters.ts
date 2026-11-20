@@ -1,5 +1,5 @@
 // the invitation filters: the invitations addressed to a user, and the topic invitations still waiting for their answer
-import { and, eq, gt, isNotNull, isNull, notInArray, or, type SQL } from "drizzle-orm"
+import { and, eq, gt, isNotNull, isNull, notInArray, or, type SQL, type SQLWrapper } from "drizzle-orm"
 import { toNotUserBlockedAuthorFilter } from "./contentFilters"
 import { db } from "./index"
 import { invites } from "./schema/invites"
@@ -20,8 +20,18 @@ export async function loadUserEmail(userId: string): Promise<UserEmail | undefin
 	return userEmail
 }
 
-// the user an invitation may address, by id or by a verified address
-type InviteAddressedToUserOptions = { userId: string } & UserEmail
+// the user an invitation may address, by id or by a verified address. a read of many users at once names the joined
+// user's own columns
+type InviteAddressedToUserOptions =
+	| ({ userId: string } & UserEmail)
+	| { userId: SQLWrapper; email: SQLWrapper; isEmailVerified: SQLWrapper }
+
+// the joined `users` row as the user an invitation may address, for a read of many users at once
+export const JOINED_USER_INVITE_ADDRESS = {
+	userId: users.id,
+	email: users.email,
+	isEmailVerified: users.emailVerified,
+} satisfies InviteAddressedToUserOptions
 
 /**
  * The filter for the invitations addressed to a user. A username invitation matches by the invited user id, and an
@@ -34,6 +44,11 @@ export function toInviteAddressedToUserFilter({
 }: InviteAddressedToUserOptions): SQL | undefined {
 	// a username invitation names the account outright
 	const usernameInviteFilter = and(isNull(invites.email), eq(invites.invitedUserId, userId))
+
+	// a loaded user's verification is known here, and a joined user's is read from its own column
+	if (typeof isEmailVerified !== "boolean") {
+		return or(usernameInviteFilter, and(eq(isEmailVerified, true), eq(invites.email, email)))
+	}
 	return isEmailVerified ? or(usernameInviteFilter, eq(invites.email, email)) : usernameInviteFilter
 }
 

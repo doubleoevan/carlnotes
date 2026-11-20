@@ -95,6 +95,10 @@ settings change the defaults:
 - `CHAT_TRANSCRIPTION_MODEL` names the transcription model (default `gemini-3.5-transcribe`). LiteLLM's Gemini
   pass-through calls it by Google's name, with no alias.
 - `PODCAST_RECORDING_CONCURRENCY` sets how many recording activities one worker runs at once (default 16).
+- `PODCAST_SCHEDULED_CHAPTER_CONCURRENCY` sets how many of a scheduled scan's chapters one worker records at once on
+  the `episode-scheduled-chapters` queue (default 32).
+- `PODCAST_ENCODE_CONCURRENCY` sets how many episodes one worker encodes at once on the `episode-encodes` queue
+  (default 2). Set it to the cores the worker has.
 - `PODCAST_HOST_VOICE` and `PODCAST_COHOST_VOICE` name the two voices.
 
 To run without the podcast, set `PODCAST_SPEECH_MODEL` empty. No episode is recorded and the topic page shows no player.

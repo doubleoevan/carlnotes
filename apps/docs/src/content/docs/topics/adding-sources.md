@@ -52,7 +52,8 @@ resume belongs in attachments. Only you can see and download your attachments. S
 ## Results per brew
 
 **Max results** sets how many findings each brew keeps and ranks: Carl's top 5, 10, 15, or 20. A smaller number makes
-Carl more selective, so he keeps only his strongest findings.
+Carl more selective, so he keeps only his strongest findings. Raise it and the next brew fills the new places from new
+pages and from the best pages that the smaller number left out.
 
 ## Schedule
 

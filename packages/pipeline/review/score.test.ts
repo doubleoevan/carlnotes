@@ -10,7 +10,7 @@ import { runWithConcurrency } from "@carlnotes/server/concurrency"
 import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import { rankBySimilarity } from "./filter"
-import { findingIdsToFilter } from "./index"
+import { findingIdsToFilter } from "./maxTopicFindings"
 import {
 	buildScorePrompt,
 	fetchAndScoreResources,

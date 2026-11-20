@@ -35,11 +35,17 @@ const ZOOM_CENTER = "x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
 // the espresso the film fades through, as ffmpeg writes a color
 const ESPRESSO_COLOR = `0x${ESPRESSO.slice(1)}`
 
+// how many threads each part of a shot's run takes: every input's decoder, the filter graph, and the encoder. with no
+// count set, ffmpeg takes a thread for each core of the node, and a render's memory grows with the node's size. a
+// thread count changes no frame, so shots encoded at different counts still join by stream copy
+const SHOT_THREAD_COUNT = "2"
+
 // one shot's picture: its still's file, how far its image may zoom, its move, its frames to the next cut, and the
 // frames it is on screen, which include its crossfade into the next shot
 export type VideoShotPicture = {
 	pictureAnimation?: PictureAnimation
 	reviewedAnimationPath?: string
+	// the still, and how it moves
 	stillPath: string
 	zoomLimit: number
 	move: VideoShotMove
@@ -94,12 +100,13 @@ export function toVideoShotArguments(videoShotEncode: VideoShotEncode): string[]
 		shownLabel = "crossfaded"
 	}
 
-	// the lower third over the shot, with its fades timed from the segment's start
+	// the lower third over the shot, with its fades timed from the segment's start. the shot passes through unchanged
+	// once the lower third's input has ended
 	if (lowerThird) {
 		const lowerThirdInputIndex = previousShot ? 2 : 1
-		inputArguments.push(...toLowerThirdInput(lowerThird.lowerThirdPath))
+		inputArguments.push(...toLowerThirdInput(lowerThird))
 		filters.push(`[${lowerThirdInputIndex}:v]format=rgba,${toLowerThirdFades(lowerThird)}[lowerThird]`)
-		filters.push(`[${shownLabel}][lowerThird]overlay=0:0[titled]`)
+		filters.push(`[${shownLabel}][lowerThird]overlay=0:0:eof_action=pass[titled]`)
 		shownLabel = "titled"
 	}
 
@@ -107,19 +114,10 @@ export function toVideoShotArguments(videoShotEncode: VideoShotEncode): string[]
 	const segmentFades = toSegmentFades({ frameCount, isSegmentStart, isSegmentEnd })
 	filters.push(`[${shownLabel}]${[...segmentFades, "format=yuv420p"].join(",")}[segment]`)
 	return [
-		...[
-			"-y",
-			...(videoShotEncode.reviewedAnimationPath ||
-			previousShot?.reviewedAnimationPath ||
-			videoShotEncode.pictureAnimation ||
-			previousShot?.pictureAnimation
-				? ["-filter_complex_threads", "2"]
-				: []),
-			...inputArguments,
-		],
+		...["-y", "-filter_complex_threads", SHOT_THREAD_COUNT, ...inputArguments],
 		...["-filter_complex", filters.join(";"), "-map", "[segment]", "-frames:v", String(frameCount)],
 		...H264_ARGUMENTS,
-		...["-an", videoShotEncode.shotPath],
+		...["-threads", SHOT_THREAD_COUNT, "-an", videoShotEncode.shotPath],
 	]
 }
 
@@ -141,7 +139,7 @@ function toShotInput(shot: VideoShotPicture): string[] {
 	return shot.reviewedAnimationPath
 		? [
 				"-threads",
-				"2",
+				SHOT_THREAD_COUNT,
 				"-protocol_whitelist",
 				"file",
 				"-stream_loop",
@@ -151,7 +149,7 @@ function toShotInput(shot: VideoShotPicture): string[] {
 				"-i",
 				shot.reviewedAnimationPath,
 			]
-		: ["-i", shot.stillPath]
+		: ["-threads", SHOT_THREAD_COUNT, "-i", shot.stillPath]
 }
 
 // a shot's picture, how many of its frames were drawn before this run, and how many frames this run draws
@@ -212,9 +210,19 @@ function toSegmentFades({ frameCount, isSegmentStart, isSegmentEnd }: ToSegmentF
 	return [...(isSegmentStart ? [fadeIn] : []), ...(isSegmentEnd ? [fadeOut] : [])]
 }
 
-// the lower third png as an input that loops at the film's frame rate
-function toLowerThirdInput(lowerThirdPath: string): string[] {
-	return ["-framerate", String(VIDEO_FRAMES_PER_SECOND), "-loop", "1", "-i", lowerThirdPath]
+// the lower third png as an input that loops at the film's frame rate. one that fades out stops at the end of its
+// fade, so the rest of the shot decodes and overlays nothing. one shown throughout loops for the whole shot
+function toLowerThirdInput({
+	lowerThirdPath,
+	shotStartSeconds,
+	isShownThroughout,
+}: NonNullable<VideoShotEncode["lowerThird"]>): string[] {
+	const shownSeconds = Number((LOWER_THIRD_OUT_SECONDS - shotStartSeconds).toFixed(6))
+	return [
+		...["-threads", SHOT_THREAD_COUNT, "-framerate", String(VIDEO_FRAMES_PER_SECOND), "-loop", "1"],
+		...(isShownThroughout ? [] : ["-t", String(shownSeconds)]),
+		...["-i", lowerThirdPath],
+	]
 }
 
 // how long a run of some frames may encode before it is killed

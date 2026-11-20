@@ -9,6 +9,7 @@ import {
 import { toSourceOptionsSentence } from "@carlnotes/contracts/sources"
 import type { TopicDraft, TopicDraftTeam } from "@carlnotes/contracts/topicPayloads"
 import { type BuiltPrompt, fetchPromptTemplate } from "@carlnotes/models/prompts/fetch"
+import { loadPromptFragment } from "@carlnotes/models/prompts/fragment"
 import { writePrompt } from "@carlnotes/models/prompts/write"
 import type { ChatTurnInput } from "./chatMessages"
 import { toPodcastEpisodeChapterBlock, toPodcastQuestionBlock } from "./podcastEpisodeQuestionPrompt"
@@ -23,9 +24,6 @@ const EMPTY_EDIT_TOPIC_BLOCK = "None."
 
 // whether the chat turn's question was spoken, which splices the spoken fragment above the chat's closing rules
 type ChatPromptOptions = { isSpoken?: boolean }
-
-// the shared fragments with no variables, written once for every chat
-type ChatFragmentName = "chat-conduct" | "chat-docs-guide" | "chat-open-new-topic" | "chat-search-web" | "chat-spoken"
 
 // the topic chat's turn options: the edit block for a turn with the topic tools, the spoken flag, the podcast
 // episode chapter a question asked from the podcast player was asked during, and the Topic Post a question asked from
@@ -64,10 +62,10 @@ export async function buildTopicChatPrompt(
 	] = await Promise.all([
 		fetchPromptTemplate("chat-topic"),
 		toGlossaryBlock(TOPIC_CHAT_GLOSSARY_LINE),
-		toFragmentBlock("chat-conduct"),
-		toFragmentBlock("chat-docs-guide"),
-		toFragmentBlock("chat-open-new-topic"),
-		toFragmentBlock("chat-search-web"),
+		loadPromptFragment("chat-conduct"),
+		loadPromptFragment("chat-docs-guide"),
+		loadPromptFragment("chat-open-new-topic"),
+		loadPromptFragment("chat-search-web"),
 		toSpokenBlock(isSpoken),
 		toPodcastQuestionBlock(podcastEpisodeChapter),
 		toTopicPostQuestionBlock(topicPost),
@@ -128,20 +126,11 @@ async function toGlossaryBlock(chatGlossaryLine: string): Promise<string> {
 }
 
 /**
- * A shared fragment with no variables, written once for every chat: carl's conduct, how a chat reads the docs
- * sections, or what a chat does if a reader asks for a new topic.
- */
-async function toFragmentBlock(fragmentName: ChatFragmentName): Promise<string> {
-	const { template } = await fetchPromptTemplate(fragmentName)
-	return writePrompt(template, {})
-}
-
-/**
  * What changes on a spoken chat turn, written once for every chat: the reply is read aloud, so it is short and has no
  * markup. A typed chat turn gets an empty block without a fetch.
  */
 async function toSpokenBlock(isSpoken: boolean): Promise<string> {
-	return isSpoken ? toFragmentBlock("chat-spoken") : ""
+	return isSpoken ? loadPromptFragment("chat-spoken") : ""
 }
 
 // the outcome line for a turn whose message answered no proposal
@@ -192,7 +181,7 @@ export async function buildNewTopicChatPrompt(
 	const [{ template, name, registryPrompt }, glossaryBlock, docsGuideBlock, spokenBlock] = await Promise.all([
 		fetchPromptTemplate("chat-new-topic"),
 		toGlossaryBlock(NEW_TOPIC_CHAT_GLOSSARY_LINE),
-		toFragmentBlock("chat-docs-guide"),
+		loadPromptFragment("chat-docs-guide"),
 		toSpokenBlock(isSpoken),
 	])
 	// write the prompt with the docs, the topic draft, and the teams fenced as data and the app's own blocks unfenced
@@ -302,10 +291,10 @@ export async function buildTeamChatPrompt(
 	] = await Promise.all([
 		fetchPromptTemplate("chat-team"),
 		toGlossaryBlock(TEAM_CHAT_GLOSSARY_LINE),
-		toFragmentBlock("chat-conduct"),
-		toFragmentBlock("chat-docs-guide"),
-		toFragmentBlock("chat-open-new-topic"),
-		toFragmentBlock("chat-search-web"),
+		loadPromptFragment("chat-conduct"),
+		loadPromptFragment("chat-docs-guide"),
+		loadPromptFragment("chat-open-new-topic"),
+		loadPromptFragment("chat-search-web"),
 		toSpokenBlock(isSpoken),
 	])
 

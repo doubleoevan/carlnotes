@@ -138,7 +138,11 @@ async function recordVoiceClip(testKey: string): Promise<VoiceClip> {
 	}
 
 	// encode the MP3 as Chrome's recording, then read the key's spend, and transcode and transcribe it on the same key
-	const recordingBytes = await runFfmpeg({ ffmpegArguments: CHROME_RECORDING_ARGUMENTS, inputBytes: audioBytes })
+	const recordingBytes = await runFfmpeg({
+		timeoutMs: 60_000,
+		ffmpegArguments: CHROME_RECORDING_ARGUMENTS,
+		inputBytes: audioBytes,
+	})
 	const transcodedBytes = await transcodeRecording(recordingBytes)
 	const spendBeforeDollars = (await readLiteLLMKeySpend(testKey)) ?? 0
 	const transcribeRecordingResult = await transcribeRecording({ audioBytes: transcodedBytes, litellmApiKey: testKey })

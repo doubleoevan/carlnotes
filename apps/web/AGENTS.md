@@ -345,9 +345,12 @@ the browser bundle and renders pages through the server build, behind its own ro
   `hooks/useCodeBlockColors.ts` loads into the Topic Post editor. A change highlights only the blocks it changed, and
   an unlabeled block's language is guessed from its first 2,000 characters.
 - Clients — the typed api clients live in `@carlnotes/client`, imported as `@carlnotes/client/<domain>Client`.
-  `lib/webApiClient.ts` holds the app's `configureApiClient` call, with the base url, `""` in the browser and the api on
-  port 3000 on the server, and `showError`, which toasts the message; `router.tsx` calls it where both the server
-  render and the browser pass, and the route tests' `-loadRouter.ts` calls it the same way.
+  `lib/webApiClient.ts` holds the app's `configureApiClient` call, with the base url, `""` in the browser and on the
+  server the origin `API_ORIGIN` names or, unset, the render's own process on port 3000, and `showError`, which toasts
+  the message. It sets no headers, so a render's read brings no cookie and no forwarded address, which is how the
+  api's rate limiters skip it. It tests `window` instead of using `createIsomorphicFn`, because the MCP views' bundle
+  is built without the compiler that removes a server side. `router.tsx` calls it where both the server render and
+  the browser pass, and the route tests' `-loadRouter.ts` calls it the same way.
 - `mcpViews/` — the MCP Apps views the mcp server's tools name: `main.tsx`, the entry `vite.mcpViews.config.ts` builds
   into two scripts and one stylesheet in `dist/mcp-views/` as part of `build` or alone with `build:mcp-views`:
   `mcpViews.js` for every MCP view but the dashboard, with `emptyDashboardMcpView.ts` in the dashboard MCP view's place,

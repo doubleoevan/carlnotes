@@ -82,9 +82,15 @@ export async function publishPodcastEpisode({
 	chapterAttemptCounts,
 	recordedChapterPositions,
 }: PublishPodcastEpisodeOptions): Promise<void> {
-	// publish only a recording Podcast Episode. a retry after a saved publish writes nothing
+	// publish only a recording Podcast Episode. a retry after a saved publish writes nothing, and a row that failed or
+	// was removed while its workflow went on publishes nothing and keeps no audio
+	const recordedAudioKeys = [
+		encodedPodcastEpisode.audioKey,
+		...recordedChapterPositions.map((position) => toPodcastEpisodeChapterKey(podcastEpisodeId, position)),
+	]
 	const [podcastEpisode] = await db.select().from(podcastEpisodes).where(eq(podcastEpisodes.id, podcastEpisodeId))
 	if (podcastEpisode?.status !== "recording") {
+		await deleteStoppedRecordingAudio(podcastEpisode?.status, recordedAudioKeys)
 		return
 	}
 
@@ -131,6 +137,18 @@ export async function publishPodcastEpisode({
 		runAttempt: () => savePodcastEpisodeAsPublished(savePodcastEpisodeAsPublishedOptions),
 		isRetryable: isUniqueViolation,
 	})
+
+	// the row stopped recording between the read above and the save, as a row the reaper failed does, so nothing was
+	// published. the audio goes only if the row failed or was removed. a row that an overlapping attempt of this
+	// publish published plays this audio
+	if (!savedPodcastEpisode) {
+		const [stoppedPodcastEpisode] = await db
+			.select({ status: podcastEpisodes.status })
+			.from(podcastEpisodes)
+			.where(eq(podcastEpisodes.id, podcastEpisodeId))
+		await deleteStoppedRecordingAudio(stoppedPodcastEpisode?.status, recordedAudioKeys)
+		return
+	}
 
 	// delete the recorded chapters' audio, which the join left in place for a retried join to read, and the audio of
 	// the short Podcast Episodes that this one replaced, now that the publish has committed. clear the cached unseen
@@ -208,6 +226,13 @@ export async function failPodcastEpisode({ podcastEpisodeId, reason }: FailPodca
 	})
 }
 
+// delete the audio that a recording stored, if its row failed or was removed. a published row keeps the audio it plays
+async function deleteStoppedRecordingAudio(status: string | undefined, recordedAudioKeys: string[]): Promise<void> {
+	if (status === "failed" || status === "removed") {
+		await deleteStoredObjects(recordedAudioKeys)
+	}
+}
+
 // the chapter rows of a publish. each script chapter with its Finding's Resource and source url, and its times
 async function toPodcastEpisodeChapterRows({
 	podcastEpisodeId,
@@ -250,9 +275,10 @@ async function toPodcastEpisodeChapterRows({
 	})
 }
 
-// write the chapters and the published row in one transaction, with the replaced short Podcast Episodes removed.
-// return the episode number that the Podcast Episode took and the Podcast Episodes that it replaced.
-// the season is the publish time's UTC year, and the episode number is one more than the Topic's highest in that season
+// write the published row and its chapters in one transaction, with the replaced short Podcast Episodes removed.
+// return the episode number that the Podcast Episode took and the Podcast Episodes that it replaced, or null for a row
+// that is no longer recording, which writes nothing. the season is the publish time's UTC year, and the episode number
+// is one more than the Topic's highest in that season
 async function savePodcastEpisodeAsPublished({
 	topicId,
 	podcastEpisodeId,
@@ -262,7 +288,7 @@ async function savePodcastEpisodeAsPublished({
 	publishedAt,
 	isShort,
 	recordedChapterPositions,
-}: SavePodcastEpisodeAsPublishedOptions): Promise<SavedPodcastEpisode> {
+}: SavePodcastEpisodeAsPublishedOptions): Promise<SavedPodcastEpisode | null> {
 	const season = publishedAt.getUTCFullYear()
 	return db.transaction(async (transaction) => {
 		// serialize publication with the first personal sources confirmation
@@ -278,11 +304,9 @@ async function savePodcastEpisodeAsPublished({
 			.where(and(eq(podcastEpisodes.topicId, topicId), eq(podcastEpisodes.season, season)))
 		const podcastEpisodeNumber = (highestPodcastEpisodeNumberRow?.highestPodcastEpisodeNumber ?? 0) + 1
 
-		// write the chapters if there are any, then the row that publishes the Podcast Episode with its recorded script
-		if (podcastEpisodeChapterRows.length > 0) {
-			await transaction.insert(podcastEpisodeChapters).values(podcastEpisodeChapterRows)
-		}
-		await transaction
+		// publish the row with its recorded script, only while it is still recording. it is the transaction's first write,
+		// so a row that failed or was removed since the publish read it leaves nothing written
+		const publishedRows = await transaction
 			.update(podcastEpisodes)
 			.set({
 				status: "published",
@@ -294,7 +318,16 @@ async function savePodcastEpisodeAsPublished({
 				durationSeconds: encodedPodcastEpisode.durationSeconds,
 				publishedAt,
 			})
-			.where(eq(podcastEpisodes.id, podcastEpisodeId))
+			.where(and(eq(podcastEpisodes.id, podcastEpisodeId), eq(podcastEpisodes.status, "recording")))
+			.returning({ id: podcastEpisodes.id })
+		if (publishedRows.length === 0) {
+			return null
+		}
+
+		// write the chapters if there are any
+		if (podcastEpisodeChapterRows.length > 0) {
+			await transaction.insert(podcastEpisodeChapters).values(podcastEpisodeChapterRows)
+		}
 
 		// save the published Podcast Episode's vector from its chapters' resources
 		await savePodcastEpisodeVector(podcastEpisodeId, transaction)

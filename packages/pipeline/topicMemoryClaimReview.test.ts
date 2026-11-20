@@ -2,7 +2,10 @@ import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import * as models from "@carlnotes/models/models"
 import type { LanguageModel } from "ai"
 import * as ai from "ai"
-import { buildTopicMemorySplitPrompt, validateTopicMemoryClaims } from "./topicMemoryClaimReview"
+import { NoObjectGeneratedError } from "ai"
+import { buildTopicMemorySplitPrompt } from "./topicMemoryClaimPrompts"
+import { checkTopicMemoryClaims, validateTopicMemoryClaims } from "./topicMemoryClaimReview"
+import { newTopicMemorySpend } from "./topicMemorySpend"
 
 const findings = [
 	{ id: "opening", title: "Cafe opens", snippet: null, description: "The cafe opened on May 1, 2026." },
@@ -60,6 +63,42 @@ test("a split fragment that remains compound does not reach the write path", asy
 	expect(result.writes.map(({ text }) => text)).toEqual([validOpening.text])
 })
 
+test("an update at its spend limit checks no claim and writes none of the unchecked ones", async () => {
+	const generateText = spyOn(ai, "generateText")
+	const result = await validateTopicMemoryClaims({
+		proposals: [proposal],
+		findings,
+		litellmApiKey: "test",
+		signal: new AbortController().signal,
+		spend: { ...newTopicMemorySpend("scan-1", 0.12), spentDollars: 0.12 },
+	})
+	expect(result.writes).toEqual([])
+	expect(result.counts).toEqual({ checked: 1, split: 0, rejected: 1 })
+	expect(generateText).not.toHaveBeenCalled()
+})
+
+test("a claim check that spends the update's limit retries no half and approves no claim", async () => {
+	// an unreadable reply that costs more than the limit leaves both halves unchecked
+	spyOn(models, "cheapModel").mockReturnValue({} as LanguageModel)
+	const generateText = spyOn(ai, "generateText").mockRejectedValue(
+		new NoObjectGeneratedError({
+			message: "no object",
+			text: "{",
+			response: { id: "response", timestamp: new Date(), modelId: "cheap-model" },
+			usage: { inputTokens: 0, outputTokens: 1_000_000, totalTokens: 1_000_000 } as never,
+			finishReason: "length",
+		}),
+	)
+	const verdicts = await checkTopicMemoryClaims({
+		claims: [validOpening, validAward].map(({ text, factDate, person }) => ({ text, factDate, person })),
+		litellmApiKey: "test",
+		signal: new AbortController().signal,
+		spend: newTopicMemorySpend("scan-1", 0.0001),
+	})
+	expect(verdicts).toEqual([])
+	expect(generateText).toHaveBeenCalledTimes(1)
+})
+
 test("the split prompt fences notes and uses citation indexes in place of database IDs", async () => {
 	const { prompt } = await buildTopicMemorySplitPrompt({
 		claim: proposal,
@@ -77,8 +116,10 @@ test("an incomplete trip draft is rewritten from the selected article context", 
 	const evidence = { ...findings[0]!, articleContext: "Mara spent about a month traveling through Kyoto and Osaka." }
 	const travel = { ...proposal, text: "The trip took about a month.", findingIds: [evidence.id] }
 	const completed = "Mara traveled through Kyoto and Osaka for about a month."
+	// a model reply in the shape that the provider returns
 	const output = (value: unknown): Awaited<ReturnType<typeof ai.generateText>> =>
 		({ output: value, usage: {} }) as Awaited<ReturnType<typeof ai.generateText>>
+	// the check calls the draft incomplete, the rewrite completes it, and the second check passes it
 	spyOn(models, "cheapModel").mockReturnValue({} as LanguageModel)
 	const generate = spyOn(ai, "generateText")
 		.mockResolvedValueOnce(output({ claims: [{ index: 0, verdict: "incomplete" }] }))
@@ -96,6 +137,7 @@ test("an incomplete trip draft is rewritten from the selected article context", 
 			}),
 		)
 		.mockResolvedValueOnce(output({ claims: [{ index: 0, verdict: "single" }] }))
+	// the rewrite read the article's text, and the completed wording is kept with its Finding
 	const result = await validateTopicMemoryClaims({
 		proposals: [travel],
 		findings: [evidence],
@@ -114,6 +156,7 @@ function verifySplit(
 	spyOn(models, "cheapModel").mockReturnValue({} as LanguageModel)
 	const output = (value: unknown): Awaited<ReturnType<typeof ai.generateText>> =>
 		({ output: value, usage: {} }) as Awaited<ReturnType<typeof ai.generateText>>
+	// the check finds a compound claim, the split returns two claims, and the second check gives the verdict
 	spyOn(ai, "generateText")
 		.mockResolvedValueOnce(output({ claims: [{ index: 0, verdict: "compound" }] }))
 		.mockResolvedValueOnce(output({ claims: [validOpening, second] }))

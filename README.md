@@ -68,16 +68,18 @@ These processes run the app:
 
 | Process | What it does |
 |---|---|
-| `app` | Serves the api and the web app, rendering public pages on the server. Chat replies and uploads run in-process. |
-| `temporal-worker` | One process hosts six Temporal Workers, each polling one task queue. Attachments, topic scans, the closing writes that record a scan's outcome, scan emails, podcast episode recordings, and url Source screens each get their own Worker. The closing writes have their own queue, so a backlog of scans waiting for a slot never delays the write for a scan that paid for its review. If any Worker stops, the process exits and the platform restarts it. In production the Northflank service starts it with `bun run temporal`. |
+| `app` | Serves the api and the web app, rendering public pages on the server. Chat replies and uploads run in-process. It starts from the image's command, the same as `bun run api`. |
+| `web` | The same entry as `app`, started under the process name `web` with `bun run web`. Path routing on the public domain sends pages, documents, and public images to it, and `/api`, `/mcp`, and the streams to `app`, so a burst of page renders never stalls a chat stream. Either service serves every path, so routing a path back is a routing change with no deploy. |
+| `temporal-worker` | One process hosts a Temporal Worker for each task queue it polls, 15 in the `main` queue group. Attachments, topic scans, the closing writes that record a scan's outcome, scan emails, podcast episode recordings, a scheduled scan's chapters, topic memories, a film's short writes, and url Source screens each get their own Worker. The closing writes have their own queue, so a backlog of scans waiting for a slot never delays the write for a scan that paid for its review. If any Worker stops, the process exits and the platform restarts it. In production the Northflank service starts it with `bun run temporal:main`. |
+| `temporal-films` | The same worker entry in the `films` queue group, started with `bun run temporal:films`: the three Workers that render new films, rebuild a film for a new image, and run the film backfill, on a service sized for ffmpeg. A replica renders `TOPIC_VIDEO_CONCURRENCY` films at once and serves its demand for the platform's autoscaling at `/metrics` on `WORKER_METRICS_PORT`. A stop costs a render the shot in progress: the render is scheduled again and reuses the shots it stored. |
 | scheduler | `bun apps/worker/schedule.ts` sweeps for scheduled Topics and starts their scans. One query computes which Topics are scheduled from each Topic's frequency and its last completed Scan. So a sweep is safe to repeat, and no stored queue can drift. A job lease keeps two sweeps from overlapping. In production a Northflank cron job runs one sweep per interval (`bun run schedule`). |
 | budget reset | `bun apps/worker/resetMonthlyBudgets.ts` replaces every LiteLLM key created before the month began, so each user's spend starts the month at zero. The reset replaces four keys at a time, under the same kind of job lease as the sweep. In production a Northflank cron job runs the reset once a day shortly after midnight UTC (`bun run reset:monthly-budgets`). After the first of the month, the reset finds only the keys that an earlier run failed to replace. |
 
-Every process above runs on Northflank, which deploys a commit on `main` once CI passes it. `app` and `temporal-worker`
-each run as replicas. The state that every `app` replica shares lives in Redis. Temporal gives each scan to one worker.
-Beside them run Neon Postgres (pgvector), a single-node Redis addon reached as `REDIS_URL`, object storage, a
-self-hosted Temporal server, Resend, and Stripe. Object storage goes through Bun's S3 client, and R2 serves it today,
-picked by the `S3_*` env values.
+Every process above runs on Northflank, which deploys a commit on `main` once CI passes it. `app`, `web`, and
+`temporal-worker` each run as replicas. The state that every `app` and `web` replica shares lives in Redis. Temporal
+gives each scan to one worker. Beside them run Neon Postgres (pgvector), a single-node Redis addon reached as
+`REDIS_URL`, object storage, a self-hosted Temporal server, Resend, and Stripe. Object storage goes through Bun's S3
+client, and R2 serves it today, picked by the `S3_*` env values.
 
 Model calls go through a LiteLLM proxy in front of Fireworks. Every user gets a virtual key with a monthly budget. The
 [litellm config](litellm-config.yaml) maps role names to models, so a model swap is a config edit.
@@ -214,11 +216,13 @@ bun run dev:api      # Hono API; wraps itself in doppler run for DATABASE_URL; t
 bun run dev:worker   # scheduled-scan sweep loop, one sweep a minute (the script sets SCHEDULE_INTERVAL_MS=60000); `bun run schedule` runs one sweep, as a cron would
 bun run reset:monthly-budgets # replace every LiteLLM key created before the month began, as the daily cron does. a later run in the same month replaces only the keys that an earlier run failed to replace
                      # schedule, reset:monthly-budgets, db:migrate, docs:embed, and edge:purge run their command through apps/worker/runMonitoredJob.ts: in prd the sweep and the reset check in to their Sentry cron monitors, and a failed release job is reported. elsewhere it only runs the command
+bun run api          # the api's entry as the app service starts it, under the process name api
+bun run web          # the same entry as the web service starts it, under the process name web
 bun run temporal     # Temporal worker for topic scans and attachment processing, as the Northflank service starts it; needs a Temporal server (docker-compose `temporal`, or `temporal server start-dev`)
-bun run temporal:main # start the scan and recording worker, including dispatch of new films
-bun run temporal:films # poll only film and film-backfill queues on a separately resourced worker
+bun run temporal:main # start the scan and recording worker, including dispatch of new films. it polls `topic-scans` for a person's Scans, `topic-scans-scheduled` for the sweep's (`SCHEDULED_SCAN_CONCURRENCY`), and `episode-encodes` for a podcast episode's audio join (`PODCAST_ENCODE_CONCURRENCY`, the worker's cores)
+bun run temporal:films # poll only the film, film rebuild, and film backfill queues on a separately resourced worker
 bun run dev:temporal # the same worker, kept as the dev name beside dev:api and dev:ui
-bun run dev:temporal:watch # the same worker, restarted on save; what `bun run dev` uses. a restart mid-review leaves that scan waiting out its 30-minute activity timeout before it fails
+bun run dev:temporal:watch # the same worker, restarted on save; what `bun run dev` uses. a restart mid-review starts that scan's review again, at once if the worker shut down cleanly and after the two-minute heartbeat timeout if it was killed. the new attempt skips the pages already scored, and a review gets three attempts
 bun run dev:email    # React Email preview at localhost:3011; Bun renders templates and approval states to temporary HTML; no Doppler needed
 bun run dev:docs     # Starlight dev server on localhost:4321/docs, reachable on the LAN, with hot reload; also shows draft pages that the production build leaves out
                      # run by an agent, it starts in the background: `cd apps/docs && astro dev stop` ends it, `astro dev logs` tails it
@@ -234,7 +238,7 @@ bun run eval:topic-memories:labels <local-ip> <dataset-path> <review-id> # serve
 bun run smoke:topic-memories # verify the Journal write and MCP membership paths on a migrated disposable journal_test_* Postgres database with pgvector
 doppler run --project carlnotes --config dev -- bun run topic-memories:backfill # apply the Journal migration and start the worker first
 doppler run --project carlnotes --config dev -- bun run topic-memories:repair-dev # check stored topic memories, split compound claims and preserve feedback before replaying the dev brews
-bun run films:backfill # under doppler, start or join the film backfill that the worker also starts on boot: each topic's latest published podcast episode with no film gets one, and every ready film below the current render version is rendered again while it keeps playing, on the platform's bill, TOPIC_VIDEO_BACKFILL_CONCURRENCY at a time (default 1, and 0 turns the backfill off); the worker logs the counts so far and the films left after each batch, and the script prints the rendered, skipped, and failed counts, the generated images drawn, the render time, and the stored bytes. TOPIC_VIDEO_CONCURRENCY (default 1) sets the episode-videos queue's renders per replica, and 0 turns films off. a chapter draws generated images until it shows one distinct image for every 30 seconds, up to TOPIC_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT (default 40) a film, and 0 turns them off
+bun run films:backfill # under doppler, start or join the film backfill that the worker also starts on boot: each topic's latest published podcast episode with no film gets one, and every ready film below the current render version is rendered again while it keeps playing, on the platform's bill, TOPIC_VIDEO_BACKFILL_CONCURRENCY at a time (default 1, and 0 turns the backfill off); the worker logs the counts so far, the films left, and their estimated cost after each batch, and each render's cost to the platform is recorded in the spends table, where the day's total reads it and no owner's month does, and the script prints the rendered, skipped, and failed counts, the generated images drawn, the render time, and the stored bytes. the backfill starts no render while a new film waits for a film Worker, and a film whose render is already queued or running is skipped. TOPIC_VIDEO_CONCURRENCY (default 1) sets the films a replica renders at once, and 0 turns films off. a chapter draws generated images until it shows one distinct image for every 30 seconds, up to TOPIC_VIDEO_GENERATED_CHAPTER_IMAGE_LIMIT (default 40) a film, and 0 turns them off
 bun run edge:purge   # clear the pages and the signed-out feed that Cloudflare shares; the deploy job that runs right after the app deploys
 bun run sync:releases # re-read every published GitHub release into the releases table the /releases endpoint serves; it seeds history and repairs a missed webhook delivery, and is safe to re-run
 bun run sync:releases:prd # the same sync against the production database; run it once after the first deploy, since the table starts empty. the webhook writes it going forward
@@ -328,7 +332,7 @@ bun run smoke:reddit       # live Reddit listing and search. CI skips this suite
 bun run smoke:x            # the X smoke test: one account's tweets and what they cost, plus the lookup that vets a suggested account
 bun run smoke:speech       # the podcast speech smoke test: a two-speaker clip on each Gemini tier
 bun run smoke:podcast-episode  # the podcast episode smoke test: one episode from its plan to its removal. needs ffmpeg
-bun run smoke:review       # the review smoke test: the paid section buys its best survivors, bounded by its limit
+bun run smoke:review       # the review smoke test: the paid section buys its best survivors, bounded by its limit, and a later Scan scores no page that the Topic's limit removed unless the page changed
 bun run smoke:subscribers  # the subscriber-count smoke test: both subscription paths against real rows, rolled back after
 bun run smoke:profile      # the profile smoke test: the header's distinct people against the footer's summed rows
 bun run smoke:social       # the reactions and comments smoke test: one row per user, the edit time, the reads, and the blocks
@@ -343,6 +347,7 @@ bun run smoke:room         # the team chat-room smoke test: the access matrix, i
 bun run smoke:rooms        # the chat-rooms smoke test: which rooms a user can open, one per holding team, and the unseen count
 bun run smoke:chat-turns   # the chat turn shapes smoke test: each kind's row and each chat proposal shape is kept, each mismatched row is rejected, rolled back
 bun run smoke:push-devices # the push devices smoke test: ending a session or closing the account deletes its phones, one send per event, recipient, and phone, rolled back
+bun run smoke:update-counts # the update counts smoke test: several accounts' push badge counts from one grouped read, each equal to that account counted alone and to its note badges
 bun run smoke:mcp          # builds the ui, then checks both MCP routes: Origin, twenty-six-tool contracts, private access, result bounds, OAuth and revocation, MCP views, writes, confirmations, and rate limiting
 bun run smoke:mcp-views    # builds the MCP view bundle in two Vite builds, one for the dashboard MCP view's own script, then runs each MCP view in this machine's Chrome under the test host, offline, as part of `bun run check`
 bun run seed:personal-sources owner@example.com # retain synthetic review Topics for an existing development owner
@@ -386,7 +391,8 @@ their settings:
 REVIEW_CONCURRENCY=1 MAX_SCORED_RESOURCES_PER_SCAN=8 bun run smoke:review
 ```
 
-Load testing shows how many requests one api process can serve at once. [oha](https://github.com/hatoo/oha)
+Load testing shows how many requests one api process can serve at once. `bun run api` and `bun run web` start the
+same entry under each service's name, so either can be tested alone. [oha](https://github.com/hatoo/oha)
 (`brew install oha`) keeps a set number of requests going. It reports the requests per second and how long the requests
 took, from the fastest to the slowest. Point it at the local dev api, never at carlnotes.com. A local run is unlimited,
 because the api's rate limits skip a request from this machine's own address with no session, as a page render's calls

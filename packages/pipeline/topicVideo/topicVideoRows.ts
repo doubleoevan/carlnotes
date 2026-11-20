@@ -1,23 +1,23 @@
 // a podcast episode film's row and its stored files: the render version, the status writes a render and a rebuild
 // make, the write that stops the films drawn from an image, publication of a replacement film, the upload
-// that records its pending deletion first, what a render's minutes cost, and the failure a last attempt records
+// that records its pending deletion first, and what a render's minutes cost
 
 import type { UncheckedImageSubjectKind } from "@carlnotes/contracts/enums"
 import { type DbHandle, db } from "@carlnotes/db"
 import { podcastEpisodes, topicVideos } from "@carlnotes/db/schema/podcast"
+import type { SpendKind } from "@carlnotes/db/schema/spends"
+import { recordSpend } from "@carlnotes/db/spends"
 import {
 	clearPendingObjectDeletion,
 	recordPendingObjectDeletionBeforeUpload,
 	uploadPodcastEpisodeFile,
 } from "@carlnotes/db/store"
 import { TOPIC_VIDEO_DOLLARS_PER_MINUTE } from "@carlnotes/models/budget"
-import { trackEvent } from "@carlnotes/server/analytics"
 import { reportError } from "@carlnotes/server/monitoring"
 import { and, eq, inArray, lt, ne, sql } from "drizzle-orm"
 import type { PgUpdateSetSource } from "drizzle-orm/pg-core"
 import { recordReplacedImageDeletions } from "../topicImages/topicImageRenders"
 import { checkTopicVideoImage, checkVideoSceneSources, type VideoSceneSource } from "./topicVideoImageCheck"
-import { loadTopicVideoPodcastEpisode } from "./topicVideoInputs"
 
 // the render version a film is rendered at now. a ready film below it is rendered again, and a film from before render
 // versions is at version 1. version 2 cuts each chapter into a montage. version 3 cuts the intro and the sign-off
@@ -84,6 +84,28 @@ export async function saveTopicVideoRendering(podcastEpisodeId: string): Promise
 		})
 }
 
+/**
+ * Returns whether a podcast episode is published. One that was removed, or deleted with its Topic or its owner's
+ * account, is not.
+ */
+export async function isPodcastEpisodePublished(podcastEpisodeId: string): Promise<boolean> {
+	const [podcastEpisode] = await db
+		.select({ status: podcastEpisodes.status })
+		.from(podcastEpisodes)
+		.where(eq(podcastEpisodes.id, podcastEpisodeId))
+	return podcastEpisode?.status === "published"
+}
+
+/**
+ * Writes a published podcast episode's film row as rendering once its render is queued, before a film slot is free. A
+ * podcast episode that is not published gets no row, because its render is skipped.
+ */
+export async function saveQueuedTopicVideoRendering(podcastEpisodeId: string): Promise<void> {
+	if (await isPodcastEpisodePublished(podcastEpisodeId)) {
+		await saveTopicVideoRendering(podcastEpisodeId)
+	}
+}
+
 // an image that no film may show any longer: what the image was for, the id of its Topic or its podcast episode, and
 // its hash
 export type SaveImageTopicVideosRenderingOptions = {
@@ -133,6 +155,7 @@ type SaveTopicVideoReadyOptions = {
 	renderVersion?: number
 	topicId?: string
 	podcastEpisodeId: string
+	// what the render stored, and what it cost
 	objectKeys: FilmObjectKeys
 	byteSize: number
 	durationSeconds: number
@@ -259,60 +282,6 @@ function toFilmStoredKeys(objectKeys: Record<keyof FilmObjectKeys, string | null
 	return Object.values(objectKeys).filter((objectKey): objectKey is string => Boolean(objectKey))
 }
 
-/**
- * Records that a ready film's render at the current render version failed for good, and leaves the film that plays as
- * it is. Returns whether the podcast episode had a ready film.
- */
-export async function saveTopicVideoRerenderFailed(
-	podcastEpisodeId: string,
-	renderVersion: number = TOPIC_VIDEO_RENDER_VERSION,
-): Promise<boolean> {
-	// the ready film's row, with the failed render version saved on it
-	const isReadyFilm = and(eq(topicVideos.podcastEpisodeId, podcastEpisodeId), eq(topicVideos.status, "ready"))
-	const failedRows = await db
-		.update(topicVideos)
-		.set({ failedRenderVersion: renderVersion })
-		.where(isReadyFilm)
-		.returning({ id: topicVideos.id })
-	return failedRows.length > 0
-}
-
-/**
- * Marks a film failed after its last attempt, reports the error, and records the failure for analytics. A ready film
- * whose render at the current render version failed stays ready, with that version recorded as failed.
- */
-export async function markTopicVideoFailed(
-	podcastEpisodeId: string,
-	error: string,
-	renderVersion?: 3 | 4,
-): Promise<void> {
-	// read the podcast episode's topic and owner for the report. a ready film keeps playing
-	const topicVideoPodcastEpisode = await loadTopicVideoPodcastEpisode(podcastEpisodeId)
-	const isReadyFilmKept = await saveTopicVideoRerenderFailed(podcastEpisodeId, renderVersion)
-
-	// any other row is marked failed, unless another render saved it ready meanwhile, and the failure is reported
-	if (!isReadyFilmKept) {
-		const isUnfinished = and(eq(topicVideos.podcastEpisodeId, podcastEpisodeId), ne(topicVideos.status, "ready"))
-		await db
-			.update(topicVideos)
-			.set({ status: "failed", error: error.slice(0, 500) })
-			.where(isUnfinished)
-	}
-	reportError(new Error("a podcast episode film failed to render"), "topic-video", {
-		podcastEpisodeId,
-		error: error.slice(0, 200),
-	})
-
-	// the failure event holds ids and a short reason code only
-	if (topicVideoPodcastEpisode) {
-		trackEvent("episode_video_render_failed", topicVideoPodcastEpisode.ownerId, {
-			topicId: topicVideoPodcastEpisode.topicId,
-			podcastEpisodeId,
-			reason: toRenderFailureReason(error),
-		})
-	}
-}
-
 // a file to upload, its key and type, and the keys uploaded so far, which a failure deletes
 type UploadTopicVideoFileOptions = {
 	signal?: AbortSignal
@@ -352,18 +321,22 @@ export function toTopicVideoCostDollars(renderedSeconds: number): number {
 	return (renderedSeconds / 60) * TOPIC_VIDEO_DOLLARS_PER_MINUTE
 }
 
-// a short reason code from a failure's message, which the analytics event includes instead of the message
-function toRenderFailureReason(error: string): string {
-	// a failed encode or probe names its tool
-	if (error.startsWith("ffmpeg")) {
-		return "ffmpeg"
-	}
-	if (error.startsWith("ffprobe")) {
-		return "ffprobe"
-	}
+// the film, what the platform paid for, and what it cost
+type PlatformTopicVideoSpend = { podcastEpisodeId: string; kind: SpendKind; dollars: number }
 
-	// any other failure is a timeout or something else
-	return /timed? ?out/i.test(error) ? "timeout" : "other"
+/**
+ * Records a cost of a film that the platform paid for: a platform-billed render's minutes, images, and animation plan,
+ * and the first animated picture of a Free owner's month. The film row's cost stays as it is, so the cost reaches the
+ * day's total and no owner's month. A failed write is reported and leaves the render as it is.
+ */
+export async function recordPlatformTopicVideoSpend({
+	podcastEpisodeId,
+	kind,
+	dollars,
+}: PlatformTopicVideoSpend): Promise<void> {
+	await recordSpend({ kind, dollars, podcastEpisodeId }).catch((error: unknown) =>
+		reportError(error, "topic-video", { podcastEpisodeId, step: "platform-spend", kind }),
+	)
 }
 
 /**

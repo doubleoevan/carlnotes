@@ -27,9 +27,10 @@ export type ChapterImageGenerationSpies = {
 	writeScene: Spy
 	renderOriginal: Spy
 	classifyImage: Spy
-	// storage
+	// storage, and the objects it holds by key
 	attachmentExists: Spy
 	upload: Spy
+	storedObjects: Map<string, Uint8Array>
 	// the owner's key, the error reports, and the spend cutoff
 	provisionKey: Spy
 	reportError: Spy
@@ -38,8 +39,8 @@ export type ChapterImageGenerationSpies = {
 
 /**
  * Stubs an image generation that succeeds on the owner's key, an image the moderation passes, storage that holds
- * nothing yet and reads a Resource Image's key back as its bytes, and an owner within the spend cutoff. Returns the
- * spies.
+ * nothing yet, keeps what is uploaded to it, and reads a Resource Image's key back as its bytes, and an owner within
+ * the spend cutoff. Returns the spies and the stored objects.
  */
 export function stubChapterImageGenerations(): ChapterImageGenerationSpies {
 	// a scene, its generated original, and a moderation pass
@@ -50,11 +51,27 @@ export function stubChapterImageGenerations(): ChapterImageGenerationSpies {
 		verdict: { isViolation: false, category: null },
 	})
 
-	// storage that holds nothing yet, and reads a Resource Image's key back as its bytes
-	const attachmentExists = spyOn(storage, "attachmentExists").mockResolvedValue(false)
-	const upload = spyOn(storage, "uploadAttachment").mockResolvedValue(undefined)
+	// storage that holds nothing yet and keeps each upload until a delete
+	const storedObjects = new Map<string, Uint8Array>()
+	const attachmentExists = spyOn(storage, "attachmentExists").mockImplementation(async (objectKey: string) =>
+		storedObjects.has(objectKey),
+	)
+	const upload = spyOn(storage, "uploadAttachment").mockImplementation(async (objectKey, bytes) => {
+		storedObjects.set(objectKey, bytes)
+	})
+
+	// a delete takes each key out of storage
+	spyOn(storage, "deleteStoredObjects").mockImplementation(async (objectKeys) => {
+		for (const objectKey of objectKeys) {
+			storedObjects.delete(objectKey)
+		}
+	})
+
+	// a read returns a Resource Image's key as its bytes, an uploaded object, or the jpeg an earlier render stored
 	spyOn(storage, "getAttachmentBytes").mockImplementation(async (objectKey: string) =>
-		objectKey.startsWith("resources/") ? new TextEncoder().encode(objectKey) : STORED_JPEG,
+		objectKey.startsWith("resources/")
+			? new TextEncoder().encode(objectKey)
+			: (storedObjects.get(objectKey) ?? STORED_JPEG),
 	)
 
 	// the owner's key, the error reports, and an owner within the spend cutoff
@@ -67,6 +84,7 @@ export function stubChapterImageGenerations(): ChapterImageGenerationSpies {
 		classifyImage,
 		attachmentExists,
 		upload,
+		storedObjects,
 		provisionKey,
 		reportError,
 		isCutoffPassed,

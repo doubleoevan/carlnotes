@@ -1,15 +1,15 @@
 // the attachment processing workflow
 
 import { toWorkflowFailureReason } from "@carlnotes/contracts/scanFailure"
+import { ATTACHMENT_STEP_RETRY_POLICY, ATTACHMENT_STEP_TIMEOUT_MS } from "@carlnotes/pipeline/stageTimeouts"
 import { proxyActivities } from "@temporalio/workflow"
 import type * as activities from "./processAttachmentActivities"
 
-// activity proxies with a generous timeout for extraction and the per-chunk model calls.
-// the retries wait 15 and then 30 seconds, so a busy model has time to free up
+// every step gets the same generous timeout and retries, for extraction and the per-chunk model calls
 const { extractAttachmentText, summarizeChunk, finalizeAttachment, finalizeVerbatimAttachment, failAttachment } =
 	proxyActivities<typeof activities>({
-		startToCloseTimeout: "5 minutes",
-		retry: { maximumAttempts: 3, initialInterval: "15 seconds", backoffCoefficient: 2 },
+		startToCloseTimeout: ATTACHMENT_STEP_TIMEOUT_MS,
+		retry: ATTACHMENT_STEP_RETRY_POLICY,
 	})
 
 /** Processes an attachment end to end, compensating with a failed status and object cleanup on error. */

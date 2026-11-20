@@ -1,6 +1,6 @@
 // a film's generated chapter images, with the connection pool, storage, and the model calls stubbed: what reaches the
-// scene writer, each image's framing, its moderation and storage, the stored image a second attempt reuses, a stopped
-// render, and who pays
+// scene writer, each image's framing, its moderation and storage, the unchecked key an image waits under, the marker a
+// rejection leaves, the stored image a second attempt reuses, a stopped render, and who pays
 import { afterEach, beforeEach, expect, mock, test } from "bun:test"
 import { restoreConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import {
@@ -20,6 +20,7 @@ let renderOriginal: ChapterImageGenerationSpies["renderOriginal"]
 let classifyImage: ChapterImageGenerationSpies["classifyImage"]
 let attachmentExists: ChapterImageGenerationSpies["attachmentExists"]
 let upload: ChapterImageGenerationSpies["upload"]
+let storedObjects: ChapterImageGenerationSpies["storedObjects"]
 
 // the owner's key, the error reports, and the owner's spend cutoff, which the image generations never read
 let provisionKey: ChapterImageGenerationSpies["provisionKey"]
@@ -28,8 +29,17 @@ let isCutoffPassed: ChapterImageGenerationSpies["isCutoffPassed"]
 
 // an image generation that succeeds on the owner's key, an image the moderation passes, and nothing stored yet
 beforeEach(() => {
-	;({ writeScene, renderOriginal, classifyImage, attachmentExists, upload, provisionKey, reportError, isCutoffPassed } =
-		stubChapterImageGenerations())
+	;({
+		writeScene,
+		renderOriginal,
+		classifyImage,
+		attachmentExists,
+		upload,
+		storedObjects,
+		provisionKey,
+		reportError,
+		isCutoffPassed,
+	} = stubChapterImageGenerations())
 })
 
 // put the pool and every spy back after each test
@@ -101,10 +111,10 @@ test("a generated image is checked, stored under its chapter's numbered key, and
 	const generatedChapterImages = await loadGeneratedChapterImages({ ...OWNER_BILLING, generatedChapterImageRefs })
 	expect(generatedChapterImages.newlyGeneratedChapterImageCount).toBe(2)
 
-	// the moderation reads the jpeg as a data url, and the first jpeg keeps the key the api serves
+	// the moderation reads the jpeg as a data url, and the first jpeg keeps the key the api serves. nothing unchecked
+	// is left once both images pass
 	expect(classifyImage.mock.calls[0]?.[0].dataUrl).toStartWith("data:image/jpeg;base64,")
-	const uploadedKeys = upload.mock.calls.map(([objectKey]: [string]) => objectKey).toSorted()
-	expect(uploadedKeys).toEqual([
+	expect([...storedObjects.keys()].toSorted()).toEqual([
 		"episodes/episode-1/video/chapter-3-image-s2-1.jpg",
 		"episodes/episode-1/video/chapter-3-image-s2.jpg",
 	])
@@ -164,6 +174,11 @@ test("the platform's image generations use the master key and add no cost to the
 	expect(provisionKey).not.toHaveBeenCalled()
 	expect(renderOriginal.mock.calls[0]?.[0].litellmApiKey).toBeUndefined()
 	expect(toCostUpdates(sentQueries)).toEqual([])
+
+	// the image's cost is the platform's: a spends row for the film, with no user
+	const platformSpend = sentQueries.find((sentQuery) => sentQuery.text.startsWith('insert into "spends"'))
+	expect(platformSpend?.values).toEqual(expect.arrayContaining(["topicVideoChapterImage", "episode-1"]))
+	expect(platformSpend?.values).not.toContain("owner-1")
 })
 
 test("an owner past the spend cutoff still generates every image", async () => {
@@ -199,16 +214,78 @@ test("a stopped render generates nothing more and throws an error", async () => 
 	expect(reportError).not.toHaveBeenCalled()
 })
 
-test("an image the moderation flags is billed, not stored, and not shown", async () => {
+// the keys of chapter 1's first generated image: the one the api serves, and the two that hold its check
+const SERVED_KEY = "episodes/episode-1/video/chapter-1-image-s2.jpg"
+const UNCHECKED_KEY = "episodes/episode-1/video/chapter-1-image-s2-unchecked.jpg"
+const REJECTED_KEY = "episodes/episode-1/video/chapter-1-image-s2-rejected"
+
+// the keys that were uploaded to, in order
+function toUploadedKeys(): string[] {
+	return upload.mock.calls.map(([objectKey]: [string]) => objectKey)
+}
+
+test("an image waits under its unchecked key until the moderation has passed it", async () => {
+	// the served key holds nothing while the check runs
+	const storedKeysDuringCheck: string[][] = []
+	classifyImage.mockImplementation(async () => {
+		storedKeysDuringCheck.push([...storedObjects.keys()])
+		return { outcome: "classified", verdict: { isViolation: false, category: null } }
+	})
+	stubChapterReads()
+	await loadGeneratedChapterImages({ ...OWNER_BILLING, generatedChapterImageRefs: [{ position: 1, imageNumber: 0 }] })
+	expect(storedKeysDuringCheck).toEqual([[UNCHECKED_KEY]])
+
+	// the pass puts the image under the served key, and the unchecked one goes
+	expect(toUploadedKeys()).toEqual([UNCHECKED_KEY, SERVED_KEY])
+	expect([...storedObjects.keys()]).toEqual([SERVED_KEY])
+})
+
+test("an image the moderation flags is billed once, never served, and never generated again", async () => {
 	classifyImage.mockResolvedValue({ outcome: "classified", verdict: { isViolation: true, category: "violence" } })
 	const sentQueries = stubChapterReads()
 	const generatedChapterImageRefs = [{ position: 1, imageNumber: 0 }]
 	const generatedChapterImages = await loadGeneratedChapterImages({ ...OWNER_BILLING, generatedChapterImageRefs })
 
-	// the image generation is billed, and its image is not stored or shown
+	// the image generation is billed, and its image is not shown. a marker is all that is left of it
 	expect(generatedChapterImages.jpegBytesByPosition.size).toBe(0)
-	expect(upload).not.toHaveBeenCalled()
 	expect(toCostUpdates(sentQueries)).toHaveLength(1)
+	expect([...storedObjects.keys()]).toEqual([REJECTED_KEY])
+
+	// a second render finds the marker: no image generation, no check, no cost, and nothing at the served key
+	const laterRenderImages = await loadGeneratedChapterImages({ ...OWNER_BILLING, generatedChapterImageRefs })
+	expect(laterRenderImages.jpegBytesByPosition.size).toBe(0)
+	expect(renderOriginal).toHaveBeenCalledTimes(1)
+	expect(classifyImage).toHaveBeenCalledTimes(1)
+	expect(toCostUpdates(sentQueries)).toHaveLength(1)
+	expect(toUploadedKeys()).not.toContain(SERVED_KEY)
+})
+
+test("a check that fails to run keeps the image, and the next attempt checks it with no second generation", async () => {
+	// the moderation cannot be reached on the first attempt
+	classifyImage.mockResolvedValueOnce({ outcome: "failed", error: new Error("the moderation endpoint returned 503") })
+	const sentQueries = stubChapterReads()
+	const generatedChapterImageRefs = [{ position: 1, imageNumber: 0 }]
+	const firstAttemptImages = await loadGeneratedChapterImages({ ...OWNER_BILLING, generatedChapterImageRefs })
+
+	// the image is left out, the failed check is reported, and the paid image stays under its unchecked key
+	expect(firstAttemptImages.jpegBytesByPosition.size).toBe(0)
+	expect(reportError).toHaveBeenCalledTimes(1)
+	expect([...storedObjects.keys()]).toEqual([UNCHECKED_KEY])
+
+	// the next attempt checks the kept image, serves it, and generates and bills nothing more
+	const secondAttemptImages = await loadGeneratedChapterImages({ ...OWNER_BILLING, generatedChapterImageRefs })
+	expect(secondAttemptImages.jpegBytesByPosition.get(1)).toEqual([ORIGINAL.jpegBytes])
+	expect(secondAttemptImages.newlyGeneratedChapterImageCount).toBe(0)
+	expect(renderOriginal).toHaveBeenCalledTimes(1)
+	expect(toCostUpdates(sentQueries)).toHaveLength(1)
+	expect([...storedObjects.keys()]).toEqual([SERVED_KEY])
+})
+
+test("an image the moderation cannot read is rejected like a flagged one", async () => {
+	classifyImage.mockResolvedValue({ outcome: "unreadable" })
+	stubChapterReads()
+	await loadGeneratedChapterImages({ ...OWNER_BILLING, generatedChapterImageRefs: [{ position: 1, imageNumber: 0 }] })
+	expect([...storedObjects.keys()]).toEqual([REJECTED_KEY])
 })
 
 test("a skipped moderation check lets the image through", async () => {
@@ -219,5 +296,5 @@ test("a skipped moderation check lets the image through", async () => {
 
 	// the image is stored and shown
 	expect(generatedChapterImages.jpegBytesByPosition.get(1)).toEqual([ORIGINAL.jpegBytes])
-	expect(upload).toHaveBeenCalledTimes(1)
+	expect([...storedObjects.keys()]).toEqual([SERVED_KEY])
 })

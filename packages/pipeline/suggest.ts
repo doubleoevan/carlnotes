@@ -1,10 +1,12 @@
 // proposes Sources a Topic could follow, read from its own title, prompt, and attachments
 import { toHostWithoutWww } from "@carlnotes/contracts/seo"
-import { customSourceKeys, toPublisherDomain } from "@carlnotes/contracts/sources"
+import { customSourceKeys, toPublisherDomain, toSourceValueLines } from "@carlnotes/contracts/sources"
 import { toOneLineText } from "@carlnotes/contracts/text"
+import { EXA_COST_PER_SEARCH } from "@carlnotes/models/budget"
 import { cheapModel } from "@carlnotes/models/models"
 import { fetchPromptTemplate, promptTelemetry } from "@carlnotes/models/prompts/fetch"
 import { writePrompt } from "@carlnotes/models/prompts/write"
+import { runUserPaidCall } from "@carlnotes/models/userPaidCalls"
 import { generateText, Output } from "ai"
 import { z } from "zod"
 import type { NewResource } from "./ingest/ingester"
@@ -16,8 +18,11 @@ import { isSuggestedSourceReadable, toResolvedSource } from "./suggestedSourceCh
 // one suggested Source: the custom source option it is added through, and its value
 export type SuggestedSource = { sourceOption: (typeof customSourceKeys)[number]; value: string; name?: string }
 
-// what one suggestion request reads
+// what one suggestion request reads, and the user who asks, whom its web search bills. an eval's request has no
+// user, and its search bills nobody
 export type SuggestionContext = {
+	userId?: string
+	// the Topic's own words, the sources it already has, and how many to suggest
 	name: string
 	prompt: string
 	attachmentContext: string
@@ -170,7 +175,10 @@ async function generateSourceSuggestions(suggestionContext: SuggestionContext): 
 		prompt: writePrompt(
 			template,
 			{ topicContext, excludedSources: excludedSources || "None.", webSearchPages },
-			{ maxSuggestions: String(suggestionContext.limit + SUGGESTION_HEADROOM) },
+			{
+				maxSuggestions: String(suggestionContext.limit + SUGGESTION_HEADROOM),
+				sourceValueLines: toSourceValueLines(),
+			},
 		),
 		name,
 		registryPrompt,
@@ -213,18 +221,32 @@ export function toValueWithoutOption(suggestedSource: SuggestedSource): string {
 }
 
 /**
- * Returns the pages that a web search for the topic finds, or none without a search key or after a failed search.
+ * Returns the pages that a web search for the topic finds, or none without a search key or after a failed search. The
+ * search is the asking user's spend, and a user whose monthly budget is spent gets no search.
  */
-export async function loadWebSearchResources({ name, prompt }: SuggestionContext): Promise<NewResource[]> {
+export async function loadWebSearchResources({ name, prompt, userId }: SuggestionContext): Promise<NewResource[]> {
 	// a deployment with no search key suggests from the topic's words alone
 	if (!Bun.env.EXA_API_KEY) {
 		return []
 	}
 
 	// search for the topic's title and the start of its prompt
+	const searchTopic = (): ReturnType<typeof runSearch> =>
+		runSearch(`${name}: ${prompt}`.slice(0, MAX_WEB_SEARCH_QUERY_CHARS))
 	try {
-		const searchResponse = await runSearch(`${name}: ${prompt}`.slice(0, MAX_WEB_SEARCH_QUERY_CHARS))
-		return parseResults(searchResponse).resources.slice(0, MAX_WEB_SEARCH_PAGES)
+		if (!userId) {
+			return parseResults(await searchTopic()).resources.slice(0, MAX_WEB_SEARCH_PAGES)
+		}
+
+		// the search is the user's spend, and a spent monthly budget searches for nothing
+		const suggestionSearch = { userId, kind: "sourceSuggestionSearch", maxDollars: EXA_COST_PER_SEARCH } as const
+		const paidSearch = await runUserPaidCall(suggestionSearch, async () => ({
+			callResult: await searchTopic(),
+			dollars: EXA_COST_PER_SEARCH,
+		}))
+		return paidSearch.status === "budgetSpent"
+			? []
+			: parseResults(paidSearch.callResult).resources.slice(0, MAX_WEB_SEARCH_PAGES)
 	} catch (error) {
 		// a search that fails leaves the model with the topic's words alone
 		console.error("source suggestion web search failed", error)

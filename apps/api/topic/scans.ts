@@ -15,7 +15,7 @@ import { scans } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
 import { isUserLiteLLMKeyBudgetExhausted } from "@carlnotes/models/litellm"
 import { loadScan, startTopicScan } from "@carlnotes/pipeline/scan"
-import { failStaleScans } from "@carlnotes/pipeline/staleScans"
+import { reapStaleScans } from "@carlnotes/pipeline/staleScans"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { reportError } from "@carlnotes/server/monitoring"
 import { and, eq, sql } from "drizzle-orm"
@@ -83,8 +83,8 @@ export async function runManualScan(
 		return { status: "budget" }
 	}
 
-	// close out any hung scans first, so a stuck scan row doesn't block a new manual scan indefinitely
-	await failStaleScans()
+	// reap any hung scans first, so a stuck scan row doesn't block a new manual scan indefinitely
+	await reapStaleScans()
 
 	// a waiting first Scan, or a free user's manual Scan past the scheduled scans cutoff, waits for the sweep
 	const saveWaitingManualScanResult = await saveWaitingManualScan({

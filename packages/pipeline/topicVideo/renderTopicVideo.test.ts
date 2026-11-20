@@ -5,7 +5,12 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { existsSync } from "node:fs"
 import { dirname } from "node:path"
-import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
+import {
+	restoreConnectionPool,
+	type SentQuery,
+	stubConnectionPool,
+	toTableUpdates,
+} from "@carlnotes/db/connectionPoolStub"
 import * as monthlyBudgetCutoffs from "@carlnotes/db/monthlyBudgetCutoffs"
 import * as podcastFeedCache from "@carlnotes/db/podcastFeedCache"
 import * as storage from "@carlnotes/db/store"
@@ -124,12 +129,18 @@ const REPLACED_FILM_ROW = [
 ]
 
 // answer the render's reads: the podcast episode, its film row if it has one, the keys the swap reads, its chapters,
-// and the row a film's update returns
-function stubRenderReads(filmStateRow: unknown[] | null): SentQuery[] {
+// the status that a failed render reads to learn whether its podcast episode was removed, and the row a film's update
+// returns
+function stubRenderReads(filmStateRow: unknown[] | null, podcastEpisodeStatus = "published"): SentQuery[] {
 	return stubConnectionPool(({ text }) => {
 		if (text.includes('from "episodes" inner join "topics"')) {
 			return [RENDERABLE_PODCAST_EPISODE_ROW]
 		}
+		if (text.startsWith('select "status" from "episodes"')) {
+			return [[podcastEpisodeStatus]]
+		}
+
+		// the film row as the render reads it before it starts
 		if (text.startsWith('select "status", "render_version"')) {
 			return filmStateRow ? [filmStateRow] : []
 		}
@@ -185,13 +196,9 @@ function stubRenderSteps(): { upload: ReturnType<typeof spyOn>; deleteObjects: R
 		},
 	)
 	spyOn(podcastFeedCache, "deletePodcastFeedCache").mockResolvedValue(undefined)
+	spyOn(storage, "listStoredObjectKeys").mockResolvedValue([])
 	const deleteObjects = spyOn(storage, "deleteStoredObjects").mockResolvedValue(undefined)
 	return { upload, deleteObjects }
-}
-
-// the film row's updates a render sent
-function toFilmRowUpdates(sentQueries: SentQuery[]): SentQuery[] {
-	return sentQueries.filter((sentQuery) => sentQuery.text.startsWith('update "topic_videos"'))
 }
 
 test("a ready film at the current render version is skipped", async () => {
@@ -203,7 +210,7 @@ test("a ready film at the current render version is skipped", async () => {
 	// nothing is uploaded or written
 	expect(upload).not.toHaveBeenCalled()
 	expect(toFilmRowWrite(sentQueries)).toBeUndefined()
-	expect(toFilmRowUpdates(sentQueries)).toEqual([])
+	expect(toTableUpdates(sentQueries, "topic_videos")).toEqual([])
 })
 
 // a first render shows its row rendering, then stores its film at the current render version under versioned keys
@@ -215,12 +222,33 @@ test("a new film is stored at the current render version", async () => {
 
 	// the row is written rendering first, then ready at the current render version with its keys
 	expect(toFilmRowWrite(sentQueries)?.values).toContain("rendering")
-	const [readyUpdate] = toFilmRowUpdates(sentQueries)
+	const [readyUpdate] = toTableUpdates(sentQueries, "topic_videos")
 	expect(readyUpdate?.text).toContain('"render_version" = $')
 	expect(readyUpdate?.values).toContain("ready")
 	expect(readyUpdate?.values).toContain(TOPIC_VIDEO_RENDER_VERSION)
 	expect(readyUpdate?.values).toContain(`episodes/episode-1/video/chapters-v${TOPIC_VIDEO_RENDER_VERSION}.mp4`)
 	expect(readyUpdate?.values).toContain(`episodes/episode-1/video/film-image-1-v${TOPIC_VIDEO_RENDER_VERSION}.mp4`)
+})
+
+// the backfill's render must reach the day's total and never its owner's month
+test("a platform-billed render records its minutes as the platform's spend, and adds no cost to the film", async () => {
+	const sentQueries = stubRenderReads(null)
+	stubRenderSteps()
+	await renderTopicVideo({ podcastEpisodeId: "episode-1", isPlatformBilled: true })
+
+	// the film's row is saved ready with no cost added, and the 60-second film's minute is a spends row with no user
+	const [readyUpdate] = toTableUpdates(sentQueries, "topic_videos")
+	expect(readyUpdate?.values).toContain("0.000000")
+	const platformSpends = sentQueries.filter((sentQuery) => sentQuery.text.startsWith('insert into "spends"'))
+	expect(platformSpends).toHaveLength(1)
+	expect(platformSpends[0]?.values).toEqual(expect.arrayContaining(["topicVideoRender", 0.001, "episode-1"]))
+	expect(platformSpends[0]?.values).not.toContain("owner-1")
+
+	// an owner's render adds its minute to the film's row and records no spends row
+	const ownerQueries = stubRenderReads(null)
+	await renderTopicVideo({ podcastEpisodeId: "episode-1" })
+	expect(toTableUpdates(ownerQueries, "topic_videos")[0]?.values).toContain("0.001000")
+	expect(ownerQueries.some((sentQuery) => sentQuery.text.startsWith('insert into "spends"'))).toBe(false)
 })
 
 // a ready film below the current version is rendered again while its row stays ready, then its files are swapped
@@ -231,9 +259,11 @@ test("a ready film below the current render version is rendered again and swappe
 	const renderResult = await renderTopicVideo({ podcastEpisodeId: "episode-1", isPlatformBilled: true })
 	expect(renderResult).toMatchObject({ outcome: "rendered" })
 
-	// the film keeps the image it shows, and of its stored files only the chapter images in the first style are deleted
+	// the film keeps the image it shows, and of its stored files only the chapter images in the first style are deleted.
+	// the second delete is of the shots the render kept, of which the bucket lists none
 	expect(drawOwnImage).not.toHaveBeenCalled()
-	expect(deleteObjects).toHaveBeenCalledTimes(1)
+	expect(deleteObjects).toHaveBeenCalledTimes(2)
+	expect(deleteObjects.mock.calls[1]?.[0]).toEqual([])
 	const deletedKeys: string[] = deleteObjects.mock.calls[0]?.[0] ?? []
 	expect(deletedKeys).toContain("episodes/episode-1/video/chapter-0-image.jpg")
 	expect(deletedKeys.every((deletedKey) => /\/chapter-\d+-image(-\d+)?\.jpg$/.test(deletedKey))).toBe(true)
@@ -241,7 +271,7 @@ test("a ready film below the current render version is rendered again and swappe
 	// the row is never written rendering, and one update swaps the keys only while the row is ready below the current
 	// render version
 	expect(toFilmRowWrite(sentQueries)).toBeUndefined()
-	const [swapUpdate, ...otherUpdates] = toFilmRowUpdates(sentQueries)
+	const [swapUpdate, ...otherUpdates] = toTableUpdates(sentQueries, "topic_videos")
 	expect(otherUpdates).toEqual([])
 	expect(swapUpdate?.text).toContain('"render_version" < $')
 	expect(swapUpdate?.text).toContain('"status" = $')
@@ -279,7 +309,24 @@ test("a failed re-render leaves the film row unchanged and deletes its uploads",
 		`episodes/episode-1/video/intro-image-1-v${TOPIC_VIDEO_RENDER_VERSION}.mp4`,
 	])
 	expect(toFilmRowWrite(sentQueries)).toBeUndefined()
-	expect(toFilmRowUpdates(sentQueries)).toEqual([])
+	expect(toTableUpdates(sentQueries, "topic_videos")).toEqual([])
+})
+
+// no attempt could finish a removed podcast episode's film, so the render ends as a skip instead of a failure
+test("a render that stops after its podcast episode was removed is skipped, and uploads nothing", async () => {
+	// the podcast episode is removed while the film's files render, and the removal stops the render
+	const sentQueries = stubRenderReads(null, "removed")
+	const { upload } = stubRenderSteps()
+	const removal = new AbortController()
+	spyOn(videoFilm, "writeVideoFilm").mockImplementation(async () => {
+		removal.abort(new Error("the podcast episode was removed"))
+	})
+
+	// the render ends as skipped, with no upload and no ready row
+	const renderResult = await renderTopicVideo({ podcastEpisodeId: "episode-1", signal: removal.signal })
+	expect(renderResult).toEqual({ outcome: "skipped", reason: "removed" })
+	expect(upload).not.toHaveBeenCalled()
+	expect(toTableUpdates(sentQueries, "topic_videos")).toEqual([])
 })
 
 // a re-render whose podcast episode lost its chapters records the failed version, and the film that plays stays ready
@@ -299,7 +346,7 @@ test("a re-render with missing inputs records the failed render version and keep
 
 	// no failed row is written, and the one update sets the failed render version on the ready row
 	expect(toFilmRowWrite(sentQueries)).toBeUndefined()
-	const [failedVersionUpdate] = toFilmRowUpdates(sentQueries)
+	const [failedVersionUpdate] = toTableUpdates(sentQueries, "topic_videos")
 	expect(failedVersionUpdate?.text).toContain('set "failed_render_version" = $')
 	expect(failedVersionUpdate?.values).toContain(TOPIC_VIDEO_RENDER_VERSION)
 	expect(failedVersionUpdate?.values).not.toContain("failed")
@@ -315,10 +362,12 @@ test.each(["upload", "publication"])(
 		} else {
 			spyOn(topicVideoRows, "publishTopicVideoReplacement").mockRejectedValueOnce(Error("simulated failure"))
 		}
+
+		// the render fails, and the ready film's row and files stay as they were
 		await expect(
 			renderTopicVideo({ podcastEpisodeId: "episode-1", renderVersion: 4, isPlatformBilled: true }),
 		).rejects.toThrow("simulated failure")
-		expect(toFilmRowUpdates(queries)).toEqual([])
+		expect(toTableUpdates(queries, "topic_videos")).toEqual([])
 		expect(deleteObjects).not.toHaveBeenCalled()
 	},
 )
@@ -333,6 +382,8 @@ test.skipIf(!Bun.which("ffmpeg"))(
 		let workDirectory = ""
 		let stopped = false
 		Bun.env.TOPIC_VIDEO_DISK_LIMIT_MIB = "1"
+
+		// the audio download writes raw video into the render's folder until the limit stops it
 		spyOn(storage, "downloadPodcastEpisodeFile").mockImplementation(async ({ filePath, signal }) => {
 			workDirectory = dirname(filePath)
 			try {
@@ -368,7 +419,7 @@ test.skipIf(!Bun.which("ffmpeg"))(
 			expect(stopped).toBe(true)
 			expect(existsSync(workDirectory)).toBe(false)
 			expect(upload).not.toHaveBeenCalled()
-			expect(toFilmRowUpdates(sent)).toEqual([])
+			expect(toTableUpdates(sent, "topic_videos")).toEqual([])
 		} finally {
 			restore()
 		}
@@ -387,7 +438,7 @@ test("a film stays ready when the worker already exceeds its memory allowance", 
 			"1 MiB memory limit",
 		)
 		expect(upload).not.toHaveBeenCalled()
-		expect(toFilmRowUpdates(sent)).toEqual([])
+		expect(toTableUpdates(sent, "topic_videos")).toEqual([])
 	} finally {
 		restore()
 	}
@@ -401,8 +452,10 @@ test("cancellation during upload leaves the previous film playable", async () =>
 		controller.abort(new Error("cancelled upload"))
 		return "unpublished-intro"
 	})
+
+	// the render fails with the cancellation, and the ready film's row is not written
 	await expect(
 		renderTopicVideo({ podcastEpisodeId: "episode-1", renderVersion: 4, signal: controller.signal }),
 	).rejects.toThrow("cancelled upload")
-	expect(toFilmRowUpdates(sent)).toEqual([])
+	expect(toTableUpdates(sent, "topic_videos")).toEqual([])
 })

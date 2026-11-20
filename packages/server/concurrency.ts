@@ -50,13 +50,16 @@ export function createConcurrencyLimiter(
 /**
  * Returns a function that takes a weight once the weights taken across every caller in the process leave room for it
  * within `maxWeight`, and resolves with the function that releases it. A weight with no room waits its turn, oldest
- * first, and a weight above `maxWeight` is taken alone. A take given a signal leaves the wait and rejects with the
- * signal's reason if the signal aborts before its turn comes.
+ * first, and a weight above `maxWeight` is taken alone. A take marked ahead waits in front of every take not marked
+ * ahead. A take given a signal leaves the wait and rejects with the signal's reason if the signal aborts before its
+ * turn comes.
  */
-export function createWeightLimiter(maxWeight: number): (weight: number, signal?: AbortSignal) => Promise<() => void> {
-	// the weight taken now, and the takes waiting for room, oldest first
+export function createWeightLimiter(
+	maxWeight: number,
+): (weight: number, signal?: AbortSignal, isAhead?: boolean) => Promise<() => void> {
+	// the weight taken now, and the takes waiting for room, the ones marked ahead first and each group oldest first
 	let takenWeight = 0
-	const waitingTakes: { weight: number; take: () => void }[] = []
+	const waitingTakes: { weight: number; isAhead: boolean; take: () => void }[] = []
 
 	// whether a weight fits beside the weight taken. a weight above the limit fits once nothing else is taken
 	const isRoomFor = (weight: number): boolean => takenWeight === 0 || takenWeight + weight <= maxWeight
@@ -68,7 +71,7 @@ export function createWeightLimiter(maxWeight: number): (weight: number, signal?
 		}
 	}
 
-	return (weight, signal) =>
+	return (weight, signal, isAhead = false) =>
 		new Promise((resolve, reject) => {
 			// a take whose signal has already aborted never waits
 			if (signal?.aborted) {
@@ -92,6 +95,7 @@ export function createWeightLimiter(maxWeight: number): (weight: number, signal?
 			// take the weight and resolve with its release
 			const waitingTake = {
 				weight,
+				isAhead,
 				take: (): void => {
 					signal?.removeEventListener("abort", leaveWait)
 					takenWeight += weight
@@ -109,12 +113,17 @@ export function createWeightLimiter(maxWeight: number): (weight: number, signal?
 				startWaitingTakes()
 			}
 
-			// a take waits behind every older one, and for room
+			// a take waits behind every older one, and for room. a take marked ahead goes in front of the takes not
+			// marked ahead, and starts if it then leads and fits
 			if (waitingTakes.length > 0 || !isRoomFor(weight)) {
-				waitingTakes.push(waitingTake)
+				const firstBehindIndex = isAhead ? waitingTakes.findIndex((waiting) => !waiting.isAhead) : -1
+				waitingTakes.splice(firstBehindIndex >= 0 ? firstBehindIndex : waitingTakes.length, 0, waitingTake)
 				signal?.addEventListener("abort", leaveWait, { once: true })
+				startWaitingTakes()
 				return
 			}
+
+			// a take with room and none waiting starts at once
 			waitingTake.take()
 		})
 }

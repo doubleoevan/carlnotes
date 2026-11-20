@@ -9,17 +9,20 @@ import {
 	type ApplyTopicMemoryWriteOptions,
 	applyTopicMemoryWrite,
 	type EmbeddedTopicMemoryWrite,
+	loadRejectedTopicMemoryWrites,
 	type TopicMemoryMergedPair,
 } from "./applyTopicMemoryWrite"
 import { limitActiveTopicMemories } from "./topicMemoryCleanup"
 import { loadEligibleTopicMemoryFindingIds, loadTopicMemoryScan } from "./topicMemoryEvidence"
-import { saveTopicMemorySubject } from "./topicMemorySubjects"
+import { saveTopicMemorySubjects, type TopicMemorySubjectEntry } from "./topicMemorySubjects"
 
+// the Scan and its Topic, the writes to save, and the signal that ends the update
 type SaveTopicMemoryUpdatesOptions = {
 	scanId: string
 	topicId: string
 	writes: EmbeddedTopicMemoryWrite[]
 	signal: AbortSignal
+	// the pairs that the update merged, each write's stored id, and the replacements that the review confirmed
 	mergedPairs?: TopicMemoryMergedPair[]
 	writeResults?: Map<EmbeddedTopicMemoryWrite, string>
 	replacements?: ReadonlyMap<EmbeddedTopicMemoryWrite, NonNullable<ApplyTopicMemoryWriteOptions["replacement"]>>
@@ -39,6 +42,7 @@ export async function saveTopicMemoryUpdates({
 		// serialize with feedback and changes to public evidence
 		const topic = await lockPersonalSourcesTopic(transaction, topicId)
 		const scan = topic && (await loadTopicMemoryScan(scanId, transaction))
+		// a Scan of another Topic, a Scan already updated, and a Topic with Personal sources left to convert save nothing
 		if (
 			scan?.topicId !== topicId ||
 			scan.topicMemoriesUpdatedAt ||
@@ -83,7 +87,7 @@ async function applyEligibleTopicMemoryWrites(
 		writeResults,
 		replacements,
 		...options
-	}: Omit<ApplyTopicMemoryWriteOptions, "write" | "replacement"> &
+	}: Omit<ApplyTopicMemoryWriteOptions, "write" | "replacement" | "isRejected"> &
 		Pick<SaveTopicMemoryUpdatesOptions, "writes" | "signal" | "writeResults" | "replacements">,
 ): Promise<void> {
 	if (writes.length === 0) {
@@ -94,6 +98,11 @@ async function applyEligibleTopicMemoryWrites(
 	const orderedWrites = writes.toSorted(
 		(left, right) => Number(shouldCombineWithExactMatch(left)) - Number(shouldCombineWithExactMatch(right)),
 	)
+
+	// the Topic's rejected topic memories are read once for every write, and the subjects are saved in one statement
+	// after the last write, so the Topic lock is held for as few statements as the writes need
+	const rejectedWrites = await loadRejectedTopicMemoryWrites(transaction, options.topicId, orderedWrites)
+	const subjectEntries: TopicMemorySubjectEntry[] = []
 	for (const write of orderedWrites) {
 		signal.throwIfAborted()
 		if (write.findingIds.length === 0 || write.findingIds.some((id) => !eligibleIds.has(id))) {
@@ -103,20 +112,19 @@ async function applyEligibleTopicMemoryWrites(
 			...options,
 			write,
 			replacement: replacements?.get(write),
+			isRejected: rejectedWrites.has(write),
 		})
 		if (memoryId) {
+			// the established spelling comes before an alias of it whose public Finding is still eligible
 			writeResults?.set(write, memoryId)
-			await saveTopicMemorySubject({ handle: transaction, topicId: options.topicId, identity: write })
+			subjectEntries.push({ identity: write })
 			if (write.subjectAlias && eligibleIds.has(write.subjectAlias.findingId)) {
-				await saveTopicMemorySubject({
-					handle: transaction,
-					topicId: options.topicId,
-					identity: write,
-					evidence: write.subjectAlias,
-				})
+				subjectEntries.push({ identity: write, evidence: write.subjectAlias })
 			}
 		}
 	}
+	// save the subjects of the writes that were stored
+	await saveTopicMemorySubjects(transaction, options.topicId, subjectEntries)
 }
 
 function shouldCombineWithExactMatch({ reconciliation }: EmbeddedTopicMemoryWrite): boolean {

@@ -8,7 +8,12 @@ import { deleteStoredObjects } from "@carlnotes/db/store"
 import { loadOrProvisionUserLiteLLMKey } from "@carlnotes/models/litellm"
 import { topicImageCostDollars, topicImageModel } from "@carlnotes/models/topicImageModel"
 import { and, asc, eq, isNull, sql } from "drizzle-orm"
-import { renderTopicImageOriginal, TopicImageRenderFailure } from "../topicImages/renderTopicImageOriginal"
+import {
+	deleteDrawnImage,
+	renderTopicImageOriginal,
+	TopicImageRenderFailure,
+	toDrawnImageKey,
+} from "../topicImages/renderTopicImageOriginal"
 import { storePodcastEpisodeImageFiles, toPodcastEpisodeImageObjectKeys } from "../topicImages/topicImageFiles"
 import { writeTopicImageScene } from "../topicImages/writeTopicImageScene"
 import { loadPodcastEpisodeImageSceneInput } from "./podcastEpisodeImageRenders"
@@ -27,13 +32,23 @@ export async function drawPodcastEpisodeImage({
 	podcastEpisodeId,
 	isPlatformBilled = false,
 }: DrawPodcastEpisodeImageOptions): Promise<void> {
-	// the podcast episode's owner and image. one that has an image, or no title yet, has nothing to draw
+	// the podcast episode's owner, status, and image. one that is not published has nothing to draw, so a workflow that
+	// outlives a failed or removed row spends nothing on it
 	const [podcastEpisode] = await db
-		.select({ ownerId: podcastEpisodes.ownerId, imageHash: podcastEpisodes.imageHash })
+		.select({
+			ownerId: podcastEpisodes.ownerId,
+			status: podcastEpisodes.status,
+			imageHash: podcastEpisodes.imageHash,
+		})
 		.from(podcastEpisodes)
 		.where(eq(podcastEpisodes.id, podcastEpisodeId))
-	const sceneInput = podcastEpisode?.imageHash ? null : await loadPodcastEpisodeImageSceneInput(podcastEpisodeId)
-	if (!podcastEpisode || !sceneInput) {
+	if (podcastEpisode?.status !== "published") {
+		return
+	}
+
+	// one that has an image, or no title yet, has nothing to draw either
+	const sceneInput = podcastEpisode.imageHash ? null : await loadPodcastEpisodeImageSceneInput(podcastEpisodeId)
+	if (!sceneInput) {
 		return
 	}
 
@@ -41,19 +56,26 @@ export async function drawPodcastEpisodeImage({
 	const litellmApiKey = isPlatformBilled ? undefined : await loadOrProvisionUserLiteLLMKey(podcastEpisode.ownerId)
 	const scene = await writeTopicImageScene({ ...sceneInput, litellmApiKey })
 
-	// the original from the scene and the house style. a spent budget and a rejection are final
+	// the original from the scene and the house style. a spent budget and a rejection are final. the drawn bytes are
+	// kept under the episode's key, so an attempt after a failed store draws nothing
 	const model = topicImageModel()
-	const original = await renderTopicImageOriginal({ scene, isHouseStyle: true, model, litellmApiKey }).catch(
-		(error: unknown) => {
-			if (error instanceof TopicImageRenderFailure && error.outcome !== "retryable") {
-				throw new PodcastEpisodeImageRejectedError(error.message)
-			}
-			throw error
-		},
-	)
+	const drawnImageKey = toDrawnImageKey("podcast-episode", podcastEpisodeId)
+	const original = await renderTopicImageOriginal({
+		scene,
+		isHouseStyle: true,
+		model,
+		litellmApiKey,
+		drawnImageKey,
+	}).catch((error: unknown) => {
+		if (error instanceof TopicImageRenderFailure && error.outcome !== "retryable") {
+			throw new PodcastEpisodeImageRejectedError(error.message)
+		}
+		throw error
+	})
 
 	// the files under the original's hash, then the hash on the episode, with the cost only if the owner pays. an
-	// episode that got its image meanwhile keeps it, and this render's files go
+	// episode that got its image meanwhile keeps it, and this render's files go unless the episode's image is under the
+	// same hash, as it is if an overlapping draw read the same kept bytes
 	const hash = await storePodcastEpisodeImageFiles(podcastEpisodeId, original)
 	const imageCostDollars = isPlatformBilled ? 0 : topicImageCostDollars(model)
 	const updatedRows = await db
@@ -67,12 +89,32 @@ export async function drawPodcastEpisodeImage({
 		.returning({ id: podcastEpisodes.id })
 		.catch(async (error: unknown) => {
 			// a failed write leaves no files behind
-			await deleteStoredObjects(toPodcastEpisodeImageObjectKeys(podcastEpisodeId, hash))
+			await deleteUnusedImageFiles(podcastEpisodeId, hash)
 			throw error
 		})
 
 	// no row changed: another render stored its image first
 	if (updatedRows.length === 0) {
+		await deleteUnusedImageFiles(podcastEpisodeId, hash)
+	}
+
+	// the episode has its image either way, so the kept bytes go
+	await deleteDrawnImage(drawnImageKey)
+}
+
+// delete the files stored under a hash, unless the podcast episode's image is under that hash or the podcast episode has
+// no image yet, because a retry or another draw of the same original stores the same hash
+async function deleteUnusedImageFiles(podcastEpisodeId: string, hash: string): Promise<void> {
+	// the hash that the podcast episode's image is under now
+	const [podcastEpisode] = await db
+		.select({ imageHash: podcastEpisodes.imageHash })
+		.from(podcastEpisodes)
+		.where(eq(podcastEpisodes.id, podcastEpisodeId))
+	if (podcastEpisode?.imageHash === null) {
+		return
+	}
+	// delete the files of a hash that lost to another image, or of a podcast episode that is gone
+	if (podcastEpisode?.imageHash !== hash) {
 		await deleteStoredObjects(toPodcastEpisodeImageObjectKeys(podcastEpisodeId, hash))
 	}
 }

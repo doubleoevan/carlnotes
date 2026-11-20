@@ -1,23 +1,40 @@
 // retires unprotected facts by Scan recency
 import { TOPIC_MEMORY_ACTIVE_LIMIT } from "@carlnotes/contracts/topicMemories"
-import type { DbTransaction } from "@carlnotes/db"
+import { type DbTransaction, db } from "@carlnotes/db"
 import { scans } from "@carlnotes/db/schema/scans"
 import { topicMemories, topicMemoryFeedback } from "@carlnotes/db/schema/topicMemories"
 import { topicMemoryCorrection, topicMemoryIsSaved } from "@carlnotes/db/topicMemories"
-import { and, count, eq, inArray, sql } from "drizzle-orm"
+import { and, count, eq, inArray, type SQL, sql } from "drizzle-orm"
 import { toEvictedTopicMemoryIds } from "./topicMemoryCleanupRules"
 
-/**
- * Limits ready active topic memories, preserving queued claims, saved topic memories and corrections.
- */
-export async function limitActiveTopicMemories(transaction: DbTransaction, topicId: string, now: Date): Promise<void> {
-	// most Scans are below the cap and do not need a read of their Scan history
-	const active = and(
+// the active topic memories that count toward a Topic's limit. a claim queued for review does not
+function toReadyTopicMemories(topicId: string): SQL | undefined {
+	return and(
 		eq(topicMemories.topicId, topicId),
 		eq(topicMemories.status, "active"),
 		eq(topicMemories.isAtomic, true),
 		eq(topicMemories.needsReview, false),
 	)
+}
+
+/**
+ * Returns whether saved topic memories and corrections alone fill the Topic's limit. A new topic memory would then be
+ * retired in the transaction that adds it.
+ */
+export async function isTopicMemoryLimitFilledBySaved(topicId: string): Promise<boolean> {
+	const [protectedMemories] = await db
+		.select({ count: count() })
+		.from(topicMemories)
+		.where(and(toReadyTopicMemories(topicId), sql`(${topicMemoryIsSaved} or ${topicMemoryCorrection} is not null)`))
+	return (protectedMemories?.count ?? 0) >= TOPIC_MEMORY_ACTIVE_LIMIT
+}
+
+/**
+ * Limits ready active topic memories, preserving queued claims, saved topic memories and corrections.
+ */
+export async function limitActiveTopicMemories(transaction: DbTransaction, topicId: string, now: Date): Promise<void> {
+	// most Scans are below the limit and do not need a read of their Scan history
+	const active = toReadyTopicMemories(topicId)
 	const [total] = await transaction.select({ count: count() }).from(topicMemories).where(active)
 	if ((total?.count ?? 0) <= TOPIC_MEMORY_ACTIVE_LIMIT) {
 		return

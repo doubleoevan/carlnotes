@@ -138,10 +138,12 @@ async function check(topicId: string, ownerId: string): Promise<boolean> {
 	// print the scan report itself so the owner can review its quality by reading it
 	console.log(`scan summary:\n${topicScan.scanSummary}`)
 
-	// what the podcast source contributed, and whether any episode reached Firecrawl
-	const episodes = ingestResult.resources.filter((resource) => resource.kind === "listen")
-	const scrapedEpisodes = await scrapedEpisodeCount(episodes.map((episode) => episode.url))
-	console.log(`\nepisodes ingested  : ${episodes.length} (with transcripts: ${countWithTranscripts(episodes)})`)
+	// what the podcast source contributed, read from the stored Resources, and whether any episode reached Firecrawl
+	const listenResources = await loadListenResources(ingestResult.resources.map((resource) => resource.url))
+	const scrapedEpisodes = await scrapedEpisodeCount(listenResources.map((listenResource) => listenResource.url))
+	console.log(
+		`\nepisodes ingested  : ${listenResources.length} (with transcripts: ${countWithTranscripts(listenResources)})`,
+	)
 	console.log(`episodes scraped   : ${scrapedEpisodes} (a stored body without a transcript means Firecrawl ran)`)
 
 	// send the Scan's report twice, the way a retry would. one email goes out, and one row names the Scan
@@ -180,7 +182,7 @@ async function check(topicId: string, ownerId: string): Promise<boolean> {
 		["a finding has a relevance explanation", findingsWithExplanations.length > 0],
 
 		// podcast source checks. keyless ingestion spends nothing, and an episode is never scraped
-		["the podcast source found episodes", episodes.length > 0],
+		["the podcast source found episodes", listenResources.length > 0],
 		["keyless ingestion cost nothing", topicScan.stageCosts.ingestion === 0],
 		["no episode was scraped for its page", scrapedEpisodes === 0],
 
@@ -208,7 +210,20 @@ async function loadTopicVectorRow(topicId: string): Promise<{ isPublicAndShown: 
 	return topicVectorRow
 }
 
-// how many of this scan's episodes carried a transcript their feed published
+// the listen Resources among the Resources that this scan found. the ingest result names each Resource by its url alone
+async function loadListenResources(resourceUrls: string[]): Promise<{ url: string; transcriptUrl: string | null }[]> {
+	if (resourceUrls.length === 0) {
+		return []
+	}
+
+	// the stored rows of the found urls that are listen Resources
+	return db
+		.select({ url: resources.url, transcriptUrl: resources.transcriptUrl })
+		.from(resources)
+		.where(and(inArray(resources.url, resourceUrls), eq(resources.kind, "listen")))
+}
+
+// how many of this scan's listen Resources include a transcript their feed published
 function countWithTranscripts(episodes: { transcriptUrl?: string | null }[]): number {
 	return episodes.filter((episode) => episode.transcriptUrl).length
 }

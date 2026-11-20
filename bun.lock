@@ -55,7 +55,6 @@
         "@modelcontextprotocol/core": "2.4.0",
         "@modelcontextprotocol/ext-apps": "2.0.4",
         "@modelcontextprotocol/server": "2.4.0",
-        "@resvg/resvg-js": "^2.6.2",
         "ai": "^7.0.162",
         "better-auth": "~1.7.16",
         "cbor2": "^2.4.1",
