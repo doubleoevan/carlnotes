@@ -203,7 +203,7 @@ reports a sweep that stops or dies early (design D13).
       a public page's second request is an edge hit, a chat stream and `/api` bypass the cache, a view records its
       place, a forged forwarded header is still counted on both services, and the web log holds no trusted proxies
       warning
-- [ ] 4.11 Rerun task 4.1's measurement after the routes, once with `API_ORIGIN` unset and once set in the web
+- [x] 4.11 Rerun task 4.1's measurement after the routes, once with `API_ORIGIN` unset and once set in the web
       service's own variables. Verify: both p99 readings and the choice are recorded in design.md A.4
 
 ## 5. Correct one stale claim (item 5, with finding W5)

@@ -1251,6 +1251,25 @@ limit, which row 66 tightened: 75 of 124 requests were limited where 1 was befor
 comparable with the earlier 123. Neither run came near the 100 ms event loop warning, and no request waited for a
 database connection. Task 4.11 reruns the same two commands after the routes, against `web`.
 
+Task 4.11's rerun after the path routes (2026-11-20 18:23 to 18:30 UTC, production at 3f95386b, `web` at two
+replicas, one address, the same two commands and page through `web`'s own Northflank hostname, each replica's next
+minute line). The first pair ran with `API_ORIGIN` unset. The second ran with `API_ORIGIN` set to `http://app:3000`
+in `web`'s own variables. Run logs `logs/launch-hardening/apply/runs/after-4.11-api-origin-unset/` and
+`after-4.11-api-origin-set/`:
+
+| Run | Responses | Response p50 and p99 | Event loop p99 | Largest delay |
+|---|---|---|---|---|
+| Unset, `oha -n 120 -c 50` | 61 rendered, 57 shed at the render limit, 2 rate limited | 719 ms, 1,470 ms | 5 ms, 3 ms | 182 ms, 322 ms |
+| Unset, `oha -z 62s -q 2 -c 16` | 76 rendered, 48 rate limited | 294 ms, 1,084 ms | 8 ms, 12 ms | 36 ms, 27 ms |
+| Set, `oha -n 120 -c 50` | 83 rendered, 31 shed at the render limit, 6 rate limited | 959 ms, 2,349 ms | 5 ms, 3 ms | 733 ms, 730 ms |
+| Set, `oha -z 62s -q 2 -c 16` | 70 rendered, 54 rate limited | 291 ms, 946 ms | 7 ms, 11 ms | 33 ms, 30 ms |
+
+**Chose: `API_ORIGIN` unset**, and `web` runs that way. Reading `app` shed fewer renders in the burst, but its burst
+p99 was 60% higher and its largest delays reached 730 ms, and the steady run differed by less than its own noise.
+Unset keeps a render's queries off the process that holds the chat streams and never meets another build's api in
+the middle of a release. With it set, `web`'s pool stayed near empty and the queries moved to `app`. Neither setting
+came near the 100 ms event loop warning, and no request waited for a database connection.
+
 Its load test baseline, from the archived apps-and-packages-restructure design: 77 requests a second and a p99 of
 2.27 s on `/api/topic-feed`, measured 2026-10-21. The split change waited, unapplied, for render load to move the
 event loop's p99 past its 100 ms warning. Neither its runs nor today's passive baseline came near it. This change
