@@ -1,5 +1,6 @@
 // fetch a transcript as plain text: a video's caption track from the host that publishes it, or a declared transcript
 import { toOneLineText } from "@carlnotes/contracts/text"
+import { YOUTUBE_HOSTS } from "@carlnotes/contracts/youtube"
 import { FetchStatusError, fetchPublicUrl, readLimitedBody } from "@carlnotes/server/publicFetch"
 import type { FetchResult } from "./scrape"
 
@@ -9,8 +10,7 @@ const VIDEO_HOST_TIMEOUT_MS = 30_000
 // a body read straight from its url is bounded by its own timeout
 const DIRECT_TIMEOUT_MS = 10_000
 
-// the YouTube hostnames a video url can have, with watch pages and short links kept apart
-const YOUTUBE_WATCH_HOSTS = new Set(["youtube.com", "www.youtube.com", "m.youtube.com"])
+// the hosts of YouTube's short video links, kept apart from its watch pages
 const YOUTUBE_SHORT_HOSTS = new Set(["youtu.be", "www.youtu.be"])
 
 // the paths that name the video in their next segment instead of in a "v" param
@@ -179,7 +179,7 @@ export function toYoutubeVideoId(url: string): string | null {
 	if (YOUTUBE_SHORT_HOSTS.has(parsedUrl.hostname)) {
 		return parsedUrl.pathname.split("/")[1] || null
 	}
-	if (!YOUTUBE_WATCH_HOSTS.has(parsedUrl.hostname)) {
+	if (!YOUTUBE_HOSTS.has(parsedUrl.hostname)) {
 		return null
 	}
 

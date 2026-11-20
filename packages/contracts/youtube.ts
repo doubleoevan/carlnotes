@@ -1,5 +1,8 @@
-// a YouTube video's urls, its player frame's attributes, and its play button's triangle, and the video on making a
-// topic that the homepage, the menus, and the docs play
+// a YouTube video's urls, the hosts they are on, its player frame's attributes, and its play button's triangle, and the
+// video on making a topic that the homepage, the menus, and the docs play
+
+// the hosts a YouTube watch, YouTube channel, or playlist page is on
+export const YOUTUBE_HOSTS = new Set(["youtube.com", "www.youtube.com", "m.youtube.com"])
 
 /**
  * Returns a YouTube video's canonical watch page url.

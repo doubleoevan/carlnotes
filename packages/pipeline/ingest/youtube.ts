@@ -5,33 +5,77 @@ import { toYoutubeWatchUrl } from "@carlnotes/contracts/youtube"
 import { db } from "@carlnotes/db"
 import { sources } from "@carlnotes/db/schema/topics"
 import { reportError } from "@carlnotes/server/monitoring"
+import { FetchStatusError } from "@carlnotes/server/publicFetch"
 import { eq } from "drizzle-orm"
 import { toYoutubeVideoId } from "../transcripts"
 import { fetchNamedFeed } from "./feed"
-import type { NewResource, Source, SourceIngester } from "./ingester"
+import type { IngestResult, NewResource, Source, SourceIngester } from "./ingester"
+import { toAtomUrl } from "./youtubeSourceIds"
 
 // fetch limits used to bound slow feeds and reject oversized bodies
 const MAX_RESULTS = 25
 const FETCH_TIMEOUT_MS = 10_000
-
-// the YouTube hosts whose playlist pages can be expanded. the search ingester reuses this
-const YOUTUBE_HOSTS = new Set(["youtube.com", "www.youtube.com", "m.youtube.com"])
 
 // fetch a channel or playlist's recent videos as "watch" Resources
 export const youtubeIngester: SourceIngester = async (source: Source) => {
 	// resolve what to pull from config, then select the keyed API or the keyless Atom fallback
 	const { apiPlaylistId, atomUrl } = toPlaylistIdAndAtomUrl(source)
 	const apiKey = Bun.env.YOUTUBE_API_KEY
-	if (apiKey) {
-		const { channelTitle, resources } = await fetchVideos(apiPlaylistId, apiKey)
-		await saveSourceName(source, channelTitle)
-		return { resources, costDollars: 0 }
+	if (!apiKey) {
+		return fetchAtomVideos({ source, atomUrl, isMissingFromApi: false })
 	}
 
-	// fall back to the keyless Atom feed, tagged so the Scan records the fallback
-	const { feedName, resources } = await fetchNamedFeed(atomUrl, { resourceKind: "watch" })
-	await saveSourceName(source, feedName)
-	return { resources, costDollars: 0, fallbackMode: YOUTUBE_ATOM_FALLBACK_MODE }
+	// the API names the YouTube channel, which the Source keeps as its name
+	try {
+		const { youtubeChannelTitle, resources } = await fetchVideos(apiPlaylistId, apiKey)
+		await saveSourceName(source, youtubeChannelTitle)
+		return { resources, costDollars: 0 }
+	} catch (error) {
+		// a playlist the API does not serve, as for a YouTube Topic channel, is read from the Atom feed instead
+		if (!isMissingYoutubePlaylist(error)) {
+			throw error
+		}
+		return fetchAtomVideos({ source, atomUrl, isMissingFromApi: true })
+	}
+}
+
+// read the keyless Atom feed, tagged so the Scan records the fallback
+async function fetchAtomVideos({
+	source,
+	atomUrl,
+	isMissingFromApi,
+}: {
+	source: Source
+	atomUrl: string
+	isMissingFromApi: boolean
+}): Promise<IngestResult> {
+	// the feed names the YouTube channel too
+	try {
+		const { feedName, resources } = await fetchNamedFeed(atomUrl, { resourceKind: "watch" })
+		await saveSourceName(source, feedName)
+		return { resources, costDollars: 0, fallbackMode: YOUTUBE_ATOM_FALLBACK_MODE }
+	} catch (error) {
+		// a YouTube channel or playlist that both the API and the feed say is missing can never be read, so its owner is
+		// shown why. the feed alone sometimes responds with 404 for a YouTube channel that exists
+		if (isMissingFromApi && isMissingYoutubePlaylist(error)) {
+			await db
+				.update(sources)
+				.set({ status: "failed", error: YOUTUBE_SOURCE_MISSING_ERROR })
+				.where(eq(sources.id, source.id))
+		}
+
+		// the Scan records this Source's failure either way
+		throw error
+	}
+}
+
+// what the owner of a YouTube source that YouTube does not have reads
+const YOUTUBE_SOURCE_MISSING_ERROR = "YouTube has no channel or playlist with this id"
+
+// a 404 or a 400 is YouTube saying the playlist or YouTube channel does not exist. a quota 403, a 5xx, or a timeout may
+// pass
+function isMissingYoutubePlaylist(error: unknown): boolean {
+	return error instanceof FetchStatusError && (error.status === 404 || error.status === 400)
 }
 
 // keep what the channel or playlist is called on the Source, so it reads by name instead of by id
@@ -58,22 +102,10 @@ type YoutubePlaylist = {
 // the fields addVideoDurations reads from a videos response
 type YoutubeVideoDetails = { items?: { id?: string; contentDetails?: { duration?: string } }[] }
 
-// pull the playlist id from a YouTube playlist page url. any other url returns null
-export function playlistIdFromUrl(url: string): string | null {
-	// only the playlist page on a YouTube host counts
-	const playlistUrl = URL.parse(url)
-	if (!playlistUrl || !YOUTUBE_HOSTS.has(playlistUrl.hostname) || playlistUrl.pathname !== "/playlist") {
-		return null
-	}
-
-	// the list query param holds the playlist id. a playlist page without one has nothing to expand
-	return playlistUrl.searchParams.get("list")
-}
-
 // the config has either a channel id or a playlist id. throws an error when it has neither
 function toPlaylistIdAndAtomUrl(source: Source): { apiPlaylistId: string; atomUrl: string } {
 	// read whichever id the config has
-	const channelId = typeof source.config.channelId === "string" ? source.config.channelId : undefined
+	const youtubeChannelId = typeof source.config.channelId === "string" ? source.config.channelId : undefined
 	const playlistId = typeof source.config.playlistId === "string" ? source.config.playlistId : undefined
 
 	// a playlist id is read directly by both access modes
@@ -82,134 +114,53 @@ function toPlaylistIdAndAtomUrl(source: Source): { apiPlaylistId: string; atomUr
 	}
 
 	// a channel id maps to its uploads playlist for the API and its channel feed for Atom
-	if (channelId) {
-		return { apiPlaylistId: uploadsFromChannel(channelId), atomUrl: toAtomUrl(channelId, "channel") }
+	if (youtubeChannelId) {
+		return {
+			apiPlaylistId: uploadsFromYoutubeChannel(youtubeChannelId),
+			atomUrl: toAtomUrl(youtubeChannelId, "channel"),
+		}
 	}
 	throw new Error(`youtube source ${source.id} has no channelId or playlistId in config`)
 }
 
-/**
- * The Atom feed url for a YouTube channel or playlist id, which is the keyless way to read either one.
- */
-export function toAtomUrl(youtubeId: string, youtubeKind: YoutubeIdKind = toYoutubeIdKind(youtubeId)): string {
-	// the feed names the id by what it is. a caller that knows says so, and the rest is read from the id itself
-	const atomQuery =
-		youtubeKind === "playlist"
-			? new URLSearchParams({ playlist_id: youtubeId })
-			: new URLSearchParams({ channel_id: youtubeId })
-	return `https://www.youtube.com/feeds/videos.xml?${atomQuery}`
-}
-
-// the id forms that the Atom feed reads directly: a channel id, and the playlist ids a channel or a user builds
-const YOUTUBE_ID_PATTERN = /^(?:UC[\w-]{22}|(?:PL|UU|RD|OL|LL|FL)[\w-]{12,})$/
-
-// a channel handle, which is what a channel is known by and the one form that has to be looked up
-const YOUTUBE_HANDLE_PATTERN = /^@[\w.-]+$/
-
-// a channel page names its own channel in its canonical link
-const CANONICAL_CHANNEL_PATTERN = /<link rel="canonical" href="https:\/\/www\.youtube\.com\/channel\/(UC[\w-]{22})">/
-
-/**
- * The channel or playlist id a YouTube source names, however it was written. Null if it names neither.
- */
-export async function toYoutubeSourceId(value: string): Promise<string | null> {
-	// an id is already what the feed reads, so it needs no lookup
-	const namedSource = value.trim()
-	if (YOUTUBE_ID_PATTERN.test(namedSource)) {
-		return namedSource
-	}
-
-	// a handle names no id at all, so the channel page is asked for it. a bare handle and a handle url are the same ask
-	const handle = toYoutubeHandle(namedSource)
-	if (handle) {
-		return fetchChannelId(handle)
-	}
-
-	// a channel url has its id in the path, and a playlist url has its own id in the list param
-	const channelUrlId = toChannelUrlId(namedSource)
-	return channelUrlId ?? playlistIdFromUrl(namedSource)
-}
-
-// the handle that a value names, whether written bare or as a channel url. anything else names no handle
-function toYoutubeHandle(value: string): string | null {
-	// a bare handle is already a match
-	if (YOUTUBE_HANDLE_PATTERN.test(value)) {
-		return value
-	}
-
-	// a handle url has it as the first path segment on a YouTube host
-	const handleUrl = URL.parse(value)
-	if (!handleUrl || !YOUTUBE_HOSTS.has(handleUrl.hostname)) {
-		return null
-	}
-	const firstSegment = handleUrl.pathname.split("/")[1] ?? ""
-	return YOUTUBE_HANDLE_PATTERN.test(firstSegment) ? firstSegment : null
-}
-
-// the channel id a /channel url has in its path. any other url has none
-function toChannelUrlId(value: string): string | null {
-	// only the channel path on a YouTube host names a channel id
-	const channelUrl = URL.parse(value)
-	if (!channelUrl || !YOUTUBE_HOSTS.has(channelUrl.hostname)) {
-		return null
-	}
-	const [, firstSegment, secondSegment] = channelUrl.pathname.split("/")
-	return firstSegment === "channel" && YOUTUBE_ID_PATTERN.test(secondSegment ?? "") ? (secondSegment ?? null) : null
-}
-
-// ask the channel page which channel it is
-async function fetchChannelId(handle: string): Promise<string | null> {
-	// a page that does not answer names no channel
-	try {
-		const response = await fetch(`https://www.youtube.com/${handle}`, {
-			signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-		})
-		if (!response.ok) {
-			return null
-		}
-
-		// the canonical link is the only place the page names itself instead of another channel
-		return (await response.text()).match(CANONICAL_CHANNEL_PATTERN)?.[1] ?? null
-	} catch (error) {
-		console.error(`youtube handle ${handle} could not be resolved`, error)
-		return null
-	}
-}
-
-// whether an id names a channel or a playlist
-export type YoutubeIdKind = "channel" | "playlist"
-
-/**
- * What a YouTube id is for, parsed from its prefix. Channel ids are the only ones that start with UC,
- * so everything else is a playlist: PL, and the UU, RD, OL, and LL are the playlists a channel generates.
- */
-function toYoutubeIdKind(youtubeId: string): YoutubeIdKind {
-	return youtubeId.startsWith("UC") ? "channel" : "playlist"
-}
-
-// a channel's uploads playlist id is the channel id with the UC prefix swapped to UU. YouTube keeps this mapping stable
-function uploadsFromChannel(channelId: string): string {
+// a YouTube channel's uploads playlist id is the YouTube channel id with the UC prefix swapped to UU. YouTube keeps
+// this mapping stable
+function uploadsFromYoutubeChannel(youtubeChannelId: string): string {
 	// pass ids without the UC prefix through unchanged. a bad id fails the fetch and stops only this Source
-	return channelId.startsWith("UC") ? `UU${channelId.slice(2)}` : channelId
+	return youtubeChannelId.startsWith("UC") ? `UU${youtubeChannelId.slice(2)}` : youtubeChannelId
+}
+
+// a 400 that names the API key is a rejected key, which is a fault to report instead of a missing playlist
+const API_KEY_REJECTION_PATTERN = /API_KEY_|API key/
+
+// the API key goes in a header, so a failed fetch's url, which an error log prints, never holds it
+function toApiKeyHeaders(apiKey: string): Record<string, string> {
+	return { "X-Goog-Api-Key": apiKey }
 }
 
 // fetch a playlist's recent videos using the Data API, keeping the channel title the response names with them
 export async function fetchVideos(
 	playlistId: string,
 	apiKey: string,
-): Promise<{ channelTitle: string | null; resources: NewResource[] }> {
+): Promise<{ youtubeChannelTitle: string | null; resources: NewResource[] }> {
 	// playlistItems costs one quota unit and skips no videos, which is cheaper and more complete than search.list
-	const url = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&maxResults=${MAX_RESULTS}&playlistId=${playlistId}&key=${apiKey}`
-	const response = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
-	// a failed response stops only this Source. the Scan isolates the failure
+	const url = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&maxResults=${MAX_RESULTS}&playlistId=${playlistId}`
+	const response = await fetch(url, { headers: toApiKeyHeaders(apiKey), signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
+
+	// a failed response stops only this Source. the Scan isolates the failure. a playlist that does not exist is
+	// YouTube's response instead of a fault, so it throws the status error the ingester reads the Atom feed after
 	if (!response.ok) {
+		const responseText = await response.text()
+		if (response.status === 404 || (response.status === 400 && !API_KEY_REJECTION_PATTERN.test(responseText))) {
+			throw new FetchStatusError(`youtube playlistItems ${playlistId}`, response.status)
+		}
 		throw new Error(`youtube playlistItems ${playlistId} returned ${response.status}`)
 	}
 
 	// the playlist owner's channel title is included on every item, so the first one names the Source
 	const playlist = (await response.json()) as YoutubePlaylist
-	const channelTitle = playlist.items?.[0]?.snippet?.channelTitle?.trim() || null
-	return { channelTitle, resources: await addVideoDurations(parseVideos(playlist), apiKey) }
+	const youtubeChannelTitle = playlist.items?.[0]?.snippet?.channelTitle?.trim() || null
+	return { youtubeChannelTitle, resources: await addVideoDurations(parseVideos(playlist), apiKey) }
 }
 
 // add each video's length with one call for the page. the Resources stay as they are if the call fails
@@ -220,8 +171,11 @@ async function addVideoDurations(resources: NewResource[], apiKey: string): Prom
 	}
 	try {
 		// videos.list costs one quota unit for up to 50 ids
-		const url = `https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${videoIds.join(",")}&key=${apiKey}`
-		const response = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
+		const url = `https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${videoIds.join(",")}`
+		const response = await fetch(url, {
+			headers: toApiKeyHeaders(apiKey),
+			signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+		})
 		if (!response.ok) {
 			throw new Error(`youtube videos returned ${response.status}`)
 		}

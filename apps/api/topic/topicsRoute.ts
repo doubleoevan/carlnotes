@@ -24,6 +24,7 @@ import { TOPIC_PAGE_KEY_PREFIX } from "./feedCaches"
 import { readVisitorTopicPage } from "./feeds"
 import { loadTopicGateResponse } from "./helpers"
 import { loadRelatedTopics } from "./relatedTopics"
+import { toYoutubeSourceRejectionMessage } from "./saveHelpers"
 import { createTopic, updateTopic } from "./saveTopic"
 import { loadTeamTopicOptions } from "./teamTopicOptions"
 import { loadTopicPage } from "./topics"
@@ -61,6 +62,14 @@ export const topicsRoute = new Hono<AppEnv>()
 
 		if (createTopicResult.status === "inviteLimit") {
 			return context.json({ error: "daily invite limit reached" }, 429)
+		}
+		// a YouTube value that names no YouTube channel or playlist, or one YouTube did not respond to, is rejected in
+		// words the editor shows
+		if (createTopicResult.status === "youtubeSourceUnresolved") {
+			return context.json(
+				{ error: toYoutubeSourceRejectionMessage(createTopicResult) },
+				createTopicResult.isYoutubeUnavailable ? 503 : 422,
+			)
 		}
 		// a full topic limit and a full daily topic limit both reject, but only the second can name its number
 		return createTopicResult.status === "dailyFrequency"
@@ -185,6 +194,14 @@ export const topicsRoute = new Hono<AppEnv>()
 		}
 		if (updateTopicResult.status === "inviteLimit") {
 			return context.json({ error: "daily invite limit reached" }, 429)
+		}
+		// a YouTube value that names no YouTube channel or playlist, or one YouTube did not respond to, is rejected in
+		// words the editor shows
+		if (updateTopicResult.status === "youtubeSourceUnresolved") {
+			return context.json(
+				{ error: toYoutubeSourceRejectionMessage(updateTopicResult) },
+				updateTopicResult.isYoutubeUnavailable ? 503 : 422,
+			)
 		}
 		// a topic the user cannot see reads as one that does not exist
 		return updateTopicResult.status === "missing"

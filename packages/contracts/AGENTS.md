@@ -62,7 +62,7 @@ limit, for the api's drain, and `toJitteredBackoffMs`, the doubling retry wait s
 that the scrape, the model calls, and the stream reconnect share. `profiles.ts` also holds `toSessionProfileIdentity`, the signed-in user's
 identity for a profile link, read from the session user. `reportedPath.ts` names a page by its route's shape, for
 PostHog's page views and Sentry's page renders alike. `youtube.ts` builds a YouTube video's watch page url and its
-player url, and holds `TOPIC_TUTORIAL_VIDEO`, the video on making a topic that the homepage, the menus, and the docs
+player url, names the hosts YouTube's pages are on, and holds `TOPIC_TUTORIAL_VIDEO`, the video on making a topic that the homepage, the menus, and the docs
 build all read, with the marker a docs page writes for it. `mobileApp.ts` holds `MOBILE_APP_BUNDLE_IDENTIFIER`, the iOS
 bundle identifier and Android package that the mobile app's config and the api's Apple provider both read, and
 `MOBILE_APP_SCHEME` with its origin, which the app's config and the api's trusted origins both read. `signupGate.ts`

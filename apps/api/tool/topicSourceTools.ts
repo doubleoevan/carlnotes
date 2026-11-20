@@ -17,7 +17,14 @@ import { and, count, eq, isNull } from "drizzle-orm"
 import type { AnalyticsProperties } from "../currentUser"
 import { clearVisitorTopicCaches } from "../topic/feedCaches"
 import type { PromptVersionOrigin } from "../topic/promptVersions"
-import { type NewTopicSource, startPendingSourceScreens, toNewSourceRow, toPodcastNames } from "../topic/saveHelpers"
+import {
+	type NewTopicSource,
+	startPendingSourceScreens,
+	toNewSourceRow,
+	toPodcastNames,
+	toResolvedTopicSource,
+	type YoutubeSourceRejection,
+} from "../topic/saveHelpers"
 import { loadEditableTopic, type TopicToolRejection, toToolAnalyticsProperties } from "./topicTools"
 
 // how many recent succeeded scans the mean scan cost averages over
@@ -45,6 +52,7 @@ export type TopicSourceCostDelta = { perScanCents: number; perMonthCents: number
 export type AddTopicSourceResult =
 	| TopicToolRejection
 	| { status: "invalid" }
+	| YoutubeSourceRejection
 	| { status: "limit"; limit: number }
 	| { status: "present"; topicSourceLabel: string }
 	| { status: "saved"; topicSourceId: string; topicSourceLabel: string; topicSourceCostDelta: TopicSourceCostDelta }
@@ -79,9 +87,15 @@ export async function addTopicSource({
 	}
 
 	// build the source from the registry, and reject a value it cannot use
-	const newTopicSource = toNewTopicSource(sourceOption, value)
-	if (!newTopicSource) {
+	const builtTopicSource = toNewTopicSource(sourceOption, value)
+	if (!builtTopicSource) {
 		return { status: "invalid" }
+	}
+
+	// resolve a YouTube value to its id, and reject one that names nothing
+	const newTopicSource = await toResolvedTopicSource(builtTopicSource)
+	if ("status" in newTopicSource) {
+		return newTopicSource
 	}
 
 	// load the topic's sources

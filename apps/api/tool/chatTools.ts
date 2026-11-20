@@ -4,6 +4,7 @@ import type { TopicToolCalls } from "@carlnotes/contracts/chatTurns"
 import { proposeTopicEditPayload } from "@carlnotes/contracts/topicPayloads"
 import { type Tool, tool } from "ai"
 import { z } from "zod"
+import { toYoutubeSourceRejectionMessage } from "../topic/saveHelpers"
 import type { CreateTopicFromDraftResult } from "./topicDraftTools"
 import type { addTopicSource, RemoveTopicSourceResult } from "./topicSourceTools"
 import type { UpdateTopicFieldsResult } from "./topicTools"
@@ -136,6 +137,9 @@ export function toAddTopicSourceText(addTopicSourceResult: Awaited<ReturnType<ty
 		// a topic at its source limit
 		case "limit":
 			return `This topic already holds ${addTopicSourceResult.limit} sources, the most a topic can. Drop one first.`
+		// a YouTube value that names no YouTube channel or playlist, or one YouTube did not respond to
+		case "youtubeSourceUnresolved":
+			return toYoutubeSourceRejectionMessage(addTopicSourceResult)
 		// the gate's rejections
 		default:
 			return toRejectionText(addTopicSourceResult.status)
@@ -182,7 +186,17 @@ export function toGateReason(status: "missing" | "forbidden"): string {
 // a create rejection that names nothing, and the line each one shows
 type PlainCreateRejection = Exclude<
 	CreateTopicFromDraftResult,
-	{ status: "created" | "invalid" | "limit" | "inviteeRejected" | "objectionable" | "termsOutdated" }
+	{
+		status:
+			| "created"
+			| "invalid"
+			| "limit"
+			| "inviteeRejected"
+			| "objectionable"
+			| "termsOutdated"
+			// a YouTube rejection is worded with its value, outside this table
+			| "youtubeSourceUnresolved"
+	}
 >
 // the line each one shows
 export const CREATE_REJECTION_LINES: Record<PlainCreateRejection["status"], string> = {

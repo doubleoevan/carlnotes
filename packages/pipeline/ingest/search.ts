@@ -10,7 +10,8 @@ import { buildTopicScanContext } from "../attach"
 import { type IngestContext, type NewResource, PaidSourceError, type Source, type SourceIngester } from "./ingester"
 import { toResourceKind } from "./normalize"
 import { selectTopicMemorySearchQuery } from "./selectTopicMemorySearchQuery"
-import { fetchVideos, playlistIdFromUrl } from "./youtube"
+import { fetchVideos } from "./youtube"
+import { playlistIdFromUrl } from "./youtubeSourceIds"
 
 // query and fetch limits
 export const MAX_DEFAULT_SEARCH_QUERIES = 5

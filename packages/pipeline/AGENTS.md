@@ -102,6 +102,8 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
 - `ingest/` — one ingester per Source kind: `rss.ts`, `youtube.ts`, `reddit.ts`, `x.ts`, `bluesky.ts`, `podcast.ts`,
   `url.ts`, and `search.ts`, over `feed.ts` for the feeds that need no key and `normalize.ts` for the url, title, and
   kind a Resource gets before it is stored, and `toLimitedSnippet`, which cuts a snippet to `MAX_SNIPPET_CHARS`, 8,000.
+  `youtubeSourceIds.ts` resolves the handle, url, or id a YouTube Source is written as to the YouTube channel or
+  playlist id `youtube.ts` reads, and every save path resolves a new YouTube Source through it.
   `index.ts` reads a topic's Sources oldest first, runs and times each through its ingester, and stores what they find.
   Its `toScanSummary` dedupes the Resources by canonical url, credits each to
   the first Source that returned it as the Resource's `sourceId`, and returns one source result per Source in that

@@ -37,7 +37,8 @@ import {
 	startFirstScan,
 	startPendingSourceScreens,
 	toNewSourceRow,
-	toPodcastNames,
+	toResolvedPayloadSources,
+	type YoutubeSourceRejection,
 } from "./saveHelpers"
 import { type ObjectionableRejection, type TermsOutdatedRejection, toTopicSaveRejection } from "./saveTopicGate"
 import { reconcileTopicSources } from "./saveTopicSources"
@@ -53,7 +54,12 @@ export { saveTopicVectorsReportingFailure } from "./topicIndexing"
 export { notifyIndexNowOfTopicChange, saveTopicVectorsOnVisibilityChange }
 
 // both creation and editing enforce the same frequency, invitation, and content checks
-type TopicSaveRejection = DailyFrequencyRejection | InviteeRejection | ObjectionableRejection | TermsOutdatedRejection
+type TopicSaveRejection =
+	| DailyFrequencyRejection
+	| InviteeRejection
+	| ObjectionableRejection
+	| TermsOutdatedRejection
+	| YoutubeSourceRejection
 
 // the outcome of a topic creation request
 type CreateTopicResult =
@@ -124,7 +130,13 @@ export async function createTopic(
 	if (inviteeCheck.status !== "ok") {
 		return inviteeCheck
 	}
-	const podcastNames = await toPodcastNames(payload.sources)
+
+	// each new YouTube Source resolves to the id its ingester reads, and a value that names nothing is rejected
+	const resolvedSources = await toResolvedPayloadSources(payload.sources)
+	if (resolvedSources.status !== "resolved") {
+		return resolvedSources
+	}
+	const { podcastNames } = resolvedSources
 	const created = await db.transaction(async (transaction) => {
 		// authorize distinct drafts against the same owner slot, and replay identical confirmations before checking limits
 		const rejection = await guardTopicCreation(transaction, userId, payload, confirmationRecord)
@@ -177,7 +189,9 @@ export async function createTopic(
 		}
 
 		// insert the new sources. a create payload never includes kept ids
-		const newSources = payload.sources.flatMap((topicSource) => ("id" in topicSource ? [] : [topicSource]))
+		const newSources = resolvedSources.payloadSources.flatMap((topicSource) =>
+			"id" in topicSource ? [] : [topicSource],
+		)
 		if (newSources.length > 0) {
 			await transaction
 				.insert(sources)
@@ -302,7 +316,13 @@ export async function updateTopic(
 	if (inviteeCheck.status !== "ok") {
 		return inviteeCheck
 	}
-	const podcastNames = await toPodcastNames(payload.sources)
+
+	// each new YouTube Source resolves to the id its ingester reads, and a value that names nothing is rejected
+	const resolvedSources = await toResolvedPayloadSources(payload.sources)
+	if (resolvedSources.status !== "resolved") {
+		return resolvedSources
+	}
+	const { podcastNames } = resolvedSources
 	// whether the visibility change released the topic's home order inside the transaction
 	let isHomeOrderReleased = false
 	let releasedProfileUserIds: string[] = []
@@ -375,7 +395,12 @@ export async function updateTopic(
 				.onConflictDoNothing()
 		}
 
-		return reconcileTopicSources({ transaction, topicId, payloadSources: payload.sources, podcastNames })
+		return reconcileTopicSources({
+			transaction,
+			topicId,
+			payloadSources: resolvedSources.payloadSources,
+			podcastNames,
+		})
 	})
 
 	// draw again what was drawn from an image that went back to its uploader

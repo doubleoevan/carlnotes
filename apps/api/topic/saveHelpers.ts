@@ -1,6 +1,7 @@
 // the helpers for saving a topic: the daily slot its frequency takes, its new source rows, and its first scan
 import { isDailyFrequency } from "@carlnotes/contracts/enums"
 import { FIRST_SCAN_PAUSED_REASON, FIRST_SCAN_SPENT_BUDGET_REASON } from "@carlnotes/contracts/scanFailure"
+import { toSourceValue } from "@carlnotes/contracts/sources"
 import type { UpdateTopicPayload } from "@carlnotes/contracts/topicPayloads"
 import type { DbHandle, DbTransaction } from "@carlnotes/db"
 import { isFirstScanWaiting } from "@carlnotes/db/dailySpendCutoffs"
@@ -10,6 +11,7 @@ import { teams } from "@carlnotes/db/schema/teams"
 import type { sources } from "@carlnotes/db/schema/topics"
 import { isUserLiteLLMKeyBudgetExhausted } from "@carlnotes/models/litellm"
 import { lookupPodcast } from "@carlnotes/pipeline/ingest/podcast"
+import { toResolvedYoutubeSourceConfig, YoutubeUnavailableError } from "@carlnotes/pipeline/ingest/youtubeSourceIds"
 import { failUnstartedScan, scanTopic } from "@carlnotes/pipeline/scan"
 import { screenPendingSources, screenTopicSources } from "@carlnotes/pipeline/screen"
 import { reportError } from "@carlnotes/server/monitoring"
@@ -77,6 +79,82 @@ export function toNewSourceRow(
 		kind: source.sourceKind,
 		config: podcastName ? { ...source.config, name: podcastName } : source.config,
 		status: source.sourceKind === "url" ? "pending" : "ready",
+	}
+}
+
+// a save stopped by a YouTube Source whose value names no YouTube channel or playlist, or whose lookup YouTube did not
+// respond to
+export type YoutubeSourceRejection = { status: "youtubeSourceUnresolved"; value: string; isYoutubeUnavailable: boolean }
+
+/**
+ * Returns what a person reads if a YouTube Source's value names no YouTube channel or playlist, or if YouTube did not
+ * respond to the lookup.
+ */
+export function toYoutubeSourceRejectionMessage({ value, isYoutubeUnavailable }: YoutubeSourceRejection): string {
+	return isYoutubeUnavailable
+		? `YouTube didn't respond to the lookup for ${value}. Try again in a minute.`
+		: `YouTube has no channel or playlist at ${value}. Use the YouTube channel's @handle, its url, or a playlist url.`
+}
+
+/**
+ * Returns the payload's Sources with each new YouTube value resolved to the YouTube channel or playlist id the ingester
+ * reads, and the show names of the new podcast Sources, or the rejection for the first YouTube value that names
+ * neither. Both are read before the writing.
+ */
+export async function toResolvedPayloadSources(
+	payloadSources: UpdateTopicPayload["sources"],
+): Promise<
+	| { status: "resolved"; payloadSources: UpdateTopicPayload["sources"]; podcastNames: Map<string, string> }
+	| YoutubeSourceRejection
+> {
+	// a kept Source is saved as it came, and a new one that names nothing it can read is a rejection
+	const [resolvedPayloadSources, podcastNames] = await Promise.all([
+		Promise.all(
+			payloadSources.map((payloadSource) =>
+				"id" in payloadSource ? payloadSource : toResolvedTopicSource(payloadSource),
+			),
+		),
+		toPodcastNames(payloadSources),
+	])
+	const youtubeSourceRejection = resolvedPayloadSources.find(
+		(payloadSource): payloadSource is YoutubeSourceRejection => "status" in payloadSource,
+	)
+	if (youtubeSourceRejection) {
+		return youtubeSourceRejection
+	}
+	return {
+		status: "resolved",
+		payloadSources: resolvedPayloadSources.flatMap((payloadSource) =>
+			"status" in payloadSource ? [] : [payloadSource],
+		),
+		podcastNames,
+	}
+}
+
+/**
+ * Returns a new Source with a YouTube value resolved to the YouTube channel or playlist id the ingester reads, or the
+ * rejection for a YouTube value that names neither. A Source of another kind is returned as it came.
+ */
+export async function toResolvedTopicSource(
+	newTopicSource: NewTopicSource,
+): Promise<NewTopicSource | YoutubeSourceRejection> {
+	if (newTopicSource.sourceKind !== "youtube") {
+		return newTopicSource
+	}
+
+	// a lookup YouTube did not respond to is told apart from a value that names nothing
+	const value = toSourceValue("youtube", newTopicSource.config)
+	try {
+		const config = await toResolvedYoutubeSourceConfig(newTopicSource.config)
+		return config
+			? { ...newTopicSource, config }
+			: { status: "youtubeSourceUnresolved", value, isYoutubeUnavailable: false }
+	} catch (error) {
+		// any other error is a fault, not a rejection
+		if (!(error instanceof YoutubeUnavailableError)) {
+			throw error
+		}
+		return { status: "youtubeSourceUnresolved", value, isYoutubeUnavailable: true }
 	}
 }
 

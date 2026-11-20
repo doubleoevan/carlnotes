@@ -12,7 +12,7 @@ import { fetchFeed } from "./ingest/feed"
 import { searchPodcasts } from "./ingest/podcast"
 import { fetchSubredditFeed, toSubredditName } from "./ingest/reddit"
 import { readHandle } from "./ingest/x"
-import { toAtomUrl, toYoutubeSourceId } from "./ingest/youtube"
+import { toAtomUrl, toYoutubeSourceId, YoutubeUnavailableError } from "./ingest/youtubeSourceIds"
 import type { SuggestedSource } from "./suggest"
 
 // how long a verification fetch may run. a slow suggested source is dropped instead of delaying the reply
@@ -50,7 +50,13 @@ export async function toResolvedSource(suggestedSource: SuggestedSource): Promis
 
 // a channel suggestion as the channel or playlist id that its value names, or null if the value names neither
 async function toResolvedYoutubeSource(suggestedSource: SuggestedSource): Promise<SuggestedSource | null> {
-	const youtubeId = await toYoutubeSourceId(suggestedSource.value)
+	// a lookup YouTube did not respond to drops the suggestion, the same as one that names nothing
+	const youtubeId = await toYoutubeSourceId(suggestedSource.value).catch((error: unknown) => {
+		if (!(error instanceof YoutubeUnavailableError)) {
+			throw error
+		}
+		return null
+	})
 
 	// drop a value that names no channel or playlist
 	if (!youtubeId) {

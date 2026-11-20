@@ -16,6 +16,7 @@ import { type Tool, tool } from "ai"
 import { z } from "zod"
 import type { AnalyticsProperties } from "../currentUser"
 import { toDraftTeamWithDefault } from "../team/defaultTeam"
+import { toYoutubeSourceRejectionMessage } from "../topic/saveHelpers"
 import { deleteTopicDraft } from "../topic/topicDrafts"
 import { type ChatTurnToolCalls, CREATE_REJECTION_LINES, toRejectionToast } from "./chatTools"
 import {
@@ -245,6 +246,9 @@ export function toCreateTopicText(createTopicFromDraftResult: CreateTopicFromDra
 			return `${createTopicFromDraftResult.email} does not take invites. Drop that address from the draft, then create again.`
 		case "inviteLimit":
 			return "That many invites is past the plan's limit. Trim the invite list, then create again."
+		// a YouTube source that names no YouTube channel or playlist
+		case "youtubeSourceUnresolved":
+			return `${toYoutubeSourceRejectionMessage(createTopicFromDraftResult)} Fix it or drop it from the draft, then create again.`
 		// the moderation check's rejection, in Carl's own words
 		case "objectionable":
 			return `${toModerationRejectionMessage(createTopicFromDraftResult.category)} Nothing was created.`
@@ -281,6 +285,9 @@ export function toCreateTopicReason(
 	switch (createTopicFromDraftResult.status) {
 		case "invalid":
 			return `That source can't be read: ${createTopicFromDraftResult.value}.`
+		// a YouTube value that names no YouTube channel or playlist
+		case "youtubeSourceUnresolved":
+			return toYoutubeSourceRejectionMessage(createTopicFromDraftResult)
 		case "limit":
 			return `That's more than the ${createTopicFromDraftResult.limit} sources a topic can have.`
 		case "inviteeRejected":

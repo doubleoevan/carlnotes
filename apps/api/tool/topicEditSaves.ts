@@ -7,6 +7,7 @@ import { TERMS_OUTDATED_LINE } from "@carlnotes/contracts/terms"
 import type { AddTopicSourcePayload, ProposeTopicEditPayload } from "@carlnotes/contracts/topicPayloads"
 import type { AnalyticsProperties } from "../currentUser"
 import type { PromptVersionOrigin } from "../topic/promptVersions"
+import { toYoutubeSourceRejectionMessage } from "../topic/saveHelpers"
 import { toTopicEditRejection } from "../topic/saveTopicGate"
 import {
 	type ChatTurnToolCalls,
@@ -282,7 +283,7 @@ function toAddTopicSourceToast(addTopicSourceResult: Exclude<AddTopicSourceResul
 	switch (addTopicSourceResult.status) {
 		case "present":
 			return `Carl didn't add ${addTopicSourceResult.topicSourceLabel}. This topic already has it.`
-		// a bad value or a full topic
+		// a bad value, a full topic, or a YouTube value that names nothing
 		case "invalid":
 			return toRejectionToast("add that source", "It needs a url, handle, or id.")
 		case "limit":
@@ -290,6 +291,8 @@ function toAddTopicSourceToast(addTopicSourceResult: Exclude<AddTopicSourceResul
 				"add that source",
 				`This topic holds ${addTopicSourceResult.limit} sources, the most a topic can.`,
 			)
+		case "youtubeSourceUnresolved":
+			return toRejectionToast("add that source", toYoutubeSourceRejectionMessage(addTopicSourceResult))
 		default:
 			return toRejectionToast("add that source", toGateReason(addTopicSourceResult.status))
 	}

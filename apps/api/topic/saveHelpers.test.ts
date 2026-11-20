@@ -11,7 +11,7 @@ import * as scan from "@carlnotes/pipeline/scan"
 import * as screen from "@carlnotes/pipeline/screen"
 import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
 import * as authorization from "../authorization"
-import { type Scan, startFirstScan } from "./saveHelpers"
+import { type Scan, startFirstScan, toResolvedPayloadSources } from "./saveHelpers"
 
 // the connection pool's own query, put back after each test along with the spies
 afterEach(() => {
@@ -209,4 +209,57 @@ test("a spent monthly budget fails a first Scan before the dispatch limit is rea
 	await startFirstScan("topic-1", FIRST_SCAN, "owner-1")
 	expectFirstScanFailed(sentQueries, FIRST_SCAN_SPENT_BUDGET_REASON)
 	expect(isFirstScanWaitingSpy).not.toHaveBeenCalled()
+})
+
+// every save path resolves a new YouTube value to the id its ingester reads, and keeps a kept or other Source as it
+// came
+test("toResolvedPayloadSources resolves a new YouTube handle and keeps the rest", async () => {
+	// the handle's YouTube channel page names its YouTube channel
+	spyOn(globalThis, "fetch").mockImplementation(
+		(async () =>
+			new Response(
+				'<link rel="canonical" href="https://www.youtube.com/channel/UCHnyfMqiRRG1u-2MsSQLbXA">',
+			)) as unknown as typeof fetch,
+	)
+	const resolvedSources = await toResolvedPayloadSources([
+		{ id: "kept-source" },
+		{ sourceKind: "reddit", config: { subreddit: "startups" } },
+		{ sourceKind: "youtube", config: { channelId: "@veritasium" } },
+	])
+	expect(resolvedSources).toEqual({
+		status: "resolved",
+		payloadSources: [
+			{ id: "kept-source" },
+			{ sourceKind: "reddit", config: { subreddit: "startups" } },
+			{ sourceKind: "youtube", config: { channelId: "UCHnyfMqiRRG1u-2MsSQLbXA", name: "@veritasium" } },
+		],
+		podcastNames: new Map(),
+	})
+})
+
+// a value that names no YouTube channel or playlist is rejected with what was saved, so nothing unreadable is written
+test("toResolvedPayloadSources rejects a YouTube value that names nothing", async () => {
+	const resolvedSources = await toResolvedPayloadSources([
+		{ sourceKind: "youtube", config: { channelId: "Homeboy Sandman" } },
+	])
+	expect(resolvedSources).toEqual({
+		status: "youtubeSourceUnresolved",
+		value: "Homeboy Sandman",
+		isYoutubeUnavailable: false,
+	})
+})
+
+// a lookup that YouTube did not respond to is rejected as unavailable, so the editor asks for a retry instead of a fix
+test("toResolvedPayloadSources rejects a YouTube lookup that YouTube did not answer", async () => {
+	spyOn(globalThis, "fetch").mockImplementation(
+		(async () => new Response("busy", { status: 429 })) as unknown as typeof fetch,
+	)
+	const resolvedSources = await toResolvedPayloadSources([
+		{ sourceKind: "youtube", config: { channelId: "@veritasium" } },
+	])
+	expect(resolvedSources).toEqual({
+		status: "youtubeSourceUnresolved",
+		value: "@veritasium",
+		isYoutubeUnavailable: true,
+	})
 })
