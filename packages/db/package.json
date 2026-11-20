@@ -10,7 +10,7 @@
 	"dependencies": {
 		"@carlnotes/contracts": "workspace:*",
 		"@carlnotes/server": "workspace:*",
-		"@neondatabase/serverless": "^1.2.0",
+		"@neondatabase/serverless": "^1.2.1",
 		"drizzle-orm": "^0.45.4",
 		"zod": "^4.6.7"
 	}
