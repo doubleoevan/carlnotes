@@ -5,6 +5,7 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as storage from "@carlnotes/db/store"
+import * as visitorPageCaches from "@carlnotes/db/visitorPageCaches"
 import * as litellm from "@carlnotes/models/litellm"
 import * as edgePurge from "@carlnotes/server/edgePurge"
 import sharp from "sharp"
@@ -325,6 +326,7 @@ test("removing a film's uploaded image clears its hash, records its files as pen
 	// the film of episode-1 shows an upload on a public topic. the read selects the film's id, the image's hash, its
 	// origin, the topic's id, and the topic's visibility
 	const purgeEdgeCacheTagSpy = spyOn(edgePurge, "purgeEdgeCacheTagAfterDeletion").mockResolvedValue(undefined)
+	const clearVisitorPagesSpy = spyOn(visitorPageCaches, "clearVisitorPagesOfTopic").mockResolvedValue(undefined)
 	const sentQueries = stubConnectionPool(({ text }) =>
 		text.startsWith("select") ? [["film-1", "hash-upload", "uploaded", "topic-1", "public"]] : [],
 	)
@@ -342,7 +344,8 @@ test("removing a film's uploaded image clears its hash, records its files as pen
 		"episodes/episode-1/video/image-hash-upload-original.jpg",
 	])
 
-	// the public topic's image files leave the edge
+	// the topic's visitor pages leave the cache, and the public topic's image files leave the edge
+	expect(clearVisitorPagesSpy.mock.calls).toEqual([["topic-1"]])
 	expect(purgeEdgeCacheTagSpy.mock.calls).toEqual([["topic-image:topic-1"]])
 })
 

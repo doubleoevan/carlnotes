@@ -11,7 +11,8 @@ import { runWithJobLease } from "@carlnotes/db/jobLease"
 import { loadUserAccess } from "@carlnotes/db/quotas"
 import { notificationsEmailSends } from "@carlnotes/db/schema/notificationsEmailSends"
 import { users } from "@carlnotes/db/schema/users"
-import { isAfterSubscriberActivation, topicSubscriptionStartDate } from "@carlnotes/db/topicPermissions"
+import { topicSubscriptionStartDate } from "@carlnotes/db/topicPermissions"
+import { isAfterSubscriberActivation } from "@carlnotes/db/topicSubscriptions"
 import { type EmailMessage, sendEmail } from "@carlnotes/emails/email"
 import {
 	type NotificationsEmailItem,

@@ -28,7 +28,7 @@ type PaginationProps = { ariaLabel: string; pageNumber: number; pageCount: numbe
 	  }
 	| {
 			renderPageLink: (pageControl: PageControl) => ReactNode
-			rowCount: number
+			rowCount?: number
 			isPagedOnServer?: boolean
 			onOpenPage?: undefined
 	  }

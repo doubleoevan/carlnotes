@@ -3,11 +3,33 @@ import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import { toDiscussionTopicPostId } from "@carlnotes/contracts/topicPosts"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { useEffect, useState } from "react"
+import { startLimitedPoll } from "../lib/limitedPoll"
 import { isManualScanShown } from "../lib/topicActions"
 import { usePodcastEpisodePlayer } from "../stores/podcastEpisodePlayerStore"
 
-// the polling interval for a linked episode that is still recording
-const RECORDING_POLL_MS = 5_000
+// the polling interval for a linked podcast episode that is still recording, and how long the page polls it before it
+// stops
+export const PODCAST_EPISODE_RECORDING_POLL_MS = 5_000
+const RECORDING_POLL_LIMIT_MS = 60 * 60 * 1000
+
+/**
+ * Reads a linked podcast episode that is still recording on an interval while the app is focused and online, until it
+ * stops recording or the poll's time limit. The read returns whether the podcast episode still records. Returns the
+ * call that stops the reads.
+ */
+export function startRecordingPodcastEpisodePoll(readPodcastEpisode: () => Promise<boolean>): () => void {
+	const stopPoll = startLimitedPoll({
+		read: async () => {
+			// a podcast episode that stopped recording ends the poll
+			if (!(await readPodcastEpisode())) {
+				stopPoll()
+			}
+		},
+		pollMs: PODCAST_EPISODE_RECORDING_POLL_MS,
+		limitMs: RECORDING_POLL_LIMIT_MS,
+	})
+	return stopPoll
+}
 
 // the podcast episode that the player shows, and whether a running scan is about to record an episode instead
 export type ShownPodcastEpisodeState = { podcastEpisode: PodcastEpisode | null; willScanRecordPodcastEpisode: boolean }
@@ -16,7 +38,8 @@ export type ShownPodcastEpisodeState = { podcastEpisode: PodcastEpisode | null; 
 // then a recording episode, then a running scan's next episode, then a failed episode, then the latest episode.
 // a Topic Post's discussion loaded in the player is no episode of the topic's podcast, so it is never shown here
 /**
- * Selects the episode shown for a Topic and follows a linked recording until it publishes.
+ * Selects the podcast episode shown for a Topic and follows a linked recording until it publishes, pausing while the app is in
+ * the background, until the poll's time limit.
  */
 export function useShownPodcastEpisode({
 	topic,
@@ -51,15 +74,15 @@ export function useShownPodcastEpisode({
 			return
 		}
 
-		// load the linked podcast episode, and poll again while the episode is recording
+		// load the linked podcast episode, and return whether it still records
 		const controller = new AbortController()
-		let recordingPollTimer: ReturnType<typeof setTimeout> | undefined
-		const loadLinkedPodcastEpisode = async (): Promise<void> => {
+		let stopRecordingPoll = (): void => {}
+		const loadLinkedPodcastEpisode = async (): Promise<boolean> => {
 			const fetchedPodcastEpisode = await fetchPodcastEpisode(linkedPodcastEpisodeId, {
 				signal: controller.signal,
 			}).catch(() => null)
 			if (controller.signal.aborted) {
-				return
+				return false
 			}
 
 			// keep the linked podcast episode only if the episode is this topic's
@@ -69,16 +92,20 @@ export function useShownPodcastEpisode({
 				podcastEpisodeId: linkedPodcastEpisodeId,
 				podcastEpisode: topicPodcastEpisode,
 			})
-			if (topicPodcastEpisode?.status === "recording") {
-				recordingPollTimer = setTimeout(loadLinkedPodcastEpisode, RECORDING_POLL_MS)
-			}
+			return topicPodcastEpisode?.status === "recording"
 		}
-		void loadLinkedPodcastEpisode()
+
+		// poll again while the podcast episode is recording
+		void loadLinkedPodcastEpisode().then((isRecording) => {
+			if (isRecording && !controller.signal.aborted) {
+				stopRecordingPoll = startRecordingPodcastEpisodePoll(loadLinkedPodcastEpisode)
+			}
+		})
 
 		// stop the poll when the linked podcast episode changes
 		return () => {
 			controller.abort()
-			clearTimeout(recordingPollTimer)
+			stopRecordingPoll()
 		}
 	}, [linkedPodcastEpisodeId, topicId, isActive])
 

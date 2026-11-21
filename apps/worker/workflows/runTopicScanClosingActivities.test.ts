@@ -2,7 +2,7 @@
 // with no topic saves none, the finish write counts each Source's kept findings and the earlier findings, and a payload
 // from an older worker is reviewed and finished as a newer one is
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
-import type { StoredSourceResult } from "@carlnotes/contracts/topics"
+import type { StoredSourceResult } from "@carlnotes/contracts/scanSourceResults"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool, toTableRow } from "@carlnotes/db/connectionPoolStub"
 import { scans } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"

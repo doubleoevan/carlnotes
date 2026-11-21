@@ -10,7 +10,7 @@ import { bookmarks, consumptions, findings, resources, scans } from "@carlnotes/
 import { topics } from "@carlnotes/db/schema/topics"
 import { and, eq, inArray, like, type SQL, sql } from "drizzle-orm"
 import { toContainsLikePattern } from "../likePattern"
-import { loadLatestPodcastEpisodes } from "../podcast/podcastEpisodeShapes"
+import { loadLatestPodcastEpisodes } from "../podcast/latestPodcastEpisodes"
 import { loadTopicFindingPermissions } from "../topic/findingPermissions"
 import {
 	TOPIC_FINDING_COLUMNS,

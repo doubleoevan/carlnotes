@@ -13,10 +13,11 @@ import type { TopicPostRow } from "./topicPosts"
 // how much of a post's text describes it while it has no summary
 const DESCRIPTION_MAX_CHARS = 200
 
-// the published Topic Post, its Topic's preview, its own card's fields, and the app's url that the head is built from
+// the published Topic Post, its Topic's preview, null for a public Topic's post, its own card's fields, and the app's
+// url that the head is built from
 type ToTopicPostPageHeadOptions = {
 	topicPostRow: TopicPostRow
-	topicPreview: TopicPreview
+	topicPreview: TopicPreview | null
 	topicPostPreview: TopicPostPreview
 	appUrl: string
 }
@@ -39,7 +40,7 @@ export function toTopicPostPageHead({
 	// private or invite Topic's post keeps its words out of its head, which describes the Topic instead
 	const description = isPublicTopic
 		? (topicPost.summary ?? toCutText(toHtmlText(topicPost.html), DESCRIPTION_MAX_CHARS))
-		: topicPreview.description
+		: (topicPreview?.description ?? "")
 
 	// the post's own card, at the version its drawn fields name
 	const previewVersion = toPreviewVersion(toTopicPostPreviewKey(topicPostPreview))

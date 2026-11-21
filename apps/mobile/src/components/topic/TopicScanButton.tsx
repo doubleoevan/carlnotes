@@ -7,6 +7,7 @@ import {
 } from "@carlnotes/contracts/scanFailure"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { useManualScanProgress } from "@carlnotes/core/hooks/useManualScanProgress"
+import { useTopicScanStatusPoll } from "@carlnotes/core/hooks/useTopicScanStatusPoll"
 import { SCAN_RUNNING_LABEL } from "@carlnotes/core/lib/labels"
 import { isManualScanShown } from "@carlnotes/core/lib/topicActions"
 import { usePurchaseOffers } from "@carlnotes/core/stores/purchaseOffersStore"
@@ -30,11 +31,18 @@ export function TopicScanButton({
 	topic: TopicResponse
 	onScanned: (fetchTopicPageOptions?: FetchTopicPageOptions) => Promise<void>
 }) {
-	// track manual scan progress and refresh it while the screen is active
+	// track manual scan progress. poll from the press until the scan row arrives and while the scan's podcast episode
+	// records, if the screen is active. each tick reads the Topic's scan status, and reads the page only if the status
+	// changed
 	const progress = useManualScanProgress(topic.scans)
 	const mutation = usePageMutation(onScanned)
 	const isRunning = progress.isScanning || progress.isRunningScan
-	usePollWhileScanning({ isScanning: isRunning, reload: () => onScanned({ isPoll: true }) })
+	const scanStatusPoll = useTopicScanStatusPoll({ topic, reloadTopicPage: () => onScanned({ isPoll: true }) })
+	usePollWhileScanning({
+		isScanning: isRunning || scanStatusPoll.isPodcastEpisodePending,
+		reload: scanStatusPoll.reload,
+		toPollMs: scanStatusPoll.toPollMs,
+	})
 	// the daily quota's alert opens Plans where the store sells the user a plan
 	const { canPurchase } = usePurchaseOffers()
 	const dailyScansBlockedPath = canPurchase ? PLANS_PATH : null

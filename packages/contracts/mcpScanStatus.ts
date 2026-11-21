@@ -1,6 +1,8 @@
 // what start_scan and read_scan_status return: a Topic's running Scan, its latest finished Scan, or neither. a stored MCP
 // view bundle reads this shape, so it only gains fields
-import type { ScanSourceResults, TopicScan } from "./topics"
+
+import type { ScanSourceResults } from "./scanSourceResults"
+import type { TopicScan } from "./topics"
 
 // where a running Scan is: waiting for a worker, gathering from its Sources, or reviewing what they found
 export type McpScanStage = "waiting" | "gathering" | "reviewing"

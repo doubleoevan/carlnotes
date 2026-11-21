@@ -17,8 +17,8 @@ import { loadRelatedTopics } from "./relatedTopics"
 const PAGE_TOPIC = { id: "topic-1" }
 const USER_ID = "user-1"
 
-// the count of findings no user rated down that a listed topic needs, as the view rules write it
-const SHOWN_FINDING_COUNT_TEXT = `where "findings"."topic_id" = "topics"."id" and "findings"."rating" is distinct from 'down') >= $`
+// the count of findings no user rated down that a listed topic needs, stopped at the minimum, as the view rules write it
+const SHOWN_FINDING_COUNT_TEXT = `where "findings"."topic_id" = "topics"."id" and "findings"."rating" is distinct from 'down' limit $`
 
 // one Redis with the centroid stored per test, and the connection pool and Redis put back after each
 stubRelatedReadsForEachTest()

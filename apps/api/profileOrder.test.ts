@@ -181,7 +181,7 @@ function sendTopicVideoProfileOrder(userId: string | null, position: number): Re
 
 test("the owner features their ready film of a public topic, which purges their profile and reports ids alone", async () => {
 	// the purge and the event the request sends
-	const purgeProfileSpy = spyOn(edgeCache, "purgeProfileAtEdge").mockResolvedValue(undefined)
+	const purgeProfileSpy = spyOn(edgeCache, "clearProfilePage").mockResolvedValue(undefined)
 	const trackEventSpy = spyOn(analytics, "trackEvent").mockImplementation(() => {})
 	const sentQueries = stubTopicVideoRow()
 	expect((await sendTopicVideoProfileOrder("owner-1", 2)).status).toBe(200)
@@ -200,7 +200,7 @@ test("the owner features their ready film of a public topic, which purges their 
 })
 
 test("a visitor is unauthorized, and anyone but the topic's owner is told the film is missing", async () => {
-	const purgeProfileSpy = spyOn(edgeCache, "purgeProfileAtEdge").mockResolvedValue(undefined)
+	const purgeProfileSpy = spyOn(edgeCache, "clearProfilePage").mockResolvedValue(undefined)
 	const sentQueries = stubTopicVideoRow()
 	expect((await sendTopicVideoProfileOrder(null, 1)).status).toBe(401)
 	expect((await sendTopicVideoProfileOrder("user-2", 1)).status).toBe(404)
@@ -210,7 +210,7 @@ test("a visitor is unauthorized, and anyone but the topic's owner is told the fi
 
 test("a film still rendering, a removed podcast episode's, a private topic's, and a thirteenth are each a conflict", async () => {
 	// each film the rules keep off a profile, and a profile that already holds twelve featured films
-	const purgeProfileSpy = spyOn(edgeCache, "purgeProfileAtEdge").mockResolvedValue(undefined)
+	const purgeProfileSpy = spyOn(edgeCache, "clearProfilePage").mockResolvedValue(undefined)
 	const rejectedFilmRows = [
 		{ status: "rendering" as const },
 		{ podcastEpisodeStatus: "removed" as const },

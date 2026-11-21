@@ -54,6 +54,20 @@ test("an admin block and its clear each clear the cached reads of the users the 
 	])
 })
 
+test("an admin block clears the copies of each Topic Post page that shows one of the author's Comments", async () => {
+	// the blocked user's row back from the update, and the one Topic Post they commented on
+	stubConnectionPool(({ text }) => {
+		if (text.startsWith('update "users"')) {
+			return [["user-2"]]
+		}
+		return text.startsWith('select distinct "post_id"') ? [["post-1"]] : []
+	})
+	// the block deletes the copy of that post's page
+	const deleteRedisKeysSpy = spyOn(redis, "deleteRedisKeys").mockResolvedValue(0)
+	await setAdminBlock("user-2", "admin-1")
+	expect(deleteRedisKeysSpy.mock.calls).toContainEqual(["visitor-page:topic-post:post-1"])
+})
+
 test("a user who is not an admin and a visitor block nobody", async () => {
 	const sentQueries = stubConnectionPool(() => [FREE_USER_ACCESS_ROW])
 	const userResponse = await toSignedInApp(adminBlocksRoute, "owner-1").request("/admin/users/user-2/block", {

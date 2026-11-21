@@ -2,6 +2,7 @@
 // the 404 for a url no page serves
 import { afterAll, beforeAll, expect, test } from "bun:test"
 import type { PageHead } from "@carlnotes/contracts/pageHead"
+import type { ProfileResponse } from "@carlnotes/contracts/profilePage"
 import { SITE_TITLE } from "@carlnotes/contracts/seo"
 import { RouterProvider } from "@tanstack/react-router"
 import { renderToString } from "react-dom/server"
@@ -40,9 +41,35 @@ const INVITE_HEAD = {
 	jsonLd: null,
 } satisfies PageHead
 
+// the profile the page read holds: a person with nothing on their profile yet
+const PROFILE = {
+	userId: USER_ID,
+	username: "carl",
+	avatarSource: "initials",
+	avatarVersion: null,
+	joinedAt: "2026-07-01T00:00:00.000Z",
+	subscriberCount: 2,
+	includesNonPublicTopics: false,
+	isBlocked: false,
+	topics: [],
+	teams: [],
+	profileTopics: [],
+	pinnedTopicCount: 0,
+	profileTopicPodcastEpisodeVideos: [],
+	pinnedTopicPodcastEpisodeVideoCount: 0,
+	profilePodcastEpisodes: [],
+	profileTopicPosts: [],
+	pinnedTopicPostCount: 0,
+	pinnedPodcastEpisodeCount: 0,
+} satisfies ProfileResponse
+
+// the paths the fake fetch was asked for, oldest first
+const requestedPaths: string[] = []
+
 // the api's response to each path these tests serve. any other path responds 404
 const API_RESPONSES: Record<string, () => Response> = {
-	[`/api/profiles/${USER_ID}/head`]: () => Response.json(PROFILE_HEAD),
+	[`/api/profiles/${USER_ID}/page`]: () =>
+		Response.json({ head: PROFILE_HEAD, profile: PROFILE, news: null, userState: null }),
 	[`/api/teams/${PRIVATE_TEAM_ID}/page`]: () =>
 		Response.json({ error: "forbidden", teamName: "Night owls", hasRequestedToJoin: false }, { status: 403 }),
 	[`/api/invites/${INVITE_TOKEN}/head`]: () => Response.json(INVITE_HEAD),
@@ -54,6 +81,7 @@ const realFetch = globalThis.fetch
 // a fake fetch that serves the responses above in place of the api
 function fakeFetch(input: RequestInfo | URL): Promise<Response> {
 	const requestUrl = input instanceof Request ? input.url : input.toString()
+	requestedPaths.push(new URL(requestUrl).pathname)
 	const apiResponse = API_RESPONSES[new URL(requestUrl).pathname]?.()
 	return Promise.resolve(apiResponse ?? Response.json({ error: "not found" }, { status: 404 }))
 }
@@ -68,8 +96,12 @@ afterAll(() => {
 
 // a profile renders the title and canonical url the api returns for it
 test("a profile renders its head", async () => {
+	requestedPaths.length = 0
 	const { router, serverLoadResult } = await loadRouter(`/profiles/${USER_ID}`)
 	const html = renderToString(<RouterProvider router={router} />)
+
+	// the server load sends the one page read
+	expect(requestedPaths).toEqual([`/api/profiles/${USER_ID}/page`])
 
 	expect(serverLoadResult).toMatchObject({ type: "render", status: 200 })
 	expect(html).toContain("<title>carl — CarlNotes</title>")

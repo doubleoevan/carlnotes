@@ -1,4 +1,5 @@
 import { authClient } from "@carlnotes/client/authClient"
+import { fetchPodcastEpisodePageRead } from "@carlnotes/client/pageReadClient"
 import { fetchPodcastEpisodePage } from "@carlnotes/client/podcastEpisodeClient"
 import { isPublishedPodcastEpisode, type PodcastEpisode } from "@carlnotes/contracts/podcast"
 import type { PodcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpisodePage"
@@ -67,14 +68,12 @@ export function PodcastEpisodePage() {
 	const [openDialog, setOpenDialog] = useState<PodcastEpisodeDialog | null>(null)
 	const { openNewTopicDialog, newTopicDialog } = useNewTopicDialog()
 
-	// load in the browser unless the server already loaded this podcast episode page and set the page title
+	// load the page read in the browser unless the server already loaded this podcast episode page and set the page title
 	const loadPodcastEpisodePage = useCallback((): void => {
-		fetchPodcastEpisodePage({ topicId, season, episodeNumber })
-			.then((podcastEpisodePageResult) => {
-				setPodcastEpisodePage(
-					podcastEpisodePageResult.status === "visible" ? podcastEpisodePageResult.podcastEpisodePage : null,
-				)
-				setIsTopicGated(podcastEpisodePageResult.status === "gated")
+		fetchPodcastEpisodePageRead({ topicId, season, episodeNumber })
+			.then((podcastEpisodePageRead) => {
+				setPodcastEpisodePage(podcastEpisodePageRead?.podcastEpisodePage ?? null)
+				setIsTopicGated(Boolean(podcastEpisodePageRead?.topicGate))
 			})
 			.catch(() => {
 				setPodcastEpisodePage(null)
@@ -180,7 +179,11 @@ export function PodcastEpisodePage() {
 
 			{/* the film's section, for a podcast episode with a film: the film player in its card, or the card that says
 			    the film is rendering */}
-			<PodcastEpisodeTopicVideoSection podcastEpisode={podcastEpisode} onVideoRenderingPoll={pollPodcastEpisodePage} />
+			<PodcastEpisodeTopicVideoSection
+				podcastEpisode={podcastEpisode}
+				isTopicPublic={topic.visibility === "public"}
+				onVideoRenderingPoll={pollPodcastEpisodePage}
+			/>
 
 			{/* the podcast's section, under the film's, with the theme song's credits right after its title: the player card, whose
 			    Subscribe buttons the page's own button row replaces */}
@@ -232,7 +235,11 @@ export function PodcastEpisodePage() {
 				podcastEpisodes={relatedPodcastEpisodes}
 			/>
 			{/* the podcast episode's listener count */}
-			<PodcastEpisodeCountsLine podcastEpisodeId={podcastEpisode.id} isPublic={topic.visibility === "public"} />
+			<PodcastEpisodeCountsLine
+				podcastEpisodeId={podcastEpisode.id}
+				isPublic={topic.visibility === "public"}
+				savedListenerCount={podcastEpisodePage.listenerCount}
+			/>
 
 			{/* the podcast feed dialog */}
 			{isPodcastFeedDialogOpen && (
@@ -255,23 +262,30 @@ export function PodcastEpisodePage() {
 	)
 }
 
-// the podcast episode, and the read of its page again while its film renders
+// the podcast episode, whether its Topic is public, and the read of its page again once its film leaves rendering
 type PodcastEpisodeTopicVideoSectionProps = {
 	podcastEpisode: PodcastEpisode
+	isTopicPublic: boolean
 	onVideoRenderingPoll: () => Promise<void>
 }
 
 // the film's collapsible section at the film anchor, for a podcast episode with a film, with the theme song's credits
 // right after its title. it holds the film player in its card, which stays mounted while the section is closed, or the
-// card that says the film is rendering, and the page is read again until the film is ready
+// card that says the film is rendering, and the film's status is read until the film leaves rendering, then the page
 function PodcastEpisodeTopicVideoSection({
 	podcastEpisode,
+	isTopicPublic,
 	onVideoRenderingPoll,
 }: PodcastEpisodeTopicVideoSectionProps) {
-	// read the page again while the film renders
+	// read the film's status while the film renders, and the page once it leaves rendering
 	const topicVideoDisplay = toTopicVideoDisplay(podcastEpisode)
 	const isVideoRendering = topicVideoDisplay === "rendering"
-	useTopicVideoRenderingPoll({ isVideoRendering, onPoll: onVideoRenderingPoll })
+	useTopicVideoRenderingPoll({
+		podcastEpisodeId: podcastEpisode.id,
+		isTopicPublic,
+		isVideoRendering,
+		onPoll: onVideoRenderingPoll,
+	})
 	if (!topicVideoDisplay) {
 		return null
 	}

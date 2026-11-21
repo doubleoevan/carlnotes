@@ -166,12 +166,29 @@ export async function loadTopicCounts(
 		.select({ ...gatedTopicColumns, viewerCount: topics.viewerCount, subscriberCount: topics.subscriberCount })
 		.from(topics)
 		.where(eq(topics.id, topicId))
-	if (!topicRow || !(await isAllowed(userId, "topic:view", topicRow))) {
+	return topicRow ? toTopicCountsFromRow(userId, topicRow) : null
+}
+
+// a topic's access fields and its saved counts
+type TopicCountsRow = Pick<
+	typeof topics.$inferSelect,
+	"id" | "ownerId" | "visibility" | "teamId" | "viewerCount" | "subscriberCount"
+>
+
+/**
+ * Returns a topic's viewers and subscribers from a row that already holds its access fields and saved counts, for
+ * someone who may view it, or null.
+ */
+export async function toTopicCountsFromRow(
+	userId: string | null,
+	topicRow: TopicCountsRow,
+): Promise<CountsResult<TopicCounts> | null> {
+	if (!(await isAllowed(userId, "topic:view", topicRow))) {
 		return null
 	}
 
 	// the viewers, and the subscribers the topic row already counts
-	const viewerCount = await readViewerCount({ kind: "topic", id: topicId }, topicRow.viewerCount)
+	const viewerCount = await readViewerCount({ kind: "topic", id: topicRow.id }, topicRow.viewerCount)
 	return {
 		counts: { viewerCount, subscriberCount: topicRow.subscriberCount },
 		isPublic: topicRow.visibility === "public",

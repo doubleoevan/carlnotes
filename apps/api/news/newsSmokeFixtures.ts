@@ -141,21 +141,22 @@ async function seedFinding(
 	return findingId
 }
 
-// a Comment by one user on a Topic or on one of its Findings, some minutes ago
+// a Comment by one user on a Topic, on one of its Findings, or on one of its Topic Posts, some minutes ago
 async function seedComment(
 	name: string,
 	authorUserId: string,
 	topicId: string,
 	minutesAgo: number,
-	options: { findingId?: string; parentCommentId?: string; body?: string } = {},
+	options: { findingId?: string; topicPostId?: string; parentCommentId?: string; body?: string } = {},
 ): Promise<string> {
 	const commentId = toRunId(name)
 	await db.insert(comments).values({
 		id: commentId,
 		authorUserId,
-		// a Comment hangs on its Finding, or on the Topic itself
+		// a Comment hangs on its Finding, its Topic Post, or the Topic itself
 		findingId: options.findingId,
-		topicId: options.findingId ? undefined : topicId,
+		postId: options.topicPostId,
+		topicId: options.findingId || options.topicPostId ? undefined : topicId,
 		targetTopicId: topicId,
 		parentCommentId: options.parentCommentId,
 		body: options.body ?? `${name} body`,
@@ -164,12 +165,12 @@ async function seedComment(
 	return commentId
 }
 
-// a reaction by one user on a Comment or a Finding of a Topic, some minutes ago
+// a reaction by one user on a Comment, a Finding, or a Topic Post of a Topic, some minutes ago
 async function seedReaction(
 	userId: string,
 	topicId: string,
 	minutesAgo: number,
-	target: { commentId: string } | { findingId: string },
+	target: { commentId: string } | { findingId: string } | { postId: string },
 ): Promise<void> {
 	await db
 		.insert(reactions)
@@ -219,7 +220,8 @@ export async function seedOwnEvents(): Promise<void> {
 }
 
 // the person's published Topic Posts: one with its own image on a public Topic they neither hold nor follow, one on
-// a Topic they follow, and one on a private Topic they may no longer open
+// a Topic they follow, and one on a private Topic they may no longer open. then what hangs on the person's post and
+// Comments on someone else's Topic, and a reply to their Comment on their own Topic
 export async function seedPersonTopicPosts(): Promise<void> {
 	const personPost = { authorUserId: userIds.person, title: "a post" }
 	await db.insert(topicPosts).values([
@@ -233,6 +235,18 @@ export async function seedPersonTopicPosts(): Promise<void> {
 		{ ...personPost, id: toRunId("followed-post"), topicId: topicIds.followed, publishedAt: toMinutesAgo(34) },
 		{ ...personPost, id: toRunId("closed-post"), topicId: topicIds.otherPrivate, publishedAt: toMinutesAgo(33) },
 	])
+
+	// a Comment and a reaction on the post on someone else's Topic
+	const otherPostId = toRunId("other-post")
+	await seedComment("post-comment", userIds.firstReactor, topicIds.otherPublic, 32, { topicPostId: otherPostId })
+	await seedReaction(userIds.secondReactor, topicIds.otherPublic, 31, { postId: otherPostId })
+
+	// the person's Comment on someone else's Topic with a reaction, and on their own Topic with a reply, which fits the
+	// own group both by its Topic and by the Comment it answers
+	const otherCommentId = await seedComment("person-other-comment", userIds.person, topicIds.otherPublic, 2 * 24 * 60)
+	await seedReaction(userIds.firstReactor, topicIds.otherPublic, 29, { commentId: otherCommentId })
+	const ownCommentId = await seedComment("person-own-comment", userIds.person, topicIds.ownPublic, 3 * 24 * 60)
+	await seedComment("own-topic-reply", userIds.teammate, topicIds.ownPublic, 28, { parentCommentId: ownCommentId })
 }
 
 // what happened on the Topics of the person's Teams and on the Topics they follow

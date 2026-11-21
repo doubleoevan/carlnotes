@@ -25,7 +25,8 @@ const TOPIC_POST_ROW: TopicPostRow = {
 		editedAt: new Date("2026-11-01T10:05:00Z"),
 	},
 	topic: { id: "topic-1", ownerId: "owner-1", visibility: "public", teamId: null, name: "Coffee", imageHash: null },
-	author: { userId: "user-1", username: "CoffeeReader", avatarSource: "generated", avatarKey: null },
+	author: { userId: "user-1", username: "CoffeeReader", avatarSource: "generated", avatarKey: null, image: null },
+	topicCounts: { viewerCount: 0, subscriberCount: 0 },
 }
 
 // the Topic's preview, which describes a private Topic's post and gives every post its card image

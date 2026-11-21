@@ -23,6 +23,7 @@ import {
 	sharedCommentsResponse,
 } from "@carlnotes/contracts/social"
 import { type ApiResponse, apiClient, readApiErrorMessage, readApiResponse } from "./apiClient"
+import { notifyNewsWrite } from "./newsClient"
 
 // why a write changed nothing: the comment is past its edit time, or the write failed, with Carl's words if the text
 // was rejected or the Terms are waiting
@@ -80,7 +81,8 @@ export async function saveReaction(saveReactionPayload: SaveReactionPayload): Pr
 			return { status: "failed", message: (await readApiErrorMessage(response)) ?? null }
 		}
 
-		// the summary as it stands now
+		// the user's news reads again, and the summary as it stands now
+		notifyNewsWrite()
 		return { status: "saved", summary: (await readApiResponse(reactionSummaryResponse, response)).summary }
 	} catch {
 		return UNSENT_WRITE_FAILURE
@@ -123,8 +125,15 @@ export async function fetchCommentReplies(commentId: string, cursor?: string): P
  * Posts a comment or a reply on a social target's thread. Returns the comment as its author reads it, or why nothing
  * was posted.
  */
-export function postComment(postCommentPayload: PostCommentPayload): Promise<CommentWriteResult> {
-	return toCommentWriteResult(() => apiClient().api.comments.$post({ json: postCommentPayload }))
+export async function postComment(postCommentPayload: PostCommentPayload): Promise<CommentWriteResult> {
+	// a posted comment reads the user's news again
+	const commentWriteResult = await toCommentWriteResult(() =>
+		apiClient().api.comments.$post({ json: postCommentPayload }),
+	)
+	if (commentWriteResult.status === "saved") {
+		notifyNewsWrite()
+	}
+	return commentWriteResult
 }
 
 /**
@@ -142,8 +151,15 @@ export function editComment(commentId: string, body: string): Promise<CommentWri
  */
 export async function deleteComment(commentId: string): Promise<DeleteCommentResponse | false> {
 	try {
+		// a deleted comment reads the user's news again
 		const response = await apiClient().api.comments[":id"].$delete({ param: { id: commentId } })
-		return response.ok ? await readApiResponse(deleteCommentResponse, response) : false
+		if (!response.ok) {
+			return false
+		}
+
+		// the delete went through, so the news reads again
+		notifyNewsWrite()
+		return await readApiResponse(deleteCommentResponse, response)
 	} catch {
 		return false
 	}

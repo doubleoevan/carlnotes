@@ -7,11 +7,11 @@ import { chatRoomAttachments } from "@carlnotes/db/schema/chat"
 import { teamMembers, teams } from "@carlnotes/db/schema/teams"
 import { deleteStoredObjects, recordPendingObjectDeletions } from "@carlnotes/db/store"
 import { clearUnseenCommentMentions } from "@carlnotes/db/unseenCommentMentions"
-import { purgeEdgeCacheTagAfterDeletion, toDashboardCacheTag } from "@carlnotes/server/edgePurge"
 import { and, eq } from "drizzle-orm"
 import { isLeaderRole } from "../authorization"
 import { deleteChatRoomAttachmentRows } from "../chat/roomAttachments"
-import { toTeamAvatarCacheTag } from "../edgeCache"
+import { clearPages, toTeamAvatarCacheTag } from "../edgeCache"
+import { clearOwnNews } from "../news/newsCaches"
 import { loadUsername } from "../usernames"
 import { deactivateTeamTopicSubscriptions, removeTeamMemberInTransaction, toTeamRole } from "./members"
 
@@ -60,8 +60,9 @@ export async function deleteTeam(userId: string, teamId: string): Promise<Delete
 		return updateTeamLeader(userId, teamId)
 	}
 
-	// delete the team's stored objects once the row is gone, and purge its avatar and Team Dashboard from the edge
-	await deleteStoredObjects(deletedTeamObjectKeys)
+	// delete the team's stored objects once the row is gone, clear the caller's own news that showed the team's topics
+	// and the team's page copy, and purge it from the edge
+	await Promise.all([deleteStoredObjects(deletedTeamObjectKeys), clearOwnNews(userId)])
 	await purgeDeletedTeamAtEdge(teamId)
 	return { status: "deleted" }
 }
@@ -105,8 +106,8 @@ async function updateTeamLeader(userId: string, teamId: string): Promise<DeleteT
 		return { status: "forbidden" }
 	}
 
-	// the caller left the team, so clear their cached comment mentions
-	await clearUnseenCommentMentions([userId])
+	// the caller left the team, so clear their cached comment mentions and their own news that showed the team's topics
+	await Promise.all([clearUnseenCommentMentions([userId]), clearOwnNews(userId)])
 	return { status: "handedOver", newLeaderUsername: (await loadUsername(newLeaderId)) ?? "" }
 }
 
@@ -134,11 +135,13 @@ export async function deleteTeamRow(transaction: DbTransaction, teamId: string):
 }
 
 /**
- * Purges a deleted team's avatar and its Team Dashboard from the edge.
+ * Clears a deleted team's page and Team Dashboard copies, then purges its avatar, its page, and its Team Dashboard
+ * from the edge in one request.
  */
-export async function purgeDeletedTeamAtEdge(teamId: string): Promise<void> {
-	await Promise.all([
-		purgeEdgeCacheTagAfterDeletion(toTeamAvatarCacheTag(teamId)),
-		purgeEdgeCacheTagAfterDeletion(toDashboardCacheTag({ dashboardKind: "teamDashboard", subjectId: teamId })),
-	])
+export function purgeDeletedTeamAtEdge(teamId: string): Promise<void> {
+	return clearPages({
+		teamIds: [teamId],
+		dashboardSubjects: [{ dashboardKind: "teamDashboard", subjectId: teamId }],
+		extraCacheTags: [toTeamAvatarCacheTag(teamId)],
+	})
 }

@@ -4,7 +4,8 @@ import { fetchTeamPage, sendDeleteTeam } from "@carlnotes/client/teamClient"
 import { fetchAddableTopics } from "@carlnotes/client/topicClient"
 import { isLeaderRole } from "@carlnotes/contracts/enums"
 import { type TeamPageResponse, toTeamPageTitle } from "@carlnotes/contracts/teams"
-import { TEAM_PAGE_SECTION_VALUES } from "@carlnotes/core/lib/cardSections"
+import { TEAM_PAGE_SECTION_VALUES, toTopicPostsPageOptions } from "@carlnotes/core/lib/cardSections"
+import { toTeamPageResultWithUserState } from "@carlnotes/core/lib/pageUserStates"
 import { sendTeamViewOnce } from "@carlnotes/core/lib/pageViews"
 import { getRouteApi, useNavigate } from "@tanstack/react-router"
 import { Pencil, Share, Trash2 } from "lucide-react"
@@ -236,7 +237,10 @@ export function TeamPage() {
 				</Accordion>
 			</div>
 			{/* the team page's visitors, as its last line */}
-			<ViewerCountLine viewerCountPage={{ kind: "team", id: teamPage.teamId, isPublic: teamPage.isPublic }} />
+			<ViewerCountLine
+				viewerCountPage={{ kind: "team", id: teamPage.teamId, isPublic: teamPage.isPublic }}
+				savedViewerCount={teamPage.viewerCount}
+			/>
 			{isSharing && (
 				<ShareTeam
 					teamId={teamPage.teamId}
@@ -280,17 +284,26 @@ function useTeamPageResult(teamId: string): {
 	// the team page result the route loads on the server, or undefined after a browser navigation
 	const loadedTeamResult = teamRoute.useLoaderData({ select: (loaderData) => loaderData?.teamResult ?? undefined })
 	const [teamResult, setTeamResult] = useState<TeamPageResult | undefined>(loadedTeamResult)
+	const topicPostsPageNumber = teamRoute.useSearch({ select: (search) => search.posts })
 
-	// fetch the team page result, which says whether the team is visible, gated to this user, or missing
+	// fetch the team page result, which says whether the team is visible, gated to this user, or missing, with the
+	// user state merged into the shared copy and the page of the Topic Posts that the url names. a read that a later read
+	// replaced never shows
+	const teamReadRef = useRef(0)
 	const reloadTeam = useCallback((): void => {
-		fetchTeamPage(teamId)
-			.then(setTeamResult)
-			.catch(() => setTeamResult({ status: "missing" }))
-	}, [teamId])
+		teamReadRef.current += 1
+		const teamRead = teamReadRef.current
+		const isLatestTeamRead = (): boolean => teamRead === teamReadRef.current
+		fetchTeamPage(teamId, { isUserStateAsked: true, ...toTopicPostsPageOptions(topicPostsPageNumber) })
+			.then(
+				(fetchedTeamResult) => isLatestTeamRead() && setTeamResult(toTeamPageResultWithUserState(fetchedTeamResult)),
+			)
+			.catch(() => isLatestTeamRead() && setTeamResult({ status: "missing" }))
+	}, [teamId, topicPostsPageNumber])
 
-	// load the team on mount and on a move to another team, except when hydrating a visible or gated team the server
-	// rendered. a server read that failed or came back missing still loads
+	// load the team on mount, on a move to another team, and on a move to another page of its Topic Posts, except when
+	// hydrating a visible or gated team the server rendered. a server read that failed or came back missing still loads
 	const isLoadedOnServer = loadedTeamResult?.status === "visible" || loadedTeamResult?.status === "gated"
-	useLoadInBrowser({ pageId: teamId, isLoadedOnServer, loadPage: reloadTeam })
+	useLoadInBrowser({ pageId: `${teamId}:${topicPostsPageNumber}`, isLoadedOnServer, loadPage: reloadTeam })
 	return { teamResult, reloadTeam }
 }

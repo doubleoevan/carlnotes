@@ -6,7 +6,7 @@ import { deleteRedisKeys } from "@carlnotes/db/redis"
 import { userBlocks } from "@carlnotes/db/schema/userBlocks"
 import { users } from "@carlnotes/db/schema/users"
 import { clearUnseenCommentMentions } from "@carlnotes/db/unseenCommentMentions"
-import { and, desc, eq } from "drizzle-orm"
+import { and, desc, eq, or } from "drizzle-orm"
 import { Hono } from "hono"
 import { toUnseenChatMentionCountKey } from "./chat/mentions"
 import { type AppEnv, currentUser } from "./currentUser"
@@ -97,6 +97,34 @@ export async function loadUserBlockedIds(blockerUserId: string): Promise<Set<str
 		.from(userBlocks)
 		.where(eq(userBlocks.blockerUserId, blockerUserId))
 	return new Set(userBlockRows.map((userBlockRow) => userBlockRow.blockedUserId))
+}
+
+// the people a user blocked, and everyone in a user block with the user, whichever of them blocked the other
+type UserBlocksBetween = { blockedUserIds: Set<string>; userBlockUserIds: Set<string> }
+
+/**
+ * Loads the user blocks a user is in, either way, in one read: the people the user blocked, and everyone in a user
+ * block with the user.
+ */
+export async function loadUserBlocksBetween(userId: string): Promise<UserBlocksBetween> {
+	// every user block the user is in, whichever of them blocked the other
+	const userBlockRows = await db
+		.select({ blockerUserId: userBlocks.blockerUserId, blockedUserId: userBlocks.blockedUserId })
+		.from(userBlocks)
+		.where(or(eq(userBlocks.blockerUserId, userId), eq(userBlocks.blockedUserId, userId)))
+
+	// the other person of each user block, and the ones the user blocked
+	const blockedUserIds = new Set<string>()
+	const userBlockUserIds = new Set<string>()
+	for (const { blockerUserId, blockedUserId } of userBlockRows) {
+		if (blockerUserId === userId) {
+			blockedUserIds.add(blockedUserId)
+		}
+		userBlockUserIds.add(blockerUserId === userId ? blockedUserId : blockerUserId)
+	}
+
+	// both sets of people
+	return { blockedUserIds, userBlockUserIds }
 }
 
 // the user block routes: block a user, unblock them, and list the blocker's blocked users

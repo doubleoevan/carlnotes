@@ -127,8 +127,10 @@ the browser bundle and renders pages through the server build, behind its own ro
   from `/assets/voice-activity-<versions>/` by `apps/web/voiceActivityAssetsPlugin.ts`, the Vite plugin that copies them
   out of the installed packages' folders into the client build and serves them in dev. `@carlnotes/core/lib/pageHead`
   turns a `PageHead`, or a fixed title and path, into the tags a route's `head()` returns. `loadOnServer.ts` runs a
-  route loader's read on the server only, and its `loadPageOnServer` reads a page's head and page data together. Its
-  `readWithDegradedFallback` returns a fallback for a failed read and marks the response, so the api responds 503.
+  route loader's read on the server only, where the profile, team, topic, podcast episode, Topic Post, and Dashboard
+  routes each send their one page read from `@carlnotes/client/pageReadClient`; browser navigation reads the page's own
+  routes as before. Its `readWithDegradedFallback` returns a fallback for a failed read and marks the response, so the
+  api responds 503.
   `requireSession.ts` is the sign-in guard the `_signedIn` layout runs before its pages load. `sessionCookie.ts` reads
   on the server whether the request brings a session cookie. `visitAnalytics.ts` starts the browser's analytics, reports
   a page view per route change, and captures the named visit events, their urls rewritten like every other event's.
@@ -170,7 +172,8 @@ the browser bundle and renders pages through the server build, behind its own ro
   under its note icon on a search row and a news row.
   `TopicResourceInfo.tsx` shows a Finding's details and actions in the popover opened from `TopicResource.tsx` or a Podcast Episode chapter.
   `TagsAndNewTopicRow.tsx` is the Tags picker and New Topic button row above the home feed and the search results.
-  `TopicCountsLine.tsx` ends the topic page with its viewer and follower counts, empty in the server render.
+  `TopicCountsLine.tsx` ends the topic page with its viewer and follower counts, empty in the server render, and shows
+  the counts saved with the page until the poll's first read a minute later.
   `components/common/DetailsLine.tsx` adapts core's details line, which `TopicPageHeader.tsx` draws under the byline
   and reactions with the counts of the page's sections, the Topic Post page under its byline's row, the profile's
   summary line and the team header as their counts, and the Topic Post popup under its Topic's name.
@@ -292,7 +295,8 @@ the browser bundle and renders pages through the server build, behind its own ro
   the topic's latest podcast episode's film is rendering, the section's title row shows the shimmering line "Carl and
   Vienna are filming..." right before the film count, wrapping to its own line if the row runs out of room, through
   `UnpublishedPodcastEpisodeCard.tsx`'s `PodcastEpisodeProgressLine`, and core's `useTopicVideoRenderingPoll` reads the
-  page again until the film is ready. `pages/PodcastEpisodePage.tsx` shows `UnpublishedPodcastEpisodeCard` with
+  film's status read (`GET /api/status/episodes/:id/topic-video`) until the film leaves rendering, then the page once.
+  `pages/PodcastEpisodePage.tsx` shows `UnpublishedPodcastEpisodeCard` with
   `isVideoRendering` in its Coffee Break Film section for a podcast episode whose film is rendering, and its poll replaces the page once the film is no
   longer rendering. A failed poll read of the topic page keeps the page shown.
   Both players use `PodcastEpisodeSeekBar`. Hovering a chapter shows `PodcastEpisodeChapterPreview.tsx`, a popover
@@ -422,27 +426,32 @@ the browser bundle and renders pages through the server build, behind its own ro
   and saves a signed-in user's progress in the loaded podcast episode, its playback start once per load, for the player
   store.
 - `hooks/` — the React hooks that read the browser or a route, `useTopicPagePayload.ts` among them, the topic page's
-  payload, its poll reload, and a signed-in reader's related topics from their own read, `useConfirmDialog.tsx`, which asks before an action runs, `useSiteAssetUrl.ts`, a
-  site image's url, absolute in an MCP view's frame, and `useScanNote.ts`, a scan's note behind its recap popover, read
-  once the trigger is pointed at, focused, touched, or opened, and kept once the scan has finished, and
-  `useColorMode.ts`, the color mode the page shows, kept current as the theme toggle switches it; `providers/` —
-  context providers. The images the bundler imports, Carl's and Vienna's portraits, come from
-  `@carlnotes/nightshift/assets/`. The DOM-free hooks `useNow`, `useAvatar`, `useUsernameChange`, `useNoteBodySave`, and
-  `useNoteComments` live in `@carlnotes/core/hooks/`. A component that reads the browser during render, `localStorage`,
-  `window`, or `document`, reads it through `useBrowserValue` in `hooks/useBrowserValue.ts`, so the server and the first
-  browser render agree. A page that starts from a server loader's data loads in the browser through `useLoadInBrowser`
-  in the same file. `useLoadInBrowser` skips the first load while hydrating data the server already read. Code without
-  its route's typed `useSearch` reads the query string as `URLSearchParams` through `useSearchParams` in
-  `hooks/useSearchParams.ts`. `useCtaPromptToast` in `hooks/useCtaPromptToast.ts` toasts the prompt that a page's `cta`
-  param names, on the signup and plans pages. `useIsSignedInBeforeSession` in `hooks/useIsSignedInBeforeSession.ts` says
-  whether the page shows as signed in. The page load's session cookie decides until Better Auth's session request
-  finishes, and the session decides after. An element that fades in as it scrolls into view takes its class from
-  `useRevealClassName` in `hooks/useRevealClassName.ts`, which shows a server-rendered element before any script runs,
-  so nothing a crawler or a browser without JavaScript reads starts hidden. A box that scrolls takes its tab stop from
-  `useScrollRegionTabStop` in `hooks/useScrollRegionTabStop.ts`, which returns `{ ref, tabIndex }` for the box, with a
-  tab stop while its content overflows, so a keyboard can scroll text with no link in it. The box draws its focus ring
-  with `SCROLL_REGION_FOCUS_CLASS`. The counts lines read their counts through `@carlnotes/core/hooks/usePolledCounts`,
-  once the page has mounted and then every minute while it is focused.
+  payload, which a navigation in the browser reads from the topic's page read, its poll reload, which keeps the shown
+  topic through `replaceEqualDeep` if the page is unchanged, and a signed-in reader's related topics from their own
+  read. The scan button's poll reads the Topic's scan status read (`GET /api/status/topics/:id/scan`) through core's
+  `useTopicScanStatusPoll` and reads the page only if the status changed, and the Topic Post page passes the
+  discussion's status read (`GET /api/status/topic-posts/:id/discussion`) to its discussion card,
+  `useConfirmDialog.tsx`, which asks before an action runs, `useSiteAssetUrl.ts`, a site image's url, absolute in an MCP
+  view's frame, and `useScanNote.ts`, a scan's note behind its recap popover, read once the trigger is pointed at,
+  focused, touched, or opened, and kept once the scan has finished, and `useColorMode.ts`, the color mode the page
+  shows, kept current as the theme toggle switches it; `providers/` — context providers. The images the bundler imports,
+  Carl's and Vienna's portraits, come from `@carlnotes/nightshift/assets/`. The DOM-free hooks `useNow`, `useAvatar`,
+  `useUsernameChange`, `useNoteBodySave`, and `useNoteComments` live in `@carlnotes/core/hooks/`. A component that reads
+  the browser during render, `localStorage`, `window`, or `document`, reads it through `useBrowserValue` in
+  `hooks/useBrowserValue.ts`, so the server and the first browser render agree. A page that starts from a server
+  loader's data loads in the browser through `useLoadInBrowser` in the same file. `useLoadInBrowser` skips the first
+  load while hydrating data the server already read. Code without its route's typed `useSearch` reads the query string
+  as `URLSearchParams` through `useSearchParams` in `hooks/useSearchParams.ts`. `useCtaPromptToast` in
+  `hooks/useCtaPromptToast.ts` toasts the prompt that a page's `cta` param names, on the signup and plans pages.
+  `useIsSignedInBeforeSession` in `hooks/useIsSignedInBeforeSession.ts` says whether the page shows as signed in. The
+  page load's session cookie decides until Better Auth's session request finishes, and the session decides after. An
+  element that fades in as it scrolls into view takes its class from `useRevealClassName` in
+  `hooks/useRevealClassName.ts`, which shows a server-rendered element before any script runs, so nothing a crawler or a
+  browser without JavaScript reads starts hidden. A box that scrolls takes its tab stop from `useScrollRegionTabStop` in
+  `hooks/useScrollRegionTabStop.ts`, which returns `{ ref, tabIndex }` for the box, with a tab stop while its content
+  overflows, so a keyboard can scroll text with no link in it. The box draws its focus ring with
+  `SCROLL_REGION_FOCUS_CLASS`. The counts lines read their counts through `@carlnotes/core/hooks/usePolledCounts`, once
+  the page has mounted and then every minute while it is focused.
 - `src/globals.css` — the app's stylesheet, with the keyframes in `animations.css` and the `scrollbar-none` utility
   the note toolbar scrolls sideways with. It imports its `@theme inline` block, the `shadow-raised` utility, and the
   `:root` and dark variables from `@carlnotes/nightshift/tokens.css`, which is written from the Nightshift TypeScript
@@ -574,7 +583,12 @@ episodes, or Topic Posts.
 Post page's actions menus open: it reads the featured Topic Posts and the ones an admin may feature, offers the page's post a
 place, and sends the order. `components/common/CardsSection.tsx` is the web's accordion section, grid, and page
 buttons for core's `CardsSection`, which the home's, the profile's, and the team page's card sections render, with the
-grid and the count's place from Nightshift's `cardGrid.ts`, which the topic page's Coffee Break Cinema reads too, and
+grid and the count's place from Nightshift's `cardGrid.ts`, which the topic video section reads too. The
+page buttons of a section the server pages are links to the url at each page, under the section's search key, so a
+reader without JavaScript and a crawler reach every card, and the home, profile, team, and topic routes read those
+keys with `lib/pageSearch.ts` and ask the server for the pages they name. The scan history,
+`components/topic/TopicScanHistory.tsx`, shows the topic page's newest 50 scans five at a time and reads each later
+page through core's `toTopicScanPages` and `useServerPagedCards`, with the loading mug in its card while a page loads.
 `components/common/pageSectionsElements.tsx` is `PAGE_SECTIONS_ELEMENTS`, the sections and cards that the profile's
 and the team page's adapters spread,
 Featured Posts right below Featured Podcasts on the profile and the team page. The home writes its sections in

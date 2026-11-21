@@ -1,8 +1,8 @@
 // the ingest stage: run a topic's Sources through their ingesters, dedupe what they find, credit each Resource to one
 // Source, and store it
 
+import { SOURCE_RESULT_REASON_CHARS, type StoredSourceResult } from "@carlnotes/contracts/scanSourceResults"
 import { toDefaultSource, toSourceResultLabel } from "@carlnotes/contracts/sources"
-import { SOURCE_RESULT_REASON_CHARS, type StoredSourceResult } from "@carlnotes/contracts/topics"
 import { db } from "@carlnotes/db"
 import { resources, type scans } from "@carlnotes/db/schema/scans"
 import { sources } from "@carlnotes/db/schema/topics"

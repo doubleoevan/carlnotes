@@ -191,6 +191,13 @@ export async function saveRedisJson({ key, value, ttlMs }: SaveRedisJsonOptions)
 }
 
 /**
+ * Stores a JSON value under a key for the time to live and writes nothing if the key holds a value.
+ */
+export async function saveRedisJsonIfAbsent({ key, value, ttlMs }: SaveRedisJsonOptions): Promise<void> {
+	await runWithRedis("set", (client) => client.set(key, JSON.stringify(value), "PX", String(ttlMs), "NX"))
+}
+
+/**
  * Replaces the JSON value stored under a key for the time to live and writes nothing if the key is gone.
  */
 export async function replaceRedisJson({ key, value, ttlMs }: ReplaceRedisJsonOptions): Promise<void> {

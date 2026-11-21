@@ -1,6 +1,6 @@
-// the api client for Topic Posts: one post's read, a draft's create and saves, the publish, the delete, the image's
-// regenerate and upload, a body image's upload, and a post's place among its author's featured profile items and the home's featured items. a Topic's posts
-// come with its page
+// the api client for Topic Posts: one post's read, one later page of a Topic's posts, a draft's create and saves, the
+// publish, the delete, the image's regenerate and upload, a body image's upload, and a post's place among its author's
+// featured profile items and the home's featured items. a Topic's first page of posts comes with its page
 import { regenerateTopicImageResponse, uploadTopicImageResponse } from "@carlnotes/contracts/topicImages"
 import {
 	type TopicPostBodyImageUploadResponse,
@@ -12,15 +12,39 @@ import {
 	type TopicPostResponse,
 	type TopicPostSavePayload,
 	type TopicPostSaveResult,
+	type TopicPostsResponse,
 	type TopicPostWriteFailure,
 	type TopicPostWriteResult,
 	topicPostConflictResponse,
 	topicPostDiscussionRegenerateResponse,
 	topicPostResponse,
 	topicPostSaveResponse,
+	topicPostsResponse,
 } from "@carlnotes/contracts/topicPosts"
-import { type ApiResponse, apiClient, fetchApi, readApiErrorMessage, readApiResponse } from "./apiClient"
+import {
+	type ApiResponse,
+	apiClient,
+	fetchApi,
+	readApiErrorMessage,
+	readApiResponse,
+	readPageResponse,
+} from "./apiClient"
+import { notifyNewsWrite } from "./newsClient"
 import type { UploadedTopicImage } from "./topicImageClient"
+
+/**
+ * Fetches one zero-based page of a Topic's Topic Posts as the user may see them, rejecting a failed read.
+ */
+export async function fetchTopicPostsPage(topicId: string, page: number): Promise<TopicPostsResponse> {
+	return readPageResponse(
+		topicPostsResponse,
+		apiClient().api.topics[":id"]["topic-posts"].$get({
+			param: { id: topicId },
+			query: { page: String(page) },
+		}),
+		"topic posts",
+	)
+}
 
 // the failure of a write whose request never arrived
 const UNSENT_WRITE_FAILURE = { status: "failed", message: null } as const
@@ -78,19 +102,29 @@ export async function saveTopicPost(
 /**
  * Publishes a draft. Returns the published post, or why it stayed a draft.
  */
-export function publishTopicPost(topicPostId: string): Promise<TopicPostWriteResult> {
-	return toTopicPostWriteResult(() =>
+export async function publishTopicPost(topicPostId: string): Promise<TopicPostWriteResult> {
+	// a published post reads the user's news again
+	const topicPostWriteResult = await toTopicPostWriteResult(() =>
 		apiClient().api["topic-posts"][":id"].publish.$post({ param: { id: topicPostId } }),
 	)
+	if (topicPostWriteResult.status === "saved") {
+		notifyNewsWrite()
+	}
+	return topicPostWriteResult
 }
 
 /**
  * Deletes a Topic Post, and returns whether it is gone.
  */
 export async function deleteTopicPost(topicPostId: string): Promise<boolean> {
-	// a thrown fetch error reads as a failed delete
+	// a thrown fetch error reads as a failed delete, and a deleted post reads the user's news again
 	try {
 		const response = await apiClient().api["topic-posts"][":id"].$delete({ param: { id: topicPostId } })
+
+		// a deleted post tells the news to read again
+		if (response.ok) {
+			notifyNewsWrite()
+		}
 		return response.ok
 	} catch {
 		return false

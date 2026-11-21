@@ -7,6 +7,7 @@ import { findings, resources } from "@carlnotes/db/schema/scans"
 import { topicImageRenders, topicImages } from "@carlnotes/db/schema/topicImages"
 import { topics } from "@carlnotes/db/schema/topics"
 import { recordPendingObjectDeletions } from "@carlnotes/db/store"
+import { clearVisitorPagesOfTopic } from "@carlnotes/db/visitorPageCaches"
 import { purgeEdgeCacheTagAfterDeletion, toTopicImageCacheTag } from "@carlnotes/server/edgePurge"
 import { and, desc, eq, getTableColumns } from "drizzle-orm"
 import { startTopicImageWorkflow } from "../temporalClient"
@@ -225,12 +226,16 @@ export async function replaceTopicImage({
 		return topicRow
 	})
 
-	// the covers drawn over the replaced image, or over the illustration before a first image, go, and a public
-	// topic's replaced files leave the edge
+	// the covers drawn over the replaced image, or over the illustration before a first image, go with the visitor
+	// pages that name the replaced file, and a public topic's replaced files leave the edge
 	if (topicRow && topicRow.previousHash !== hash) {
-		await forgetTopicCovers(topicId)
-		if (topicRow.previousHash && topicRow.visibility === "public") {
-			await purgeEdgeCacheTagAfterDeletion(toTopicImageCacheTag(topicId))
+		try {
+			await Promise.all([forgetTopicCovers(topicId), clearVisitorPagesOfTopic(topicId)])
+		} finally {
+			// a public topic's replaced files leave the edge even if a clear fails
+			if (topicRow.previousHash && topicRow.visibility === "public") {
+				await purgeEdgeCacheTagAfterDeletion(toTopicImageCacheTag(topicId))
+			}
 		}
 	}
 }
@@ -269,9 +274,10 @@ export async function removeTopicImageUpload(topicId: string): Promise<boolean> 
 		return topicImage
 	})
 
-	// the covers drawn over the upload go, and a public topic's removed files leave the edge
+	// the covers drawn over the upload go with the visitor pages that name it, and a public topic's removed files
+	// leave the edge
 	if (removedUpload) {
-		await forgetTopicCovers(topicId)
+		await Promise.all([forgetTopicCovers(topicId), clearVisitorPagesOfTopic(topicId)])
 		if (removedUpload.visibility === "public") {
 			await purgeEdgeCacheTagAfterDeletion(toTopicImageCacheTag(topicId))
 		}

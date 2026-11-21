@@ -9,6 +9,7 @@ import { clearUnseenCommentMentions, loadTopicPostMentionedUserIds } from "@carl
 import { addViewer } from "@carlnotes/db/viewerCounts"
 import { toUserViewerElement } from "@carlnotes/server/viewerElements"
 import { and, eq, isNull, sql } from "drizzle-orm"
+import { clearOwnNews } from "../news/newsCaches"
 import { settleTopicPostBodyImages } from "./topicPostBodyImages"
 import { loadTopicPostObjectKeys } from "./topicPostObjectKeys"
 import type { TopicPostRow } from "./topicPosts"
@@ -93,9 +94,11 @@ export async function publishTopicPost(topicPostId: string, version: number): Pr
 		.where(and(eq(topicPosts.id, topicPostId), eq(topicPosts.version, version), isNull(topicPosts.publishedAt)))
 		.returning({ authorUserId: topicPosts.authorUserId })
 
-	// count the author as the Topic Post's first viewer, and return whether this request published it
+	// count the author as the Topic Post's first viewer, clear the author's own news, and return whether this request
+	// published it
 	if (publishedRow) {
 		void addViewer({ kind: "topicPost", id: topicPostId }, toUserViewerElement(publishedRow.authorUserId))
+		await clearOwnNews(publishedRow.authorUserId)
 	}
 	return publishedRow !== undefined
 }
@@ -114,22 +117,29 @@ export async function createTopicPostDraft(topicId: string, authorUserId: string
 /**
  * Deletes a Topic Post, which takes its Comments, its reactions, and its discussions with it, and schedules its image's
  * files and its discussions' audio for deletion. A featured post leaves the home's featured items and its author's featured profile items,
- * and each user its Comments mention reads their unseen Comment Mentions again.
+ * each user its Comments mention reads their unseen Comment Mentions again, and its author reads their own news again.
  */
 export async function deleteTopicPost(topicPostId: string): Promise<void> {
 	// the users that the post's Comments mention, read while the Comments exist
 	const mentionedUserIds = await loadTopicPostMentionedUserIds(topicPostId)
-	await db.transaction(async (transaction) => {
+	const deletedRows = await db.transaction(async (transaction) => {
 		// the keys first. the delete takes the rows that name them
 		const objectKeys = await loadTopicPostObjectKeys({ topicPostId }, transaction)
 
-		// close the gap a featured post leaves in each order, then delete the row
+		// close the gap a featured post leaves in each order
 		await releaseHomeOrder({ table: topicPosts, id: topicPostId, handle: transaction })
 		await releaseTopicPostProfileOrder(topicPostId, transaction)
-		await transaction.delete(topicPosts).where(eq(topicPosts.id, topicPostId))
+
+		// delete the row with its author, and queue its files
+		const deletedTopicPostRows = await transaction
+			.delete(topicPosts)
+			.where(eq(topicPosts.id, topicPostId))
+			.returning({ authorUserId: topicPosts.authorUserId })
 		await recordPendingObjectDeletions({ handle: transaction, objectKeys, nextTryAt: new Date() })
+		return deletedTopicPostRows
 	})
 
-	// the deleted Comments' mentions leave each mentioned user's cached read
+	// the deleted Comments' mentions leave each mentioned user's cached read, and the post leaves its author's own news
 	await clearUnseenCommentMentions(mentionedUserIds)
+	await Promise.all(deletedRows.map((deletedRow) => clearOwnNews(deletedRow.authorUserId)))
 }

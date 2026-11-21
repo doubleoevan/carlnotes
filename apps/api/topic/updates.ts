@@ -19,7 +19,7 @@ import { and, desc, eq, inArray, isNull, max, ne, not, or, sql } from "drizzle-o
 import type { AnalyticsProperties } from "../currentUser"
 import { attachTopicFindingFaviconPaths } from "../favicons"
 import { MCP_PAGE_MAX_CHARS, packPage } from "../mcp/results"
-import { loadLatestPodcastEpisodes } from "../podcast/podcastEpisodeShapes"
+import { loadLatestPodcastEpisodes } from "../podcast/latestPodcastEpisodes"
 import { toFindingSearchTopic } from "../search/findingSearch"
 import { loadViewableTopic } from "./accessibleFindings"
 import { activeSubscriptionTopicIdQuery } from "./feeds"

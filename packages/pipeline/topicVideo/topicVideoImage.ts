@@ -13,7 +13,7 @@ import { topicImageCostDollars, topicImageRegenerateModel } from "@carlnotes/mod
 import { reportError } from "@carlnotes/server/monitoring"
 import { runWithRetries } from "@carlnotes/server/retry"
 import { and, eq, isNull, sql } from "drizzle-orm"
-import { loadPodcastEpisodeImageSceneInput, purgePublicImageFiles } from "../podcast/podcastEpisodeImageRenders"
+import { clearReplacedImageCopies, loadPodcastEpisodeImageSceneInput } from "../podcast/podcastEpisodeImageRenders"
 import {
 	deleteDrawnImage,
 	renderTopicImageOriginal,
@@ -250,9 +250,9 @@ export async function publishTopicVideoImage({
 		return topicVideo
 	})
 
-	// a public topic's replaced image leaves the edge
-	if (replacedImage?.previousHash && replacedImage.previousHash !== imageHash) {
-		await purgePublicImageFiles(replacedImage)
+	// the topic's visitor pages and a public topic's replaced image leave the caches, after a first image too
+	if (replacedImage && replacedImage.previousHash !== imageHash) {
+		await clearReplacedImageCopies(replacedImage)
 	}
 
 	// the intro and the sign-off are rendered again from the new image. a failed start is reported, and the next play
@@ -308,9 +308,9 @@ export async function removeTopicVideoImageUpload(podcastEpisodeId: string): Pro
 		return topicVideo
 	})
 
-	// a public topic's removed image leaves the edge
+	// the topic's visitor pages and a public topic's removed image leave the caches
 	if (removedUpload) {
-		await purgePublicImageFiles(removedUpload)
+		await clearReplacedImageCopies(removedUpload)
 	}
 	return removedUpload?.id ?? null
 }

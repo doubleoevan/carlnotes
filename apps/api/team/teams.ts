@@ -5,12 +5,12 @@ import { teamMembers, teams } from "@carlnotes/db/schema/teams"
 import { teamTopics } from "@carlnotes/db/schema/teamTopics"
 import { subscriptions, topics } from "@carlnotes/db/schema/topics"
 import { clearUnseenCommentMentions, loadTopicMentionedUserIds } from "@carlnotes/db/unseenCommentMentions"
+import { clearVisitorPagesOfTopic, clearVisitorTeamPages } from "@carlnotes/db/visitorPageCaches"
 import { rebuildTopicDashboards, rebuildTopicDashboardsById } from "@carlnotes/pipeline/dashboardRebuild"
-import { purgeEdgeCacheTagAfterDeletion, toDashboardCacheTag } from "@carlnotes/server/edgePurge"
 import { and, eq, inArray, isNull, notInArray, sql } from "drizzle-orm"
 import { isLeaderRole } from "../authorization"
+import { clearPages } from "../edgeCache"
 import { deletePodcastFeedToken } from "../podcast/podcastFeedTokens"
-import { clearVisitorTopicPages } from "../topic/feedCaches"
 import { toTopicAccessFilter } from "../topic/permissions"
 import { updateTopicSubscriberCount } from "../topic/subscriberCounts"
 import { saveTeamTopicSubscriptions, toTeamRole } from "./members"
@@ -55,7 +55,7 @@ export async function createTeam(
 
 	// drop the visitors' copies of each attached topic's page, which names its teams, and rebuild the Dashboards of the
 	// topics the team now owns
-	await clearVisitorTopicPages(...payload.topicIds)
+	await clearVisitorPagesOfTopic(...payload.topicIds)
 	await rebuildTopicDashboardsById(...payload.topicIds)
 	return { status: "created", teamId }
 }
@@ -133,7 +133,7 @@ export async function addTopicToTeam(
 		addTopicInTransaction(transaction, userId, teamId, topicId),
 	)
 	if (addTopicResult === "added") {
-		await clearVisitorTopicPages(topicId)
+		await clearVisitorPagesOfTopic(topicId)
 		await rebuildTopicDashboardsById(topicId)
 	}
 	return addTopicResult
@@ -338,12 +338,14 @@ export async function removeTopicFromTeam(userId: string, teamId: string, topicI
 	})
 
 	// delete the podcast feed token of each member who lost the subscription, drop the visitors' copies of the
-	// topic's page, which names its teams, and clear the cached comment mentions of the topic's mentioned users
+	// topic's pages, which name its teams, and of the team's page, which no longer lists it, and clear the cached
+	// comment mentions of the topic's mentioned users
 	await Promise.all([
 		...deactivatedSubscriberUserIds.map((deactivatedSubscriberUserId) =>
 			deletePodcastFeedToken({ topicId, userId: deactivatedSubscriberUserId }),
 		),
-		clearVisitorTopicPages(topicId),
+		clearVisitorPagesOfTopic(topicId),
+		clearVisitorTeamPages(teamId),
 		loadTopicMentionedUserIds(topicId).then(clearUnseenCommentMentions),
 		rebuildTopicDashboards({ ownerId: topic?.ownerId ?? userId, teamId }),
 		rebuildTopicDashboardsById(topicId),
@@ -380,12 +382,16 @@ export async function updateTeam(
 		throw error
 	}
 
-	// a rename or a visibility change leaves the edge copy of the team's Team Dashboard stale, and a description edit
-	// does not show there
+	// every edit changes the team page's visitor copy. a rename or a visibility change leaves the origin and edge copies
+	// of the team's Team Dashboard stale, and a visibility change leaves the team's page at the edge too, in one purge
+	await clearVisitorTeamPages(teamId)
 	const isRenamed = payload.name !== undefined && payload.name !== storedTeam?.name
 	const isVisibilityChanged = payload.isPublic !== undefined && payload.isPublic !== storedTeam?.isPublic
 	if (isRenamed || isVisibilityChanged) {
-		await purgeEdgeCacheTagAfterDeletion(toDashboardCacheTag({ dashboardKind: "teamDashboard", subjectId: teamId }))
+		await clearPages({
+			teamIds: isVisibilityChanged ? [teamId] : [],
+			dashboardSubjects: [{ dashboardKind: "teamDashboard", subjectId: teamId }],
+		})
 	}
 	return "saved"
 }

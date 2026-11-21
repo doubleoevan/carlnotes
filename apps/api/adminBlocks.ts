@@ -1,11 +1,13 @@
 // the admin block, which stops one user from reactions and comments everywhere, and its two routes
 import { db } from "@carlnotes/db"
+import { comments } from "@carlnotes/db/schema/social"
 import { users } from "@carlnotes/db/schema/users"
 import { clearUnseenCommentMentions, loadAuthorMentionedUserIds } from "@carlnotes/db/unseenCommentMentions"
-import { eq } from "drizzle-orm"
+import { and, eq, isNotNull } from "drizzle-orm"
 import { type Context, Hono } from "hono"
 import { isAllowed } from "./authorization"
 import { type AppEnv, currentUser } from "./currentUser"
+import { clearTopicPostPages } from "./edgeCache"
 
 /**
  * Sets or clears the admin block on a user, and clears the cached unseen Comment Mentions of each user their Comments
@@ -22,8 +24,14 @@ export async function setAdminBlock(userId: string, blockingAdminUserId: string 
 		return false
 	}
 
-	// the block hides the user's Comments and clearing it shows them, so each user they mention reads again
+	// the block hides the user's Comments and clearing it shows them, so each user they mention reads again, and each
+	// Topic Post page that shows one of their Comments is read again
 	await clearUnseenCommentMentions(await loadAuthorMentionedUserIds(userId))
+	const commentedTopicPostRows = await db
+		.selectDistinct({ topicPostId: comments.postId })
+		.from(comments)
+		.where(and(eq(comments.authorUserId, userId), isNotNull(comments.postId)))
+	await clearTopicPostPages(...commentedTopicPostRows.flatMap(({ topicPostId }) => (topicPostId ? [topicPostId] : [])))
 	return true
 }
 

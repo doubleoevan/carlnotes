@@ -136,6 +136,22 @@ export async function readApiResponse<Schema extends z.ZodType>(
 	return parseResult.data
 }
 
+/**
+ * Returns one api response parsed with the configured schema. Throws an error that names the read if the response is
+ * not ok, and an ApiResponseError if its parse fails.
+ */
+export async function readPageResponse<Schema extends z.ZodType>(
+	schema: Schema,
+	pageRequest: Promise<ApiResponse>,
+	pageName: string,
+): Promise<z.output<Schema>> {
+	const response = await pageRequest
+	if (!response.ok) {
+		throw new Error(`${pageName} load failed: ${response.status}`)
+	}
+	return readApiResponse(schema, response)
+}
+
 // the schema each contract is parsed with, built once per contract and per configuration
 let configuredResponseSchemas = new WeakMap<z.ZodType, z.ZodType>()
 function toConfiguredResponseSchema<Schema extends z.ZodType>(schema: Schema): z.ZodType<z.output<Schema>> {

@@ -2,8 +2,10 @@
 // a refused delete purges nothing
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
+import * as redis from "@carlnotes/db/redis"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
 import * as store from "@carlnotes/db/store"
+import * as visitorPageCaches from "@carlnotes/db/visitorPageCaches"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import { stubEdgePurge, toPurgedTags } from "../edgePurgeTestFixtures"
 import { deleteTeam } from "./deleteTeam"
@@ -34,16 +36,31 @@ function toSoloTeamRows({ text }: SentQuery, teamRole: string): unknown[] {
 	return text.startsWith('delete from "teams"') ? [[null]] : []
 }
 
-test("a team deleted with nobody else on it purges its avatar and its Team Dashboard from the edge", async () => {
+test("a team deleted with nobody else on it purges its avatar, its page, and its Team Dashboard from the edge", async () => {
 	// a leader alone on the team, with Redis and object storage stubbed
 	const fetchSpy = stubEdgePurge()
 	stubRedisClient()
 	spyOn(store, "deleteStoredObjects").mockResolvedValue(undefined)
 	stubConnectionPool((sentQuery) => toSoloTeamRows(sentQuery, "leader"))
 
-	// the delete removes the team row and purges both of the team's tags
+	// the delete removes the team row and purges the team's three tags in one request
 	expect(await deleteTeam("user-1", "team-1")).toEqual({ status: "deleted" })
-	expect(toPurgedTags(fetchSpy)).toEqual(["dashboard:teamDashboard:team-1", "team-avatar:team-1"])
+	expect(fetchSpy.mock.calls.filter(([url]) => String(url).endsWith("/purge_cache"))).toHaveLength(1)
+	expect(toPurgedTags(fetchSpy)).toEqual(["dashboard:teamDashboard:team-1", "team-avatar:team-1", "team:team-1"])
+})
+
+test("a deleted team's page and Team Dashboard copies go", async () => {
+	// a leader alone on the team, with the copies' deletes watched
+	stubEdgePurge()
+	stubRedisClient()
+	spyOn(store, "deleteStoredObjects").mockResolvedValue(undefined)
+	const deleteRedisKeysSpy = spyOn(redis, "deleteRedisKeys").mockResolvedValue(0)
+	stubConnectionPool((sentQuery) => toSoloTeamRows(sentQuery, "leader"))
+	await deleteTeam("user-1", "team-1")
+	expect(deleteRedisKeysSpy).toHaveBeenCalledWith(
+		visitorPageCaches.toVisitorTeamPageKey("team-1"),
+		visitorPageCaches.toVisitorDashboardPageKey({ dashboardKind: "teamDashboard", subjectId: "team-1" }),
+	)
 })
 
 test("a member's delete purges nothing", async () => {

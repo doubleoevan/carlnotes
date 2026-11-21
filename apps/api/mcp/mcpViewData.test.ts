@@ -8,7 +8,7 @@ import { toTestTopicFinding } from "@carlnotes/contracts/topicFeedTestFixtures"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as findingPersonalAnnotations from "@carlnotes/db/findingPersonalAnnotations"
 import type { CallToolResult } from "@modelcontextprotocol/server"
-import * as podcastEpisodeShapes from "../podcast/podcastEpisodeShapes"
+import * as latestPodcastEpisodes from "../podcast/latestPodcastEpisodes"
 import * as accessibleFindings from "../topic/accessibleFindings"
 import * as findingPermissions from "../topic/findingPermissions"
 import * as permissions from "../topic/permissions"
@@ -78,11 +78,12 @@ function stubMcpViewReads(): void {
 	)
 	spyOn(results, "loadVisibleTopic").mockResolvedValue(TOPIC as never)
 	spyOn(results, "readTopicFeed").mockResolvedValue({
-		items: [{ findingId: TOPIC_FINDING.findingId }],
-		nextCursor: null,
+		mcpPage: { items: [{ findingId: TOPIC_FINDING.findingId }], nextCursor: null },
+		topic: TOPIC,
+		topicFindings: [TOPIC_FINDING],
 	} as never)
 	spyOn(accessibleFindings, "loadTopicAccessAndFindings").mockResolvedValue({ topicFindings: [TOPIC_FINDING] } as never)
-	spyOn(podcastEpisodeShapes, "loadLatestPodcastEpisodeSummaries").mockResolvedValue(new Map())
+	spyOn(latestPodcastEpisodes, "loadLatestPodcastEpisodeSummaries").mockResolvedValue(new Map())
 	spyOn(permissions, "hasSubscription").mockResolvedValue(false)
 	spyOn(findingPermissions, "canRateTopic").mockResolvedValue(true)
 	spyOn(findingPermissions, "canBookmarkTopic").mockResolvedValue(true)
@@ -123,6 +124,15 @@ test.each(["read_topic_feed", "search"] as const)("a visitor's %s reads no priva
 	const loadFindingPersonalAnnotationsSpy = spyOn(findingPersonalAnnotations, "loadFindingPersonalAnnotations")
 	await toToolResult(toolName, VISITOR)
 	expect(loadFindingPersonalAnnotationsSpy).not.toHaveBeenCalled()
+})
+
+test("read_topic_feed's MCP view takes the feed's findings and reads them no second time", async () => {
+	// the feed's window holds the page's finding, which the view shows
+	stubMcpViewReads()
+	const loadTopicAccessAndFindingsSpy = spyOn(accessibleFindings, "loadTopicAccessAndFindings")
+	const feedResult = await toToolResult("read_topic_feed", USER)
+	expect(feedResult._meta?.[MCP_VIEW_META_KEY]).toMatchObject({ topicFindings: [{ findingId: "finding-1" }] })
+	expect(loadTopicAccessAndFindingsSpy).not.toHaveBeenCalled()
 })
 
 // a podcast episode with a film, and the play token its MCP view's files open with

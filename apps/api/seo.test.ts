@@ -4,6 +4,7 @@ import { hasSubstringsInOrder } from "@carlnotes/contracts/textOrderTestFixtures
 import { DAY_MS } from "@carlnotes/contracts/time"
 import type { PublicTopic } from "@carlnotes/contracts/topics"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
+import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import { documentsRoute } from "./documents"
 import { loadDocsPages, toLlmsFullTxt, toLlmsTxt, toSecurityTxt, toSitemapXml, toTopicDescription } from "./seo"
@@ -16,9 +17,10 @@ const PUBLIC_TOPIC = {
 	feedUpdatedAt: "2026-08-20T00:00:00.000Z",
 } satisfies PublicTopic
 
-// a published podcast episode of the public topic, as loadPublicPodcastEpisodeRows returns it
+// a published podcast episode of the public topic, as loadLlmsTxtRows returns it
 const PUBLIC_PODCAST_EPISODE_ROW = {
 	topicId: "topic-public",
+	topicName: "Coffee gear reviews",
 	season: 2026,
 	episodeNumber: 3,
 	publishedAt: new Date("2026-08-21T00:00:00.000Z"),
@@ -66,6 +68,54 @@ test("llms.txt follows the convention", async () => {
 
 	// llms.txt leaves out the component browser
 	expect(llmsTxt).not.toContain("/nightshift")
+})
+
+// each document read inside its ten minutes reads Redis, so a crawler's repeat or a changed query string sends no query
+test("a second sitemap, llms.txt, or Topic feed read sends no query", async () => {
+	// the in-memory Redis store, and a database with no rows
+	stubRedisClient()
+	const sentQueries = stubConnectionPool()
+	try {
+		for (const documentPath of ["/sitemap.xml", "/llms.txt", "/topics/topic-1/feed.xml"]) {
+			// the first read builds the document from the database
+			const firstResponse = await documentsRoute.request(documentPath)
+			const firstQueryCount = sentQueries.length
+			expect(firstQueryCount).toBeGreaterThan(0)
+
+			// the second read, with a new query string, returns the same document and sends nothing
+			const secondResponse = await documentsRoute.request(`${documentPath}?x=1`)
+			expect(sentQueries.length).toBe(firstQueryCount)
+			expect(secondResponse.status).toBe(firstResponse.status)
+			expect(await secondResponse.text()).toBe(await firstResponse.text())
+
+			// the next document counts its own queries
+			sentQueries.length = 0
+		}
+	} finally {
+		restoreConnectionPool()
+		restoreRedisClient()
+	}
+})
+
+// llms.txt reads its topics and its podcast episodes up to 50 each
+test("llms.txt reads 50 topics and 50 podcast episodes at most", async () => {
+	stubRedisClient()
+	const sentQueries = stubConnectionPool()
+	try {
+		// two reads, and each read's last value is its limit
+		await documentsRoute.request("/llms.txt")
+		expect(sentQueries).toHaveLength(2)
+		for (const sentQuery of sentQueries) {
+			expect(sentQuery.text).toContain(" limit $")
+			expect(sentQuery.values.at(-1)).toBe(50)
+		}
+
+		// the podcast episode read joins the public topics instead of listing their ids
+		expect(sentQueries.some((sentQuery) => sentQuery.text.includes('inner join "topics"'))).toBe(true)
+	} finally {
+		restoreConnectionPool()
+		restoreRedisClient()
+	}
 })
 
 // the long form includes the docs and blog text whole, and no topic content

@@ -2,6 +2,8 @@
 import { toAvatarVersion } from "@carlnotes/contracts/avatars"
 import type { ReactionSummary, SocialTarget } from "@carlnotes/contracts/social"
 import { db } from "@carlnotes/db"
+import { memoizeUserAccessInRequest, userAccessColumns } from "@carlnotes/db/quotas"
+import { memoizeRowsById } from "@carlnotes/db/requestMemo"
 import { bookmarks, findings } from "@carlnotes/db/schema/scans"
 import { teamMembers } from "@carlnotes/db/schema/teams"
 import { teamTopics } from "@carlnotes/db/schema/teamTopics"
@@ -23,11 +25,52 @@ export async function loadViewableTopic(
 ): Promise<typeof topics.$inferSelect | null> {
 	// read the topic with the user's access read started beside it. the view check shares that read through the
 	// request memo
-	const [[topic]] = await Promise.all([
-		db.select().from(topics).where(eq(topics.id, topicId)),
-		userId ? loadUserAccess(userId) : null,
-	])
+	const [topic] = await Promise.all([loadTopicRow(topicId), userId ? loadUserAccess(userId) : null])
 	return topic && (await isAllowed(userId, "topic:view", topic)) ? topic : null
+}
+
+/**
+ * Loads a topic's row, read once in a request that only reads, or undefined for no such topic.
+ */
+export async function loadTopicRow(topicId: string): Promise<typeof topics.$inferSelect | undefined> {
+	return (await loadTopicWithOwner(topicId))?.topic
+}
+
+// the topic owner's identity, the image their published avatar falls back to, and their access columns
+const topicOwnerColumns = {
+	userId: users.id,
+	username: users.username,
+	avatarSource: users.avatarSource,
+	avatarKey: users.avatarKey,
+	image: users.image,
+	...userAccessColumns,
+}
+
+// a topic's row with its owner's columns
+export type TopicWithOwner = {
+	topic: typeof topics.$inferSelect
+	owner: Pick<typeof users.$inferSelect, Exclude<keyof typeof topicOwnerColumns, "userId">> & { userId: string }
+}
+
+/**
+ * Loads a topic's row with its owner's identity, image, and access in one read, once in a request that only reads, or
+ * undefined for no such topic. The owner's access is kept as the request's read of it, so a check of the owner reads
+ * nothing more.
+ */
+export async function loadTopicWithOwner(topicId: string): Promise<TopicWithOwner | undefined> {
+	const topicWithOwnerById = await memoizeRowsById("topic-rows", [topicId], async () => {
+		const topicWithOwnerRows = await db
+			.select({ topic: topics, owner: topicOwnerColumns })
+			.from(topics)
+			.innerJoin(users, eq(users.id, topics.ownerId))
+			.where(eq(topics.id, topicId))
+		// keep each owner's access for the request's later checks
+		for (const { owner } of topicWithOwnerRows) {
+			memoizeUserAccessInRequest(owner.userId, owner)
+		}
+		return new Map(topicWithOwnerRows.map((topicWithOwnerRow) => [topicWithOwnerRow.topic.id, topicWithOwnerRow]))
+	})
+	return topicWithOwnerById.get(topicId)
 }
 
 // attach the bookmarks from the team that owns the topic to its topic findings
@@ -93,6 +136,10 @@ type LoadTopicAccessAndFindingsOptions = {
 	pageSocialTarget?: SocialTarget
 	// for a caller that keeps only some of the Findings and reads the reactions of those
 	isReactionReadSkipped?: boolean
+	// the podcast episode whose chapters narrate the only findings to read
+	chapterPodcastEpisodeId?: string
+	// other targets on the page whose reactions load in the same read as the findings'
+	extraReactionTargets?: Promise<SocialTarget[]>
 }
 
 // the user's topic access and the findings it gates, up to the read limit or within one page window
@@ -103,10 +150,13 @@ export async function loadTopicAccessAndFindings({
 	isRatedDownExcluded,
 	pageSocialTarget,
 	isReactionReadSkipped = false,
+	chapterPodcastEpisodeId,
+	extraReactionTargets,
 }: LoadTopicAccessAndFindingsOptions): Promise<{
 	isAdmin: boolean
 	topicFindings: Awaited<ReturnType<typeof loadTopicFindings>>
 	reactions: ReactionSummary | undefined
+	reactionSummaryByTarget: Map<string, ReactionSummary>
 }> {
 	// only the owner and admins can see the spend
 	const { isAdmin } = userId ? await loadUserAccess(userId) : { isAdmin: false }
@@ -118,14 +168,20 @@ export async function loadTopicAccessAndFindings({
 		subscriberActivatedAt: await topicSubscriptionStartDate(topic, userId, isAdmin),
 		pageWindow,
 		isRatedDownExcluded,
+		chapterPodcastEpisodeId,
 	})
 
 	// each Finding's reactions and the page's own, as this user reads them, unless the caller reads its own Findings',
 	// the owning team's bookmarks, and the favicons. each fills its own fields of the findings, so they load together
-	const [reactions] = await Promise.all([
-		isReactionReadSkipped ? undefined : attachReactionSummaries({ topicFindings, userId, pageSocialTarget }),
+	const [attachedReactionSummaries] = await Promise.all([
+		isReactionReadSkipped
+			? undefined
+			: Promise.resolve(extraReactionTargets).then((extraSocialTargets) =>
+					attachReactionSummaries({ topicFindings, userId, pageSocialTarget, extraSocialTargets }),
+				),
 		attachTeamBookmarks(topicFindings, topic.id, topic.teamId),
 		attachTopicFindingFaviconPaths(topicFindings),
 	])
-	return { isAdmin, topicFindings, reactions }
+	const reactionSummaryByTarget = attachedReactionSummaries?.reactionSummaryByTarget ?? new Map()
+	return { isAdmin, topicFindings, reactions: attachedReactionSummaries?.pageReactions, reactionSummaryByTarget }
 }

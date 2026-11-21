@@ -46,7 +46,7 @@ test("a topic's vector averages its kept findings' current model embeddings", as
 	const selectText = insertQuery.text.split(" from ")[0] ?? ""
 	expect(selectText).toContain('"topics"."visibility" = $')
 	expect(insertQuery.text).toContain(
-		`where "findings"."topic_id" = "topics"."id" and "findings"."rating" is distinct from 'down') >= $`,
+		`where "findings"."topic_id" = "topics"."id" and "findings"."rating" is distinct from 'down' limit $`,
 	)
 	expect(insertQuery.text).toContain('as "is_public_and_shown"')
 	expect(insertQuery.text).toContain('"is_public_and_shown" = excluded.is_public_and_shown')

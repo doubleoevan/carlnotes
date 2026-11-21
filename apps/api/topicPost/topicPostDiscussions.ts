@@ -5,7 +5,7 @@ import { toTranscriptTurn } from "@carlnotes/contracts/podcastEpisodes"
 import type { TopicPostResponse } from "@carlnotes/contracts/topicPosts"
 import { db } from "@carlnotes/db"
 import { topicPostDiscussions } from "@carlnotes/db/schema/topicPosts"
-import { and, desc, eq, isNotNull } from "drizzle-orm"
+import { and, desc, eq, isNotNull, or, sql } from "drizzle-orm"
 
 // the newest recording of a post that still has its audio, with the script it was recorded from
 type TopicPostDiscussionAudioRow = {
@@ -44,23 +44,38 @@ export async function loadTopicPostDiscussionAudioRow(
  * transcript, and whether a newer one is recording. Null for a post with neither.
  */
 export async function loadTopicPostDiscussion(topicPostId: string): Promise<TopicPostResponse["discussion"]> {
-	// the newest recording that still has its audio, and whether one is on its way
-	const [discussionAudioRow, [recordingRow]] = await Promise.all([
-		loadTopicPostDiscussionAudioRow(topicPostId),
-		db
-			.select({ id: topicPostDiscussions.id })
-			.from(topicPostDiscussions)
-			.where(and(eq(topicPostDiscussions.topicPostId, topicPostId), eq(topicPostDiscussions.status, "recording")))
-			.limit(1),
-	])
-	if (!discussionAudioRow && !recordingRow) {
+	// in one read, the newest recording that still has its audio and one that is on its way, at most one row of each
+	const isRecording = sql<boolean>`${topicPostDiscussions.status} = 'recording'`
+	const discussionRows = await db
+		.selectDistinctOn([isRecording], {
+			id: topicPostDiscussions.id,
+			durationSeconds: topicPostDiscussions.durationSeconds,
+			publishedAt: topicPostDiscussions.publishedAt,
+			audioKey: topicPostDiscussions.audioKey,
+			audioByteSize: topicPostDiscussions.audioByteSize,
+			script: topicPostDiscussions.script,
+			status: topicPostDiscussions.status,
+		})
+		.from(topicPostDiscussions)
+		.where(
+			and(
+				eq(topicPostDiscussions.topicPostId, topicPostId),
+				or(isNotNull(topicPostDiscussions.audioKey), eq(topicPostDiscussions.status, "recording")),
+			),
+		)
+		.orderBy(isRecording, desc(topicPostDiscussions.publishedAt))
+
+	// the recording with audio, and whether one is on its way
+	const discussionAudioRow = discussionRows.find((discussionRow) => discussionRow.status !== "recording")
+	const isRecordingDiscussion = discussionRows.some((discussionRow) => discussionRow.status === "recording")
+	if (!discussionAudioRow && !isRecordingDiscussion) {
 		return null
 	}
 	return {
 		id: discussionAudioRow?.id ?? null,
 		durationSeconds: discussionAudioRow?.durationSeconds ?? null,
 		publishedAt: discussionAudioRow?.publishedAt?.toISOString() ?? null,
-		isRecording: Boolean(recordingRow),
+		isRecording: isRecordingDiscussion,
 		// the recording's script as a transcript reads it, with each speaker's name and no vocal tags
 		transcript: discussionAudioRow?.script?.map(toTranscriptTurn),
 	}

@@ -13,6 +13,7 @@ import { and, eq, inArray, or } from "drizzle-orm"
 import { Hono } from "hono"
 import { isAllowed } from "../authorization"
 import { type AnalyticsProperties, type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
+import { clearOwnNews } from "../news/newsCaches"
 import { deletePodcastFeedToken } from "../podcast/podcastFeedTokens"
 import { loadOwnedTopic, verifiedEmailQuery } from "./permissions"
 import { updateTopicSubscriberCount } from "./subscriberCounts"
@@ -72,14 +73,16 @@ export async function setTopicSubscription({
 			await updateTopicSubscriberCount(topicId, transaction)
 		})
 
-		// delete the user's podcast feed token for the topic
+		// delete the user's podcast feed token for the topic, and clear the user's own news, which read the Topic
 		await deletePodcastFeedToken({ topicId, userId })
+		await clearOwnNews(userId)
 		trackEvent("topic_unsubscribed", userId, subscriptionProperties)
 		return true
 	}
 
-	// subscribing reactivates an existing subscription row or inserts a new one
+	// subscribing reactivates an existing subscription row or inserts a new one, and the user's own news reads the Topic
 	await activateSubscription({ userId, topicId })
+	await clearOwnNews(userId)
 	trackEvent("topic_subscribed", userId, subscriptionProperties)
 	return true
 }
@@ -109,8 +112,9 @@ export async function deleteTopicSubscription(
 		await updateTopicSubscriberCount(topicId, transaction)
 	})
 
-	// delete the user's podcast feed token for the topic, and report the unsubscribe
+	// delete the user's podcast feed token for the topic, clear the user's own news, and report the unsubscribe
 	await deletePodcastFeedToken({ topicId, userId })
+	await clearOwnNews(userId)
 	trackEvent("topic_unsubscribed", userId, { ...analyticsProperties, topicId, subscriptionSource: "page" })
 }
 

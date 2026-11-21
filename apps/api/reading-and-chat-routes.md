@@ -14,6 +14,10 @@
   rate limit, a visitor's too when it comes from the app's own origin. `topic/findingPermissions.ts` holds who may see,
   rate, and bookmark a finding, and `loadTopicFindingPermissions`, the rate and bookmark rules for many topics in two
   reads.
+- `status/` — the status reads: a film's, a Topic Post Discussion's, and a Topic's latest Scan's, after
+  `/api/status/`. The film poll on the podcast episode page and the topic page, the discussion poll, and the scan poll
+  read one in place of their page, and read the page only once the status leaves in progress or, for a Scan, once its
+  status or counts change. A status read counts no view and no play.
 - `counts/` — the viewer and listener counts: `countsRoute.ts` (`POST /api/topics/:id/view`, the view a topic page
   sends, counted only from the app's own origin and returning 204, `POST /api/topicPosts/:id/view` the same for a Topic
   Post page through `topicPost/topicPostViewerCounts.ts`, and the `/api/counts/` reads of a topic's viewers and
@@ -64,13 +68,16 @@
   malformed value, keeps only the `ok`, `fallback`, and `failed` results, and copies each wire field by name. For
   everyone the gate does not grant `topic:viewOwnerDetails`, it nulls each cost and failure reason and labels a url
   Source by its page's host.
-- `topic/feeds.ts` — the topic feed's sections; the visitors' feed and topic page, each read through one Redis copy for
-  half a minute; `topic/feedCaches.ts` — the Redis keys of those copies, and `clearVisitorTopicCaches`, which a topic's
-  edit and delete and a Source added or removed call to drop its page copy, and the visitors' feed copies if the listing
-  changed; `clearVisitorTopicPages`, which a team attach or detach calls; and `clearSharedTopicFeedCaches`, which drops
-  the feed copies with the home and popular topic id lists; `topic/feedData.ts` — the batched reads behind every
-  topic in a feed, each table read once for the whole batch; `topic/topicFeedResponse.ts` — `loadTopicFeedResponse`,
-  the feed's sections with the user's topic quotas merged in, which `GET /api/topic-feed` returns.
+- `topic/feeds.ts` — the topic feed's sections and the visitors' feed, read through one Redis copy for half a minute;
+  `topic/topicPageRead.ts` — the topic's page read, whose visitor copy lives in `@carlnotes/db/visitorPageCaches`;
+  `topic/feedCaches.ts` — the feed copies' keys, and `clearVisitorTopicCaches`, which a topic's edit and delete and a
+  Source added or removed call to drop the copy of every page that shows the topic, purge its `topic:<id>` tag on a
+  visibility change or a delete, and drop the visitors' feed copies if the listing changed; `clearVisitorPagesOfTopic`
+  in `@carlnotes/db/visitorPageCaches`, which a team attach, a podcast episode edit, and a Topic Post write call; and
+  `clearSharedTopicFeedCaches`, which drops the feed copies with the home and popular topic id lists and the visitors'
+  home; `topic/feedData.ts` — the batched reads behind every topic in a feed, each table read once for the whole batch;
+  `topic/topicFeedResponse.ts` — `loadTopicFeedResponse`, the feed's sections with the user's topic quotas merged in,
+  which `GET /api/topic-feed` returns.
 - `chat/room.ts` — posting to a chat room and its stream. A chat message that addresses Carl from a free user past the
   chat cutoff is rejected privately before anything posts. Otherwise it reserves his turn's largest cost before it
   posts, priced from the room's stored question by `loadModelRoomQuestionChars` in `chat/roomQuestion.ts`, which sums
@@ -79,29 +86,31 @@
   `chat/roomRoute.ts` — the chat room routes; `chat/roomReads.ts` — `loadChatRoomMessagePage`, one page of a room's
   messages for a member less the ones they reported or blocked, which the routes and `read_team` return;
   `chat/roomPosts.ts` — `postCheckedChatRoomMessage`, the post after the Terms, the room's access, and the text and
-  image moderation, which the routes and `post_to_team_room` call; `chat/roomAccess.ts` — one chat room, the member's access to it, and the
-  topic side of a chat room filter; `chat/roomDeletes.ts` — clearing a room and deleting one message or shared file.
+  image moderation, which the routes and `post_to_team_room` call; `chat/roomAccess.ts` — one chat room, the member's
+  access to it, and the topic side of a chat room filter; `chat/roomDeletes.ts` — clearing a room and deleting one
+  message or shared file.
 - `chat/privateChat.ts` — the private chat routes, each post rejecting a signed-out visitor through
   `toSignedOutRejection` in `bodyLimit.ts` before the body is read; `chat/chatTurnAnswer.ts` — answering an allowed
   private chat turn: its podcast episode chapter, attachments, the reservation of its largest cost, which rejects a turn
   before any model call once the spend and open reservations reach the budget, its proposal, tools, and streamed reply;
   `chat/chatTurnAuthorization.ts` — whether a user may take a chat turn on a topic, in a team chat, or in the new-topic
   chat, `toChatRejection`, the response each rejected status gets, which the private chat routes, the voice routes, and
-  the chat attachment delete share, `loadChatUserRejection`, which returns the rejection for a spent budget, then for
-  a free unverified password account while the unverified accounts switch is on (`emailUnverified`, a 403 with
-  `email unverified`), then for a free user past the chat cutoff, and `rejectChatTurn`, which also counts a budget rejection; `chat/chatTurnStream.ts` —
-  streaming a chat turn's reply, saving its row, then releasing its reservation; `chat/chatProposals.ts` — the change
-  Carl previewed in a private chat, recorded in `chat_proposals` as a keyed digest that holds none of the preview's
-  text, taken by the user's next message on that page, and applied by the server through the topic tools or the create
-  path only if it matches its record and the agreement check reads the message as agreeing. No chat binds a tool that
-  saves a topic change or creates a topic. `chat/roomProposals.ts` — a topic's team chat room preview, kept encrypted in
-  `chat_proposals` for the member it was shown to, taken by that member's next message to Carl, and applied the same
-  way, so no other member's yes saves it. A topic chat turn may be a question asked from the podcast player, which names
-  its podcast episode and chapter: the route responds 404 before any model call unless the chapter is on the topic's
-  published podcast episode, and the chat turn's row is a `podcast` row with the answering speaker. `chat/roomTurns.ts`
-  — Carl's chat room turn, and `chat/roomQuestion.ts` — the question it is asked, from the chat window and the room's
-  summary and files, with `toChatRoomTranscriptLine` and the empty placeholders that the topic chat tools eval shares.
-  `room.smoke.ts` runs `roomSmokeSections.ts` over `roomSmokeFixtures.ts`.
+  the chat attachment delete share, `loadChatUserRejection`, which returns the rejection for a spent budget, then for a
+  free unverified password account while the unverified accounts switch is on (`emailUnverified`, a 403 with `email
+  unverified`), then for a free user past the chat cutoff, and `rejectChatTurn`, which also counts a budget rejection;
+  `chat/chatTurnStream.ts` — streaming a chat turn's reply, saving its row, then releasing its reservation;
+  `chat/chatProposals.ts` — the change Carl previewed in a private chat, recorded in `chat_proposals` as a keyed digest
+  that holds none of the preview's text, taken by the user's next message on that page, and applied by the server
+  through the topic tools or the create path only if it matches its record and the agreement check reads the message as
+  agreeing. No chat binds a tool that saves a topic change or creates a topic. `chat/roomProposals.ts` — a topic's team
+  chat room preview, kept encrypted in `chat_proposals` for the member it was shown to, taken by that member's next
+  message to Carl, and applied the same way, so no other member's yes saves it. A topic chat turn may be a question
+  asked from the podcast player, which names its podcast episode and chapter: the route responds 404 before any model
+  call unless the chapter is on the topic's published podcast episode, and the chat turn's row is a `podcast` row with
+  the answering speaker. `chat/roomTurns.ts` — Carl's chat room turn, and `chat/roomQuestion.ts` — the question it is
+  asked, from the chat window and the room's summary and files, with `toChatRoomTranscriptLine` and the empty
+  placeholders that the topic chat tools eval shares. `room.smoke.ts` runs `roomSmokeSections.ts` over
+  `roomSmokeFixtures.ts`.
 - `chat/voiceRoute.ts` — the voice routes: `GET /chat/spoken-questions` says whether the user's spend is past the spoken
   questions cutoff, and the rest each name their chat page in the request. `POST /chat/transcription` rejects a
   recording past that cutoff with a 402, then transcodes a spoken question's recording through ffmpeg, at most 4 at once

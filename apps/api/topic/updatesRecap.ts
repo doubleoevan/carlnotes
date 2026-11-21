@@ -2,7 +2,7 @@
 
 import { toUtcDay, withTimeLimit } from "@carlnotes/contracts/time"
 import type { UpdatesFinding } from "@carlnotes/contracts/updates"
-import { cacheJson } from "@carlnotes/db/redis"
+import { cacheJson, saveRedisJsonIfAbsent } from "@carlnotes/db/redis"
 import { loadOrProvisionUserLiteLLMKey } from "@carlnotes/models/litellm"
 import { isBudgetRejection } from "@carlnotes/models/models"
 import { reserveUserSpend } from "@carlnotes/models/spendReservations"
@@ -11,6 +11,9 @@ import { reportError } from "@carlnotes/server/monitoring"
 
 // how long a stored recap lasts. the key names its day, so this only clears the old key
 const RECAP_CACHE_TTL_MS = 24 * 60 * 60 * 1000
+
+// how long the marker of a read that ended with no recap lasts under the recap's key
+const NO_RECAP_MARKER_TTL_MS = 60_000
 
 // how long a list waits for its recap. the consumptions are saved by then, so a slow model call never holds the list
 const RECAP_WAIT_MS = 5_000
@@ -25,22 +28,30 @@ type LoadUpdatesRecapOptions = {
 
 /**
  * Returns the day's recap, or null if the budget is spent, the call fails, the call outlasts the wait, or no recap is
- * stored and there is no Finding to write one from. The Findings are read only if the day has no stored recap. Null
- * is never stored, so the next list tries again, and a call that outlasts the wait still stores its recap for that
- * list.
+ * stored and there is no Finding to write one from. The Findings are read only if the day has no stored recap. A read
+ * that ends with no recap stores null under the recap's key for a minute, so a reload inside that minute reads no
+ * Finding, reserves nothing, and calls no model. A recap that a slower call stores replaces that marker, and a call
+ * that outlasts the wait still stores its recap for the next list.
  */
 export function loadUpdatesRecap({
 	userId,
 	topicId,
 	loadUpdatesFindings,
 }: LoadUpdatesRecapOptions): Promise<string | null> {
+	const key = toUpdatesRecapKey(userId, topicId)
 	const recapWrite = cacheJson<string | null>({
-		key: toUpdatesRecapKey(userId, topicId),
+		key,
 		ttlMs: RECAP_CACHE_TTL_MS,
 		// with no Finding to write from, only the day's stored recap returns, and no model call runs
 		load: async () => {
 			const updatesFindings = await loadUpdatesFindings()
-			return updatesFindings.length > 0 ? writeRecapWithinBudget(userId, updatesFindings) : null
+			const recap = updatesFindings.length > 0 ? await writeRecapWithinBudget(userId, updatesFindings) : null
+
+			// no recap stores its marker for a minute, unless a recap is stored by then
+			if (recap === null) {
+				await saveRedisJsonIfAbsent({ key, value: null, ttlMs: NO_RECAP_MARKER_TTL_MS })
+			}
+			return recap
 		},
 		isStorable: (recap) => recap !== null,
 	})

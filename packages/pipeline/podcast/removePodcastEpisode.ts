@@ -20,6 +20,7 @@ import {
 } from "@carlnotes/db/store"
 import { toTopicVideoKeys } from "@carlnotes/db/topicVideoKeys"
 import { clearUnseenCommentMentions, loadPodcastEpisodeMentionedUserIds } from "@carlnotes/db/unseenCommentMentions"
+import { clearVisitorPagesOfTopic } from "@carlnotes/db/visitorPageCaches"
 import { eq, inArray } from "drizzle-orm"
 import { rebuildTopicDashboardsById } from "../dashboardRebuild"
 import { deletePodcastEpisodeVectors } from "../meanVectors"
@@ -72,9 +73,12 @@ export async function removePodcastEpisode(podcastEpisodeId: string): Promise<bo
 	await deleteStoredObjects(objectKeys)
 	await clearUnseenCommentMentions(mentionedUserIds)
 
-	// the removed podcast episode leaves its topic's Dashboards at once
+	// the removed podcast episode leaves its topic's visitor pages and Dashboards at once
 	if (podcastEpisode.topicId) {
-		await rebuildTopicDashboardsById(podcastEpisode.topicId)
+		await Promise.all([
+			clearVisitorPagesOfTopic(podcastEpisode.topicId),
+			rebuildTopicDashboardsById(podcastEpisode.topicId),
+		])
 	}
 	return true
 }

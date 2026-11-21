@@ -1,19 +1,17 @@
 // the team page read: the team, its members, its topics, and what the user may do on it
 import { toAvatarKeyVersion, toAvatarVersion } from "@carlnotes/contracts/avatars"
-import type { PodcastEpisodeCard } from "@carlnotes/contracts/home"
 import type { TeamPageResponse } from "@carlnotes/contracts/teams"
 import { db } from "@carlnotes/db"
 import { teamMembers } from "@carlnotes/db/schema/teams"
 import { teamTopics } from "@carlnotes/db/schema/teamTopics"
 import { topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
-import { eq } from "drizzle-orm"
+import { eq, inArray, or, sql } from "drizzle-orm"
 import { isLeaderRole } from "../authorization"
 import { loadTeamChatMentions } from "../chat/mentions"
-import { loadPodcastEpisodeCards } from "../home/topicCards"
-import { loadProfileTopicVideoIds, loadTeamCards } from "../profileCards"
+import { loadTeamCards } from "../profileCards"
 import { toTopicTableRows } from "../topic/topicTableRows"
-import { loadTeamPageAccess } from "./teamPageAccess"
+import { loadTeamPageAccess, type TeamPageAccess } from "./teamPageAccess"
 
 // a team page as one user may see it: the whole page, the gate a private team shows a non-member, or no team at all
 export type TeamPageResult =
@@ -22,11 +20,16 @@ export type TeamPageResult =
 	| { status: "missing" }
 
 /**
- * Loads a team's page as the user may see it, or the gate a private team shows a non-member.
+ * Loads a team's page as the user may see it, or the gate a private team shows a non-member. A caller that already
+ * loaded what the user is to the team passes it.
  */
-export async function loadTeamPage(userId: string | null, teamId: string): Promise<TeamPageResult> {
-	// check access before reading the page
-	const teamPageAccess = await loadTeamPageAccess(userId, teamId)
+export async function loadTeamPage(
+	userId: string | null,
+	teamId: string,
+	loadedTeamPageAccess?: TeamPageAccess,
+): Promise<TeamPageResult> {
+	// check access before reading the page, unless the caller already did
+	const teamPageAccess = loadedTeamPageAccess ?? (await loadTeamPageAccess(userId, teamId))
 	if (!teamPageAccess) {
 		return { status: "missing" }
 	}
@@ -75,16 +78,13 @@ export async function loadTeamPage(userId: string | null, teamId: string): Promi
 
 	// the topics whose cards the page shows: every one for a member, and the public ones for anyone else, a pending
 	// invitee included
-	const cardTopicIds = visibleTopics
-		.filter((topicRow) => isMember || topicRow.visibility === "public")
-		.map((topicRow) => topicRow.id)
+	const cardTopicRows = visibleTopics.filter((topicRow) => isMember || topicRow.visibility === "public")
 
-	// the topic table's rows, and the cards of the card topics, of their podcast episodes, of every one of their
-	// published Topic Posts, and of their films
-	const [topicTableRows, teamCards, topicVideoCards] = await Promise.all([
+	// the topic table's rows, and the cards of the card topics, of their podcast episodes and films, and of every one of
+	// their published Topic Posts
+	const [topicTableRows, { topicVideoCards, ...teamCards }] = await Promise.all([
 		toTopicTableRows(visibleTopics, userId),
-		loadTeamCards(cardTopicIds, userId),
-		loadTeamTopicVideoCards(cardTopicIds),
+		loadTeamCards(cardTopicRows, userId),
 	])
 
 	// build the page from the members and topics the user may see
@@ -110,27 +110,25 @@ export async function loadTeamPage(userId: string | null, teamId: string): Promi
 		topics: topicTableRows,
 		...teamCards,
 		topicPodcastEpisodeVideoCards: topicVideoCards,
+		viewerCount: team.viewerCount,
 	}
 	return { status: "visible", team: teamPage }
-}
-
-// the film cards of the topics whose cards the page shows: the ready films of their published podcast episodes, the
-// ones their topics' owners featured on their profiles first, then the most listened one of each other topic
-async function loadTeamTopicVideoCards(topicIds: string[]): Promise<PodcastEpisodeCard[]> {
-	const { podcastEpisodeIds } = await loadProfileTopicVideoIds(topicIds)
-	return loadPodcastEpisodeCards(podcastEpisodeIds)
 }
 
 /**
  * Returns the topics a team holds: its own plus the ones shared into it.
  */
-export async function loadTeamTopics(teamId: string): Promise<(typeof topics.$inferSelect)[]> {
-	const ownedTopicRows = await db.select().from(topics).where(eq(topics.teamId, teamId))
-	// a shared topic is reached through its team_topics row instead of the team column
-	const sharedTopicRows = await db
-		.select()
+export function loadTeamTopics(teamId: string): Promise<(typeof topics.$inferSelect)[]> {
+	// a shared topic is reached through its team_topics row
+	const sharedTopicIds = db
+		.select({ topicId: teamTopics.topicId })
 		.from(teamTopics)
-		.innerJoin(topics, eq(topics.id, teamTopics.topicId))
 		.where(eq(teamTopics.teamId, teamId))
-	return [...ownedTopicRows, ...sharedTopicRows.map((topicRow) => topicRow.topics)]
+
+	// one read of its own topics and the shared ones, its own first
+	return db
+		.select()
+		.from(topics)
+		.where(or(eq(topics.teamId, teamId), inArray(topics.id, sharedTopicIds)))
+		.orderBy(sql`${topics.teamId} is not distinct from ${teamId} desc`)
 }

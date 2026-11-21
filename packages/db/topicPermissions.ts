@@ -1,5 +1,5 @@
 // the shared access checks for topics, and the topic view rules in SQL. a topic finding's checks are in
-// findingPermissions.ts
+// findingPermissions.ts, and a user's subscriptions are in topicSubscriptions.ts
 
 import { and, eq, inArray, or, type SQL, type SQLWrapper, sql } from "drizzle-orm"
 import { toTopicRoleFilter } from "./contentFilters"
@@ -11,6 +11,7 @@ import { teamMembers } from "./schema/teams"
 import { teamTopics } from "./schema/teamTopics"
 import { subscriptions, topics } from "./schema/topics"
 import { users } from "./schema/users"
+import { hasSubscription, subscriptionActivatedAt } from "./topicSubscriptions"
 
 // a topic row, the shape every check in this file takes
 type TopicRow = typeof topics.$inferSelect
@@ -120,21 +121,32 @@ export async function toTopicEditRole(
 		return null
 	}
 
-	// the owning team edits together because the owner is one of them
-	const memberships = await transaction
-		.select({ userId: teamMembers.userId, role: teamMembers.role })
-		.from(teamMembers)
-		.where(
-			and(
-				eq(teamMembers.teamId, topic.teamId),
-				eq(teamMembers.isActive, true),
-				inArray(teamMembers.userId, [userId, topic.ownerId]),
-			),
-		)
-	if (!memberships.some((membership) => membership.userId === topic.ownerId)) {
-		return null
+	// the owning team edits together because the owner is one of them. a read on the connection pool runs at most once
+	// per request for this user, owner, and team, and a read inside a transaction always runs
+	const { ownerId, teamId } = topic
+	const loadEditRole = async (): Promise<TopicRole> => {
+		const memberships = await transaction
+			.select({ userId: teamMembers.userId, role: teamMembers.role })
+			.from(teamMembers)
+			.where(
+				and(
+					eq(teamMembers.teamId, teamId),
+					eq(teamMembers.isActive, true),
+					inArray(teamMembers.userId, [userId, ownerId]),
+				),
+			)
+
+		// the user's role, if the owner is still an active member of the team
+		if (!memberships.some((membership) => membership.userId === ownerId)) {
+			return null
+		}
+		return memberships.find((membership) => membership.userId === userId)?.role ?? null
 	}
-	return memberships.find((membership) => membership.userId === userId)?.role ?? null
+
+	// one read per request on the connection pool, and a fresh read inside a transaction
+	return transaction === db
+		? memoizeInRequest(`topic-edit-role:${userId}:${ownerId}:${teamId}`, loadEditRole)
+		: loadEditRole()
 }
 
 /**
@@ -236,89 +248,6 @@ async function isInvited(userId: string, topicId: string): Promise<boolean> {
 }
 
 /**
- * Returns the ids of the topics the user subscribes to among the given ones. The owner's own subscription exists from
- * creation.
- */
-export async function loadSubscribedTopicIds(userId: string, topicIds: string[]): Promise<Set<string>> {
-	// an empty selection needs no database query
-	if (topicIds.length === 0) {
-		return new Set()
-	}
-
-	// load active subscriptions within the selection
-	const subscriptionRows = await db
-		.select({ topicId: subscriptions.topicId })
-		.from(subscriptions)
-		.where(
-			and(
-				eq(subscriptions.subscriberUserId, userId),
-				eq(subscriptions.isActive, true),
-				inArray(subscriptions.topicId, topicIds),
-			),
-		)
-	return new Set(subscriptionRows.map((subscriptionRow) => subscriptionRow.topicId))
-}
-
-// an active subscription on the topic is the grant. deactivating one ends it without losing the row
-export async function hasSubscription(userId: string, topicId: string): Promise<boolean> {
-	const [subscription] = await db
-		.select({ id: subscriptions.id })
-		.from(subscriptions)
-		.where(
-			and(
-				eq(subscriptions.topicId, topicId),
-				eq(subscriptions.subscriberUserId, userId),
-				eq(subscriptions.isActive, true),
-			),
-		)
-		.limit(1)
-	return subscription !== undefined
-}
-
-/**
- * When the user's subscription to the topic became active, or null with no active subscription.
- */
-export async function subscriptionActivatedAt(userId: string, topicId: string): Promise<Date | null> {
-	const activatedAtByTopicId = await subscriptionActivatedAtByTopicId(userId, [topicId])
-	return activatedAtByTopicId.get(topicId) ?? null
-}
-
-/**
- * When the user's subscription to each of the topics became active, by topic id. A topic with no active subscription
- * has no entry.
- */
-export async function subscriptionActivatedAtByTopicId(userId: string, topicIds: string[]): Promise<Map<string, Date>> {
-	// an empty id list matches nothing, so skip the query
-	if (topicIds.length === 0) {
-		return new Map()
-	}
-
-	// the earliest activation of each topic wins
-	const activationRows = await db
-		.select({
-			topicId: subscriptions.topicId,
-			activatedAt: sql<Date | string>`min(${subscriptions.createdAt})`,
-		})
-		.from(subscriptions)
-		.where(
-			and(
-				inArray(subscriptions.topicId, topicIds),
-				eq(subscriptions.subscriberUserId, userId),
-				eq(subscriptions.isActive, true),
-			),
-		)
-		.groupBy(subscriptions.topicId)
-	return new Map(activationRows.map((activationRow) => [activationRow.topicId, new Date(activationRow.activatedAt)]))
-}
-
-/**
- * A topic is only visible after the first scan after its activation.
- */
-export function isVisibleAfterActivation(scanStartedAt: Date, activatedAt: Date | null): boolean {
-	return activatedAt !== null && scanStartedAt > activatedAt
-}
-
-/**
  * Returns the invite topic subscription start date that gates what this user reads, null if the user has no active
  * subscription, or undefined if no gate applies.
  */
@@ -333,36 +262,6 @@ export async function topicSubscriptionStartDate(
 	}
 	// a signed-out user holds no subscription to activate
 	return userId ? subscriptionActivatedAt(userId, topic.id) : null
-}
-
-/**
- * Returns whether a time passes the user's subscription activation gate. No gate passes every time, no active
- * subscription passes none, and an activation passes only a later time.
- */
-export function isAfterSubscriberActivation(
-	time: Date | null,
-	subscriberActivatedAt: Date | null | undefined,
-): boolean {
-	if (subscriberActivatedAt === undefined) {
-		return true
-	}
-	return subscriberActivatedAt !== null && time !== null && time > subscriberActivatedAt
-}
-
-/**
- * The user's direct subscription row on a topic, ignoring team member paths.
- */
-export async function loadDirectSubscription(
-	userId: string,
-	topicId: string,
-): Promise<{ id: string; isActive: boolean } | undefined> {
-	// the topic and this user's id together identify at most one row
-	const [subscription] = await db
-		.select({ id: subscriptions.id, isActive: subscriptions.isActive })
-		.from(subscriptions)
-		.where(and(eq(subscriptions.topicId, topicId), eq(subscriptions.subscriberUserId, userId)))
-		.limit(1)
-	return subscription
 }
 
 /**

@@ -4,8 +4,8 @@ import { EMPTY_COMMENT_THREAD } from "@carlnotes/contracts/social"
 import type { TopicPostResponse } from "@carlnotes/contracts/topicPosts"
 import { appUrl } from "@carlnotes/server/appUrl"
 import { readPlayToken } from "../podcast/playTokens"
+import * as topicPostResponse from "../topicPost/topicPostResponse"
 import type { TopicPostRow } from "../topicPost/topicPosts"
-import * as topicPosts from "../topicPost/topicPosts"
 import * as mcpViewData from "./mcpViewData"
 import * as socialTools from "./socialTools"
 import { USER } from "./toolTestFixtures"
@@ -42,7 +42,7 @@ const TOPIC_POST_ROW = {
 
 test("a post's MCP view data plays its discussion with the caller's play token, and holds no regeneration quota", async () => {
 	spyOn(mcpViewData, "loadMcpViewSession").mockResolvedValue(null)
-	spyOn(topicPosts, "toTopicPostResponse").mockResolvedValue(TOPIC_POST)
+	spyOn(topicPostResponse, "toTopicPostResponse").mockResolvedValue(TOPIC_POST)
 	const commentPageSpy = spyOn(socialTools, "loadToolCommentPage").mockResolvedValue(EMPTY_COMMENT_THREAD)
 	const { topicPost, podcastEpisodes } = await loadTopicPostMcpViewData(USER, TOPIC_POST_ROW)
 
@@ -69,14 +69,14 @@ test("a post's MCP view data plays its discussion with the caller's play token, 
 
 test("a post with no recording has no podcast episode to play", async () => {
 	spyOn(mcpViewData, "loadMcpViewSession").mockResolvedValue(null)
-	spyOn(topicPosts, "toTopicPostResponse").mockResolvedValue({ ...TOPIC_POST, discussion: null })
+	spyOn(topicPostResponse, "toTopicPostResponse").mockResolvedValue({ ...TOPIC_POST, discussion: null })
 	spyOn(socialTools, "loadToolCommentPage").mockResolvedValue(EMPTY_COMMENT_THREAD)
 	expect((await loadTopicPostMcpViewData(USER, TOPIC_POST_ROW)).podcastEpisodes).toEqual([])
 })
 
 test("the post's body images load from the site's absolute url, which the view asks the post's page for", async () => {
 	spyOn(mcpViewData, "loadMcpViewSession").mockResolvedValue(null)
-	const responseSpy = spyOn(topicPosts, "toTopicPostResponse").mockResolvedValue(TOPIC_POST)
+	const responseSpy = spyOn(topicPostResponse, "toTopicPostResponse").mockResolvedValue(TOPIC_POST)
 	spyOn(socialTools, "loadToolCommentPage").mockResolvedValue(EMPTY_COMMENT_THREAD)
 	await loadTopicPostMcpViewData(USER, TOPIC_POST_ROW)
 	expect(responseSpy).toHaveBeenCalledWith("user-1", TOPIC_POST_ROW, { siteUrl: appUrl() })

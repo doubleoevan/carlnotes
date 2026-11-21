@@ -242,11 +242,11 @@ const TOPIC_POST_ROW = {
 	author: { userId: "author-1", username: "author-1", avatarSource: "generated", avatarKey: null },
 } as TopicPostRow
 
-// the Topic Post's read, on a Topic of the given visibility, and no row for any other read
+// the Topic Post's access row, on a Topic of the given visibility, and no row for any other read
 function stubTopicPost(visibility: "public" | "private"): void {
 	stubConnectionPool()
-	spyOn(topicPosts, "loadTopicPostRow").mockResolvedValue({
-		...TOPIC_POST_ROW,
+	spyOn(topicPosts, "loadTopicPostAccessRow").mockResolvedValue({
+		topicPost: TOPIC_POST_ROW.topicPost,
 		topic: { ...TOPIC_POST_ROW.topic, visibility },
 	})
 }

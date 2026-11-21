@@ -17,6 +17,8 @@ export type ViewerCountLineElements = {
 
 type ViewerCountLineProps = {
 	viewerCountPage: ViewerCountPage
+	// the count the page's read saved, shown once the line mounts until the read a minute later
+	savedViewerCount?: number
 	// false stops the reads while the page is off the screen
 	isEnabled?: boolean
 	elements: ViewerCountLineElements
@@ -25,9 +27,14 @@ type ViewerCountLineProps = {
 /**
  * Shows a profile page's, a team page's, or a Topic Post page's viewer count as its Visitors, then a profile's and a
  * team's links to their Dashboards. The count is read once the page shows and then every minute, and shows nothing
- * until the first read.
+ * until the first read. A saved count shows once the line mounts, and the first read waits a minute.
  */
-export function ViewerCountLine({ viewerCountPage, isEnabled = true, elements }: ViewerCountLineProps) {
+export function ViewerCountLine({
+	viewerCountPage,
+	savedViewerCount,
+	isEnabled = true,
+	elements,
+}: ViewerCountLineProps) {
 	const { Line, Count, DashboardLink } = elements
 
 	// read the page's own count. every profile's count, a public team's, and a Topic Post's on a public Topic are read
@@ -47,7 +54,11 @@ export function ViewerCountLine({ viewerCountPage, isEnabled = true, elements }:
 		},
 		[kind, id, isPublic],
 	)
-	const viewerCounts = usePolledCounts(readViewerCounts, isEnabled)
+	const viewerCounts = usePolledCounts(
+		readViewerCounts,
+		isEnabled,
+		savedViewerCount === undefined ? null : { viewerCount: savedViewerCount },
+	)
 	return (
 		<Line>
 			{viewerCounts && <Count label={VIEWER_COUNT_LABEL} count={viewerCounts.viewerCount} />}

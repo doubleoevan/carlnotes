@@ -6,6 +6,7 @@ import type { DailySpendCutoffState } from "@carlnotes/db/dailySpendCutoffs"
 import { scansRemainingToday } from "@carlnotes/db/quotas"
 import { scans } from "@carlnotes/db/schema/scans"
 import type { topics } from "@carlnotes/db/schema/topics"
+import { clearStatusReads } from "@carlnotes/db/statusReadCaches"
 import { startTopicScan } from "@carlnotes/pipeline/scan"
 import { isTemporalTransportFailure } from "@carlnotes/pipeline/temporalClient"
 import { reportError } from "@carlnotes/server/monitoring"
@@ -293,7 +294,7 @@ async function hasRunningScan(topicId: string): Promise<boolean> {
 	return runningScan !== undefined
 }
 
-// save a failed Scan for a scheduled Topic whose owner's budget is spent.
+// save a failed Scan for a scheduled Topic whose owner's budget is spent, and clear the Topic's scan status copy.
 // a failed save is reported, and the Topic stays scheduled for the next sweep
 async function saveFailedScan(topic: Topic): Promise<void> {
 	const now = new Date()
@@ -311,4 +312,5 @@ async function saveFailedScan(topic: Topic): Promise<void> {
 			console.error(`could not save the failed scan for topic ${topic.id}`, error)
 			reportError(error, "scheduled-scan", { topicId: topic.id, ownerId: topic.ownerId })
 		})
+	await clearStatusReads("scan", topic.id)
 }

@@ -1,6 +1,9 @@
 import { authClient } from "@carlnotes/client/authClient"
+import { fetchTopicPageRead } from "@carlnotes/client/pageReadClient"
 import { type FetchTopicPageOptions, fetchTopicPage, type TopicPageResult } from "@carlnotes/client/topicClient"
 import { useNow } from "@carlnotes/core/hooks/useNow"
+import { toTopicPostsPageOptions } from "@carlnotes/core/lib/cardSections"
+import { toTopicPageResult } from "@carlnotes/core/lib/pageReads"
 import { sendTopicViewOnce } from "@carlnotes/core/lib/pageViews"
 import { toPolledTopicPageResult } from "@carlnotes/core/lib/scanPoll"
 import { selectTopicFindings } from "@carlnotes/core/lib/topicFeed"
@@ -19,6 +22,7 @@ import { TopicGateNotice } from "@/components/topic/TopicGateNotice"
 import { TopicLinkedFinding } from "@/components/topic/TopicLinkedFinding"
 import { TopicPageActions } from "@/components/topic/TopicPageActions"
 import { TopicPageContent } from "@/components/topic/TopicPageContent"
+import { useIsScreenActive } from "@/hooks/useIsScreenActive"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
 import { selectCachedTopic } from "@/queryCache"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
@@ -34,9 +38,14 @@ export default function TopicScreen() {
 	const { data: session } = authClient().useSession()
 	const topicFeed = useTopicFeed()
 	useFocusEffect(useCallback(() => selectCachedTopic(topicId), [topicId]))
+	// the film's poll runs only while the screen is focused and the app is active
+	const isScreenActive = useIsScreenActive()
 	const queryClient = useQueryClient()
 	const topicPageKey = ["topic-page", session?.user.id ?? null, topicId]
-	const query = useQuery({ queryKey: topicPageKey, queryFn: () => fetchTopicPage(topicId) })
+	const query = useQuery({
+		queryKey: topicPageKey,
+		queryFn: async () => toTopicPageResult(await fetchTopicPageRead(topicId, toTopicPostsPageOptions())),
+	})
 	// refresh the mounted Topic after accepted chat edits
 	const topicChangeCount = useTopicChangeCount(topicId)
 	const { refetch } = query
@@ -79,8 +88,9 @@ export default function TopicScreen() {
 			return
 		}
 
-		// a poll leaves out the related topics, the reactions, and the comment thread, so the page keeps its own
-		const polledTopicPage = await fetchTopicPage(topicId, { isPoll })
+		// a poll leaves out the related topics, the reactions, and the comment thread, so the page keeps its own. the poll
+		// holds the newest page of scans, as the page read does
+		const polledTopicPage = await fetchTopicPage(topicId, { isPoll, isNewestScans: true })
 		queryClient.setQueryData<TopicPageResult>(topicPageKey, (topicPage) =>
 			toPolledTopicPageResult(topicPage, polledTopicPage),
 		)
@@ -111,6 +121,7 @@ export default function TopicScreen() {
 						state={topicFeed}
 						onRefresh={handleRefresh}
 						onScanned={handleScanned}
+						isVideoRenderingPollEnabled={isScreenActive}
 					/>
 				) : null}
 				{page?.status === "gated" ? (

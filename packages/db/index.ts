@@ -136,9 +136,10 @@ export const ITERATIVE_INDEX_SCAN_SETTING = "set local hnsw.iterative_scan = str
 
 /**
  * Returns whether a topic, by its id column or a bound id, has enough Findings that no user rated down to be listed.
+ * The count stops at the minimum, so a busy topic costs as many index rows as the minimum and never all its Findings.
  */
 function hasEnoughFindingsToList(topicId: SQLWrapper | string): SQL {
-	return sql`(select count(*) from ${schema.findings} where ${schema.findings.topicId} = ${topicId} and ${isFindingShown}) >= ${MINIMUM_SHOWN_FINDINGS}`
+	return sql`(select count(*) from (select 1 from ${schema.findings} where ${schema.findings.topicId} = ${topicId} and ${isFindingShown} limit ${MINIMUM_SHOWN_FINDINGS}) as "shown_findings") >= ${MINIMUM_SHOWN_FINDINGS}`
 }
 
 /**

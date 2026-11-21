@@ -1,10 +1,11 @@
-import { fetchTopicPageHead } from "@carlnotes/client/pageHeadClient"
+import { fetchTopicPageRead } from "@carlnotes/client/pageReadClient"
 import { type FetchedSeason, fetchSeasonPodcastEpisodes } from "@carlnotes/client/podcastEpisodeClient"
-import { fetchTopicPage } from "@carlnotes/client/topicClient"
 import type { PageHead } from "@carlnotes/contracts/pageHead"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
+import { TOPIC_POSTS_PAGE_SEARCH_KEY, toTopicPostsPageOptions } from "@carlnotes/core/lib/cardSections"
 import { notFound, redirect } from "@tanstack/react-router"
-import { loadOnServer, loadPageOnServer, readWithDegradedFallback } from "@/lib/loadOnServer"
+import { loadOnServer, loadPageReadOnServer, readWithDegradedFallback } from "@/lib/loadOnServer"
+import { toPageSearch } from "@/lib/pageSearch"
 
 // the page head, the topic if the topic is public, and the url's season with its podcast episodes
 export type TopicRouteData = {
@@ -13,37 +14,42 @@ export type TopicRouteData = {
 	fetchedSeason: FetchedSeason | null
 }
 
-// the topic id from the url, the slug if the url has a slug, and the season from the url's query
+// the topic id from the url, the slug if the url has one, the season from the url's query, the parsed query that names
+// the page of the Topic Posts, and the query as text
 type LoadTopicRouteOptions = {
 	topicId: string
 	topicSlug?: string
 	season?: unknown
+	searchParams: Record<string, unknown>
 	search?: string
 }
 
 /**
- * Loads a topic's head and public page on the server, with the podcast episodes of the season that the url names,
- * and redirects a url without the current slug. In the browser loadTopicRoute returns no head, topic, or season.
+ * Loads a topic's page read on the server, with the page of its Topic Posts and the podcast episodes of the season that
+ * the url names, and redirects a url without the current slug. In the browser loadTopicRoute returns no head, topic, or
+ * season.
  */
 export async function loadTopicRoute({
 	topicId,
 	topicSlug,
 	season,
+	searchParams,
 	search = "",
 }: LoadTopicRouteOptions): Promise<TopicRouteData> {
-	// read the head, the topic page, and the url's season on the server
-	const [[topicHead, topicPage], fetchedSeason] = await Promise.all([
-		loadPageOnServer({
-			fetchPageHead: () => fetchTopicPageHead(topicId),
-			fetchPage: () => fetchTopicPage(topicId),
-		}),
+	// read the topic's page read, which holds its head and the url's page of its Topic Posts, and the url's season on the
+	// server
+	const topicPostsPageNumber = toPageSearch(searchParams, [TOPIC_POSTS_PAGE_SEARCH_KEY]).posts
+	const topicPageReadOptions = toTopicPostsPageOptions(topicPostsPageNumber)
+	const [topicPageRead, fetchedSeason] = await Promise.all([
+		loadPageReadOnServer(() => fetchTopicPageRead(topicId, topicPageReadOptions)),
 		loadOnServer(() => fetchLinkedSeason({ topicId, season }), null),
 	])
 
 	// respond 404 for a topic the api does not know
-	if (topicHead === null) {
+	if (topicPageRead === null) {
 		throw notFound()
 	}
+	const topicHead = topicPageRead?.head
 
 	// redirect any other path permanently to the topic's current path, the path of its card url
 	const currentTopicPath = topicHead ? new URL(topicHead.cardUrl).pathname : null
@@ -52,9 +58,8 @@ export async function loadTopicRoute({
 		throw redirect({ href: `${currentTopicPath}${search}`, statusCode: 301 })
 	}
 
-	// return the head, the topic only if the topic is public, and the fetched season
-	const topic = topicPage?.status === "visible" ? topicPage.topic : null
-	return { head: topicHead, topic, fetchedSeason }
+	// return the head, the topic only if the visitor may open it, and the fetched season
+	return { head: topicHead, topic: topicPageRead?.topic ?? null, fetchedSeason }
 }
 
 /**

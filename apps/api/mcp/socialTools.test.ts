@@ -247,7 +247,7 @@ test("a finding's reaction counts come with the feed, and a finding with none ha
 	expect(mcpPage.items[1]?.reactions).toBeUndefined()
 
 	// the feed tool's result for that page holds the counts alone, never whose they are
-	spyOn(results, "readTopicFeed").mockResolvedValue(mcpPage)
+	spyOn(results, "readTopicFeed").mockResolvedValue({ mcpPage, topic: {}, topicFindings: [] } as never)
 	spyOn(mcpViewData, "loadFindingsMcpViewData").mockResolvedValue(null)
 	const feedResult = await toToolHandler("read_topic_feed", VISITOR)({ topic_id: "topic-1" })
 	expect(feedResult.structuredContent).toMatchObject({

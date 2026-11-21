@@ -79,6 +79,9 @@ export const podcastEpisodes = pgTable(
 		index("episodes_recording_created_idx").on(table.createdAt).where(sql`${table.status} = 'recording'`),
 		uniqueIndex("episodes_topic_season_number_unique").on(table.topicId, table.season, table.episodeNumber),
 		index("episodes_topic_published_idx").on(table.topicId, table.publishedAt),
+		// the published podcast episodes newest first, which the home's reads of the week's new podcast episodes and
+		// films read by index
+		index("episodes_published_at_idx").on(table.publishedAt.desc()).where(sql`${table.status} = 'published'`),
 		// the few featured podcast episodes, which the home's home topic and podcast cards and the admin console read
 		index("episodes_feature_order_idx").on(table.homeOrder).where(sql`${table.homeOrder} is not null`),
 		// the few podcast episodes featured on a profile page

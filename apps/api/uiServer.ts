@@ -1,10 +1,10 @@
 // the web app's server build as the api runs it: the import at startup, which stops a production boot that cannot
-// render, the page render with its visitor concurrency limit and the page a shed visitor gets, the minute's render
-// counts, and the readiness render
+// render, the page render with its visitor concurrency limit, the wait for a free slot, and the page a shed visitor
+// gets, the minute's render counts, and the readiness render
 import { resolve } from "node:path"
 import { DEGRADED_RENDER_HEADER } from "@carlnotes/contracts/seo"
 import { withTimeLimit } from "@carlnotes/contracts/time"
-import { toPositiveInteger } from "@carlnotes/server/envSettings"
+import { toPositiveInteger, toWholeNumber } from "@carlnotes/server/envSettings"
 import { exitOnFatalError, reportError } from "@carlnotes/server/monitoring"
 import { getSessionCookie } from "better-auth/cookies"
 import { UI_SERVER_ENTRY } from "./bundlePaths"
@@ -12,9 +12,13 @@ import { UI_SERVER_ENTRY } from "./bundlePaths"
 // how long a crawler waits before it retries a page rendered without a read it needs
 const DEGRADED_RENDER_RETRY_AFTER_SECONDS = 60
 
-// how many visitor pages this replica renders at once unless RENDER_CONCURRENCY sets it. a visitor's render past it is
-// shed
+// how many visitor pages this replica renders at once unless RENDER_CONCURRENCY sets it. a visitor's render past it
+// waits for a free slot, and is shed if none frees in time
 const DEFAULT_RENDER_CONCURRENCY = 16
+
+// how long a visitor's render past the limit waits for a free slot before it is shed, unless RENDER_SLOT_WAIT_MS sets
+// it
+const DEFAULT_RENDER_SLOT_WAIT_MS = 2 * 1000
 
 // the shortest and longest wait before the browser retries a shed render, in seconds. each shed response picks a
 // wait between them, so shed visitors do not all return at once
@@ -58,22 +62,70 @@ type ReadinessCheck = { uiServerEntryPath: string; startedAtMs: number; renderRe
 // how many visitor pages this replica is rendering now
 let activeVisitorRenderCount = 0
 
-// how many page renders this replica started and how many visitor renders it shed since the minute's last reading
+// the visitor renders waiting for a slot, oldest first. a finished render gives its slot to the oldest one
+const renderSlotWaiters: Array<() => void> = []
+
+// how many page renders this replica started, how many visitor renders waited for a slot, and how many it shed since
+// the minute's last reading
 let startedRenderCount = 0
+let waitedRenderCount = 0
 let shedRenderCount = 0
 
-// the page renders a replica started in a minute, and the visitor renders it shed past its limit
-export type RenderGauges = { startedCount: number; shedCount: number }
+// the page renders a replica started in a minute, the visitor renders that waited for a slot, and the ones it shed
+export type RenderGauges = { startedCount: number; waitedCount: number; shedCount: number }
 
 /**
- * Returns the page renders this replica started and the visitor renders it shed since the last reading, and starts
- * both counts over.
+ * Returns the page renders this replica started, the visitor renders that waited for a slot, and the ones it shed
+ * since the last reading, and starts the counts over.
  */
 export function readAndResetRenderGauges(): RenderGauges {
-	const renderGauges = { startedCount: startedRenderCount, shedCount: shedRenderCount }
+	const renderGauges = { startedCount: startedRenderCount, waitedCount: waitedRenderCount, shedCount: shedRenderCount }
 	startedRenderCount = 0
+	waitedRenderCount = 0
 	shedRenderCount = 0
 	return renderGauges
+}
+
+/**
+ * Waits up to the slot wait for a visitor render's slot to free, and returns whether the render got one. A render
+ * that gets a slot takes the finished render's count, so the active count never passes the limit.
+ */
+function waitForRenderSlot(slotWaitMs: number): Promise<boolean> {
+	// no wait sheds at once
+	if (slotWaitMs === 0) {
+		return Promise.resolve(false)
+	}
+
+	// a finished render gives this render its slot
+	const { promise, resolve } = Promise.withResolvers<boolean>()
+	const takeRenderSlot = (): void => {
+		clearTimeout(slotWaitTimeout)
+		resolve(true)
+	}
+
+	// join the line, and leave it with no slot once the wait ends
+	const slotWaitTimeout = setTimeout(() => {
+		const waiterIndex = renderSlotWaiters.indexOf(takeRenderSlot)
+		if (waiterIndex !== -1) {
+			renderSlotWaiters.splice(waiterIndex, 1)
+		}
+		resolve(false)
+	}, slotWaitMs)
+	// wait in line for the next free slot
+	renderSlotWaiters.push(takeRenderSlot)
+	return promise
+}
+
+/**
+ * Gives a finished visitor render's slot to the oldest waiting render, or frees it if none waits.
+ */
+function releaseRenderSlot(): void {
+	const nextRenderSlotWaiter = renderSlotWaiters.shift()
+	if (nextRenderSlotWaiter) {
+		nextRenderSlotWaiter()
+		return
+	}
+	activeVisitorRenderCount--
 }
 
 // the latest readiness check, which every check within five seconds of its start reuses
@@ -130,35 +182,50 @@ export async function renderUiPage(request: Request): Promise<Response> {
 	}
 	const { uiServer } = uiServerImport
 
-	// shed a visitor's render past the concurrency limit, with a page that retries shortly. a signed-in render is never
-	// counted against the limit or shed. the page guards mark the 503 private
+	// a visitor's render past the concurrency limit waits for a slot, and is shed with a page that retries shortly if
+	// none frees in time. a signed-in render is never counted against the limit or shed. the page guards mark the 503
+	// private
 	const isVisitorRender = !getSessionCookie(request)
 	const renderConcurrency = toPositiveInteger(Bun.env.RENDER_CONCURRENCY, DEFAULT_RENDER_CONCURRENCY)
 	if (isVisitorRender && activeVisitorRenderCount >= renderConcurrency) {
-		shedRenderCount++
-		const retryAfterSeconds =
-			BUSY_RENDER_MIN_RETRY_AFTER_SECONDS +
-			Math.floor(Math.random() * (BUSY_RENDER_MAX_RETRY_AFTER_SECONDS - BUSY_RENDER_MIN_RETRY_AFTER_SECONDS + 1))
-		return new Response(toBusyRenderPage(retryAfterSeconds), {
-			status: 503,
-			headers: { "Content-Type": "text/html; charset=utf-8", "Retry-After": String(retryAfterSeconds) },
-		})
+		// count the wait, then take a freed slot or shed the render
+		waitedRenderCount++
+		const slotWaitMs = toWholeNumber(Bun.env.RENDER_SLOT_WAIT_MS, DEFAULT_RENDER_SLOT_WAIT_MS)
+		if (!(await waitForRenderSlot(slotWaitMs))) {
+			return toBusyRenderResponse()
+		}
 	}
-
-	// render the page, counting a visitor's render until the ui's server returns the page's headers
-	startedRenderCount++
-	if (isVisitorRender) {
+	// a visitor's render under the limit takes a free slot
+	else if (isVisitorRender) {
 		activeVisitorRenderCount++
 	}
+
+	// render the page, holding a visitor's slot until the ui's server returns the page's headers
+	startedRenderCount++
 	try {
 		const page = await uiServer.fetch(request)
 		return toRenderedPageResponse(request, page)
 	} finally {
-		// stop counting the render, whether it returned or threw
+		// give the slot up, whether the render returned or threw
 		if (isVisitorRender) {
-			activeVisitorRenderCount--
+			releaseRenderSlot()
 		}
 	}
+}
+
+/**
+ * Counts a shed render and returns the busy page, with a retry wait picked between the shortest and longest.
+ */
+function toBusyRenderResponse(): Response {
+	// count the shed render and pick its retry wait
+	shedRenderCount++
+	const retryAfterSeconds =
+		BUSY_RENDER_MIN_RETRY_AFTER_SECONDS +
+		Math.floor(Math.random() * (BUSY_RENDER_MAX_RETRY_AFTER_SECONDS - BUSY_RENDER_MIN_RETRY_AFTER_SECONDS + 1))
+	return new Response(toBusyRenderPage(retryAfterSeconds), {
+		status: 503,
+		headers: { "Content-Type": "text/html; charset=utf-8", "Retry-After": String(retryAfterSeconds) },
+	})
 }
 
 /**

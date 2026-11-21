@@ -15,7 +15,7 @@ import {
 	UNCHECKED_PODCAST_EPISODE_IMAGE_ROW,
 	UNCHECKED_TOPIC_VIDEO_IMAGE_ROW,
 } from "../uncheckedImageOverlayTestFixtures"
-import * as helpers from "./helpers"
+import * as podcastEpisodePage from "./podcastEpisodePage"
 import type { PodcastEpisodeRow, TopicRow } from "./podcastEpisodeRows"
 import * as podcastEpisodeRows from "./podcastEpisodeRows"
 import * as podcastEpisodeShapes from "./podcastEpisodeShapes"
@@ -66,7 +66,7 @@ function requestAs(userId: string | null, path: string): Promise<Response> {
 test("an unchecked podcast episode image and film poster show on the page to their uploader alone", async () => {
 	// the page as each user reads it: the owner and the member may edit, and nobody else
 	const sentQueries = stubUncheckedPodcastEpisodeImages()
-	spyOn(helpers, "loadPodcastEpisodePage").mockImplementation(
+	spyOn(podcastEpisodePage, "loadPodcastEpisodePage").mockImplementation(
 		async (_podcastEpisodePageRef, userId) =>
 			({
 				podcastEpisode: PUBLISHED_PODCAST_EPISODE,

@@ -21,8 +21,20 @@ const VIEWER_COUNT_LINE_ELEMENTS: ViewerCountLineElements = {
 
 /**
  * A profile page's, a team page's, or a Topic Post page's last line on the web, with its Visitors count, empty in the
- * server render.
+ * server render. A page whose read saved its count shows that count once it mounts.
  */
-export function ViewerCountLine({ viewerCountPage }: { viewerCountPage: ViewerCountPage }) {
-	return <SharedViewerCountLine viewerCountPage={viewerCountPage} elements={VIEWER_COUNT_LINE_ELEMENTS} />
+export function ViewerCountLine({
+	viewerCountPage,
+	savedViewerCount,
+}: {
+	viewerCountPage: ViewerCountPage
+	savedViewerCount?: number
+}) {
+	return (
+		<SharedViewerCountLine
+			viewerCountPage={viewerCountPage}
+			savedViewerCount={savedViewerCount}
+			elements={VIEWER_COUNT_LINE_ELEMENTS}
+		/>
+	)
 }

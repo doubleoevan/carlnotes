@@ -4,7 +4,7 @@ import { DOCS_SITE_ADDRESS } from "@carlnotes/contracts/seo"
 import { db } from "@carlnotes/db"
 import { docsChunks } from "@carlnotes/db/schema/chat"
 import { EMBED_MODEL_NAME } from "@carlnotes/db/schema/scans"
-import { embedVector } from "@carlnotes/models/models"
+import { type EmbedOptions, embedVector } from "@carlnotes/models/models"
 import { and, eq, sql } from "drizzle-orm"
 
 // qwen3 is instruction-aware
@@ -15,11 +15,19 @@ const MAX_RETRIEVED_DOCS_SECTIONS = 3
 
 const DOCS_MATCH_MAX_DISTANCE = 0.5
 
+// how many times an embedding is tried again, and the signal that stops it early
+type EmbedRetryOptions = Omit<EmbedOptions, "litellmApiKey">
+
 /**
- * Embeds a question or a search query with the query instruction.
+ * Embeds a question or a search query with the query instruction, retried and stopped early as the embed retry options
+ * say.
  */
-export function embedRetrievalQuery(query: string, litellmApiKey?: string): Promise<number[]> {
-	return embedVector(`Instruct: ${EMBED_QUERY_INSTRUCTION}\nQuery: ${query}`, { litellmApiKey })
+export function embedRetrievalQuery(
+	query: string,
+	litellmApiKey?: string,
+	embedRetryOptions: EmbedRetryOptions = {},
+): Promise<number[]> {
+	return embedVector(`Instruct: ${EMBED_QUERY_INSTRUCTION}\nQuery: ${query}`, { litellmApiKey, ...embedRetryOptions })
 }
 
 /**

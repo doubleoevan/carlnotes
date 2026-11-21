@@ -62,18 +62,36 @@ export function loadUserAccess(userId: string, transaction?: DbHandle): Promise<
 	return memoizeInRequest(`user-access:${userId}`, () => readUserAccess(userId, db))
 }
 
+/**
+ * The user columns that a user's access is read from, for a read that joins the user to a row of its own.
+ */
+export const userAccessColumns = {
+	role: users.role,
+	plan: users.plan,
+	budgetOverrideCents: users.budgetOverrideCents,
+	freeTopicLimit: users.freeTopicLimit,
+	adminBlockedAt: users.adminBlockedAt,
+}
+
+// a user's access columns as a read returns them
+type UserAccessRow = Pick<typeof users.$inferSelect, keyof typeof userAccessColumns>
+
+/**
+ * Memoizes a user's access, read from their access columns joined to another read, for the rest of the request, unless
+ * the request already read it.
+ */
+export function memoizeUserAccessInRequest(userId: string, userAccessRow: UserAccessRow): void {
+	void memoizeInRequest(`user-access:${userId}`, async () => toUserAccess(userAccessRow))
+}
+
 // read current authority through the caller's connection while a transaction holds its locks
 async function readUserAccess(userId: string, handle: DbHandle): Promise<UserAccess> {
-	const [user] = await handle
-		.select({
-			role: users.role,
-			plan: users.plan,
-			budgetOverrideCents: users.budgetOverrideCents,
-			freeTopicLimit: users.freeTopicLimit,
-			adminBlockedAt: users.adminBlockedAt,
-		})
-		.from(users)
-		.where(eq(users.id, userId))
+	const [user] = await handle.select(userAccessColumns).from(users).where(eq(users.id, userId))
+	return toUserAccess(user)
+}
+
+// a user's access from their access columns, with a missing user read as a free plan with no role
+function toUserAccess(user: UserAccessRow | undefined): UserAccess {
 	return {
 		isAdmin: isAdminRole(user?.role),
 		isAdminBlocked: Boolean(user?.adminBlockedAt),

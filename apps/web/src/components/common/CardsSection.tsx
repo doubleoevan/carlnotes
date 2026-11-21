@@ -1,16 +1,17 @@
-import { CARDS_PAGE_SIZE } from "@carlnotes/contracts/home"
+import { CARDS_PAGE_SIZE } from "@carlnotes/contracts/cardPages"
 import {
 	type CardsSectionElements,
-	CardsSection as SharedCardsSection,
 	PagedCardsSection as SharedPagedCardsSection,
 } from "@carlnotes/core/components/CardsSection"
 import { CARD_GRID_CLASS, toCountBesideTitleFrom } from "@carlnotes/nightshift/cardGrid"
 import { cn } from "@carlnotes/nightshift/classNames"
+import { useLocation } from "@tanstack/react-router"
 import type { ComponentProps } from "react"
 import { AccordionSection } from "@/components/common/AccordionSection"
 import { Pagination } from "@/components/common/Pagination"
 import { Card, CardBody } from "@/components/primitives/card"
 import { SCRIPTED_HIDDEN_CLASS, SKELETON_SHAPE_CLASS } from "@/lib/styleClasses"
+import { shouldHandleLinkClick } from "@/lib/utils"
 
 // the web's elements. the section keeps its content in the html while closed, and a card off the page shown is hidden
 // only once the script runs, so a crawler and a reader without JavaScript see every card
@@ -30,20 +31,76 @@ export const CARDS_SECTION_ELEMENTS: CardsSectionElements = {
 	),
 	Grid: ({ children }) => <div className={CARD_GRID_CLASS}>{children}</div>,
 	Cell: ({ isOnPage, children }) => <div className={cn("grid", !isOnPage && SCRIPTED_HIDDEN_CLASS)}>{children}</div>,
-	Pagination: ({ label, pageNumber, pageCount, onOpenPage }) => (
-		<Pagination ariaLabel={label} pageNumber={pageNumber} pageCount={pageCount} onOpenPage={onOpenPage} />
-	),
+	Pagination: ({ label, pageNumber, pageCount, onOpenPage, pageSearchKey }) =>
+		pageSearchKey ? (
+			<PageLinksPagination
+				label={label}
+				pageNumber={pageNumber}
+				pageCount={pageCount}
+				onOpenPage={onOpenPage}
+				pageSearchKey={pageSearchKey}
+			/>
+		) : (
+			<Pagination ariaLabel={label} pageNumber={pageNumber} pageCount={pageCount} onOpenPage={onOpenPage} />
+		),
+}
+
+// the shared page buttons' props, with the url search key that names the section's page always set
+type PageLinksPaginationProps = ComponentProps<CardsSectionElements["Pagination"]> & { pageSearchKey: string }
+
+// the page buttons of a section the server pages, as links to the page's url at each page, which a reader without
+// JavaScript follows to the server's render of that page. with JavaScript a primary click opens its page in place
+function PageLinksPagination({ label, pageNumber, pageCount, onOpenPage, pageSearchKey }: PageLinksPaginationProps) {
+	const { pathname, searchStr } = useLocation()
+	return (
+		<Pagination
+			ariaLabel={label}
+			pageNumber={pageNumber}
+			pageCount={pageCount}
+			isPagedOnServer
+			renderPageLink={({ linkedPageNumber, label: linkLabel, className, isCurrentPage, onClick }) => (
+				<a
+					href={toPageHref({ pathname, searchStr, pageSearchKey, pageNumber: linkedPageNumber })}
+					aria-current={isCurrentPage ? "page" : undefined}
+					className={className}
+					onClick={(event) => {
+						// a modified or secondary click is the browser's, which opens the link in a new tab or window
+						if (!shouldHandleLinkClick(event)) {
+							return
+						}
+
+						// save where the link sits, then open its page in place
+						event.preventDefault()
+						onClick(event)
+						onOpenPage(linkedPageNumber)
+					}}
+				>
+					{linkLabel}
+				</a>
+			)}
+		/>
+	)
+}
+
+// the page's path, its url search, the key that names the section's page, and the page from 1
+type ToPageHrefOptions = { pathname: string; searchStr: string; pageSearchKey: string; pageNumber: number }
+
+// the url of the page at one page of a section, keeping the url's other search values. the first page leaves the key
+// out
+function toPageHref({ pathname, searchStr, pageSearchKey, pageNumber }: ToPageHrefOptions): string {
+	const searchParams = new URLSearchParams(searchStr)
+	if (pageNumber === 1) {
+		searchParams.delete(pageSearchKey)
+	} else {
+		searchParams.set(pageSearchKey, String(pageNumber))
+	}
+	const search = searchParams.toString()
+	return search ? `${pathname}?${search}` : pathname
 }
 
 /**
- * A section of cards in a page's accordion on the web, with its page chosen outside it.
- */
-export function CardsSection<Row>(props: Omit<ComponentProps<typeof SharedCardsSection<Row>>, "elements">) {
-	return <SharedCardsSection {...props} elements={CARDS_SECTION_ELEMENTS} />
-}
-
-/**
- * A section of cards in a page's accordion on the web, which pages through all of its rows by itself.
+ * A section of cards in a page's accordion on the web, which pages through all of its rows by itself, or which the
+ * server pages with its page buttons as links to each page.
  */
 export function PagedCardsSection<Row>(props: Omit<ComponentProps<typeof SharedPagedCardsSection<Row>>, "elements">) {
 	return <SharedPagedCardsSection {...props} elements={CARDS_SECTION_ELEMENTS} />

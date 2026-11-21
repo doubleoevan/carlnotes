@@ -1,6 +1,7 @@
 // the scan pipeline's tables: scans, resources, findings, and the per-user finding markers
+
+import type { StoredScanSourceResults } from "@carlnotes/contracts/scanSourceResults"
 import type { PersonalSourceScoreBonus } from "@carlnotes/contracts/sourceScoring"
-import type { StoredScanSourceResults } from "@carlnotes/contracts/topics"
 import { sql } from "drizzle-orm"
 import {
 	boolean,

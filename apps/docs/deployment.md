@@ -113,8 +113,8 @@ and either serves every path. The public domain's path routes decide which one a
 |---|---|---|---|---|
 | `app` | the image's command, the same as `bun run api` | 1 vCPU and 2,048 MB, 2 to 4 replicas autoscaled at 70% CPU | `/api`, `/mcp`, `/.well-known/oauth-authorization-server`, `/.well-known/oauth-protected-resource` | `app-health-checks.json` |
 | `web` | `bun run web` | the same plan and autoscaling as `app` | the base path, and the higher-priority routes below | `app-health-checks.json` |
-| `temporal-worker` | `bun run temporal:main` | 2 vCPU and 4,096 MB, 2 replicas | none | none |
-| `temporal-films` | `bun run temporal:films` | 4 vCPU and 8 GB, 1 replica, 2 GB disk. **Owner:** 4 GB disk, `TOPIC_VIDEO_CONCURRENCY=2`, and 1 to 4 replicas autoscaled on `carlnotes_film_demand` at 2 | none | none |
+| `temporal-worker` | `bun run temporal:main` | 2 vCPU and 4,096 MB, 2 to 4 replicas autoscaled on `carlnotes_scan_demand` at 16 | none | none |
+| `temporal-films` | `bun run temporal:films` | 4 vCPU and 8 GB, 5 GB disk, `TOPIC_VIDEO_CONCURRENCY=2`, 1 to 4 replicas autoscaled on `carlnotes_film_demand` at 2 | none | none |
 | `scan-sweep` cron job | `bun run schedule` | 1 vCPU and 1,024 MB | none | the `scan-sweep` cron monitor |
 | `reset-monthly-budgets` cron job | `bun run reset:monthly-budgets` | **Owner** | none | the `reset-monthly-budgets` cron monitor |
 
@@ -182,6 +182,12 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS "sources_pending_topic_idx" ON "sources"
 CREATE INDEX CONCURRENTLY IF NOT EXISTS "users_created_idx" ON "users" USING btree ("created_at");
 ```
 
+The page reads release holds one more, in `0188_episodes_published_at.sql`:
+
+```sql
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "episodes_published_at_idx" ON "episodes" USING btree ("published_at" DESC NULLS LAST) WHERE "episodes"."status" = 'published';
+```
+
 Prompts are a deploy job too, uploaded as candidates instead of promoted. The registry keeps serving the `production`
 wording until someone promotes a candidate in Langfuse:
 
@@ -207,7 +213,8 @@ bun run docs:embed
 The edge purge is a deploy job too. It runs right after `app` and `web` deploy and clears the pages and the signed-out
 feed that Cloudflare shares, so no cached page names assets the old build had. It needs `CLOUDFLARE_ZONE_ID` and
 `CLOUDFLARE_API_TOKEN`. Without them, or if Cloudflare rejects the purge, the job logs why and the release goes on.
-Those pages leave the edge within two minutes without a purge:
+After the purge, `bun run check:edge` checks that each shared path is stored at the edge again, as Edge cache below
+says. Those pages leave the edge within two minutes without a purge:
 
 ```bash
 doppler run -- bun apps/api/edgeCache.purge.ts
@@ -245,6 +252,113 @@ both, and the smoke suite runs on the new version before production does.
 
 Set `OPENAI_API_KEY` on the Northflank `litellm` service before deploying the app that calls the
 `image-moderation` alias. The app also uses `OPENAI_API_KEY` to enable image moderation.
+
+## Edge cache
+
+Cloudflare's cache rules, its bypass rule, and its zone settings live in the carlnotes.com zone, not in the repo. This
+section is their record. The origin decides what is shared: a response is stored at the edge only if a rule below makes
+its path eligible and the origin sends it `CDN-Cache-Control` or a public `Cache-Control`. A response without a
+`Cache-Control` header is never stored. `bun run check:edge` reads the live result after a release.
+
+SSL/TLS:
+
+- Overview: encryption mode **Full (strict)**. Northflank serves a certificate valid for carlnotes.com.
+- Edge Certificates: **Always Use HTTPS** on, **Minimum TLS Version** 1.2.
+
+Caching → Configuration:
+
+- **Caching Level**: Standard, so the query string is part of the cache key and `?v=` works.
+- **Browser Cache TTL**: Respect Existing Headers. A fixed value would replace `no-cache` on the way to the browser.
+
+Caching → Tiered Cache: **Smart Tiered Cache Topology** on, so a miss in one data center asks an upper tier before the
+origin.
+
+Caching → Cache Rules, in this order. The last matching rule wins a conflict, so the bypass comes second.
+
+1. **Cache by the origin's headers**
+   - Expression:
+     ```
+     (not starts_with(http.request.uri.path, "/api/") and not starts_with(http.request.uri.path, "/mcp") and not starts_with(http.request.uri.path, "/.well-known/acme-challenge/"))
+     or http.request.uri.path eq "/api/topic-feed"
+     or http.request.uri.path eq "/api/home"
+     or (starts_with(http.request.uri.path, "/api/") and ends_with(http.request.uri.path, "/page"))
+     or starts_with(http.request.uri.path, "/api/counts/")
+     or starts_with(http.request.uri.path, "/api/status/")
+     or (starts_with(http.request.uri.path, "/api/topics/") and http.request.uri.query contains "poll=1")
+     or starts_with(http.request.uri.path, "/api/dashboards/")
+     or starts_with(http.request.uri.path, "/api/avatars/")
+     or starts_with(http.request.uri.path, "/api/team-avatars/")
+     or starts_with(http.request.uri.path, "/api/favicons/")
+     or ends_with(http.request.uri.path, "/preview.png")
+     ```
+   - Cache eligibility: Eligible for cache.
+   - Edge TTL: Use cache-control header if present, bypass cache if not.
+   - Browser TTL: Respect origin.
+   - Cache key: the default, which includes the whole query string.
+   - Serve stale content while revalidating: on.
+2. **Bypass signed-in requests**
+   - Expression:
+     ```
+     http.cookie contains "better-auth.session_token=" or http.cookie contains "better-auth-session_token="
+     or any(http.request.headers["authorization"][*] ne "")
+     ```
+     The cookie names match every name `getSessionCookie` accepts, the `__Secure-` names production uses included. The
+     `Authorization` clause keeps a bearer token's request from reading a visitor's stored copy. Confirm the rule
+     editor accepts it, because a zone's plan limits which header fields a cache rule reads.
+   - Cache eligibility: Bypass cache.
+
+The page reads are `/api/profiles/:userId/page`, `/api/topics/:id/page`,
+`/api/topics/:id/episodes/:season/:episodeNumber/page`, `/api/topic-posts/:id/page`, and `/api/teams/:id/page`. A
+Dashboard's page read is after `/api/dashboards/`, which the rule already named.
+
+**Manual step for the launch-hardening-page-reads release.** The zone's rule 1 before this release names
+`/api/topic-feed`, `/api/counts/`, `/api/dashboards/`, the avatars, the team avatars, the favicons, and the cards. Edit
+it to the expression above, which adds `/api/home`, the page reads, `/api/status/`, and a topic page's poll reload,
+and add the `Authorization` clause to rule 2. Until then `bun run check:edge` fails on each of those paths with
+`DYNAMIC`. Then set `PAGE_READS_EDGE_CACHED=true` in Doppler prd and restart the `app` and `web` services. Until the
+setting is on, every page read, status read, and poll reload is sent `private`, which Cloudflare reports as `BYPASS`,
+so the check fails on those paths whatever the rule says. Run the check after both. A third rule after the bypass, for
+the versioned public file paths, is a separate manual step: it serves a public image from the edge to a signed-in
+request too, and the check's card read with a made-up session cookie fails with anything but `HIT` until it exists.
+
+What the rules never cache: every other api route, every authenticated one included, the SSE streams after `/api/`, and
+`/mcp`. Also any response without a `Cache-Control` header, any response the origin marks `private` or `no-store`, and
+any response with `Set-Cookie`. Cloudflare does not cache a `Set-Cookie` response while Origin Cache Control is on, and
+the origin never marks one shared.
+
+Security → WAF → Custom rules, first in the list:
+
+- **Let certificate renewals through**: expression `starts_with(http.request.uri.path, "/.well-known/acme-challenge/")`.
+  Action **Skip**: all remaining custom rules, all rate limiting rules, all managed rules, and every component under
+  "More components to skip". Log matching requests on.
+- Security → Bots: **Bot Fight Mode** off. A custom rule cannot skip it, and it can challenge the certificate
+  authority.
+
+Features that rewrite the HTML, all off: Rocket Loader, Email Address Obfuscation, Automatic HTTPS Rewrites, Cloudflare
+Fonts, and Web Analytics' automatic setup. A server-rendered page that changes in transit no longer matches what the
+client hydrates, and the content security policy blocks an injected script.
+
+Compression: Cloudflare's default, on. No compression rule is needed.
+
+The purge token: My Profile → API Tokens → Create Token, permission **Zone → Cache Purge → Purge**, zone resources
+**carlnotes.com** only. It is saved in Doppler prd as `CLOUDFLARE_API_TOKEN`, beside `CLOUDFLARE_ZONE_ID` from the
+zone's Overview page. A purge that Cloudflare rate limits waits as long as its `Retry-After` names, at most a minute,
+and is sent once more.
+
+### Checking the edge after a release
+
+`bun run check:edge` is read-only and sends GET requests alone. It reads the live sitemap for one Topic, podcast
+episode, Topic Post, and team, and the Topic's page read for its owner. It then requests each shared path twice: the
+pages, the documents, `/api/topic-feed`, `/api/home`, each page read with the owner's profile and both Dashboards, and
+the Topic's Scan status. It fails on a second response whose `cf-cache-status` is `DYNAMIC` or `BYPASS`, on an error
+status, and on a response with no `cf-cache-status`, and it names each failing path. It also reads a Topic's card at
+its versioned url with a made-up session cookie, which fails on anything but `HIT`. It takes the origin,
+`https://carlnotes.com` by default, then any further shared paths, such as another status read:
+
+```bash
+bun run check:edge
+bun run check:edge https://carlnotes.com /api/status/<subject>
+```
 
 ## Spend control settings
 
@@ -431,6 +545,10 @@ filled in by hand.
 10. **Freeze deploys if you want none during the wave.** See Rollback below. A docs commit deploys too.
 11. **Check the store links.** The docs' Get the app page (`apps/docs/src/content/docs/get-the-app.md`) links to the
    live App Store and Google Play listings. Its App Store line was still a placeholder on 2026-11-13.
+12. **Check the edge cache.** Run `bun run check:edge` after the release before the wave, once the rules are edited
+   and `PAGE_READS_EDGE_CACHED` is on. Every line must read `ok`. A `DYNAMIC` line names a path the zone's cache rules
+   leave out, and a `BYPASS` line on a page read means the setting is off: fix it as Edge cache above says, and run the
+   check again.
 
 Three things stay unguarded after this work:
 
@@ -464,6 +582,7 @@ its event loop warns at the same two readings:
 | `redis.errorCount` | 0, 0, 0 | `redis-errors` at 10 in a minute | never: read the Redis addon's own logs |
 | `redis.cacheHitCount`, `redis.cacheMissCount` | 0, 7, 745 and 0, 6, 86 | none | misses stay above hits during a wave, which means the cache is not holding |
 | `redis.usedMemoryBytes` of `redis.maxMemoryBytes` | 2.4 MB, 3.9 MB, 6.3 MB of 332 MB | `redis-memory` at 80% | it passes 50%: raise the addon's plan |
+| `renders.waitedCount` of `renders.startedCount` | no lines before this release | none | it climbs minute after minute: the replicas are full, so raise the autoscaler's maximum before renders start to shed |
 | `renders.shedCount` of `renders.startedCount` | no lines before this release | `render-shed` above 0 | it is above 0 for more than a minute: add a replica of the service that renders pages |
 | `residentMemoryMb` | 550 to 595 in the built image under 16 visitors' renders, 2026-11-20 | none | on `app` it passes 700 MB: two attachment reads may take 512 MB each beside it on a 2,048 MB replica, so raise the plan's memory |
 | `coverChainLength` | no lines before this release | none | it stays above 2: podcast covers are being drawn by requests, one a second, in a child process of 340 MB |
@@ -522,22 +641,32 @@ Every process holds a database pool, so the pool count comes first.
    and its startup line reads `database pool sized to 64 connections, 2 of 25 pool shares, from max_connections 901`.
 2. **Add the replicas or the size**, in Northflank, from the table below.
 
-| Service | What it runs | Size and replicas on 2026-11-13 | Termination grace | Health checks | To add capacity |
+| Service | What it runs | Size and replicas | Termination grace | Health checks | To add capacity |
 |---|---|---|---|---|---|
-| `app` | the api, the MCP server, and every stream | 1 vCPU and 2,048 MB, 2 to 4 replicas autoscaled at 70% CPU | **Owner** | startup and liveness on `/api/health`, readiness on `/api/health/ready` | raise the autoscaler's maximum, then the plan |
-| `web` | every page render, document, and public image, once its routes are added | the same as `app` | **Owner** | the same as `app` | raise the autoscaler's maximum, then the plan |
-| `temporal-worker` | every Temporal queue but the three that render films, with the films' short writes | 2 vCPU and 4,096 MB, 2 replicas, no autoscaling, 2 GB disk | **Owner**, longer than two minutes | none | add replicas |
-| `temporal-films` | the film queue, the rebuild queue, and the backfill's queue | 4 vCPU and 8 GB, 1 replica, no autoscaling, 2 GB disk | 180 seconds | none | raise the autoscaler's maximum, or add replicas by hand |
+| `app` | the api, the MCP server, and every stream | 1 vCPU and 2,048 MB, 2 to 4 replicas autoscaled at 70% CPU | 150 seconds | startup and liveness on `/api/health`, readiness on `/api/health/ready` | raise the autoscaler's maximum, then the plan |
+| `web` | every page render, document, and public image, once its routes are added | the same as `app` | 150 seconds | the same as `app` | raise the autoscaler's maximum, then the plan |
+| `temporal-worker` | every Temporal queue but the three that render films, with the films' short writes | 2 vCPU and 4,096 MB, 2 to 4 replicas autoscaled on `carlnotes_scan_demand` at 16, 2 GB disk | 150 seconds | none | raise the autoscaler's maximum, or add replicas by hand |
+| `temporal-films` | the film queue, the rebuild queue, and the backfill's queue | 4 vCPU and 8 GB, 1 to 4 replicas autoscaled on `carlnotes_film_demand` at 2, 5 GB disk, `TOPIC_VIDEO_CONCURRENCY=2` | 180 seconds | none | raise the autoscaler's maximum, or add replicas by hand |
 | `temporal` | the Temporal server | 1 vCPU and 1,024 MB, 1 replica | **Owner** | TCP liveness on 7233 | raise the plan |
 | `litellm` | the proxy in front of every model call | 1 vCPU and 4,096 MB, 2 replicas | **Owner** | liveness on `/health/liveliness` | add replicas |
-| `redis` addon | Redis 8 | 0.2 vCPU and 512 MB, 1 replica, 6 GB disk | not applicable | the platform's | raise the plan |
-| `temporal-db` addon | Temporal's Postgres 16 | 1 vCPU and 4,096 MB, 2 replicas, 20 GB disk | not applicable | the platform's | raise the plan or the disk |
+| `redis` addon | Redis 8.10.1, eviction `allkeys-lru` | 0.2 vCPU and 512 MB, 1 replica, 6 GB NVMe disk | not applicable | the platform's | raise the plan |
+| `temporal-db` addon | Temporal's Postgres 16 | 1 vCPU and 4,096 MB, 2 replicas with automatic failover, 20 GB disk | not applicable | the platform's | raise the plan or the disk |
+
+The sizes were read on 2026-11-13, and the `app`, `web`, `temporal-worker`, `temporal-films`, and `redis` rows again
+on 2026-11-20.
 | `scan-sweep` cron job | the sweep, every 15 minutes, one at a time, 10 minutes at most | 1 vCPU and 1,024 MB | not applicable | none | raise the plan |
 
-A visitor's page render past `RENDER_CONCURRENCY`, 16 on a replica by default, gets "the site is busy, try again in
-a moment" with a two-second retry. That is the reading that the service rendering pages, `web` once its routes are
-added and `app` before, needs another replica. Raising the setting needs a restart of that service and gives a replica
-more renders than its one vCPU serves well.
+A visitor's page render past `RENDER_CONCURRENCY`, 16 on a replica by default, waits up to `RENDER_SLOT_WAIT_MS`, 2
+seconds, for a free slot, so a short burst becomes slower pages instead of errors. Only a render whose wait ends with
+no free slot gets "CarlNotes is busy, this page will try again in a moment" with a retry of two to six seconds. The
+minute line's `renders` counts the waits and the sheds apart: waits alone say the replica is full, and a shed says it
+needs another replica, `web` once its routes are added and `app` before. Raising either setting needs a restart of
+that service.
+
+Keep the limit at 16. On 2026-11-20 a burst of 120 requests against a public topic page in dev, run three times at 16,
+held the event loop for 427 to 453 ms at its worst, past the 100 ms warning. The wait rendered all 120 in two of the
+three runs and shed 14 in the third. The readings are in `logs/launch-hardening/page-reads/render-limit/`. Load past one
+replica's renders goes to another replica, not a higher limit.
 
 A chat post over 3.25 MB waits its turn among 104 MB of large chat bodies on a replica, one at a time for each user.
 A post that waits 20 seconds gets "Carl is busy reading other files" and the api logs "a large body waited 20000 ms
@@ -648,9 +777,16 @@ marked **Owner** and is not stated here.
 
 ### Postgres
 
-Neon holds every row: accounts, Topics, Findings, chat, and the pointers to every stored object. **Owner:** the
-plan, the restore window, and the branches. The privacy page promises that deleted data leaves backups within 90
-days, so the restore window has to be 90 days or less.
+Neon holds every row: accounts, Topics, Findings, chat, and the pointers to every stored object, in the Neon project
+`carlnotes`. Read from the Neon console on 2026-11-19 and 2026-11-20:
+
+- **Plan:** Launch, which autoscales to 16 CU. The compute runs from 0.25 to 8 CU.
+- **Branch `production`:** the default branch, 2.86 GB. Its restore window is 7 days, and a snapshot is taken daily at
+  00:00 UTC and kept 14 days.
+- **Branch `dev`:** a child of `production`.
+
+The privacy page promises that deleted data leaves backups within 90 days, so the restore window and the snapshots'
+14 days have to stay at 90 days or less.
 
 To restore:
 
@@ -675,8 +811,9 @@ A restore also brings back what it should not, and leaves out what it cannot hol
 
 ### Object storage
 
-One R2 bucket holds every file, through one client (`packages/db/store.ts`). **Owner:** whether the bucket has
-versioning or lifecycle rules. Nothing in the repo sets either.
+One R2 bucket holds every file, through one client (`packages/db/store.ts`): `carlnotes-prod`, in Western North
+America. On 2026-11-19 it had no versioning and no bucket lock, and its one lifecycle rule aborts an unfinished upload
+after 7 days. So a deleted object cannot be recovered.
 
 - **Gone for good if deleted:** an avatar, a Topic's attachments, chat and chat room attachments, a Topic Post's
   body images, an uploaded Topic image, and a published podcast episode's audio, which no code records again.
@@ -688,8 +825,9 @@ versioning or lifecycle rules. Nothing in the repo sets either.
 
 ### Redis
 
-Redis holds what can be built again, and a few things that cannot. **Owner:** persistence, `maxmemory`, and the
-eviction policy on the `redis` addon. It ran one replica with no backups on 2026-11-13.
+Redis holds what can be built again, and a few things that cannot. The `redis` addon ran Redis 8.10.1 on one
+instance with 0.2 vCPU, 512 MB of memory, and a 6 GB NVMe disk on 2026-11-20, with the eviction policy `allkeys-lru`
+and no backups. A restart on 2026-11-14 lost the buffered view counts, so treat its data as not persistent.
 
 A loss of Redis's data costs:
 
@@ -717,12 +855,14 @@ While Redis is unreachable every other request still succeeds, and these fail:
 
 ### Temporal
 
-Temporal's store holds the running workflows: Scans, recordings, renders, and the steps after a publish. **Owner:**
-the `temporal-db` addon's backups.
+Temporal's store holds the running workflows: Scans, recordings, renders, and the steps after a publish. The
+`temporal-db` addon runs a replica with automatic failover, and it is backed up daily at 3 am Pacific with each backup
+kept 7 days (read 2026-11-19).
 
-**Start a lost store empty. Never restore it from an older copy**, because old workflows would run again against
-rows that have moved on. No schedule has to be made again: the sweep starts the nightly Dashboard build, the worker's
-start begins the film backfill, and the sweep and the monthly reset are Northflank cron jobs.
+**Start a lost store empty. Never restore it from an older copy**, those daily backups included, because old workflows
+would run again against rows that have moved on. No schedule has to be made again: the sweep starts the nightly
+Dashboard build, the worker's start begins the film backfill, and the sweep and the monthly reset are Northflank cron
+jobs.
 
 A lost workflow leaves its row behind. The sweep handles these:
 
@@ -742,11 +882,13 @@ as it is until someone acts on it by hand.
 
 LiteLLM's own Postgres holds every virtual key and its budget. If it is lost, every stored key in
 `users.litellm_virtual_key` names a key the proxy no longer knows, and those users' model calls fail until each key
-is made again. **Owner:** where that database runs and its backups.
+is made again. It runs in its own Neon project, `carlnotes-litellm-prd`, whose restore window is 1 day, with no
+snapshot schedule (read 2026-11-19).
 
 The proxy encrypts the provider credentials it stores with `LITELLM_SALT_KEY`, or with `LITELLM_MASTER_KEY` if no
-salt is set (`.env.example`). A restored database is unreadable to a proxy that holds another value, so keep a copy
-of it with the two secrets below. **Owner:** which of the two production's `litellm` service uses.
+salt is set (`.env.example`). Production's `litellm` service sets `LITELLM_SALT_KEY`, so its stored credentials are
+encrypted with it, not with the master key. A restored database is unreadable to a proxy that holds another salt, so
+keep a copy of `LITELLM_SALT_KEY` with the two secrets below.
 
 ### The two secrets
 
@@ -758,8 +900,8 @@ Doppler holds two secrets that cannot be made again without losing data. Keep a 
   person hashes in the daily counts. A new secret signs everyone out, breaks every unsubscribe link already sent,
   and makes each person count as new in the daily counts.
 
-Cloudflare's rules, Northflank's cron schedules and service sizes, and the Sentry alerts are in no file. The
-Services table above and the Deploy alerts section are their only record.
+Cloudflare's rules, Northflank's cron schedules and service sizes, and the Sentry alerts live in no config file. The
+[Edge cache](#edge-cache) section, the Services table above, and the Deploy alerts section are their only record.
 
 ### Animated film chapters
 

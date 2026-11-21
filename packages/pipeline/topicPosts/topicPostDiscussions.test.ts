@@ -5,7 +5,9 @@ import { restoreConnectionPool, type SentQuery, stubConnectionPool, toTableRow }
 import * as monthlyBudgetCutoffs from "@carlnotes/db/monthlyBudgetCutoffs"
 import { topicPostDiscussions } from "@carlnotes/db/schema/topicPosts"
 import * as sharedComments from "@carlnotes/db/sharedComments"
+import * as statusReadCaches from "@carlnotes/db/statusReadCaches"
 import * as store from "@carlnotes/db/store"
+import * as visitorPageCaches from "@carlnotes/db/visitorPageCaches"
 import * as litellm from "@carlnotes/models/litellm"
 import * as models from "@carlnotes/models/models"
 import type { ModerationClassification } from "@carlnotes/models/moderation"
@@ -163,6 +165,9 @@ test("a discussion whose workflow does not start leaves no recording row, so the
 	// the insert returns the row, and the workflow's start fails
 	const workflowError = new Error("temporal is down")
 	const startWorkflowSpy = spyOn(temporalClient, "startTopicPostDiscussionWorkflow").mockRejectedValue(workflowError)
+	const clearStatusReadsSpy = spyOn(statusReadCaches, "clearStatusReads").mockResolvedValue()
+
+	// the insert's row and the post's author
 	const sentQueries = stubConnectionPool(({ text }) => {
 		if (text.startsWith("insert")) {
 			return [["discussion-1"]]
@@ -178,6 +183,12 @@ test("a discussion whose workflow does not start leaves no recording row, so the
 	const deleteQuery = sentQueries.find((sentQuery) => sentQuery.text.startsWith('delete from "topic_post_discussions"'))
 	expect(deleteQuery?.values).toEqual(["discussion-1"])
 
+	// the post's discussion status copy goes after the insert and again after the delete
+	expect(clearStatusReadsSpy.mock.calls).toEqual([
+		["topicPostDiscussion", "post-1"],
+		["topicPostDiscussion", "post-1"],
+	])
+
 	// the publish's next attempt finds no discussion, and starts one
 	startWorkflowSpy.mockResolvedValue()
 	expect(await startTopicPostPublishDiscussion("post-1")).toBe("discussion-1")
@@ -189,8 +200,12 @@ test("a discussion that is closed as failed is reported, and one that already pu
 	// the failing write returns the post of the row it closed
 	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
 	const deleteStoredObjectsSpy = spyOn(store, "deleteStoredObjects").mockResolvedValue()
+	const clearStatusReadsSpy = spyOn(statusReadCaches, "clearStatusReads").mockResolvedValue()
+	const clearVisitorPagesSpy = spyOn(visitorPageCaches, "clearVisitorTopicPostPages").mockResolvedValue()
 	const sentQueries = stubConnectionPool(() => [["post-1"]])
 	await failTopicPostDiscussion("discussion-1", "the speech call failed")
+	expect(clearStatusReadsSpy).toHaveBeenCalledWith("topicPostDiscussion", "post-1")
+	expect(clearVisitorPagesSpy.mock.calls).toEqual([["post-1"]])
 
 	// the row closes only while it still reads recording, and the report names it with its reason
 	expect(sentQueries[0]?.values).toEqual(["failed", "the speech call failed", "discussion-1", "recording"])
@@ -206,6 +221,8 @@ test("a discussion that is closed as failed is reported, and one that already pu
 	await failTopicPostDiscussion("discussion-1", "the speech call failed")
 	expect(reportErrorSpy).toHaveBeenCalledTimes(1)
 	expect(deleteStoredObjectsSpy).toHaveBeenCalledTimes(1)
+	expect(clearStatusReadsSpy).toHaveBeenCalledTimes(1)
+	expect(clearVisitorPagesSpy).toHaveBeenCalledTimes(1)
 })
 
 // the keys of the discussion's stored speech and of its finished audio
@@ -259,6 +276,8 @@ function stubRecording(storedSpeechByteSize: number | null): {
 
 // the speech is the paid step, so it is stored before the encode can fail, and deleted once the row publishes
 test("a discussion's speech is stored before the encode, and deleted once the discussion publishes", async () => {
+	const clearStatusReadsSpy = spyOn(statusReadCaches, "clearStatusReads").mockResolvedValue()
+	const clearVisitorPagesSpy = spyOn(visitorPageCaches, "clearVisitorTopicPostPages").mockResolvedValue()
 	const { sentQueries, steps } = stubRecording(null)
 	await recordTopicPostDiscussionAudio("discussion-1")
 	expect(steps).toEqual([
@@ -280,6 +299,10 @@ test("a discussion's speech is stored before the encode, and deleted once the di
 	// the row publishes with the two seconds that the speech holds
 	const publishUpdate = sentQueries.find((sentQuery) => sentQuery.values.includes("published"))
 	expect(publishUpdate?.values).toEqual(expect.arrayContaining([AUDIO_KEY, 2, "discussion-1", "recording"]))
+	expect(clearStatusReadsSpy).toHaveBeenCalledWith("topicPostDiscussion", "post-1")
+
+	// the published discussion leaves the post's visitor page
+	expect(clearVisitorPagesSpy.mock.calls).toEqual([["post-1"]])
 })
 
 // a retry after a failed encode finds the speech that the earlier attempt stored
@@ -299,6 +322,7 @@ test("a retry after a stored speech makes no speech call and adds no cost", asyn
 
 // a post deleted during the recording took the row with it, so the read after the publish finds no row
 test("a discussion whose row is gone at the publish deletes its speech and its audio", async () => {
+	const clearStatusReadsSpy = spyOn(statusReadCaches, "clearStatusReads").mockResolvedValue()
 	const { steps } = stubRecording(null)
 	stubConnectionPool(({ text }) =>
 		text.startsWith("select") && !text.startsWith('select "audio_key"')
@@ -314,6 +338,9 @@ test("a discussion whose row is gone at the publish deletes its speech and its a
 	)
 	await recordTopicPostDiscussionAudio("discussion-1")
 	expect(steps.at(-1)).toBe(`delete ${SPEECH_KEY} ${AUDIO_KEY}`)
+
+	// nothing published, so the post's discussion status copy stays
+	expect(clearStatusReadsSpy).not.toHaveBeenCalled()
 })
 
 // a recording attempt that outlives its heartbeat may still publish while its retry runs. the retry reads the row as

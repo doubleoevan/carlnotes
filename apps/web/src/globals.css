@@ -12,6 +12,19 @@
 /* only devices that actually hover */
 @custom-variant can-hover (@media (hover: hover));
 
+/* a link card's hover and focus glow: a faint primary ring and a soft primary halo. the light theme's lighter page
+   takes a wider, deeper halo */
+:root {
+	--card-glow-shadow:
+		0 0 0 1px color-mix(in oklab, var(--color-primary) 35%, transparent),
+		0 0 36px 6px color-mix(in oklab, var(--color-primary) 88%, black);
+}
+.dark {
+	--card-glow-shadow:
+		0 0 0 1px color-mix(in oklab, var(--color-primary) 55%, transparent),
+		0 0 28px -4px color-mix(in oklab, var(--color-primary) 65%, transparent);
+}
+
 /* streamdown styles itself with tailwind classes. tailwind has to scan its dist to emit them */
 @source "../node_modules/streamdown/dist/*.js";
 

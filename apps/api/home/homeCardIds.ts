@@ -18,7 +18,7 @@ import { cacheJson } from "@carlnotes/db/redis"
 import { podcastEpisodes, topicVideos } from "@carlnotes/db/schema/podcast"
 import { topicPosts } from "@carlnotes/db/schema/topicPosts"
 import { topics } from "@carlnotes/db/schema/topics"
-import { and, asc, desc, eq, gte, isNotNull, type SQL, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gte, isNotNull, isNull, type SQL, sql } from "drizzle-orm"
 import type { AnyPgColumn } from "drizzle-orm/pg-core"
 import { HOME_CARD_IDS_KEY } from "../topic/feedCaches"
 
@@ -140,26 +140,36 @@ const isPublishedPodcastEpisodeOfListedTopic = and(
 
 // the featured published podcast episodes of the topics the home may list in their order, then the most listened, newest
 // first among ties, one per topic. a film read takes the ones with a ready film, in their films' order, each named by
-// its podcast episode's id
+// its podcast episode's id. the featured rows and the ranked rows are two reads, so each sorts on its own column
 async function loadHomePodcastEpisodeIds({
 	isFilmRead,
 	isFeaturedOnly,
 }: HomePodcastEpisodeReadOptions): Promise<string[]> {
-	// the published podcast episodes the home may list, the featured ones first
+	// the featured podcast episodes in their order, and the ranked ones unless the read takes the featured ones alone
 	const homeOrderColumn = toPodcastEpisodeHomeOrderColumn(isFilmRead)
-	const podcastEpisodeRows = await toHomePodcastEpisodeQuery(isFilmRead)
-		.where(and(isPublishedPodcastEpisodeOfListedTopic, toFeaturedOnlyFilter({ homeOrderColumn, isFeaturedOnly })))
-		.orderBy(
-			sql`${homeOrderColumn} is null`,
-			asc(homeOrderColumn),
-			desc(podcastEpisodes.listenerCount),
-			desc(podcastEpisodes.publishedAt),
-		)
-		.limit(PODCAST_EPISODE_CANDIDATE_LIMIT)
+	const [featuredPodcastEpisodeRows, rankedPodcastEpisodeRows] = await Promise.all([
+		toHomePodcastEpisodeQuery(isFilmRead)
+			.where(and(isPublishedPodcastEpisodeOfListedTopic, isNotNull(homeOrderColumn)))
+			.orderBy(asc(homeOrderColumn), ...PODCAST_EPISODE_RANK_ORDER)
+			.limit(PODCAST_EPISODE_CANDIDATE_LIMIT),
+		isFeaturedOnly
+			? []
+			: toHomePodcastEpisodeQuery(isFilmRead)
+					.where(and(isPublishedPodcastEpisodeOfListedTopic, isNull(homeOrderColumn)))
+					.orderBy(...PODCAST_EPISODE_RANK_ORDER)
+					.limit(PODCAST_EPISODE_CANDIDATE_LIMIT),
+	])
 
-	// one podcast episode per topic, in the order read
-	return toFirstIdsPerTopic(podcastEpisodeRows, HOME_PODCAST_EPISODE_COUNT)
+	// one podcast episode per topic among the candidates, the featured ones first, in the order read
+	const candidateRows = [...featuredPodcastEpisodeRows, ...rankedPodcastEpisodeRows].slice(
+		0,
+		PODCAST_EPISODE_CANDIDATE_LIMIT,
+	)
+	return toFirstIdsPerTopic(candidateRows, HOME_PODCAST_EPISODE_COUNT)
 }
+
+// the order the home ranks podcast episodes in: the most listened first, the newest first among ties
+const PODCAST_EPISODE_RANK_ORDER = [desc(podcastEpisodes.listenerCount), desc(podcastEpisodes.publishedAt)]
 
 // the column that holds a podcast episode's home order. a film read orders by the one on the film's own row
 function toPodcastEpisodeHomeOrderColumn(isFilmRead: boolean): AnyPgColumn {

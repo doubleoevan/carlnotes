@@ -14,24 +14,33 @@ type AttachReactionSummariesOptions = {
 	topicFindings: { findingId: string; reactions?: ReactionSummary; commentCount?: number }[]
 	userId: string | null
 	pageSocialTarget?: SocialTarget
+	// other targets on the page whose reactions load in the same read, like the cards of the topic's films
+	extraSocialTargets?: SocialTarget[]
+}
+
+// the page's own summary if the read named its social target, and every target's summary that the read found
+type AttachedReactionSummaries = {
+	pageReactions: ReactionSummary | undefined
+	reactionSummaryByTarget: Map<string, ReactionSummary>
 }
 
 /**
  * Attaches each Finding's reaction summary and comment count to a feed's Findings, and returns the page's own summary
- * if the read names the page's social target. Each loads in one read however many Findings there are.
+ * if the read names the page's social target, beside every target's summary. Each loads in one read however many
+ * Findings there are.
  */
 export async function attachReactionSummaries({
 	topicFindings,
 	userId,
 	pageSocialTarget,
-}: AttachReactionSummariesOptions): Promise<ReactionSummary | undefined> {
-	// one read of every Finding's reactions and the page's own, and one of every Finding's comment count
+	extraSocialTargets = [],
+}: AttachReactionSummariesOptions): Promise<AttachedReactionSummaries> {
+	// one read of every Finding's reactions, the page's own, and the extra targets', and one of every Finding's comment
+	// count
 	const findingTargets = topicFindings.map((topicFinding) => ({ kind: "finding" as const, id: topicFinding.findingId }))
+	const pageTargets = pageSocialTarget ? [pageSocialTarget] : []
 	const [reactionSummaries, commentCounts] = await Promise.all([
-		loadReactionSummaries({
-			userId,
-			targets: pageSocialTarget ? [...findingTargets, pageSocialTarget] : findingTargets,
-		}),
+		loadReactionSummaries({ userId, targets: [...findingTargets, ...pageTargets, ...extraSocialTargets] }),
 		loadFindingCommentCounts({ findingIds: findingTargets.map(({ id }) => id), userId }),
 	])
 
@@ -42,8 +51,9 @@ export async function attachReactionSummaries({
 		topicFinding.commentCount = commentCounts.get(topicFinding.findingId) ?? 0
 	}
 
-	// the page's own summary, for a read that named its social target
-	return pageSocialTarget
+	// the page's own summary, for a read that named its social target, and every target's
+	const pageReactions = pageSocialTarget
 		? (reactionSummaries.get(toSocialTargetKey(pageSocialTarget)) ?? EMPTY_REACTION_SUMMARY)
 		: undefined
+	return { pageReactions, reactionSummaryByTarget: reactionSummaries }
 }

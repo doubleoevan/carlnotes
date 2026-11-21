@@ -1,12 +1,16 @@
 // topic tests for the api
 
 import { afterEach, expect, test } from "bun:test"
-import type { TopicScan } from "@carlnotes/contracts/topics"
+import { TOPIC_SCANS_PAGE_SIZE } from "@carlnotes/contracts/cardPages"
+import type { TopicPostCard } from "@carlnotes/contracts/topicPosts"
+import type { TopicResponse, TopicScan } from "@carlnotes/contracts/topics"
 import { appUrl } from "@carlnotes/server/appUrl"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import { toLastSucceededTopicScan, toLastTopicScanFields } from "./helpers"
 import { isTakingDailySlot } from "./saveHelpers"
 import { notifyIndexNowOfTopicChange } from "./saveTopic"
+import { toPagedTopicPage } from "./topicPageRead"
+import { toTopicScanRowsQuery } from "./topicScanRows"
 
 // a scan history row, varied only by the status and id each test needs
 function scanRow(id: string, status: TopicScan["status"]): TopicScan {
@@ -37,24 +41,66 @@ test("toLastSucceededScan is undefined when no scan has succeeded", () => {
 	expect(toLastSucceededTopicScan([scanRow("failed", "failed"), scanRow("running", "running")])).toBeUndefined()
 })
 
-// a scan that rediscovers only pages it already judged reviews nothing and writes no recap
-test("a scan with an empty recap does not blank the note, and the schedule still reads the latest scan", () => {
-	// the newest scan wrote no recap, the one before it did, and the oldest wrote another
+// the recap that the scan read found goes on the page beside the latest succeeded scan
+test("the recap the scan read found is the note, and the schedule still reads the latest scan", () => {
 	const history = [scanRow("quiet", "succeeded"), scanRow("failed", "failed"), scanRow("noted", "succeeded")]
-	const scanRows = [
-		{ id: "quiet", scanSummary: "" },
-		{ id: "failed", scanSummary: "a failed scan's words" },
-		{ id: "noted", scanSummary: "Two new grinders this week." },
-		{ id: "oldest", scanSummary: "An older recap." },
-	]
-	const lastTopicScanFields = toLastTopicScanFields([...history, scanRow("oldest", "succeeded")], scanRows)
+	const lastTopicScanFields = toLastTopicScanFields(history, "Two new grinders this week.")
 	expect(lastTopicScanFields.scanSummary).toBe("Two new grinders this week.")
 	expect(lastTopicScanFields.lastSucceededTopicScan?.id).toBe("quiet")
 
-	// a topic whose scans wrote no recap yet has no note
-	expect(toLastTopicScanFields([scanRow("quiet", "succeeded")], [{ id: "quiet", scanSummary: null }]).scanSummary).toBe(
-		null,
-	)
+	// a topic whose scans wrote no recap yet has no note, and a history with no succeeded scan has none either
+	expect(toLastTopicScanFields([scanRow("quiet", "succeeded")], null).scanSummary).toBe(null)
+	expect(toLastTopicScanFields([scanRow("failed", "failed")], "An older recap.").scanSummary).toBe(null)
+})
+
+// how many times a query's text names the scan recap column
+function toScanSummaryColumnCount(querySql: string): number {
+	return querySql.split('"scan_summary"').length - 1
+}
+
+// a poll's cache miss reads no scan's recap as a row column, and one recap in the newest row's subquery
+test("a poll's scan read reads one recap, and a head read reads two", () => {
+	const topic = { id: "topic-1", visibility: "public" as const }
+	const pollQuerySql = toTopicScanRowsQuery({ topic, userId: "user-1", isHeadRead: false }).toSQL().sql
+	expect(toScanSummaryColumnCount(pollQuerySql)).toBe(2)
+	expect(pollQuerySql).toContain('select "scans"."scan_summary" from "scans" where')
+	expect(pollQuerySql).not.toMatch(/"scans"\."scan_summary",/)
+
+	// the newest succeeded scan that kept findings adds the head's one recap
+	const headQuerySql = toTopicScanRowsQuery({ topic, userId: null, isHeadRead: true }).toSQL().sql
+	expect(toScanSummaryColumnCount(headQuerySql)).toBe(4)
+})
+
+// a read that asks for a page of scans reads one page of the history and counts its scans, and a read that asks for none
+// reads every scan
+test("a paged scan read reads one page of the history with its count, and an unpaged one reads every scan", () => {
+	// a paged read leaves out a stopped scan, counts the history's scans, and reads its page's limit and offset
+	const topic = { id: "topic-1", visibility: "public" as const }
+	const pagedQuery = toTopicScanRowsQuery({ topic, userId: null, isHeadRead: false, scansPage: 2 }).toSQL()
+	expect(pagedQuery.sql).toContain("count(*) over ()")
+	expect(pagedQuery.sql).toContain('"scans"."stopped_at" is null) order by')
+	expect(pagedQuery.sql).toMatch(/limit \$\d+ offset \$\d+$/)
+	expect(pagedQuery.params.slice(-2)).toEqual([TOPIC_SCANS_PAGE_SIZE, 2 * TOPIC_SCANS_PAGE_SIZE])
+
+	// a read with no page reads every scan with no count
+	const wholeQuerySql = toTopicScanRowsQuery({ topic, userId: null, isHeadRead: false }).toSQL().sql
+	expect(wholeQuerySql).not.toMatch(/offset \$\d+$/)
+	expect(wholeQuerySql).not.toContain("count(*) over ()")
+	expect(wholeQuerySql).not.toContain('"scans"."stopped_at" is null) order by')
+})
+
+// a paged read holds one page of the Topic Posts with where it sits, and a poll's page, which has none, stays whole
+test("a paged topic page holds one page of its Topic Posts, and a poll's page stays as it is", () => {
+	const topicPostCards = Array.from({ length: 8 }, (_, i) => ({ id: `post-${i}` }) as TopicPostCard)
+	const topicPage = { id: "topic-1", topicPosts: { topicPosts: topicPostCards, canPublish: true } } as TopicResponse
+	const pagedTopicPage = toPagedTopicPage(topicPage, 1)
+	expect(pagedTopicPage.topicPosts?.topicPosts.map(({ id }) => id)).toEqual(["post-6", "post-7"])
+	expect(pagedTopicPage.topicPosts?.canPublish).toBe(true)
+	expect(pagedTopicPage.topicPostsPage).toEqual({ page: 1, totalCount: 8 })
+
+	// a poll's page has no Topic Posts to page
+	const pollTopicPage = { id: "topic-1" } as TopicResponse
+	expect(toPagedTopicPage(pollTopicPage, 1)).toBe(pollTopicPage)
 })
 
 // only a move to a daily frequency takes one of the plan's daily slots

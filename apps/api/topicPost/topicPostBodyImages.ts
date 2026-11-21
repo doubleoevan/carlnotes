@@ -204,7 +204,16 @@ export async function settleTopicPostBodyImages({
 export async function purgeTopicPostBodyImagesAtEdge(
 	topicPostRow: Pick<TopicPostRow, "topicPost" | "topic">,
 ): Promise<void> {
-	if (isTopicPostPublic(topicPostRow)) {
-		await purgeEdgeCacheTagAfterDeletion(toTopicImageCacheTag(topicPostRow.topic.id))
+	const bodyImageCacheTags = toTopicPostBodyImageCacheTags(topicPostRow)
+	if (bodyImageCacheTags.length > 0) {
+		await purgeEdgeCacheTagAfterDeletion(...bodyImageCacheTags)
 	}
+}
+
+/**
+ * Returns the edge tag of a public Topic Post's Topic's images, its body images among them, or none for a post the
+ * edge never stores.
+ */
+export function toTopicPostBodyImageCacheTags(topicPostRow: Pick<TopicPostRow, "topicPost" | "topic">): string[] {
+	return isTopicPostPublic(topicPostRow) ? [toTopicImageCacheTag(topicPostRow.topic.id)] : []
 }

@@ -5,7 +5,8 @@ import {
 	type ProfileTeamStatus,
 	profileTeamStatusesResponse,
 } from "@carlnotes/contracts/profiles"
-import { apiClient, fetchApi, readApiErrorMessage, readApiResponse } from "./apiClient"
+import { type TopicPostCardsPage, topicPostCardsPage } from "@carlnotes/contracts/topicPosts"
+import { apiClient, fetchApi, readApiErrorMessage, readApiResponse, readPageResponse } from "./apiClient"
 
 // a user's public profile by id, read for the user audience unless the visitor audience is named, or null if there is
 // no such user. any other rejected read throws
@@ -19,6 +20,23 @@ export async function fetchProfile(userId: string, audience?: ProfileAudience): 
 		return null
 	}
 	throw new Error(`profile load failed: ${response.status}`)
+}
+
+// one zero-based page of a person's Topic Posts as the user reads them, in the user audience unless the visitor
+// audience is named. a rejected read throws
+export async function fetchProfileTopicPostsPage(
+	userId: string,
+	page: number,
+	audience?: ProfileAudience,
+): Promise<TopicPostCardsPage> {
+	return readPageResponse(
+		topicPostCardsPage,
+		apiClient().api.profiles[":userId"]["topic-posts"].$get({
+			param: { userId },
+			query: { page: String(page), audience },
+		}),
+		"profile topic posts",
+	)
 }
 
 // set the signed-in user's username. returns null on success, or which rule rejected it on failure

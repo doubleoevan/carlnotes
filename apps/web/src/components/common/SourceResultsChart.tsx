@@ -1,7 +1,7 @@
 // the source footnotes chart: what each Source read and kept in one scan, as plain HTML bars on Nightshift tokens
 
+import type { SourceResult } from "@carlnotes/contracts/scanSourceResults"
 import { toDotSeparatedText } from "@carlnotes/contracts/text"
-import type { SourceResult } from "@carlnotes/contracts/topics"
 import {
 	SourceResultsChart as SharedSourceResultsChart,
 	type SourceResultsChartComponents,

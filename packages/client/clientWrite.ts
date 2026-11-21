@@ -12,14 +12,14 @@ type ShowFailedWriteOptions = {
 }
 
 /**
- * Reports a rejected write and optionally propagates it to an optimistic caller.
+ * Reports a rejected write and optionally propagates it to an optimistic caller. Returns whether the write saved.
  */
 export async function showFailedWrite({
 	request,
 	action,
 	isBackground = false,
 	shouldThrowOnError = false,
-}: ShowFailedWriteOptions): Promise<void> {
+}: ShowFailedWriteOptions): Promise<boolean> {
 	// a rejected request never reaches a Response at all, so an offline user is told the same as a rejected write
 	let response: ApiResponse
 	try {
@@ -31,12 +31,12 @@ export async function showFailedWrite({
 		if (shouldThrowOnError) {
 			throw error
 		}
-		return
+		return false
 	}
 
 	// the server answered, so only a rejected status is a failure from here
 	if (response.ok) {
-		return
+		return true
 	}
 
 	// the log includes the detail. the message shown to the user only says the write failed
@@ -45,6 +45,7 @@ export async function showFailedWrite({
 	if (shouldThrowOnError) {
 		throw new Error(`${action} failed: ${response.status}`)
 	}
+	return false
 }
 
 // the one message a failed write shows, skipped for a write the user never asked for by itself

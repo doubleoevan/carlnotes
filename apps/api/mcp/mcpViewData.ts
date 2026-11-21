@@ -22,15 +22,16 @@ import { reportError } from "@carlnotes/server/monitoring"
 import { isMcpViewFilmPlaybackEnabled } from "@carlnotes/server/podcastEpisodeSettings"
 import { and, eq, inArray } from "drizzle-orm"
 import { withAvatarVersion } from "../avatars"
+import { loadLatestPodcastEpisodeSummaries } from "../podcast/latestPodcastEpisodes"
 import { toPlayToken } from "../podcast/playTokens"
 import { podcastEpisodeColumns } from "../podcast/podcastEpisodeRows"
-import { loadLatestPodcastEpisodeSummaries, loadPodcastEpisodes } from "../podcast/podcastEpisodeShapes"
+import { loadPodcastEpisodes } from "../podcast/podcastEpisodeShapes"
 import { attachReactionSummaries } from "../social/findingReactions"
 import { loadTopicAccessAndFindings } from "../topic/accessibleFindings"
 import { canBookmarkTopic, canRateTopic } from "../topic/findingPermissions"
 import { hasSubscription } from "../topic/permissions"
 import type { BuiltUpdates } from "../topic/updates"
-import { loadVisibleTopic } from "./results"
+import { loadVisibleTopic, type TopicFeed } from "./results"
 import { type ToolCaller, toToolCallerUserId } from "./toolCaller"
 import { loadTopicDraftMcpViewOptions } from "./topicDraftMcpViewOptions"
 
@@ -161,31 +162,44 @@ export async function loadNewsMcpViewData(toolCaller: ToolCaller, news: McpViewN
 	return { session, podcastEpisodes, news: { ...news, newsPage: { ...news.newsPage, podcastEpisodes } } }
 }
 
+// the topic and the page's findings, and the feed they were read from if a feed read them, whose window holds the
+// page's findings with their reactions
+type LoadFindingsMcpViewDataOptions = { topicId: string; findingIds: string[]; topicFeed?: TopicFeed }
+
 /**
  * Loads the findings MCP view's data: the caller, the topic with its latest podcast episode and whether the caller
- * subscribes to it, and the page's findings in the site's shape with the caller's own marks, in the page's order.
+ * subscribes to it, and the page's findings in the site's shape with the caller's own marks, in the page's order. A
+ * feed's page reads its findings from the feed's window, and any other page reads them again.
  */
 export async function loadFindingsMcpViewData(
 	toolCaller: ToolCaller,
-	{ topicId, findingIds }: { topicId: string; findingIds: string[] },
+	{ topicId, findingIds, topicFeed }: LoadFindingsMcpViewDataOptions,
 ): Promise<McpViewData | null> {
-	const topic = await loadVisibleTopic(toolCaller, topicId)
+	const topic = topicFeed?.topic ?? (await loadVisibleTopic(toolCaller, topicId))
 	if (!topic) {
 		return null
 	}
 
-	// the caller's findings on the topic, behind the topic page's own gate, picked out in the page's order
-	// ponytail: reads up to the topic page's read limit to pick one page out. read by id if a topic grows past it
+	// the caller's findings on the topic, behind the topic page's own gate, from the feed's window or read again
+	// ponytail: a page that no feed read reads up to the topic page's read limit to pick one page out. read by id if a
+	// topic grows past it
 	const userId = toToolCallerUserId(toolCaller)
-	const [{ topicFindings }, mcpViewTopic, session, personalAnnotations] = await Promise.all([
-		loadTopicAccessAndFindings({ topic, userId, isRatedDownExcluded: true, isReactionReadSkipped: true }),
+	const [topicFindings, mcpViewTopic, session, personalAnnotations] = await Promise.all([
+		topicFeed?.topicFindings ??
+			loadTopicAccessAndFindings({ topic, userId, isRatedDownExcluded: true, isReactionReadSkipped: true }).then(
+				(topicAccessAndFindings) => topicAccessAndFindings.topicFindings,
+			),
 		loadMcpViewTopic(toolCaller, topic),
 		loadMcpViewSession(toolCaller),
 		loadMcpViewPersonalAnnotations(toolCaller, findingIds),
 	])
+
+	// the page's findings in its order, each with its reactions, which the feed's window already holds
 	const topicFindingById = new Map(topicFindings.map((topicFinding) => [topicFinding.findingId, topicFinding]))
 	const pageTopicFindings = findingIds.flatMap((findingId) => topicFindingById.get(findingId) ?? [])
-	await attachReactionSummaries({ topicFindings: pageTopicFindings, userId })
+	if (!topicFeed) {
+		await attachReactionSummaries({ topicFindings: pageTopicFindings, userId })
+	}
 
 	// the podcast episode the topic header's play button plays
 	const { latestPodcastEpisode } = mcpViewTopic

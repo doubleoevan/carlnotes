@@ -2,9 +2,10 @@
 // reads of the post while one records
 import { showClientError } from "@carlnotes/client/apiClient"
 import { sendTopicPostDiscussionRegeneration } from "@carlnotes/client/topicPostClient"
+import type { TopicPostDiscussionStatusRead } from "@carlnotes/contracts/statusReads"
 import type { TopicPostResponse } from "@carlnotes/contracts/topicPosts"
 import { useEffect, useState } from "react"
-import { startLimitedPoll } from "../lib/limitedPoll"
+import { startStatusPoll } from "../lib/statusPoll"
 import { TOPIC_POST_DISCUSSION_LABELS, TOPIC_POST_DISCUSSION_POLL_MS } from "../lib/topicPostDiscussions"
 import { useStableCallback } from "./useStableCallback"
 
@@ -12,22 +13,37 @@ import { useStableCallback } from "./useStableCallback"
 // backoffs together
 const TOPIC_POST_DISCUSSION_POLL_LIMIT_MS = 45 * 60 * 1000
 
+// the read of the discussion's status, null for a failed read, and the read of the post again
+type StartTopicPostDiscussionPollOptions = {
+	readDiscussionStatus: () => Promise<TopicPostDiscussionStatusRead | null>
+	readTopicPostAgain: () => void
+}
+
 /**
- * Reads a Topic Post again on an interval while the app is focused and online, until the poll's time limit, and
- * returns the call that stops the reads.
+ * Reads a Topic Post's discussion status on an interval while the app is focused and online, until the poll's time
+ * limit, and reads the post again once the discussion leaves recording. A failed status read stops the poll. Returns
+ * the call that stops the reads.
  */
-export function startTopicPostDiscussionPoll(readTopicPostAgain: () => void): () => void {
-	return startLimitedPoll({
-		read: readTopicPostAgain,
+export function startTopicPostDiscussionPoll({
+	readDiscussionStatus,
+	readTopicPostAgain,
+}: StartTopicPostDiscussionPollOptions): () => void {
+	return startStatusPoll({
+		readStatus: readDiscussionStatus,
+		isInProgress: ({ status }) => status === "recording",
+		readPage: readTopicPostAgain,
 		pollMs: TOPIC_POST_DISCUSSION_POLL_MS,
 		limitMs: TOPIC_POST_DISCUSSION_POLL_LIMIT_MS,
 	})
 }
 
-// the post, and the read of it again that a started or finished recording asks for
+// the post, and the read of it again that a started or finished recording asks for. the page passes the read of the
+// discussion's status, which the poll needs, and leaves it out while its screen is covered. a card without it, such
+// as an MCP view's, does not poll
 type UseTopicPostDiscussionOptions = {
 	topicPost: Pick<TopicPostResponse, "id" | "discussion">
 	onChanged: () => void
+	readDiscussionStatus?: () => Promise<TopicPostDiscussionStatusRead | null>
 	// the regenerate request. a test and a story pass a fake
 	sendRegeneration?: typeof sendTopicPostDiscussionRegeneration
 }
@@ -52,6 +68,7 @@ type TopicPostDiscussion = {
 export function useTopicPostDiscussion({
 	topicPost,
 	onChanged,
+	readDiscussionStatus,
 	sendRegeneration = sendTopicPostDiscussionRegeneration,
 }: UseTopicPostDiscussionOptions): TopicPostDiscussion {
 	const [isFormOpen, setIsFormOpen] = useState(false)
@@ -59,14 +76,21 @@ export function useTopicPostDiscussion({
 	const [isSending, setIsSending] = useState(false)
 	const readTopicPostAgain = useStableCallback(onChanged)
 
-	// read the post again while a discussion records
+	// keep the latest status read, so a new callback never restarts the poll
+	const readLatestDiscussionStatus = useStableCallback(async () => (await readDiscussionStatus?.()) ?? null)
+
+	// read the discussion's status while it records, if the page passes the read
 	const isRecording = Boolean(topicPost.discussion?.isRecording)
+	const isPollEnabled = readDiscussionStatus !== undefined
 	useEffect(() => {
-		if (!isRecording) {
+		if (!(isRecording && isPollEnabled)) {
 			return
 		}
-		return startTopicPostDiscussionPoll(readTopicPostAgain)
-	}, [isRecording, readTopicPostAgain])
+		return startTopicPostDiscussionPoll({
+			readDiscussionStatus: readLatestDiscussionStatus,
+			readTopicPostAgain,
+		})
+	}, [isRecording, isPollEnabled, readLatestDiscussionStatus, readTopicPostAgain])
 
 	// start a recording with the note, then close the form and read the post again. a rejection keeps the form
 	const regenerate = async (): Promise<void> => {

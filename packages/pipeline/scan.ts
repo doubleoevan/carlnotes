@@ -2,6 +2,7 @@
 
 import { db } from "@carlnotes/db"
 import { scans } from "@carlnotes/db/schema/scans"
+import { clearStatusReads } from "@carlnotes/db/statusReadCaches"
 import { isGrpcDeadlineError } from "@temporalio/client"
 import { and, desc, eq, isNull } from "drizzle-orm"
 import {
@@ -63,6 +64,9 @@ export async function scanTopic(
 	trigger: ScanTrigger,
 	isExistingRow = false,
 ): Promise<TopicScanStart> {
+	// the Topic's scan status copy goes, so a poll reads the row this start opened
+	await clearStatusReads("scan", topicId)
+
 	// a start that throws leaves the row with nothing running, so a row this call opened is deleted and an existing row is
 	// kept for the sweep to dispatch. a start that hit its deadline may have started the workflow, so its row is kept too
 	let scanStart: ScanStart
@@ -105,7 +109,16 @@ export async function failUnstartedScan(scanId: string, failureReason: string): 
 		isNull(scans.dispatchedAt),
 		isNull(scans.pickedUpAt),
 	)
-	await db.update(scans).set({ status: "failed", error: failureReason, finishedAt: new Date() }).where(isUnstartedScan)
+	const [failedScan] = await db
+		.update(scans)
+		.set({ status: "failed", error: failureReason, finishedAt: new Date() })
+		.where(isUnstartedScan)
+		.returning({ topicId: scans.topicId })
+
+	// the Topic's scan status copy goes, so a poll reads the failure
+	if (failedScan?.topicId) {
+		await clearStatusReads("scan", failedScan.topicId)
+	}
 }
 
 /**
@@ -128,6 +141,9 @@ export async function stopTopicScan(topicId: string): Promise<ScanCancel> {
 			),
 		)
 		.returning({ id: scans.id })
+	if (stoppedWaitingScans.length > 0) {
+		await clearStatusReads("scan", topicId)
+	}
 
 	// cancel the workflow, and count a stopped waiting Scan as cancelled if no workflow was running
 	const scanCancel = await cancelTopicScanWorkflow(topicId)

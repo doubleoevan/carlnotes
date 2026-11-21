@@ -1,5 +1,5 @@
 // the news routes: a session for the user's own news, the window and the cursor, a profile's news for anyone, the
-// visitor audience, a visitor's cached first page, and the read limit
+// visitor audience, a visitor's cached first page, a person's own cached first page and its clear, and the read limit
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import type { NewsResponse } from "@carlnotes/contracts/news"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
@@ -7,6 +7,7 @@ import * as redis from "@carlnotes/db/redis"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
 import * as redisRateLimits from "@carlnotes/db/redisRateLimits"
 import { toSignedInApp } from "../testSession"
+import { clearOwnNews } from "./newsCaches"
 import { newsRoute } from "./newsRoute"
 import * as news from "./readNews"
 
@@ -122,21 +123,55 @@ test("a cached first page returns to the next visitor with no read of the news",
 	expect(readSpy).toHaveBeenCalledTimes(1)
 })
 
-test("a signed-in read, a later page, and a read with a cursor are never cached", async () => {
+test("another user's read, a later page, and a read with a cursor are never cached", async () => {
 	stubConnectionPool(() => [["profile-user-1"]])
 	const readSpy = spyOn(news, "readNews").mockResolvedValue(NEWS_RESULT)
 	const cacheSpy = spyOn(redis, "cacheJson")
 
-	// the person's own news, their read of their own profile, and another user's read of it
-	await toSignedInApp(newsRoute, "profile-user-1").request("/news")
-	await toSignedInApp(newsRoute, "profile-user-1").request("/profiles/profile-user-1/news")
+	// another user's read of the profile, and the person's own later page and read with a cursor
 	await toSignedInApp(newsRoute, "news-user-7").request("/profiles/profile-user-1/news")
+	await toSignedInApp(newsRoute, "profile-user-1").request("/news?page=2")
+	await toSignedInApp(newsRoute, "profile-user-1").request("/news?cursor=abc")
 
 	// a visitor's later page, and a visitor's read with a cursor
 	await newsRoute.request("/profiles/profile-user-1/news?page=2")
 	await newsRoute.request("/profiles/profile-user-1/news?cursor=abc")
 	expect(readSpy).toHaveBeenCalledTimes(5)
 	expect(cacheSpy).not.toHaveBeenCalled()
+})
+
+test("a person's own first page is cached by the person and the window for a minute, on both routes", async () => {
+	stubConnectionPool(() => [["profile-user-1"]])
+	const readSpy = spyOn(news, "readNews").mockResolvedValue(NEWS_RESULT)
+	const cacheSpy = spyOn(redis, "cacheJson")
+	const app = toSignedInApp(newsRoute, "profile-user-1")
+	await app.request("/news?window=day")
+	expect(cacheSpy.mock.calls[0]?.[0]).toMatchObject({ key: "own-news:profile-user-1:day", ttlMs: 60_000 })
+
+	// the person's read of their own profile shares the copy, so the second read reads no news row
+	await app.request("/profiles/profile-user-1/news?window=day")
+	expect(cacheSpy.mock.calls[1]?.[0].key).toBe("own-news:profile-user-1:day")
+	expect(readSpy).toHaveBeenCalledTimes(1)
+})
+
+test("a person's own comment shows on their next read, and another reader never reads their copy", async () => {
+	// the person's first page before and after their comment, from a read that sees the comment once it is posted
+	stubConnectionPool(() => [["profile-user-1"]])
+	const commentNews: NewsResponse = { ...NEWS_RESULT, total: 46 }
+	const readSpy = spyOn(news, "readNews").mockResolvedValue(NEWS_RESULT)
+	const personApp = toSignedInApp(newsRoute, "profile-user-1")
+	await personApp.request("/news")
+
+	// the comment's write clears the person's copy, so the next read reads the comment
+	readSpy.mockResolvedValue(commentNews)
+	await clearOwnNews("profile-user-1")
+	expect(await (await personApp.request("/news")).json()).toEqual(commentNews)
+
+	// another reader of the person's profile reads for themselves, never from the person's copy
+	readSpy.mockResolvedValue(NEWS_RESULT)
+	const strangerResponse = await toSignedInApp(newsRoute, "news-user-8").request("/profiles/profile-user-1/news")
+	expect(await strangerResponse.json()).toEqual(NEWS_RESULT)
+	expect(readSpy.mock.calls.at(-1)?.[0]).toMatchObject({ profileUserId: "profile-user-1", userId: "news-user-8" })
 })
 
 test("a profile nobody has reads as missing", async () => {

@@ -3,18 +3,25 @@
 import { NOTE_HTML_MAX_CHARS } from "@carlnotes/contracts/notes"
 import { toHtmlText } from "@carlnotes/contracts/text"
 import { toTopicPostBodyImageIds } from "@carlnotes/contracts/topicPostBodyImages"
-import { isTopicPostComplete, topicPostSavePayload, toWordCount } from "@carlnotes/contracts/topicPosts"
+import {
+	isTopicPostComplete,
+	topicPostSavePayload,
+	topicPostsQuery,
+	toWordCount,
+} from "@carlnotes/contracts/topicPosts"
 import { db } from "@carlnotes/db"
 import { loadTopicPostBodyImageLimits } from "@carlnotes/db/quotas"
 import { topics } from "@carlnotes/db/schema/topics"
 import { countSocialWriteToday } from "@carlnotes/db/socialLimits"
 import { namedTopicColumns } from "@carlnotes/db/topicPermissions"
+import { clearVisitorPagesOfTopic } from "@carlnotes/db/visitorPageCaches"
 import {
 	rebuildTopicDashboardsAfterPublication,
 	rebuildTopicDashboardsById,
 } from "@carlnotes/pipeline/dashboardRebuild"
 import { startTopicPostPublishWorkflow, startTopicPostSummaryWorkflow } from "@carlnotes/pipeline/temporalClient"
 import { trackEvent } from "@carlnotes/server/analytics"
+import { HOME_PAGE_CACHE_TAG, toTopicPageCacheTag } from "@carlnotes/server/edgePurge"
 import { reportError } from "@carlnotes/server/monitoring"
 import { zValidator } from "@hono/zod-validator"
 import { eq } from "drizzle-orm"
@@ -22,24 +29,30 @@ import { type Context, Hono } from "hono"
 import { isAllowed } from "../authorization"
 import { toBodyLimit, toSignedOutRejection } from "../bodyLimit"
 import { type AnalyticsProperties, type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
-import { purgeProfileAtEdge } from "../edgeCache"
+import { clearPages, clearProfilePage, renderedPageReadCacheHeaders } from "../edgeCache"
 import { toObjectionableContentResponse } from "../moderation"
 import { sanitizeTopicPostHtml } from "../noteHtml"
 import { noteBodySaveRateLimiter, socialReadRateLimiter, toolCallerRateLimiter } from "../rateLimit"
-import { loadTopicPostPreview, toCachedTopicPostPreviewPng, toPreviewPngResponse } from "../share/preview"
+import { toCardResponse } from "../share/cardResponse"
+import { loadTopicPostPreview, toTopicPostPreviewCard } from "../share/preview"
 import { toTermsOutdatedResponse } from "../termsAcceptance"
-import { clearVisitorTopicPages } from "../topic/feedCaches"
+import { clearSharedTopicFeedCaches } from "../topic/feedCaches"
 import { clearHomeCaches } from "../topic/homeOrder"
-import { overlayUncheckedTopicPostImage } from "../uncheckedImageOverlays"
-import { loadHtmlWithoutRemovedBodyImages, purgeTopicPostBodyImagesAtEdge } from "./topicPostBodyImages"
+import {
+	loadHtmlWithoutRemovedBodyImages,
+	purgeTopicPostBodyImagesAtEdge,
+	toTopicPostBodyImageCacheTags,
+} from "./topicPostBodyImages"
 import { toObjectionableTopicPostCategory, toTopicPostModerationTexts } from "./topicPostModeration"
+import { loadTopicPostPage, readTopicPostPageRead } from "./topicPostPageRead"
+import { toTopicPostResponse } from "./topicPostResponse"
 import {
 	canReadTopicPost,
 	loadAuthoredTopicPost,
 	loadTopicPostCards,
+	loadTopicPostCardsPage,
 	loadTopicPostRow,
 	type TopicPostRow,
-	toTopicPostResponse,
 } from "./topicPosts"
 import { createTopicPostDraft, deleteTopicPost, publishTopicPost, saveTopicPost } from "./topicPostWrites"
 
@@ -82,8 +95,9 @@ function toLimitReachedResponse(context: Context<AppEnv>): Response {
  * The Topic Post routes. Every access rejection is a 404, so a draft and a private Topic's post read as missing.
  */
 export const topicPostsRoute = new Hono<AppEnv>()
-	.get("/topics/:id/topic-posts", socialReadRateLimiter, async (context) => {
-		// the Topic's posts for whoever may open the Topic, with the caller's own drafts first
+	.get("/topics/:id/topic-posts", socialReadRateLimiter, zValidator("query", topicPostsQuery), async (context) => {
+		// the Topic's posts for whoever may open the Topic, with the caller's own drafts first. a read that names a page
+		// takes that page and the count of every post, and one that names none takes every post
 		const userId = currentUser(context)
 		const [topic] = await db
 			.select(namedTopicColumns)
@@ -93,11 +107,14 @@ export const topicPostsRoute = new Hono<AppEnv>()
 			return context.json({ error: "not found" }, 404)
 		}
 		// the topic's cards for this reader, and whether they may publish
+		const { page } = context.req.valid("query")
 		const [topicPostCards, canPublish] = await Promise.all([
-			loadTopicPostCards(userId, topic.id),
+			page === undefined
+				? loadTopicPostCards(userId, topic.id).then((topicPosts) => ({ topicPosts }))
+				: loadTopicPostCardsPage(userId, topic.id, page),
 			isAllowed(userId, "topicPost:publish", topic),
 		])
-		return context.json({ topicPosts: topicPostCards, canPublish })
+		return context.json({ ...topicPostCards, canPublish })
 	})
 	.post("/topics/:id/topic-posts", toolCallerRateLimiter, async (context) => {
 		// only an editor of the Topic starts a draft on it
@@ -129,27 +146,32 @@ export const topicPostsRoute = new Hono<AppEnv>()
 	})
 	.get(TOPIC_POST_PATH, socialReadRateLimiter, async (context) => {
 		// a draft for its author alone, and a published post for whoever may open its Topic
-		const userId = currentUser(context)
-		const topicPostRow = await loadTopicPostRow(context.req.param("id"))
-		if (!topicPostRow || !(await canReadTopicPost(userId, topicPostRow))) {
-			return context.json({ error: "not found" }, 404)
+		const topicPost = await loadTopicPostPage({ userId: currentUser(context), topicPostId: context.req.param("id") })
+		return topicPost ? context.json(topicPost) : context.json({ error: "not found" }, 404)
+	})
+	// the Topic Post's page read: the head of a published post with the post if the reader may read it
+	.get(`${TOPIC_POST_PATH}/page`, renderedPageReadCacheHeaders, async (context) => {
+		const topicPostPageRead = await readTopicPostPageRead({
+			userId: currentUser(context),
+			topicPostId: context.req.param("id"),
+		})
+		// the read carries its topic's edge tag too, so a topic made private or deleted purges its posts' page reads
+		if (topicPostPageRead?.topicPost) {
+			context.set("pageCacheTags", [toTopicPageCacheTag(topicPostPageRead.topicPost.topicId)])
 		}
-
-		// the page, with the unchecked upload of whoever may change the image in the post's image's place
-		const topicPostResponse = await toTopicPostResponse(userId, topicPostRow, { isCommentThreadIncluded: true })
-		return context.json(await overlayUncheckedTopicPostImage(topicPostResponse, userId))
+		return topicPostPageRead ? context.json(topicPostPageRead) : context.json({ error: "not found" }, 404)
 	})
 	// the link-preview card that a social platform fetches for a published Topic Post of any topic
 	.get(`${TOPIC_POST_PATH}/preview.png`, async (context) => {
-		// respond 404 unless the Topic Post has published
-		const loadedTopicPostPreview = await loadTopicPostPreview(context.req.param("id"))
-		if (!loadedTopicPostPreview) {
-			return context.json({ error: "not found" }, 404)
-		}
-
-		// draw the preview card on its first request, and read the card from storage after
-		const topicPostPreviewPng = await toCachedTopicPostPreviewPng(loadedTopicPostPreview.topicPostPreview)
-		return toPreviewPngResponse(context, topicPostPreviewPng)
+		// respond 404 unless the Topic Post has published, and draw the card on its first request
+		const topicPostId = context.req.param("id")
+		const topicPostCardResponse = await toCardResponse({
+			context,
+			cardKey: `topic-post:${topicPostId}`,
+			loadPreview: async () => (await loadTopicPostPreview(topicPostId))?.topicPostPreview ?? null,
+			toPreviewCard: toTopicPostPreviewCard,
+		})
+		return topicPostCardResponse?.response ?? context.json({ error: "not found" }, 404)
 	})
 	.put(
 		TOPIC_POST_PATH,
@@ -218,9 +240,10 @@ export const topicPostsRoute = new Hono<AppEnv>()
 			if (saveOutcome.droppedImageIds.length > 0) {
 				await purgeTopicPostBodyImagesAtEdge(topicPostRow)
 			}
-			// an edit of a published post is reported by its ids
+			// an edit of a published post is reported by its ids, and the visitor pages that show the post leave the cache
 			if (topicPost.publishedAt) {
 				trackEvent("social_topic_post_edit", userId, toTopicPostEventProperties(context, userId, topicPostRow))
+				await clearVisitorPagesOfTopic(topicPost.topicId)
 			}
 
 			// a changed text has its summary written again, once for the edits saved close together
@@ -274,10 +297,10 @@ export const topicPostsRoute = new Hono<AppEnv>()
 			// a public topic's new Topic Post joins the home's cards and its author's profile page
 			if (topicPostRow.topic.visibility === "public") {
 				await clearHomeCaches()
-				await purgeProfileAtEdge(userId)
+				await clearProfilePage(userId)
 			}
 			// clear the topic page's caches and rebuild the topic's Dashboards, whose snapshots stay until the rebuild writes
-			await clearVisitorTopicPages(topicPost.topicId)
+			await clearVisitorPagesOfTopic(topicPost.topicId)
 			await rebuildTopicDashboardsAfterPublication(topicPost.topicId)
 		}
 		// return the post as it now reads
@@ -308,16 +331,28 @@ export const topicPostsRoute = new Hono<AppEnv>()
 
 		// the delete takes the post's thread and discussions with it, and its body images leave the edge
 		await deleteTopicPost(topicPost.id)
-		if (toTopicPostBodyImageIds(topicPost.html, topicPost.id).length > 0) {
-			await purgeTopicPostBodyImagesAtEdge(topicPostRow)
+		const bodyImageCacheTags =
+			toTopicPostBodyImageIds(topicPost.html, topicPost.id).length > 0
+				? toTopicPostBodyImageCacheTags(topicPostRow)
+				: []
+
+		// a published Topic Post left its own page, the home's cards, its author's profile page, and the topic's own page.
+		// its own page's copy is cleared by id, because the topic's clear reads only the posts left. one edge purge
+		// covers every page and image the delete removed
+		if (topicPost.publishedAt) {
+			await clearSharedTopicFeedCaches()
+			await clearVisitorPagesOfTopic(topicPost.topicId)
+			await clearPages({
+				topicPostIds: [topicPost.id],
+				profileUserIds: [topicPost.authorUserId],
+				extraCacheTags: [...bodyImageCacheTags, HOME_PAGE_CACHE_TAG],
+			})
+		} else {
+			await clearPages({ extraCacheTags: bodyImageCacheTags })
 		}
 
-		// a published Topic Post left the home's cards, its author's profile page, the topic's own page, and the topic's
-		// Dashboards
+		// the topic's Dashboards are built again
 		if (topicPost.publishedAt) {
-			await clearHomeCaches()
-			await purgeProfileAtEdge(topicPost.authorUserId)
-			await clearVisitorTopicPages(topicPost.topicId)
 			await rebuildTopicDashboardsById(topicPost.topicId)
 		}
 

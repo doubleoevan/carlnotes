@@ -10,7 +10,9 @@ import { topicPostDiscussions, topicPosts } from "@carlnotes/db/schema/topicPost
 import { topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
 import { loadTopicPostSharedCommentTexts } from "@carlnotes/db/sharedComments"
+import { clearStatusReads } from "@carlnotes/db/statusReadCaches"
 import { deleteStoredObjects, toTopicPostDiscussionSpeechKey } from "@carlnotes/db/store"
+import { clearVisitorTopicPostPages } from "@carlnotes/db/visitorPageCaches"
 import { EMBED_COST_PER_MILLION_TOKENS, toEstimatedTokens, tokenCost } from "@carlnotes/models/budget"
 import { loadOrProvisionUserLiteLLMKey } from "@carlnotes/models/litellm"
 import { embedVector } from "@carlnotes/models/models"
@@ -44,7 +46,7 @@ export type StartTopicPostDiscussionOptions = {
 /**
  * Writes a recording row for a Topic Post's discussion and starts its workflow. Returns the discussion's id. A post
  * with a recording under way takes no second row, which the insert rejects as a duplicate key. A row whose workflow
- * did not start is deleted, and the start's error is thrown.
+ * did not start is deleted, and the start's error is thrown. The post's discussion status copy goes with each write.
  */
 export async function startTopicPostDiscussion({
 	topicPostId,
@@ -61,11 +63,16 @@ export async function startTopicPostDiscussion({
 		throw new Error(`no discussion row was written for topic post ${topicPostId}`)
 	}
 
+	// the post's discussion status copy goes with the new row
+	await clearStatusReads("topicPostDiscussion", topicPostId)
+
 	// the workflow that records it. a row with no workflow would stay recording, so a failed start takes the row back
 	try {
 		await startTopicPostDiscussionWorkflow({ discussionId: discussionRow.id, hint })
 	} catch (error) {
+		// the row goes, and its status copy with it
 		await db.delete(topicPostDiscussions).where(eq(topicPostDiscussions.id, discussionRow.id))
+		await clearStatusReads("topicPostDiscussion", topicPostId)
 		throw error
 	}
 	return discussionRow.id
@@ -205,6 +212,12 @@ export async function failTopicPostDiscussion(discussionId: string, reason: stri
 	if (!failedRow) {
 		return
 	}
+
+	// the visitor page that showed the recording and the post's discussion status copy leave the cache
+	await Promise.all([
+		clearVisitorTopicPostPages(failedRow.topicPostId),
+		clearStatusReads("topicPostDiscussion", failedRow.topicPostId),
+	])
 
 	// the post keeps its earlier discussion and nobody is told, so the failure is reported
 	reportError(new Error("a topic post discussion failed to record"), "podcast-episode", {

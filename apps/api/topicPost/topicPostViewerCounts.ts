@@ -4,7 +4,7 @@ import { addDailyView } from "@carlnotes/db/dailyCountBuffer"
 import { addViewer } from "@carlnotes/db/viewerCounts"
 import type { RequestSender } from "@carlnotes/server/viewerElements"
 import { type CountsResult, readViewerCount, toCountedElement } from "../counts/viewerCounts"
-import { canReadTopicPost, loadTopicPostRow } from "./topicPosts"
+import { canReadTopicPost, loadTopicPostAccessRow } from "./topicPosts"
 
 /**
  * Counts a view of a Topic Post's page, if the sender may read the post. A crawler, a link unfurler, a visitor with no
@@ -17,8 +17,8 @@ export async function countTopicPostView(requestSender: RequestSender, topicPost
 	}
 
 	// count only a view of a Topic Post the sender may read
-	const topicPostRow = await loadTopicPostRow(topicPostId)
-	if (topicPostRow && (await canReadTopicPost(requestSender.userId, topicPostRow))) {
+	const topicPostAccessRow = await loadTopicPostAccessRow(topicPostId)
+	if (topicPostAccessRow && (await canReadTopicPost(requestSender.userId, topicPostAccessRow))) {
 		await Promise.all([
 			addViewer({ kind: "topicPost", id: topicPostId }, element),
 			addDailyView({ itemKind: "topicPost", itemId: topicPostId, element, place: requestSender.place }),
@@ -33,12 +33,15 @@ export async function loadTopicPostViewerCounts(
 	userId: string | null,
 	topicPostId: string,
 ): Promise<CountsResult<ViewerCounts> | null> {
-	const topicPostRow = await loadTopicPostRow(topicPostId)
-	if (!topicPostRow || !(await canReadTopicPost(userId, topicPostRow))) {
+	const topicPostAccessRow = await loadTopicPostAccessRow(topicPostId)
+	if (!topicPostAccessRow || !(await canReadTopicPost(userId, topicPostAccessRow))) {
 		return null
 	}
 
 	// the larger of the live estimate and the saved column, and whether the Topic Post's Topic is public
-	const viewerCount = await readViewerCount({ kind: "topicPost", id: topicPostId }, topicPostRow.topicPost.viewerCount)
-	return { counts: { viewerCount }, isPublic: topicPostRow.topic.visibility === "public" }
+	const viewerCount = await readViewerCount(
+		{ kind: "topicPost", id: topicPostId },
+		topicPostAccessRow.topicPost.viewerCount,
+	)
+	return { counts: { viewerCount }, isPublic: topicPostAccessRow.topic.visibility === "public" }
 }

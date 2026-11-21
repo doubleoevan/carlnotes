@@ -14,10 +14,10 @@ import { users } from "@carlnotes/db/schema/users"
 import { and, desc, eq, isNotNull, isNull, ne, or, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { loadOwnedTopics } from "./activityTopics"
-import { isAdminRole, isAllowed, monthlySpendDollars, userBudgetCents } from "./authorization"
+import { isAllowed, loadUserAccess, monthlySpendDollars, userBudgetCents } from "./authorization"
 import { toProfileIdentity, toTeamIdentity, withAvatarVersion } from "./avatars"
 import type { AppEnv } from "./currentUser"
-import { loadLatestPodcastEpisodeSummaries } from "./podcast/podcastEpisodeShapes"
+import { loadLatestPodcastEpisodeSummaries } from "./podcast/latestPodcastEpisodes"
 
 // the subscription row fields that the queries read, with the subscribed time as a date
 export type SubscriptionRowFields = Omit<SubscriptionRow, "subscribedAt" | "latestPodcastEpisode"> & {
@@ -30,54 +30,152 @@ export type SubscriptionRowFields = Omit<SubscriptionRow, "subscribedAt" | "late
  * Assembles the user's Activity payload for the signed-in user: the user, or an admin viewing the user's activity.
  */
 export async function loadActivity(userId: string, signedInUserId: string): Promise<ActivityResponse> {
-	// the user's identity, and this month's spend against the budget
-	const [[userRow], spendMeter] = await Promise.all([
+	// the user's identity and this month's spend sums first, apart from the other reads. the spend meter below reads the
+	// sums from the request memo
+	const [[userRow]] = await Promise.all([
 		db
 			.select({ username: users.username, avatarSource: users.avatarSource, avatarKey: users.avatarKey })
 			.from(users)
 			.where(eq(users.id, userId)),
-		loadMonthlySpend(userId),
+		monthlySpendDollars(userId),
 	])
 
-	// the user's subscriptions on topics they do not own, both active and inactive alike
-	const subscriptionRows = await db
-		.select({
-			topicId: topics.id,
-			name: topics.name,
-			owner: {
-				userId: users.id,
-				username: users.username,
-				avatarSource: users.avatarSource,
-				avatarKey: users.avatarKey,
-			},
-			team: {
-				teamId: teams.id,
-				name: teams.name,
-				avatarKey: teams.avatarKey,
-				isPublic: teams.isPublic,
-				memberUserId: teamMembers.userId,
-			},
-			visibility: topics.visibility,
-			imageHash: topics.imageHash,
-			subscribedAt: subscriptions.createdAt,
-			isActive: subscriptions.isActive,
-			isEmailEnabled: subscriptions.isEmailEnabled,
-			// a real subscription row is not a pending invitation, so it includes no invite id
-			inviteId: sql<string | null>`null`,
-		})
-		.from(subscriptions)
-		.innerJoin(topics, eq(subscriptions.topicId, topics.id))
-		.innerJoin(users, eq(topics.ownerId, users.id))
-		.leftJoin(teams, eq(teams.id, topics.teamId))
-		// whether this user belongs to the owning team, which decides if a private one may be named
-		.leftJoin(
-			teamMembers,
-			and(eq(teamMembers.teamId, teams.id), eq(teamMembers.userId, userId), eq(teamMembers.isActive, true)),
-		)
-		.where(and(ne(topics.ownerId, userId), eq(subscriptions.subscriberUserId, userId)))
+	// the page's other independent reads together: the spend against the budget, the subscriptions, the invitations
+	// the user sent, the invitations waiting for the user, and the owned topics
+	const [spendMeter, subscriptionRows, inviteRows, invitedTopicSubscriptions, ownedTopics] = await Promise.all([
+		loadMonthlySpend(userId),
+		loadSubscriptionRows(userId),
+		loadSentInviteRows(userId),
+		loadInvitedTopicSubscriptions(userId),
+		loadOwnedTopics({ userId, signedInUserId }),
+	])
 
-	// the invitations the user sent on their own topics, and whether each invitee subscribed
-	const inviteRows = await db
+	// the subscriptions and the pending invitations, each with the latest podcast episode that the signed-in user may
+	// listen to
+	const subscriptionRowFields: SubscriptionRowFields[] = [
+		// convert the joined owner and team columns to their identities before the rows merge
+		...subscriptionRows.map((subscriptionRow) => ({
+			...subscriptionRow,
+			owner: withAvatarVersion(subscriptionRow.owner),
+			team: toTeamIdentity(subscriptionRow.team),
+		})),
+		...invitedTopicSubscriptions,
+	]
+	const subscriptionTopicRows = subscriptionRowFields.map((subscriptionRow) => ({
+		id: subscriptionRow.topicId,
+		name: subscriptionRow.name,
+		ownerId: subscriptionRow.owner.userId,
+		visibility: subscriptionRow.visibility,
+		imageHash: subscriptionRow.imageHash,
+	}))
+	const subscriptionPodcastEpisodeByTopic = await loadLatestPodcastEpisodeSummaries(
+		subscriptionTopicRows,
+		signedInUserId,
+	)
+
+	return {
+		// whose activity this is, for the page's profile link
+		user: {
+			userId,
+			username: userRow?.username ?? "",
+			avatarSource: userRow?.avatarSource ?? null,
+			avatarVersion: toAvatarVersion(userRow ?? {}),
+		},
+		...spendMeter,
+		topics: ownedTopics,
+		subscriptions: toSubscriptionRows(subscriptionRowFields, subscriptionPodcastEpisodeByTopic),
+		invites: inviteRows.map((inviteRow) => ({
+			inviteId: inviteRow.inviteId,
+			topicId: inviteRow.topicId ?? "",
+			name: inviteRow.name,
+			// the email address if the sender typed one, null on a username invitation
+			inviteeEmail: inviteRow.inviteeEmail,
+			invitee: toProfileIdentity(inviteRow.invitee),
+			invitedAt: inviteRow.invitedAt.toISOString(),
+			subscribedAt: inviteRow.subscribedAt?.toISOString() ?? null,
+		})),
+	}
+}
+
+// a user's identity columns as a joined read returns them, before the avatar key becomes a version
+type UserIdentityColumns = {
+	userId: string
+	username: (typeof users.$inferSelect)["username"]
+	avatarSource: (typeof users.$inferSelect)["avatarSource"]
+	avatarKey: (typeof users.$inferSelect)["avatarKey"]
+}
+
+// a subscription on a topic the user does not own, with its owner's and its team's joined columns
+type SubscriptionJoinRow = {
+	topicId: string
+	name: string
+	owner: UserIdentityColumns
+	team: Parameters<typeof toTeamIdentity>[0]
+	visibility: (typeof topics.$inferSelect)["visibility"]
+	imageHash: (typeof topics.$inferSelect)["imageHash"]
+	// the subscription's own columns, with no invite id
+	subscribedAt: Date
+	isActive: boolean
+	isEmailEnabled: boolean
+	inviteId: string | null
+}
+
+// the user's subscriptions on topics they do not own, both active and inactive alike
+function loadSubscriptionRows(userId: string): Promise<SubscriptionJoinRow[]> {
+	return (
+		db
+			.select({
+				topicId: topics.id,
+				name: topics.name,
+				owner: {
+					userId: users.id,
+					username: users.username,
+					avatarSource: users.avatarSource,
+					avatarKey: users.avatarKey,
+				},
+				team: {
+					teamId: teams.id,
+					name: teams.name,
+					avatarKey: teams.avatarKey,
+					isPublic: teams.isPublic,
+					memberUserId: teamMembers.userId,
+				},
+				visibility: topics.visibility,
+				imageHash: topics.imageHash,
+				subscribedAt: subscriptions.createdAt,
+				isActive: subscriptions.isActive,
+				isEmailEnabled: subscriptions.isEmailEnabled,
+				// the subscription's own columns, with no invite id
+				inviteId: sql<string | null>`null`,
+			})
+			.from(subscriptions)
+			.innerJoin(topics, eq(subscriptions.topicId, topics.id))
+			.innerJoin(users, eq(topics.ownerId, users.id))
+			.leftJoin(teams, eq(teams.id, topics.teamId))
+			// whether this user belongs to the owning team, which decides if a private one may be named
+			.leftJoin(
+				teamMembers,
+				and(eq(teamMembers.teamId, teams.id), eq(teamMembers.userId, userId), eq(teamMembers.isActive, true)),
+			)
+			.where(and(ne(topics.ownerId, userId), eq(subscriptions.subscriberUserId, userId)))
+	)
+}
+
+// an invitation the user sent, with the invitee's account if there is one and the time they subscribed
+type SentInviteRow = {
+	inviteId: string
+	topicId: (typeof invites.$inferSelect)["topicId"]
+	name: string
+	inviteeEmail: (typeof invites.$inferSelect)["email"]
+	invitedAt: (typeof invites.$inferSelect)["invitedAt"]
+	// the time the invitee subscribed, and their account, both null until there is one
+	subscribedAt: Date | null
+	invitee: UserIdentityColumns | null
+}
+
+// the invitations the user sent on their own topics, and whether each invitee subscribed
+function loadSentInviteRows(userId: string): Promise<SentInviteRow[]> {
+	return db
 		.select({
 			inviteId: invites.id,
 			topicId: invites.topicId,
@@ -115,64 +213,15 @@ export async function loadActivity(userId: string, signedInUserId: string): Prom
 				isNull(invites.declinedAt),
 			),
 		)
-
-	// the subscriptions and the pending invitations, each with the latest podcast episode that the signed-in user may
-	// listen to
-	const subscriptionRowFields: SubscriptionRowFields[] = [
-		// convert the joined owner and team columns to their identities before the rows merge
-		...subscriptionRows.map((subscriptionRow) => ({
-			...subscriptionRow,
-			owner: withAvatarVersion(subscriptionRow.owner),
-			team: toTeamIdentity(subscriptionRow.team),
-		})),
-		...(await loadInvitedTopicSubscriptions(userId)),
-	]
-	const subscriptionTopicRows = subscriptionRowFields.map((subscriptionRow) => ({
-		id: subscriptionRow.topicId,
-		name: subscriptionRow.name,
-		ownerId: subscriptionRow.owner.userId,
-		visibility: subscriptionRow.visibility,
-		imageHash: subscriptionRow.imageHash,
-	}))
-	const subscriptionPodcastEpisodeByTopic = await loadLatestPodcastEpisodeSummaries(
-		subscriptionTopicRows,
-		signedInUserId,
-	)
-
-	return {
-		// whose activity this is, for the page's profile link
-		user: {
-			userId,
-			username: userRow?.username ?? "",
-			avatarSource: userRow?.avatarSource ?? null,
-			avatarVersion: toAvatarVersion(userRow ?? {}),
-		},
-		...spendMeter,
-		topics: await loadOwnedTopics({ userId, signedInUserId }),
-		subscriptions: toSubscriptionRows(subscriptionRowFields, subscriptionPodcastEpisodeByTopic),
-		invites: inviteRows.map((inviteRow) => ({
-			inviteId: inviteRow.inviteId,
-			topicId: inviteRow.topicId ?? "",
-			name: inviteRow.name,
-			// the email address if the sender typed one, null on a username invitation
-			inviteeEmail: inviteRow.inviteeEmail,
-			invitee: toProfileIdentity(inviteRow.invitee),
-			invitedAt: inviteRow.invitedAt.toISOString(),
-			subscribedAt: inviteRow.subscribedAt?.toISOString() ?? null,
-		})),
-	}
 }
 
 /**
  * Loads this month's spend divided into what produced it, the user's monthly budget, and its cutoffs.
  */
 export async function loadMonthlySpend(userId: string): Promise<MonthlySpend> {
-	// the budget inputs, the month's spend, and the cutoffs
-	const [[userRow], monthlySpend, monthlyBudgetCutoffs] = await Promise.all([
-		db
-			.select({ role: users.role, plan: users.plan, budgetOverrideCents: users.budgetOverrideCents })
-			.from(users)
-			.where(eq(users.id, userId)),
+	// the budget inputs from the user's access, which the cutoffs read too, the month's spend, and the cutoffs
+	const [userAccess, monthlySpend, monthlyBudgetCutoffs] = await Promise.all([
+		loadUserAccess(userId),
 		monthlySpendDollars(userId),
 		loadMonthlyBudgetCutoffs(userId),
 	])
@@ -180,11 +229,7 @@ export async function loadMonthlySpend(userId: string): Promise<MonthlySpend> {
 		scanSpendCents: toCentsFromDollars(monthlySpend.scanDollars),
 		chatSpendCents: toCentsFromDollars(monthlySpend.chatDollars),
 		podcastEpisodeSpendCents: toCentsFromDollars(monthlySpend.podcastEpisodeDollars),
-		budgetCents: userBudgetCents({
-			isAdmin: isAdminRole(userRow?.role),
-			plan: userRow?.plan ?? "free",
-			budgetOverrideCents: userRow?.budgetOverrideCents ?? null,
-		}),
+		budgetCents: userBudgetCents(userAccess),
 		monthlyBudgetCutoffs,
 	}
 }

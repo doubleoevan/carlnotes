@@ -235,7 +235,10 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
   under the original's hash. `topicImageRenders.ts` writes a render row, naming a podcast episode, a Topic Post, or a
   film for one that draws its image, and starts its workflow, replaces a topic's image (the row, `topics.image_hash`,
   and the old files' pending deletions), removes an upload, and marks a render failed; a change to a public topic's
-  image purges its files at the edge. `topicCovers.ts` drops a topic's cached podcast feeds and the stored covers drawn
+  image purges its files at the edge. Every image swap and removal, a podcast episode's publish and removal, a film's
+  ready, re-render, and rebuild swaps, a Topic Post's summary, a discussion's publish and failure, and an image returned
+  to its uploader delete the visitor page copies that show it through `@carlnotes/db/visitorPageCaches`, so a visitor's
+  read never names a replaced file. `topicCovers.ts` drops a topic's cached podcast feeds and the stored covers drawn
   over its image after a change. `removedImageUploads.ts` removes an uploaded image and draws it again on the platform's
   budget, for a Topic, a Podcast Episode, a Topic Post, and a film. An admin's removal of a reported image and the
   sweep's removal of a flagged upload on a private Topic both go through it. The sweep's `removeImageUpload` first marks

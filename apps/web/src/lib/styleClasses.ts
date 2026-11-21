@@ -97,11 +97,14 @@ export const SCRIPTED_HIDDEN_CLASS = "scripted:hidden"
  */
 export const NARROW_SCREEN_HIDDEN_CLASS = "max-sm:scripted:hidden"
 
+// a card's hover and focus glow, whose shadow each theme sets in globals.css
+const CARD_GLOW_CLASS = "hover:shadow-(--card-glow-shadow) focus-within:shadow-(--card-glow-shadow)"
+
 /**
  * A card that is one link to its page: the box the heading's link stretches over, the group whose hover underlines the
- * heading, and the overlay shadow under the pointer or a focus inside it.
+ * heading, and a glow in the primary color under the pointer or a focus inside it.
  */
-export const CARD_LINK_BOX_CLASS = "group/card relative flex flex-col hover:shadow-overlay focus-within:shadow-overlay"
+export const CARD_LINK_BOX_CLASS = `group/card relative flex flex-col transition-shadow duration-200 motion-reduce:transition-none ${CARD_GLOW_CLASS}`
 
 /**
  * The heading of a card that is one link: the display font, underlined while the card is hovered, and a pseudo-element

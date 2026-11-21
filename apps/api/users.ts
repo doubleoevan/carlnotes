@@ -11,7 +11,6 @@ import { deleteStoredObjects, recordPendingObjectDeletions } from "@carlnotes/db
 import { deleteUncheckedImage } from "@carlnotes/db/uncheckedImages"
 import { deleteLiteLLMKey } from "@carlnotes/models/litellmProxy"
 import { trackEvent } from "@carlnotes/server/analytics"
-import { purgeEdgeCacheTagAfterDeletion, toDashboardCacheTag } from "@carlnotes/server/edgePurge"
 import { reportError } from "@carlnotes/server/monitoring"
 import { zValidator } from "@hono/zod-validator"
 import { and, asc, count, eq, inArray, ne } from "drizzle-orm"
@@ -22,7 +21,7 @@ import { isAllowed } from "./authorization"
 import { cancelUserSubscription } from "./billing"
 import { loadChatAttachmentObjectKeys } from "./chat/chatAttachmentReads"
 import { type AnalyticsProperties, type AppEnv, currentUser, toAnalyticsProperties } from "./currentUser"
-import { toUserAvatarCacheTag } from "./edgeCache"
+import { clearPages, toUserAvatarCacheTag } from "./edgeCache"
 import { deleteRevenueCatCustomer } from "./storeBilling"
 import { deleteTeamRow, purgeDeletedTeamAtEdge } from "./team/deleteTeam"
 import { deleteTopic } from "./topic/deleteTopic"
@@ -177,12 +176,13 @@ export async function deleteUser(
 		})
 	}
 
-	// purge the account's avatar and its Topic and Podcast Dashboards from the edge now that the row is gone
-	const accountCacheTags = [
-		toUserAvatarCacheTag(targetUserId),
-		...toPersonalDashboardSubjects(targetUserId).map(toDashboardCacheTag),
-	]
-	await Promise.all(accountCacheTags.map(purgeEdgeCacheTagAfterDeletion))
+	// clear the profile and the Topic and Podcast Dashboards, with the account's avatar at the edge, now that the row
+	// is gone
+	await clearPages({
+		profileUserIds: [targetUserId],
+		dashboardSubjects: toPersonalDashboardSubjects(targetUserId),
+		extraCacheTags: [toUserAvatarCacheTag(targetUserId)],
+	})
 
 	// the row is gone, so this analytics event is the only record of who closed it
 	trackEvent("account_deleted", actingUserId, {

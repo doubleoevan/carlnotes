@@ -3,6 +3,7 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import type { scans } from "@carlnotes/db/schema/scans"
+import * as statusReadCaches from "@carlnotes/db/statusReadCaches"
 import { toScanSummary } from "./ingest/index"
 import type { NewResource } from "./ingest/ingester"
 import { failUnstartedScan, scanTopic, stopTopicScan } from "./scan"
@@ -22,6 +23,7 @@ const OPEN_SCAN = { id: "scan-1" } as typeof scans.$inferSelect
 test("a rejected start keeps an existing Scan row and marks that row dispatched, and deletes a row that the caller opened", async () => {
 	// a workflow start that is rejected as already running
 	spyOn(scanWorkflowClient, "startTopicScanWorkflow").mockResolvedValue({ status: "running" })
+	const clearStatusReadsSpy = spyOn(statusReadCaches, "clearStatusReads").mockResolvedValue()
 
 	// an existing row gets a dispatchedAt and is never deleted
 	const existingRowSentQueries = stubConnectionPool()
@@ -29,6 +31,7 @@ test("a rejected start keeps an existing Scan row and marks that row dispatched,
 	expect(existingRowSentQueries).toHaveLength(1)
 	expect(existingRowSentQueries[0]?.text).toStartWith('update "scans" set "dispatched_at" = $1')
 	expect(existingRowSentQueries[0]?.values).toContain("scan-1")
+	expect(clearStatusReadsSpy).toHaveBeenCalledWith("scan", "topic-1")
 
 	// a row that the caller opened is deleted
 	const openedRowSentQueries = stubConnectionPool()
@@ -66,8 +69,11 @@ test("a start that hits its deadline keeps the row the caller opened", async () 
 
 // the update matches only a running Scan that is not manual, never dispatched, and never picked up
 test("failUnstartedScan marks failed only a running Scan that is not manual, not dispatched, and not picked up", async () => {
-	const sentQueries = stubConnectionPool()
+	// the update fails the Topic's Scan
+	const clearStatusReadsSpy = spyOn(statusReadCaches, "clearStatusReads").mockResolvedValue()
+	const sentQueries = stubConnectionPool(() => [["topic-1"]])
 	await failUnstartedScan("scan-1", "the failure reason")
+	expect(clearStatusReadsSpy).toHaveBeenCalledWith("scan", "topic-1")
 
 	// one update saves the status, the reason, and the finish time
 	expect(sentQueries).toHaveLength(1)
@@ -86,8 +92,10 @@ test("failUnstartedScan marks failed only a running Scan that is not manual, not
 // a waiting Scan with no workflow is saved as stopped, and the stop reads as cancelled
 test("stopTopicScan saves a waiting Scan as stopped and returns cancelled when no workflow is running", async () => {
 	spyOn(scanWorkflowClient, "cancelTopicScanWorkflow").mockResolvedValue({ status: "idle" })
+	const clearStatusReadsSpy = spyOn(statusReadCaches, "clearStatusReads").mockResolvedValue()
 	const sentQueries = stubConnectionPool(() => [["scan-1"]])
 	expect((await stopTopicScan("topic-1")).status).toBe("cancelled")
+	expect(clearStatusReadsSpy).toHaveBeenCalledWith("scan", "topic-1")
 
 	// the update saves the stop the way the workflow does, on a running row that was never dispatched or picked up
 	expect(sentQueries).toHaveLength(1)
@@ -100,8 +108,12 @@ test("stopTopicScan saves a waiting Scan as stopped and returns cancelled when n
 // a Topic with no waiting Scan and no running workflow has nothing to stop
 test("stopTopicScan returns idle when no waiting Scan and no workflow is running", async () => {
 	spyOn(scanWorkflowClient, "cancelTopicScanWorkflow").mockResolvedValue({ status: "idle" })
+	const clearStatusReadsSpy = spyOn(statusReadCaches, "clearStatusReads").mockResolvedValue()
 	stubConnectionPool()
 	expect(await stopTopicScan("topic-1")).toEqual({ status: "idle" })
+
+	// no waiting Scan stopped, so the Topic's scan status copy stays
+	expect(clearStatusReadsSpy).not.toHaveBeenCalled()
 })
 
 // a fake Resource with just the url and resource kind

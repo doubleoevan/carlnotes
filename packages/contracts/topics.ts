@@ -1,5 +1,6 @@
 // the topic contracts: the feed and page payloads, scans, the gate, sources, attachments, and the draft limits
 import { z } from "zod"
+import { cardsPagePosition } from "./cardPages"
 import { chatMention } from "./chat"
 import {
 	attachmentStatuses,
@@ -19,7 +20,7 @@ import { invite } from "./invites"
 import { podcastEpisode, podcastEpisodeSummary, publishedPodcastEpisodeSummary, topicPodcast } from "./podcast"
 import { profileIdentity } from "./profiles"
 import { commentThreadResponse, reactionSummary } from "./social"
-import { customSourceKeys, SOURCE_RESULT_LABEL_CHARS } from "./sources"
+import { customSourceKeys } from "./sources"
 import { displayEnum } from "./tolerantReads"
 import { imageRegenerationQuota, topicImageUrls } from "./topicImages"
 import { topicPostsResponse } from "./topicPosts"
@@ -162,85 +163,6 @@ const topicScan = z.object({
 	podcastEpisode: publishedPodcastEpisodeSummary.nullable(),
 })
 
-// how long a failed source result's reason may be, and the most source results one scan note returns. two Source adds
-// at once can pass the ten Source limit
-export const SOURCE_RESULT_REASON_CHARS = 300
-const MAX_SOURCE_RESULTS = 50
-
-// the fields every stored source result has
-const storedSourceResultFields = {
-	sourceId: z.string(),
-	sourceKind: z.string(),
-	label: z.string(),
-	foundCount: z.number().int().nonnegative(),
-	keptCount: z.number().int().nonnegative(),
-	costDollars: z.number().nonnegative(),
-	durationMs: z.number().nonnegative(),
-}
-
-// one Source's result in a scan, as the scans table stores it
-const storedSourceResult = z.discriminatedUnion("status", [
-	z.object({ ...storedSourceResultFields, status: z.literal("ok") }),
-	z.object({ ...storedSourceResultFields, status: z.literal("fallback"), fallbackMode: z.string() }),
-	z.object({ ...storedSourceResultFields, status: z.literal("failed"), reason: z.string() }),
-	z.object({ ...storedSourceResultFields, status: z.literal("skipped") }),
-])
-
-export type StoredSourceResult = z.infer<typeof storedSourceResult>
-
-// a scan's source results as stored: one per Source, and the findings from earlier scans that no Source returned, read
-// again and kept. results saved before the earlier read count read it as zero
-export const storedScanSourceResults = z.object({
-	sources: z.array(storedSourceResult),
-	earlierKeptCount: z.number().int().nonnegative(),
-	earlierFoundCount: z.number().int().nonnegative().default(0),
-})
-
-export type StoredScanSourceResults = z.infer<typeof storedScanSourceResults>
-
-// the fields every source result in a scan note has: the stored fields, bounded, with a cost of null for everyone but the
-// owner and admins
-const sourceResultFields = {
-	...storedSourceResultFields,
-	label: z.string().max(SOURCE_RESULT_LABEL_CHARS),
-	costDollars: z.number().nonnegative().nullable(),
-}
-
-// one Source's result in a scan note, which has no skipped status. a reason is null for everyone but the owner and
-// admins
-const sourceResult = z.discriminatedUnion("status", [
-	z.object({ ...sourceResultFields, status: z.literal("ok") }),
-	z.object({ ...sourceResultFields, status: z.literal("fallback"), fallbackMode: z.string() }),
-	z.object({
-		...sourceResultFields,
-		status: z.literal("failed"),
-		reason: z.string().max(SOURCE_RESULT_REASON_CHARS).nullable(),
-	}),
-])
-
-export type SourceResult = z.infer<typeof sourceResult>
-
-// a scan note's source results
-export const scanSourceResults = z.object({
-	sources: z.array(sourceResult).max(MAX_SOURCE_RESULTS),
-	earlierKeptCount: z.number().int().nonnegative(),
-	earlierFoundCount: z.number().int().nonnegative(),
-})
-
-export type ScanSourceResults = z.infer<typeof scanSourceResults>
-
-// one scan's recap and source results, loaded per scan instead of returned with the history. malformed results parse
-// to null
-export const scanNote = z.object({
-	scanSummary: z.string().nullable(),
-	sourceResults: scanSourceResults.nullable().catch(null),
-})
-
-export type ScanNote = z.infer<typeof scanNote>
-
-// the note a failed read returns, with no summary and no source results
-export const EMPTY_SCAN_NOTE: ScanNote = { scanSummary: null, sourceResults: null }
-
 export type TopicScan = z.infer<typeof topicScan>
 
 // a topic related to a page's topic, with its latest published podcast episode that the user may listen to
@@ -262,8 +184,13 @@ export const topicResponse = topicDetails.extend({
 	podcast: topicPodcast.nullable(),
 	// every ready film of the topic as a card, newest first. older API builds omit it
 	topicPodcastEpisodeVideoCards: z.array(podcastEpisodeCard).optional(),
-	// the scan history, latest first
+	// how many people opened the topic, saved with the page so its counts line shows it before the first poll. older
+	// API builds omit it
+	viewerCount: z.number().optional(),
+	// the scan history, latest first, with a stopped scan left out. a read that asks for the newest scans alone holds the
+	// newest page of the history, and how many scans the history lists
 	scans: z.array(topicScan),
+	scansPage: cardsPagePosition.optional(),
 	// the active topic memories this reader may open. older API builds omit the count
 	topicMemoryCount: z.number().int().nonnegative().optional(),
 	// whether to reserve the feedback controls while the reader's Journal opens
@@ -300,6 +227,8 @@ export const topicResponse = topicDetails.extend({
 	commentThread: commentThreadResponse.optional(),
 	// the topic's Topic Posts, the user's own drafts first, and whether the user may publish one. absent on a poll reload
 	topicPosts: topicPostsResponse.optional(),
+	// which page of the Topic Posts a read that pages them holds, and how many the whole list holds
+	topicPostsPage: cardsPagePosition.optional(),
 	// the editor's image regenerations this month against the plan's limit, and whether the image was generated or
 	// uploaded, and the image prompt it was drawn from. null for anyone who may not edit, the origin null for a topic with
 	// no image yet, and the image prompt null for the house style and an upload
@@ -312,6 +241,15 @@ export const topicResponse = topicDetails.extend({
 })
 
 export type TopicResponse = z.infer<typeof topicResponse>
+
+// one later page of a topic's scan history, newest first with a stopped scan left out, and how many scans the history
+// lists
+export const topicScansPage = z.object({
+	scans: z.array(topicScan),
+	totalCount: z.number().int().nonnegative(),
+})
+
+export type TopicScansPage = z.infer<typeof topicScansPage>
 
 // the 403 that a topic page or a podcast episode page responds with to someone who may not see an invite topic, naming
 // the topic

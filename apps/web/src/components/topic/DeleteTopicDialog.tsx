@@ -1,5 +1,6 @@
 import { sendDeleteTopic } from "@carlnotes/client/topicClient"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
+import { toTopicScanCount } from "@carlnotes/core/lib/topicScanPages"
 import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 
@@ -35,7 +36,7 @@ export function DeleteTopicDialog({
 			onConfirm={handleDelete}
 			onClose={onClose}
 		>
-			{`'${topic.name}' and its ${topic.findings.length} findings and ${topic.scans.length} scans go with it.`}
+			{`'${topic.name}' and its ${topic.findings.length} findings and ${toTopicScanCount(topic)} scans go with it.`}
 		</ConfirmDialog>
 	)
 }

@@ -6,6 +6,7 @@ import { countSocialWriteToday } from "@carlnotes/db/socialLimits"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { and, eq, isNotNull } from "drizzle-orm"
 import type { AnalyticsProperties } from "../currentUser"
+import { clearOwnNews } from "../news/newsCaches"
 import { loadReactionSummary } from "./reactionRows"
 import { toReactionTargetColumn, toSocialTargetValues } from "./socialTargetColumns"
 import { type ResolvedSocialTarget, resolvePostableSocialTarget } from "./socialTargets"
@@ -47,6 +48,7 @@ export async function saveReaction({
 	if (reactionType === null) {
 		const deletedRows = await db.delete(reactions).where(ownReactionFilter).returning({ id: reactions.id })
 		if (deletedRows.length > 0) {
+			await clearOwnNews(userId)
 			trackEvent("social_reaction_delete", userId, eventProperties)
 		}
 		return { status: "saved", summary: await loadReactionSummary(userId, target) }
@@ -66,7 +68,7 @@ export async function saveReaction({
 		return { status: "limitReached" }
 	}
 
-	// write the user's one row on this social target, with the social target's Topic
+	// write the user's one row on this social target, with the social target's Topic, and clear the user's own news
 	const now = new Date()
 	const targetTopicId = resolvedSocialTarget.topic.id
 	await db
@@ -77,6 +79,7 @@ export async function saveReaction({
 			targetWhere: isNotNull(targetColumn),
 			set: { reactionType, updatedAt: now },
 		})
+	await clearOwnNews(userId)
 	trackEvent(`social_${toSocialEventTarget(target.kind)}_react`, userId, eventProperties)
 	return { status: "saved", summary: await loadReactionSummary(userId, target) }
 }

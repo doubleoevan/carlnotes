@@ -5,13 +5,9 @@ import { restoreConnectionPool, stubConnectionPool, toTableRow } from "@carlnote
 import { podcastEpisodeChapters } from "@carlnotes/db/schema/podcast"
 import type { topics } from "@carlnotes/db/schema/topics"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
+import { loadLatestPodcastEpisodeSummaries, loadLatestPodcastEpisodes } from "./latestPodcastEpisodes"
 import type { PodcastEpisodeRowTopic } from "./podcastEpisodeShapes"
-import {
-	loadLatestPodcastEpisodeSummaries,
-	loadLatestPodcastEpisodes,
-	loadPodcastEpisodeSummaries,
-	toPodcastEpisode,
-} from "./podcastEpisodeShapes"
+import { loadPodcastEpisodeSummaries, toPodcastEpisode } from "./podcastEpisodeShapes"
 import { toPublishedPodcastEpisodeRow } from "./podcastEpisodeTestFixtures"
 
 // the speech model, which turns podcast episodes on, the transcription model, which turns voice chat on beside it, and
@@ -80,6 +76,14 @@ test("a visitor gets a public topic's latest podcast episode with its chapters, 
 	// the chapters are read once, for the episode that the visitor may listen to alone
 	const chapterQueries = sentQueries.filter((sentQuery) => sentQuery.text.includes('from "episode_chapters"'))
 	expect(chapterQueries.map((chapterQuery) => chapterQuery.values)).toEqual([["public-episode"]])
+
+	// each topic's newest published episode is a lateral read stopped at one row, over the topics asked for
+	const [podcastEpisodeQuery] = sentQueries.filter((sentQuery) => sentQuery.text.includes('from "episodes"'))
+	expect(podcastEpisodeQuery?.text).toContain('from "topics" inner join lateral (select "id", "topic_id"')
+	expect(podcastEpisodeQuery?.text).toContain(
+		'order by "episodes"."published_at" desc limit $2) "latest_podcast_episodes" on true',
+	)
+	expect(podcastEpisodeQuery?.values).toEqual(["published", 1, "public-topic", "invite-topic"])
 })
 
 test("a summary of each topic's latest podcast episode counts its chapters in one query, and none from an invite topic", async () => {

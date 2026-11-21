@@ -10,8 +10,10 @@ import { podcastEpisodeChapters, podcastEpisodes } from "@carlnotes/db/schema/po
 import { findings } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
 import { releasePodcastEpisodeSharedComments } from "@carlnotes/db/sharedComments"
+import { clearStatusReads } from "@carlnotes/db/statusReadCaches"
 import { deleteStoredObjects, recordPendingObjectDeletions, toPodcastEpisodeChapterKey } from "@carlnotes/db/store"
 import { clearUnseenCommentMentions } from "@carlnotes/db/unseenCommentMentions"
+import { clearVisitorPagesOfTopic } from "@carlnotes/db/visitorPageCaches"
 import { tracePodcastEpisodeRecording } from "@carlnotes/models/telemetry"
 import { appBaseUrl } from "@carlnotes/server/appUrl"
 import { reportError } from "@carlnotes/server/monitoring"
@@ -171,7 +173,12 @@ export async function publishPodcastEpisode({
 		costDollars,
 		costPerAudioMinuteDollars: audioMinutes > 0 ? costDollars / audioMinutes : 0,
 	})
-	await deletePodcastFeedCache(podcastEpisode.topicId)
+
+	// the podcast feeds and the visitor pages that list the topic's podcast episodes read the new one
+	await Promise.all([deletePodcastFeedCache(podcastEpisode.topicId), clearVisitorPagesOfTopic(podcastEpisode.topicId)])
+
+	// the topic's scan status copy, which names its newest podcast episode's status, goes, and IndexNow is sent the page
+	await clearStatusReads("scan", podcastEpisode.topicId)
 	await notifyPodcastEpisodePage({
 		topicId: podcastEpisode.topicId,
 		season: publishedAt.getUTCFullYear(),
@@ -206,9 +213,12 @@ export async function failPodcastEpisode({ podcastEpisodeId, reason }: FailPodca
 		return failedPodcastEpisodeRow ?? null
 	})
 
-	// nothing to fail
+	// nothing to fail. a failed podcast episode's topic loses its scan status copy, which names its status
 	if (!failedPodcastEpisode) {
 		return
+	}
+	if (failedPodcastEpisode.topicId) {
+		await clearStatusReads("scan", failedPodcastEpisode.topicId)
 	}
 
 	// delete any audio that the recording left behind, and give the shared comments its script read back to the

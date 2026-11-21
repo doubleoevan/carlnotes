@@ -15,6 +15,7 @@ import * as monthlyBudgetCutoffs from "@carlnotes/db/monthlyBudgetCutoffs"
 import * as quotas from "@carlnotes/db/quotas"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
 import { topics } from "@carlnotes/db/schema/topics"
+import * as statusReadCaches from "@carlnotes/db/statusReadCaches"
 import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import {
@@ -393,9 +394,11 @@ test("turning the pause off records the next Scan's podcast episode", async () =
 	)
 	expect(await planPodcastEpisode(RECORDABLE_PLAN_OPTIONS)).toBeNull()
 
-	// the next plan after the pause is turned off records
+	// the next plan after the pause is turned off records, and the Topic's scan status copy goes once its row exists
+	const clearStatusReadsSpy = spyOn(statusReadCaches, "clearStatusReads").mockResolvedValue()
 	loadSpendControlSettingsSpy.mockResolvedValue(DEFAULT_SPEND_CONTROL_SETTINGS)
 	expect(await planPodcastEpisode(RECORDABLE_PLAN_OPTIONS)).toEqual(RECORDED_PODCAST_EPISODE_PLAN)
+	expect(clearStatusReadsSpy).toHaveBeenCalledWith("scan", "topic-1")
 })
 
 // a settings read that fails reads every switch as off, so the podcast episode records and the failure is reported

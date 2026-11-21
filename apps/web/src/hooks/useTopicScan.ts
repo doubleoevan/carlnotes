@@ -1,12 +1,11 @@
-import { toScanPollMs } from "@carlnotes/core/lib/scanPoll"
 import { useEffect } from "react"
 import { startVisiblePoll } from "@/lib/visiblePoll"
 
-// re-fetch on a timer while any scan is running, at the topic page's rates unless the caller names its own
+// re-fetch on a timer while any scan is running, at the caller's rates
 export function usePollWhileScanning(
 	isScanning: boolean,
 	reload: () => Promise<void>,
-	toPollMs: (watchedMs: number) => number = toScanPollMs,
+	toPollMs: (watchedMs: number) => number,
 ): void {
 	useEffect(() => {
 		if (!isScanning) {
@@ -18,5 +17,3 @@ export function usePollWhileScanning(
 }
 
 export { useManualScanProgress } from "@carlnotes/core/hooks/useManualScanProgress"
-
-export { toScanPollMs } from "@carlnotes/core/lib/scanPoll"

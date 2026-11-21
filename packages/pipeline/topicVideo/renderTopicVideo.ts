@@ -16,6 +16,7 @@ import {
 	toTopicVideoImagePartKey,
 	toTopicVideoRenderAttemptUploadKey,
 } from "@carlnotes/db/topicVideoKeys"
+import { clearVisitorPagesOfTopic } from "@carlnotes/db/visitorPageCaches"
 import { reportError } from "@carlnotes/server/monitoring"
 import { deleteOlderStyleGeneratedChapterImages } from "./generatedChapterImages"
 import { type RenderedFilm, renderFilmFiles } from "./renderFilmFiles"
@@ -188,8 +189,11 @@ async function renderFilm({
 		// the saved row plays the uploaded files, so a failure after the save deletes none of them
 		uploadedKeys.length = 0
 
-		// the film feeds list the finished film on their next fetch
-		await deletePodcastFeedCache(topicVideoPodcastEpisode.topicId)
+		// the film feeds and the visitor pages list the finished film on their next fetch
+		await Promise.all([
+			deletePodcastFeedCache(topicVideoPodcastEpisode.topicId),
+			clearVisitorPagesOfTopic(topicVideoPodcastEpisode.topicId),
+		])
 
 		// delete a re-rendered film's generated images in an older style. a failed delete is reported, and the saved
 		// film stands

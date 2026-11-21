@@ -7,6 +7,7 @@ import { join } from "node:path"
 import { DAY_MS } from "@carlnotes/contracts/time"
 import { db } from "@carlnotes/db"
 import { topicPostDiscussions } from "@carlnotes/db/schema/topicPosts"
+import { clearStatusReads } from "@carlnotes/db/statusReadCaches"
 import {
 	deleteStoredObjects,
 	downloadPodcastEpisodeFile,
@@ -17,6 +18,7 @@ import {
 	uploadAttachment,
 	uploadPodcastEpisodeFile,
 } from "@carlnotes/db/store"
+import { clearVisitorTopicPostPages } from "@carlnotes/db/visitorPageCaches"
 import { speechCost } from "@carlnotes/models/budget"
 import { loadOrProvisionUserLiteLLMKey } from "@carlnotes/models/litellm"
 import { recordSpeech, SPEECH_BYTES_PER_SECOND, WAV_HEADER_BYTES } from "@carlnotes/models/speech"
@@ -59,7 +61,7 @@ export async function recordTopicPostDiscussionAudio(discussionId: string, signa
 	const speechByteSize = speechBytes?.byteLength ?? storedSpeechByteSize ?? 0
 	const durationSeconds = Math.round(Math.max(0, speechByteSize - WAV_HEADER_BYTES) / SPEECH_BYTES_PER_SECOND)
 
-	// publish the row, and let the audio of the Topic Post's earlier discussions go
+	// publish the row, and let the audio of the Topic Post's earlier discussions go with the visitor page that plays it
 	const isPublished = await publishTopicPostDiscussion({
 		discussionId,
 		topicPostId: discussion.topicPostId,
@@ -67,6 +69,9 @@ export async function recordTopicPostDiscussionAudio(discussionId: string, signa
 		audioByteSize,
 		durationSeconds,
 	})
+	if (isPublished) {
+		await clearVisitorTopicPostPages(discussion.topicPostId)
+	}
 
 	// the stored speech has done its work. a Topic Post deleted during the recording took the row with it, so its
 	// audio has nothing to belong to either. a row that an overlapping attempt published plays the audio under the
@@ -191,7 +196,7 @@ async function publishTopicPostDiscussion({
 	audioByteSize,
 	durationSeconds,
 }: PublishTopicPostDiscussionOptions): Promise<boolean> {
-	return db.transaction(async (transaction) => {
+	const isPublished = await db.transaction(async (transaction) => {
 		// the row publishes only while it is still recording
 		const publishedRows = await transaction
 			.update(topicPostDiscussions)
@@ -221,4 +226,10 @@ async function publishTopicPostDiscussion({
 		})
 		return true
 	})
+
+	// the post's discussion status copy goes, so a poll reads it published
+	if (isPublished) {
+		await clearStatusReads("topicPostDiscussion", topicPostId)
+	}
+	return isPublished
 }

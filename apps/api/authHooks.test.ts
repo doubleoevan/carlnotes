@@ -15,6 +15,7 @@ import {
 	toEntryPoint,
 	toLoginMethod,
 } from "./authHooks"
+import { toAuthRequest } from "./trustedProxies"
 
 // put the Redis client, the connection pool, and the spies back after each test
 afterEach(() => {
@@ -128,14 +129,16 @@ async function signInWithStoredSession({
 // a change of email to post, with the session's cookie, the new address, and the client address it comes from
 type PostChangeEmailOptions = { cookie: string; newEmail: string; clientAddress: string }
 
-// post a change of email to Better Auth as the signed-in user
+// post a change of email to Better Auth as the signed-in user, with the client address written as the api writes it
 function postChangeEmail({ cookie, newEmail, clientAddress }: PostChangeEmailOptions): Promise<Response> {
 	return auth.handler(
-		new Request(`${appUrl()}/api/auth/change-email`, {
-			method: "POST",
-			headers: { cookie, "content-type": "application/json", "x-forwarded-for": clientAddress },
-			body: JSON.stringify({ newEmail }),
-		}),
+		toAuthRequest(
+			new Request(`${appUrl()}/api/auth/change-email`, {
+				method: "POST",
+				headers: { cookie, "content-type": "application/json", "x-forwarded-for": clientAddress },
+				body: JSON.stringify({ newEmail }),
+			}),
+		),
 	)
 }
 

@@ -1,6 +1,7 @@
 // the profile page contract: the user, their topic table, and the teams they belong to
 import { z } from "zod"
 import { ownerTopic } from "./activity"
+import { cardsPagePosition } from "./cardPages"
 import { podcastEpisodeCard, topicCard } from "./home"
 import { topic } from "./profiles"
 import { teamSummary } from "./teams"
@@ -38,6 +39,9 @@ export const profileResponse = z.object({
 	joinedAt: z.string(),
 	// distinct people, not summed rows. the same person subscribed to multiple Topics counts once here
 	subscriberCount: z.number(),
+	// the profile's viewers as last saved, which its viewer count line shows until its first poll a minute later. absent
+	// from an api older than the field
+	viewerCount: z.number().optional(),
 	// whether the topics below include the user's private and invite ones, which only the owner and an admin view
 	includesNonPublicTopics: z.boolean(),
 	// whether the signed-in user has blocked this person. false for a visitor and on the user's own profile
@@ -66,6 +70,8 @@ export const profileResponse = z.object({
 	// posts of public topics alone
 	profileTopicPosts: z.array(profileTopicPostCard),
 	pinnedTopicPostCount: z.number().int().nonnegative(),
+	// which page profileTopicPosts holds, if the read asked for pages. absent otherwise, and then it holds every post
+	profileTopicPostsPage: cardsPagePosition.optional(),
 })
 
 export type ProfileResponse = z.infer<typeof profileResponse>

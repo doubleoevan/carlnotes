@@ -7,7 +7,8 @@ import { loadChatRoomMessagePage, toBeforeChatMessageId } from "../chat/roomRead
 import { loadNotesPayload } from "../note/notePayloads"
 import type { NotePage } from "../note/permissions"
 import { loadTeamSummaries } from "../team/helpers"
-import { loadTeamPage } from "../team/teamPage"
+import { loadTeamPage, type TeamPageResult } from "../team/teamPage"
+import { readTeamPageRead } from "../team/teamPageRead"
 import { loadMcpViewCardPodcastEpisodes, loadMcpViewSession, toMcpViewMeta } from "./mcpViewData"
 import { BOUND_SERVER_TEXT, CONNECT_ACCOUNT_TEXT, fromCursor, UNTRUSTED_TEXT_NOTICE } from "./results"
 import { toMcpTeamPage, toMcpTeamsPage } from "./teamResults"
@@ -57,7 +58,7 @@ export function registerTeamTools({ mcpServer, toolCaller, routeTopicId }: Regis
 
 			// the page as the caller may see it, or the gate a private team shows a non-member
 			const userId = toToolCallerUserId(toolCaller)
-			const teamPageResult = await loadTeamPage(userId, team_id)
+			const teamPageResult = await readToolTeamPage(userId, team_id)
 			if (teamPageResult.status === "missing") {
 				return toTextResult("No team you may open has that id.", true)
 			}
@@ -108,4 +109,20 @@ export function registerTeamTools({ mcpServer, toolCaller, routeTopicId }: Regis
 			}
 		},
 	)
+}
+
+// a team page as a tool caller may see it: a visitor's from the team page read's copy without its head, and a user's
+// from the team page's loader
+async function readToolTeamPage(userId: string | null, teamId: string): Promise<TeamPageResult> {
+	if (userId) {
+		return loadTeamPage(userId, teamId)
+	}
+
+	// the visitors' copy, whose head no tool result includes
+	const teamPageResult = await readTeamPageRead({ userId: null, teamId })
+	if (teamPageResult.status !== "visible") {
+		return teamPageResult
+	}
+	const { head: _head, ...teamPage } = teamPageResult.team
+	return { status: "visible", team: teamPage }
 }

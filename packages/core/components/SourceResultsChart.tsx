@@ -1,4 +1,4 @@
-import type { SourceResult } from "@carlnotes/contracts/topics"
+import type { SourceResult } from "@carlnotes/contracts/scanSourceResults"
 import { type ComponentType, type ReactNode, useId, useState } from "react"
 import { toMonthDayLabel } from "../lib/labels"
 import { EARLIER_ROW_DETAIL, EARLIER_ROW_ID, toSourceResultRows, toSourceResultsLine } from "../lib/sourceResults"

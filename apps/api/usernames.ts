@@ -12,6 +12,7 @@ import {
 import { db, isUniqueViolation } from "@carlnotes/db"
 import { users } from "@carlnotes/db/schema/users"
 import { refreshSessionUser } from "@carlnotes/db/sessions"
+import { clearVisitorProfilePages } from "@carlnotes/db/visitorPageCaches"
 import { zValidator } from "@hono/zod-validator"
 import { eq, inArray } from "drizzle-orm"
 import { Hono } from "hono"
@@ -104,12 +105,12 @@ export async function saveUsername(userId: string, username: string): Promise<Se
 // the unique index on the normalized username settles a race
 async function saveChosenUsername(userId: string, username: string): Promise<"taken" | null> {
 	try {
-		// write the row, then the user's sessions
+		// write the row, then the user's sessions and their visitor profile copy
 		await db
 			.update(users)
 			.set({ username, usernameNormalized: toNormalizedUsername(username) })
 			.where(eq(users.id, userId))
-		await refreshSessionUser(userId)
+		await Promise.all([refreshSessionUser(userId), clearVisitorProfilePages(userId)])
 		return null
 	} catch (error) {
 		// only a unique violation means a concurrent write took the name after the check. anything else rethrows

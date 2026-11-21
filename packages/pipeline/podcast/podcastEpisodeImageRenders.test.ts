@@ -1,7 +1,9 @@
 // a podcast episode's uploaded image removed, with the connection pool stubbed: its hash is cleared, its files are
-// recorded as pending deletions, a public topic's files leave the edge, and an image that is not an upload stays
+// recorded as pending deletions, its topic's visitor pages and a public topic's files leave the caches, and an image
+// that is not an upload stays
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
+import * as visitorPageCaches from "@carlnotes/db/visitorPageCaches"
 import * as edgePurge from "@carlnotes/server/edgePurge"
 import { removePodcastEpisodeImageUpload } from "./podcastEpisodeImageRenders"
 
@@ -33,6 +35,7 @@ function toImageRemovalWrites(sentQueries: SentQuery[]): {
 test("removing a podcast episode's uploaded image clears its hash, records its files as pending deletions, and returns its topic's id", async () => {
 	// the podcast episode of a public topic shows an upload
 	const purgeEdgeCacheTagSpy = spyOn(edgePurge, "purgeEdgeCacheTagAfterDeletion").mockResolvedValue(undefined)
+	const clearVisitorPagesSpy = spyOn(visitorPageCaches, "clearVisitorPagesOfTopic").mockResolvedValue(undefined)
 	const sentQueries = stubPodcastEpisodeImage(["hash-upload", "uploaded", "topic-1", "public"])
 	expect(await removePodcastEpisodeImageUpload("episode-1")).toBe("topic-1")
 
@@ -53,7 +56,8 @@ test("removing a podcast episode's uploaded image clears its hash, records its f
 		"podcast-episode-images/episode-1/hash-upload/thumbnail@2x.webp",
 	])
 
-	// the public topic's image files leave the edge
+	// the topic's visitor pages leave the cache, and the public topic's image files leave the edge
+	expect(clearVisitorPagesSpy.mock.calls).toEqual([["topic-1"]])
 	expect(purgeEdgeCacheTagSpy.mock.calls).toEqual([["topic-image:topic-1"]])
 })
 

@@ -43,7 +43,7 @@ import {
 import { userBudgetCents } from "./authorization"
 import { verifyGateToken } from "./signupGate"
 import { saveDefaultUserTeam } from "./team/teams"
-import { ipAddressOptions } from "./trustedProxies"
+import { authIpAddressOptions } from "./trustedProxies"
 import { saveDefaultUsername, toAssignedUsername, toFreeUsernames } from "./usernames"
 
 // how long a password-reset link stays valid
@@ -185,8 +185,8 @@ export const auth = betterAuth({
 	// reject a breached password wherever one is being set, and canonicalize the address wherever one arrives.
 	// after a request, report a sign-in and an app's code-for-token exchange
 	hooks: { before: beforeCredentialRequest, after: afterAuthRequest },
-	// resolve the client address through the trusted proxies
-	advanced: { ipAddress: ipAddressOptions },
+	// read the client address from the header the api writes with the address its limiters resolve
+	advanced: { ipAddress: authIpAddressOptions },
 	// the mobile app's plugin first, which reads a request's expo-origin header as its origin ahead of every other
 	// check. then the oauth server for the MCP server, the jwt plugin that signs its access tokens, and client metadata
 	// documents as the second way a client registers. the jwt plugin's model is named jwk, so the plural names the jwks

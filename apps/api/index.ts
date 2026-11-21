@@ -4,7 +4,7 @@ import { oauthProviderAuthServerMetadata } from "@better-auth/oauth-provider"
 import { withTimeLimit } from "@carlnotes/contracts/time"
 import { connectionPool, db, readPoolGauges, sizeConnectionPool } from "@carlnotes/db"
 import { PersonalSourcesConversionError } from "@carlnotes/db/personalSourcesLocks"
-import { runWithRequestMemo } from "@carlnotes/db/requestMemo"
+import { runWithRequestMemo, runWithRowMemo } from "@carlnotes/db/requestMemo"
 import { FetchedSourceLimitError } from "@carlnotes/db/topicSourceCapacity"
 import { shutdownTelemetry, startTelemetry } from "@carlnotes/models/telemetry"
 import { shutdownAnalytics } from "@carlnotes/server/analytics"
@@ -42,14 +42,23 @@ import { mcpRoute } from "./mcp/server"
 import { resolveToolCaller } from "./mcp/toolCaller"
 import { nightshiftRoute } from "./nightshift"
 import { readApiProcessName } from "./processName"
-import { pageRenderRateLimiter, toolCallerRateLimiter } from "./rateLimit"
+import { mcpRateLimiter, pageRenderRateLimiter } from "./rateLimit"
 import { RELEASE_PATH, RELEASES_PATH, releasesRoute } from "./releases"
 import { traceRequest } from "./requestTracing"
-import { checkTrustedProxies } from "./trustedProxies"
+import { checkTrustedProxies, toAuthRequest } from "./trustedProxies"
 import { checkRenderReadiness, importUiServerAtStartup, renderUiPage } from "./uiServer"
 
 // how long the deep health check waits for the database before it responds 503
 const DEEP_HEALTH_TIMEOUT_MS = 2000
+
+// how long one deep health result is shared by every check that reads it, so a flood of checks sends one query a second
+const DEEP_HEALTH_SHARE_MS = 1000
+
+// what one deep health query found: the database's latency, or that it failed
+type DeepHealthResult = { status: "ok"; databaseLatencyMs: number } | { status: "unavailable" }
+
+// the deep health result read in the last second, and when its query started
+let sharedDeepHealth: { startedAt: number; deepHealthResult: Promise<DeepHealthResult> } | null = null
 
 // the largest request body the server reads, above CHAT_BODY_LIMIT_BYTES, the largest any route accepts
 const MAX_REQUEST_BODY_BYTES = 32 * 1024 * 1024
@@ -74,6 +83,12 @@ const CLICK_ID_PARAMETERS = new Set([
 	"irclid",
 	"_kx",
 	"mc_eid",
+	"_hsenc",
+	"_hsmi",
+	"mkt_tok",
+	"_bhlid",
+	"ck_subscriber_id",
+	"yclid",
 ])
 
 // the page routes the api renders itself instead of the ui's server: the blog and the release pages. each names its
@@ -129,8 +144,9 @@ const PAGE_GUARDS = [renderedCacheHeaders, pageRenderRateLimiter, redirectClickI
 const server = new Hono<AppEnv>()
 	// report an error no route handles to Sentry, and respond 500 as Hono's own handler does
 	.onError(reportRouteError)
-	// give each request its own memo, first so every later middleware and route reads through the memo
-	.use((_context, next) => runWithRequestMemo(next))
+	// give each request its own memo, first so every later middleware and route reads through the memo, and a GET
+	// request, which only reads, a memo of the rows it read by id too
+	.use((context, next) => runWithRequestMemo(() => (context.req.method === "GET" ? runWithRowMemo(next) : next())))
 	// name each traced request by its route and count its queries,
 	// ahead of the rest so the count includes every other middleware's queries
 	.use(traceRequest)
@@ -179,7 +195,8 @@ const server = new Hono<AppEnv>()
 		context.set("toolCaller", await resolveToolCaller(context.req.raw))
 		await next()
 	})
-	.use("/mcp/*", toolCallerRateLimiter, defaultBodyLimit)
+	// bound the body first, because the limiter reads it to count a tool call apart from a protocol message
+	.use("/mcp/*", defaultBodyLimit, mcpRateLimiter)
 	.route("/", mcpRoute)
 	.route("/", apiRoute)
 	// the blog and release pages pass the page guards ahead of their routes
@@ -217,6 +234,8 @@ const server = new Hono<AppEnv>()
 	.route("/", nightshiftRoute)
 	// the built ui's files: hashed assets and whatever vite copied from the public folder
 	.on(["GET", "HEAD"], "*", serveStatic({ root: UI_CLIENT_ROOT, onFound: setBundleCacheControl }))
+	// a bundle file the build does not have is a plain 404, never a rendered page, so a stale asset url costs no render
+	.on(["GET", "HEAD"], "/assets/*", (context) => context.text("Not found", 404))
 	// every request past this point renders a page with the ui's server, so it passes the page guards here
 	.on(["GET", "HEAD"], "*", ...PAGE_GUARDS)
 	// redirect a page url that ends in a slash permanently to the url without it, kept on this site
@@ -272,16 +291,26 @@ function toDocsFilePath(path: string): string {
 // the protected resource metadata for /mcp, which the mcp plugin serves at its own well-known path through the auth
 // handler. a request for any path after it reads the same document
 function toProtectedResourceMetadata(request: Request): Promise<Response> {
-	return auth.handler(new Request(new URL("/.well-known/oauth-protected-resource", request.url), request))
+	return auth.handler(toAuthRequest(request, new URL("/.well-known/oauth-protected-resource", request.url)))
 }
 
-// respond with one trivial query's latency and the pool's counts, or with 503 if the query fails or takes too long.
-// a monitor must never read a cached result
+// respond with one trivial query's latency and the connection pool's counts, or with 503 if the query fails or takes too long.
+// the checks in one second share one query's result inside this process
 async function checkDatabaseHealth(context: Context): Promise<Response> {
 	context.header("Cache-Control", NO_STORE_CACHE_CONTROL)
-	const startedAt = performance.now()
 
-	// run the query under the time limit, and respond 503 to a failure or a timeout
+	// start a query if the shared result is a second old, and respond with the result and the connection pool's counts now
+	const now = performance.now()
+	if (!sharedDeepHealth || now - sharedDeepHealth.startedAt >= DEEP_HEALTH_SHARE_MS) {
+		sharedDeepHealth = { startedAt: now, deepHealthResult: queryDeepHealth() }
+	}
+	const deepHealthResult = await sharedDeepHealth.deepHealthResult
+	return context.json({ ...deepHealthResult, pool: readPoolGauges() }, deepHealthResult.status === "ok" ? 200 : 503)
+}
+
+// run the trivial query under the time limit, and return its latency, or that it failed or timed out
+async function queryDeepHealth(): Promise<DeepHealthResult> {
+	const startedAt = performance.now()
 	try {
 		await withTimeLimit({
 			work: db.execute(sql`select 1`),
@@ -290,12 +319,16 @@ async function checkDatabaseHealth(context: Context): Promise<Response> {
 		})
 	} catch (error) {
 		console.error("the deep health check's query failed", error)
-		return context.json({ status: "unavailable", pool: readPoolGauges() }, 503)
+		return { status: "unavailable" }
 	}
+	return { status: "ok", databaseLatencyMs: Math.round(performance.now() - startedAt) }
+}
 
-	// a result responds with the query's latency and the pool's counts
-	const databaseLatencyMs = Math.round(performance.now() - startedAt)
-	return context.json({ status: "ok", databaseLatencyMs, pool: readPoolGauges() })
+/**
+ * Drops the shared deep health result, so the next check runs its own query.
+ */
+export function clearSharedDeepHealth(): void {
+	sharedDeepHealth = null
 }
 
 // respond 200 if the ui's server renders a page, or 503 with the reason. a draining replica responds 503 at once, so
@@ -342,8 +375,8 @@ function setBundleCacheControl(_path: string, context: Context): void {
 	}
 }
 
-// send the reports, events, and spans the process has buffered, then close the pool. each flush settles by itself, so
-// one that fails never keeps the others from sending
+// send the reports, events, and spans the process has buffered, then close the connection pool. each flush settles by
+// itself, so one that fails never keeps the others from sending
 async function flushProcess(): Promise<void> {
 	await Promise.allSettled([shutdownTelemetry(), shutdownAnalytics(), shutdownMonitoring()])
 	await connectionPool.end().catch(() => undefined)

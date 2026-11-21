@@ -8,6 +8,7 @@ import { toTopicPageEditablePodcastEpisodes, toTopicVideoEditableImage } from "@
 import { PROFILE_RANK_OPTION_LABELS } from "@carlnotes/core/lib/rankDialog"
 import { REQUEST_FAILED_TEXT } from "@carlnotes/core/lib/sessionCopy"
 import { toTopicActionLayout } from "@carlnotes/core/lib/topicActions"
+import { toTopicScanCount } from "@carlnotes/core/lib/topicScanPages"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { router } from "expo-router"
 import { ListOrdered, PawPrint, Trash2, Users } from "lucide-react-native"
@@ -339,7 +340,7 @@ function toTopicPageActionLayout({
 function confirmDeleteTopic(topic: TopicResponse, onDeleted: () => Promise<void>): void {
 	Alert.alert(
 		"Delete this topic?",
-		`'${topic.name}' and its ${topic.findings.length} findings and ${topic.scans.length} scans go with it.`,
+		`'${topic.name}' and its ${topic.findings.length} findings and ${toTopicScanCount(topic)} scans go with it.`,
 		[
 			{ text: "Keep it", style: "cancel" },
 			{

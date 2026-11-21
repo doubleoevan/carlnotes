@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change add-feed-homepage. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: The Feed API assembles a user's Feed
 The Feed API SHALL expose an HTTP endpoint that returns the requesting user's Feed: their Topics, and for each Topic its Findings joined to their Resources, plus the Topic metadata the homepage needs (name, tags, prompt, frequency, most recent Scan, Attachments, and Sources). Each Finding SHALL carry its relevance score, relevance explanation, rating, and the requesting user's consumed status. The response SHALL be shaped by a shared wire-contract type, never the Drizzle row types (Drizzle types stay in `db`).
 
@@ -211,3 +213,27 @@ chapters SHALL still show the thumbs down on the chapter that narrated such a Fi
 - **WHEN** a signed-in user picks Unread or Bookmarked in the feed's filters, or searches for the Finding's title
 - **THEN** none of the 8 Findings is listed
 
+### Requirement: The feed reads one last succeeded Scan and one latest Podcast Episode a Topic
+
+The Feed API SHALL read each listed Topic's most recent succeeded Scan, and each Topic's latest published Podcast
+Episode, as one row a Topic through an index on the Topic and the time. It SHALL never read every Scan or every Podcast
+Episode of the listed Topics to keep the newest. Every other caller of the latest Podcast Episode read SHALL get the
+same read, and each read SHALL return what it returned before.
+
+#### Scenario: A year of daily Scans reads one row a Topic
+
+- **GIVEN** 100 listed Topics that each hold 365 succeeded Scans
+- **WHEN** a signed-in user's feed is built
+- **THEN** the last succeeded Scan read returns 100 rows, and its plan reads each Topic's newest row through the index
+  on the Topic and the start time
+
+#### Scenario: The latest Podcast Episode read keeps its result
+
+- **WHEN** the feed holds twelve Topics with published Podcast Episodes
+- **THEN** the read names the same twelve Podcast Episodes as before, in one query, through the index on the Topic and
+  the publish time
+
+#### Scenario: More Topics still take no more queries
+
+- **WHEN** the feed holds more Topics
+- **THEN** the number of queries that read the last succeeded Scans and the latest Podcast Episodes stays the same

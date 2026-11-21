@@ -1,6 +1,7 @@
 // api tree tests: a session read rejected with a 401 reads as signed out, any other failure fails the request, an
 // oversized body is rejected before its route, a visitor's chat post and upload are rejected before their bodies
-// are read, and the general limit counts every path but the exempt ones and never a server render's loopback call
+// are read, and the general limit counts every path but the exempt ones and never a server render's own call, which
+// brings no session and no external address
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { TOPIC_ATTACHMENT_MAX_BYTES } from "@carlnotes/contracts/attachmentTypes"
 import { NOTE_HTML_MAX_CHARS } from "@carlnotes/contracts/notes"
@@ -177,7 +178,7 @@ test("the general limit counts a visitor's ordinary api request by address", asy
 	expect(apiRateLimitKeys).toEqual(["rate-limit:api:address:203.0.113.40"])
 })
 
-test("a server render's loopback calls are never limited", async () => {
+test("a server render's own calls, with no session and no external address, are never limited", async () => {
 	// the reads a page render sends from this machine, with no cookie and no forwarded address
 	stubRedisClient()
 	stubConnectionPool()

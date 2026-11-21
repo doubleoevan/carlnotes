@@ -2,7 +2,7 @@
 // so no cached page names hashed assets that the new build no longer has.
 // a missing setting is logged, and a failed purge is logged and reported, and neither fails the release
 
-import { type EdgePurgeResult, purgeEdgeCacheTags } from "@carlnotes/server/edgePurge"
+import { EDGE_PURGE_FAILED_MESSAGE, type EdgePurgeResult, purgeEdgeCacheTags } from "@carlnotes/server/edgePurge"
 import { reportError, shutdownMonitoring, startMonitoring } from "@carlnotes/server/monitoring"
 import { RENDERED_CACHE_TAG } from "./edgeCache"
 
@@ -36,7 +36,10 @@ if (import.meta.main) {
 	} else {
 		// log and report the failed purge
 		console.error(`the edge purge failed: ${edgePurgeResult.reason}`)
-		reportError(new Error(`the release's edge purge failed: ${edgePurgeResult.reason}`), "api-route")
+		reportError(new Error(EDGE_PURGE_FAILED_MESSAGE), "api-route", {
+			tags: RENDERED_CACHE_TAG,
+			reason: edgePurgeResult.reason,
+		})
 	}
 
 	// flush the report before the job exits

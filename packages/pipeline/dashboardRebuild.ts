@@ -15,6 +15,7 @@ import {
 } from "@carlnotes/db/dashboardSnapshotRows"
 import { topics } from "@carlnotes/db/schema/topics"
 import { deleteStoredObjects } from "@carlnotes/db/store"
+import { clearVisitorDashboardPages } from "@carlnotes/db/visitorPageCaches"
 import { purgeEdgeCacheTagAfterDeletion, toDashboardCacheTag } from "@carlnotes/server/edgePurge"
 import { reportError } from "@carlnotes/server/monitoring"
 import { inArray } from "drizzle-orm"
@@ -109,10 +110,12 @@ async function rebuildDashboards({ dashboardTopics, shouldDeleteSnapshots }: Reb
 	)
 }
 
-// delete one Dashboard's snapshots and share image and purge its edge copies. the route serves an empty Dashboard
-// until the rebuild writes new snapshots. a build that loaded before the delete skips its write
+// delete one Dashboard's snapshots and share image, then clear its page's visitor copy and purge its edge copies. the
+// route serves an empty Dashboard until the rebuild writes new snapshots. a build that loaded before the delete skips
+// its write
 async function deleteDashboardSnapshots(subject: DashboardSubject): Promise<void> {
 	const imageKeys = await db.transaction((transaction) => deleteDashboardSnapshotRows(transaction, [subject]))
 	await deleteStoredObjects(imageKeys)
+	await clearVisitorDashboardPages(subject)
 	await purgeEdgeCacheTagAfterDeletion(toDashboardCacheTag(subject))
 }

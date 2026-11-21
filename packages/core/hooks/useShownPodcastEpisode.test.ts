@@ -1,8 +1,14 @@
-import { expect, test } from "bun:test"
+import { afterEach, expect, jest, test } from "bun:test"
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import { toPodcastEpisodeFixture, toTopicPodcastFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
 import { toTestTopicResponse } from "@carlnotes/contracts/topicFeedTestFixtures"
-import { toShownPodcastEpisode } from "./useShownPodcastEpisode"
+import { focusManager } from "@tanstack/react-query"
+import { advancePolls, settle } from "../lib/pollTestFixtures"
+import {
+	PODCAST_EPISODE_RECORDING_POLL_MS,
+	startRecordingPodcastEpisodePoll,
+	toShownPodcastEpisode,
+} from "./useShownPodcastEpisode"
 
 test("shown episode precedence preserves loaded, linked, recording, and latest choices", () => {
 	// make all three podcast episode candidates belong to the same Topic
@@ -64,4 +70,62 @@ test("a Topic Post's discussion loaded in the player leaves the Topic's own epis
 		toShownPodcastEpisode({ topic, loadedPodcastEpisode: loadedDiscussion, linkedPodcastEpisode: null }).podcastEpisode
 			?.id,
 	).toBe("latest")
+})
+
+// put the real clock and the app's own focus back after each test
+afterEach(() => {
+	jest.useRealTimers()
+	focusManager.setFocused(undefined)
+})
+
+test("a linked recording's poll pauses in a hidden tab, reads at once on the return, and stops once it publishes", async () => {
+	// fake timers in a focused tab, and a poll that counts its reads while the podcast episode records
+	jest.useFakeTimers()
+	focusManager.setFocused(true)
+	let readCount = 0
+	let isRecording = true
+	const stopPoll = startRecordingPodcastEpisodePoll(async () => {
+		readCount += 1
+		return isRecording
+	})
+
+	// one read per interval while the podcast episode records
+	await advancePolls({ pollMs: PODCAST_EPISODE_RECORDING_POLL_MS, pollCount: 2 })
+	expect(readCount).toBe(2)
+
+	// no read in a hidden tab, and a read at once on the return
+	focusManager.setFocused(false)
+	await advancePolls({ pollMs: PODCAST_EPISODE_RECORDING_POLL_MS, pollCount: 4 })
+	expect(readCount).toBe(2)
+	focusManager.setFocused(true)
+	await settle()
+	expect(readCount).toBe(3)
+
+	// a read that finds it published stops the poll
+	isRecording = false
+	await advancePolls({ pollMs: PODCAST_EPISODE_RECORDING_POLL_MS, pollCount: 1 })
+	expect(readCount).toBe(4)
+	await advancePolls({ pollMs: PODCAST_EPISODE_RECORDING_POLL_MS, pollCount: 5 })
+	expect(readCount).toBe(4)
+	stopPoll()
+})
+
+test("a linked recording's poll stops at its one-hour limit", async () => {
+	jest.useFakeTimers()
+	focusManager.setFocused(true)
+	let readCount = 0
+	const stopPoll = startRecordingPodcastEpisodePoll(async () => {
+		readCount += 1
+		return true
+	})
+
+	// an hour of reads, then none past the limit
+	await advancePolls({
+		pollMs: PODCAST_EPISODE_RECORDING_POLL_MS,
+		pollCount: (60 * 60 * 1000) / PODCAST_EPISODE_RECORDING_POLL_MS,
+	})
+	const readCountAtLimit = readCount
+	await advancePolls({ pollMs: PODCAST_EPISODE_RECORDING_POLL_MS, pollCount: 20 })
+	expect(readCount).toBe(readCountAtLimit)
+	stopPoll()
 })

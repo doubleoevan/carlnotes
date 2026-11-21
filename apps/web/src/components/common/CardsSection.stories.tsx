@@ -1,10 +1,17 @@
-// a section of cards: one page with no page buttons, two pages that keep every card in the html, and no cards
-import { CARDS_PAGE_SIZE, type TopicCard as TopicCardFields } from "@carlnotes/contracts/home"
+// a section of cards: one page with no page buttons, two pages that keep every card in the html, no cards, and the
+// home's sections the server pages, a page at a time, with their page buttons as buttons or as links to each page
+import { CARDS_PAGE_SIZE } from "@carlnotes/contracts/cardPages"
+import type { TopicCard as TopicCardFields } from "@carlnotes/contracts/home"
+import type { TopicPostCard as TopicPostCardFields } from "@carlnotes/contracts/topicPosts"
+import type { ServerCardPages } from "@carlnotes/core/hooks/useServerPagedCards"
+import { HOME_SECTIONS } from "@carlnotes/core/lib/homeFaces"
 import { PROFILE_SECTIONS } from "@carlnotes/core/lib/profileSections"
+import { TOPIC_POST_CARD_STORY } from "@carlnotes/core/lib/topicPostStories"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { expect } from "storybook/test"
 import { Accordion } from "@/components/primitives/accordion"
 import { TopicCard } from "@/components/topic/TopicCard"
+import { TopicPostCard } from "@/components/topicPost/TopicPostCard"
 import { PagedCardsSection } from "./CardsSection"
 
 // the section the stories show, a profile's topics
@@ -74,5 +81,68 @@ export const Empty: Story = {
 	args: { rows: [] },
 	play: async ({ canvas }) => {
 		await expect(canvas.queryByText("Featured Topics")).toBeNull()
+	},
+}
+
+// the server's pages of a whole list, six cards at a time, the first of which the page read holds
+function toServerCardPages<Row>(queryKey: string, rows: Row[]): ServerCardPages<Row> {
+	return {
+		queryKey: ["story", queryKey],
+		loadedPage: { rows: rows.slice(0, CARDS_PAGE_SIZE), page: 0, totalCount: rows.length },
+		fetchPage: async (page) => ({
+			rows: rows.slice(page * CARDS_PAGE_SIZE, (page + 1) * CARDS_PAGE_SIZE),
+			totalCount: rows.length,
+		}),
+	}
+}
+
+// the home's Your topics, which the server pages: the html holds the first page, and a page button reads its page
+const YOUR_TOPICS = toTopicCards(14)
+export const HomeYourTopicsPagedOnServer: Story = {
+	render: () => (
+		<Accordion type="multiple" defaultValue={[HOME_SECTIONS.yourTopics.value]}>
+			<PagedCardsSection
+				section={HOME_SECTIONS.yourTopics}
+				rows={YOUR_TOPICS.slice(0, CARDS_PAGE_SIZE)}
+				serverPages={toServerCardPages("your-topics", YOUR_TOPICS)}
+				renderCard={(topic) => <TopicCard topic={topic} onOpen={() => {}} />}
+			/>
+		</Accordion>
+	),
+	play: async ({ canvas }) => {
+		// the first page alone, with the count of every topic
+		await expect(canvas.getByText("14 topics")).toBeInTheDocument()
+		await expect(canvas.getAllByRole("link", { name: /^Open Topic/, hidden: true })).toHaveLength(CARDS_PAGE_SIZE)
+
+		// the last page shows its two topics
+		await canvas.getByRole("button", { name: "3" }).click()
+		await expect(await canvas.findByRole("link", { name: "Open Topic 14" })).toBeInTheDocument()
+	},
+}
+
+// the home's new posts this week, which the server pages with links to each page, so a reader without JavaScript and
+// a crawler reach every post. with JavaScript a link opens its page in place
+const NEWEST_TOPIC_POSTS: TopicPostCardFields[] = Array.from({ length: 9 }, (_, index) => ({
+	...TOPIC_POST_CARD_STORY,
+	id: `post-${index + 1}`,
+	title: `Post ${index + 1}`,
+}))
+export const HomeNewestTopicPostsPagedOnServer: Story = {
+	render: () => (
+		<Accordion type="multiple" defaultValue={[HOME_SECTIONS.newestTopicPosts.value]}>
+			<PagedCardsSection
+				section={HOME_SECTIONS.newestTopicPosts}
+				rows={NEWEST_TOPIC_POSTS.slice(0, CARDS_PAGE_SIZE)}
+				serverPages={toServerCardPages("newest-topic-posts", NEWEST_TOPIC_POSTS)}
+				renderCard={(topicPost) => <TopicPostCard topicPost={topicPost} onOpen={() => {}} />}
+			/>
+		</Accordion>
+	),
+	play: async ({ canvas }) => {
+		// the second page's link names its page in the url, and opens the page in place
+		const secondPageLink = canvas.getByRole("link", { name: "2" })
+		await expect(secondPageLink.getAttribute("href")).toContain("newPosts=2")
+		await secondPageLink.click()
+		await expect(await canvas.findByText("Post 9")).toBeInTheDocument()
 	},
 }

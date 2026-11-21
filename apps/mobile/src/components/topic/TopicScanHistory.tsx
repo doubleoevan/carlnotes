@@ -3,8 +3,9 @@ import { authClient } from "@carlnotes/client/authClient"
 import { fetchScanNote, removeTopicSource } from "@carlnotes/client/topicClient"
 import { KEEP_ONE_SOURCE_MESSAGE } from "@carlnotes/contracts/sources"
 import type { TopicResponse, TopicScan } from "@carlnotes/contracts/topics"
-import { usePagination } from "@carlnotes/core/hooks/usePagination"
+import { useServerPagedCards } from "@carlnotes/core/hooks/useServerPagedCards"
 import { toScanTimestamp } from "@carlnotes/core/lib/labels"
+import { toTopicScanPages } from "@carlnotes/core/lib/topicScanPages"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { type ComponentRef, useRef, useState } from "react"
@@ -22,7 +23,8 @@ import { TopicMemoriesDialog } from "./TopicMemoriesDialog"
 import { TopicScanRecap } from "./TopicScanRecap"
 
 /**
- * Shows the delivered scan history with native sheets for individual scan notes.
+ * Shows the scan history five scans at a time with native sheets for individual scan notes. A history that holds the
+ * newest page of scans reads each later page from the server, as the web's does.
  */
 export function TopicScanHistory({
 	topic,
@@ -31,15 +33,16 @@ export function TopicScanHistory({
 	topic: TopicResponse
 	onTopicMemoryRemoved?: () => void
 }) {
-	// use the web's five-row pages while keeping each scan's note lazy
-	const { pageRows: scans, pagination } = usePagination(topic.scans)
+	// the web's five-row pages, each later page read ahead from the server, while keeping each scan's note lazy
+	const scanPages = toTopicScanPages(topic)
+	const { pageRows: scans, pagination, loadingPage } = useServerPagedCards(scanPages)
 	return (
 		<CollapsibleSection
 			title="Brew diary"
 			titleAside={
 				<TopicMemoriesDialog
 					topicId={topic.id}
-					entryCount={topic.scans.length}
+					entryCount={scanPages.loadedPage.totalCount}
 					topicMemoryCount={topic.topicMemoryCount}
 					canRateTopicMemories={topic.canRateTopicMemories}
 					onTopicMemoryRemoved={onTopicMemoryRemoved}
@@ -48,16 +51,18 @@ export function TopicScanHistory({
 			hasClosedDivider
 		>
 			<View className="rounded-lg border border-separator bg-card p-1 shadow-raised">
-				{scans.length === 0 ? (
+				{/* the loading mug while a page loads, the empty line, or the page's rows */}
+				{loadingPage !== null ? <CoffeeLoading className="min-h-24" /> : null}
+				{loadingPage === null && scans.length === 0 ? (
 					<Text className="py-3 pl-2 text-sm text-muted-foreground">{"Carl hasn't scanned this topic yet."}</Text>
 				) : null}
-				{scans.map((scan, i) => (
-					<ScanRow key={scan.id} topic={topic} scan={scan} isLast={i === scans.length - 1} />
-				))}
+				{loadingPage === null
+					? scans.map((scan, i) => <ScanRow key={scan.id} topic={topic} scan={scan} isLast={i === scans.length - 1} />)
+					: null}
 			</View>
 			<Pagination
 				label="Brew diary"
-				pageNumber={pagination.page + 1}
+				pageNumber={(loadingPage ?? pagination.page) + 1}
 				pageCount={pagination.pageCount}
 				onOpenPage={(page) => pagination.setPage(page - 1)}
 			/>

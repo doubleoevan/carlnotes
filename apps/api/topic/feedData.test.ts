@@ -22,14 +22,18 @@ test("the feed card reads the newest recap that was written beside the latest su
 	])
 
 	// the recap is its own read of the topic's succeeded scans, newest first, past every empty one, and runs once on
-	// each topic's latest scan instead of on every succeeded scan
+	// each topic instead of on every succeeded scan
 	const [{ text } = { text: "" }] = sentQueries
 	expect(text).toContain(
-		`(select "recap_scans"."scan_summary" from "scans" "recap_scans" where "recap_scans"."topic_id" = "latest_scans"."topic_id" and "recap_scans"."status" = 'succeeded' and "recap_scans"."scan_summary" <> '' order by "recap_scans"."started_at" desc limit 1)`,
+		`(select "recap_scans"."scan_summary" from "scans" "recap_scans" where "recap_scans"."topic_id" = "topics"."id" and "recap_scans"."status" = 'succeeded' and "recap_scans"."scan_summary" <> '' order by "recap_scans"."started_at" desc limit 1)`,
 	)
 
-	// the other columns are the latest succeeded scan's, from the distinct read that the recap reads beside
-	expect(text).toStartWith('select "topic_id", "started_at", "finished_at", (select "recap_scans"')
-	expect(text).toContain('"cost" from (select distinct on ("scans"."topic_id")')
-	expect(text).toEndWith('order by "scans"."topic_id", "scans"."started_at" desc) "latest_scans"')
+	// the other columns are each topic's latest succeeded scan's, from a lateral read stopped at one row
+	expect(text).toStartWith('select "topics"."id", "latest_scans"."started_at", "latest_scans"."finished_at", (select')
+	expect(text).toContain(
+		'from "topics" inner join lateral (select "started_at", "finished_at", "cost" from "scans" where ("scans"."topic_id" = "topics"."id"',
+	)
+	expect(text).toContain(
+		'order by "scans"."started_at" desc limit $2) "latest_scans" on true where "topics"."id" in ($3)',
+	)
 })

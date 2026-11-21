@@ -9,10 +9,8 @@ import { loadUserOrPublicLiteLLMKey } from "@carlnotes/models/litellm"
 import { isBudgetRejection, SPENT_BUDGET_REJECTION } from "@carlnotes/models/models"
 import { UNTRUSTED_DATA_TAG } from "@carlnotes/models/prompts/write"
 import { searchTopicFindings as rankTopicFindings } from "@carlnotes/pipeline/chat/retrieve"
-import { attachReactionSummaries } from "../social/findingReactions"
 import { loadTopicAccessAndFindings, loadViewableTopic } from "../topic/accessibleFindings"
 import { saveFindingFeedback, setBookmarked, setConsumed, setRating } from "../topic/findingFeedback"
-import { loadTopicFindings } from "../topic/findings"
 import { type ToolCaller, toMcpAnalyticsProperties, toToolCallerUserId } from "./toolCaller"
 
 // what a write says to an account behind on the Terms
@@ -104,43 +102,40 @@ type McpFindingReactions = { counts: { reactionType: string; count: number }[] }
 // one page of a result, with the cursor that continues it
 export type McpPage<Item> = { items: Item[]; nextCursor: string | null }
 
+// a page of a topic's feed for a tool caller: the page the model reads, and the topic and the window of findings it
+// was read from, which the findings MCP view reads again from no other read
+export type TopicFeed = {
+	mcpPage: McpPage<McpFinding>
+	topic: typeof topics.$inferSelect
+	topicFindings: TopicFinding[]
+}
+
 /**
- * Reads a topic's feed in stored relevance order, with a user's consumed and bookmark rows and the invite gate joined
- * for a user alone, or null for a topic the tool caller may not see.
+ * Reads a topic's feed in stored relevance order behind the topic page's gate, with a user's consumed and bookmark
+ * rows on a user's read alone, or null for a topic the tool caller may not see.
  */
 export async function readTopicFeed(
 	toolCaller: ToolCaller,
 	topicId: string,
 	cursor: string | null,
-): Promise<McpPage<McpFinding> | null> {
+): Promise<TopicFeed | null> {
 	const topic = await loadVisibleTopic(toolCaller, topicId)
 	if (!topic) {
 		return null
 	}
 
-	// read one row more than fits on a page, from the cursor's offset, so the page knows whether any finding remains.
-	// only a user's read joins their consumed and bookmark rows
+	// read one row more than fits on a page, from the cursor's offset, so the page knows whether any finding remains
 	const offset = fromCursor(cursor)
-	const pageWindow = { offset, rowCount: MCP_PAGE_SIZE + 1 }
-	const topicFindings =
-		toolCaller.kind === "user"
-			? (await loadTopicAccessAndFindings({ topic, userId: toolCaller.userId, pageWindow, isRatedDownExcluded: true }))
-					.topicFindings
-			: await loadVisitorTopicFindings(topic.id, pageWindow)
+	const { topicFindings } = await loadTopicAccessAndFindings({
+		topic,
+		userId: toToolCallerUserId(toolCaller),
+		pageWindow: { offset, rowCount: MCP_PAGE_SIZE + 1 },
+		isRatedDownExcluded: true,
+	})
 
 	// shape each finding for the tool caller and pack the page from the window
 	const mcpFindings = topicFindings.map((finding) => toMcpFinding(toolCaller, finding))
-	return packPageFromWindow(mcpFindings, { offset })
-}
-
-// a visitor's window of a topic's findings, each with its reactions
-async function loadVisitorTopicFindings(
-	topicId: string,
-	pageWindow: { offset: number; rowCount: number },
-): Promise<TopicFinding[]> {
-	const topicFindings = await loadTopicFindings({ topicId, userId: null, pageWindow, isRatedDownExcluded: true })
-	await attachReactionSummaries({ topicFindings, userId: null })
-	return topicFindings
+	return { mcpPage: packPageFromWindow(mcpFindings, { offset }), topic, topicFindings }
 }
 
 /**

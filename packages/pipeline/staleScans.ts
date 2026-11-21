@@ -2,6 +2,7 @@
 
 import { db, isScanRunning } from "@carlnotes/db"
 import { scans } from "@carlnotes/db/schema/scans"
+import { clearStatusReads } from "@carlnotes/db/statusReadCaches"
 import { toPositiveInteger } from "@carlnotes/server/envSettings"
 import { reportError } from "@carlnotes/server/monitoring"
 import { and, eq, isNotNull, isNull, lt, or, type SQL, sql } from "drizzle-orm"
@@ -41,7 +42,11 @@ export async function reapStaleScans(topicId?: string, now = new Date()): Promis
 			finishedAt: now,
 		})
 		.where(topicId ? and(staleScanFilter, eq(scans.topicId, topicId)) : staleScanFilter)
-		.returning({ id: scans.id })
+		.returning({ id: scans.id, topicId: scans.topicId })
+
+	// the reaped Scans' Topics lose their scan status copies, so a poll reads the failure
+	const reapedTopicIds = staleScanIds.flatMap((staleScan) => (staleScan.topicId ? [staleScan.topicId] : []))
+	await clearStatusReads("scan", ...new Set(reapedTopicIds))
 
 	// log and report the Scans that went quiet past a window longer than their stages allow
 	if (staleScanIds.length > 0) {

@@ -9,6 +9,7 @@ import { UNTRUSTED_DATA_TAG } from "@carlnotes/models/prompts/write"
 import * as roomReads from "../chat/roomReads"
 import * as notePayloads from "../note/notePayloads"
 import * as teamPage from "../team/teamPage"
+import * as teamPageRead from "../team/teamPageRead"
 import * as mcpViewData from "./mcpViewData"
 import { BOUND_SERVER_TEXT, CONNECT_ACCOUNT_TEXT } from "./results"
 import { toResultText, toToolHandler, USER, VISITOR } from "./toolTestFixtures"
@@ -125,11 +126,34 @@ test("a non-member reads a public team's page with no room", async () => {
 	expect(roomSpy).not.toHaveBeenCalled()
 })
 
+test("a visitor reads a public team from the team page read's copy, without its head", async () => {
+	// the visitors' copy of the team page, head included, and no notes
+	spyOn(teamPageRead, "readTeamPageRead").mockResolvedValue({
+		status: "visible",
+		team: { ...toTeamPage(null), head: { title: "Roasters" } } as TeamPageResponse,
+	})
+	const loadTeamPageSpy = spyOn(teamPage, "loadTeamPage")
+	spyOn(notePayloads, "loadNotesPayload").mockResolvedValue(null)
+
+	// the MCP view reads the page without the head, and the team's loader never runs
+	const toolResult = await toToolHandler("read_team", VISITOR)({ team_id: "team-1" })
+	const mcpViewTeamPage = ((toolResult._meta?.[MCP_VIEW_META_KEY] ?? {}) as McpViewData).team?.teamPage
+	expect(mcpViewTeamPage?.teamId).toBe("team-1")
+	expect(mcpViewTeamPage).not.toHaveProperty("head")
+	expect(loadTeamPageSpy).not.toHaveBeenCalled()
+})
+
 test("a visitor sees a private team's gate alone and lists no teams", async () => {
-	spyOn(teamPage, "loadTeamPage").mockResolvedValue({ status: "gated", teamName: "Secret", hasRequestedToJoin: false })
+	// a visitor reads the team page read, which returns a private team's gate
+	const readTeamPageReadSpy = spyOn(teamPageRead, "readTeamPageRead").mockResolvedValue({
+		status: "gated",
+		teamName: "Secret",
+		hasRequestedToJoin: false,
+	})
 	const toolResult = await toToolHandler("read_team", VISITOR)({ team_id: "team-1" })
 	expect(toolResult.structuredContent).toMatchObject({ status: "gated", hasRequestedToJoin: false })
 	expect(toolResult.structuredContent).not.toHaveProperty("members")
+	expect(readTeamPageReadSpy).toHaveBeenCalledWith({ userId: null, teamId: "team-1" })
 	expect(toResultText(await toToolHandler("list_teams", VISITOR)({}))).toBe(CONNECT_ACCOUNT_TEXT)
 })
 

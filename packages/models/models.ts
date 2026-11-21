@@ -94,7 +94,7 @@ function embedModel(litellmApiKey?: string): EmbeddingModel {
 }
 
 // the key an embedding call bills, and how many times the AI SDK retries it
-type EmbedOptions = { litellmApiKey?: string; maxRetries?: number; abortSignal?: AbortSignal }
+export type EmbedOptions = { litellmApiKey?: string; maxRetries?: number; abortSignal?: AbortSignal }
 
 /**
  * Embeds one text and returns its vector, cut to the schema's width and scaled to unit length.

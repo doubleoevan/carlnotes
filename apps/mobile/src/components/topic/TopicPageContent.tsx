@@ -4,6 +4,7 @@ import type { TopicFinding } from "@carlnotes/contracts/findings"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { PodcastEpisodeRemovalProvider } from "@carlnotes/core/components/PodcastEpisodeRemovalProvider"
 import type { TopicFeedState } from "@carlnotes/core/hooks/useTopicFeedState"
+import { toTopicTopicPostCardPages } from "@carlnotes/core/lib/cardSections"
 import { toTopicDetails } from "@carlnotes/core/lib/detailsLine"
 import { EDIT_IMAGE_DIALOG_TITLES } from "@carlnotes/core/lib/topicImageEditor"
 import { type ComponentRef, useRef, useState } from "react"
@@ -41,12 +42,15 @@ export function TopicPageContent({
 	state,
 	onRefresh,
 	onScanned,
+	isVideoRenderingPollEnabled,
 }: {
 	topic: TopicResponse
 	findings: TopicFinding[]
 	state: Pick<TopicFeedState, "handlers" | "pendingChanges" | "isReheating">
 	onRefresh: () => void
 	onScanned: (fetchTopicPageOptions?: FetchTopicPageOptions) => Promise<void>
+	// whether the film's poll may run, which the route turns off while its screen is covered
+	isVideoRenderingPollEnabled?: boolean
 }) {
 	// a visitor's press on a reaction or the composer opens sign-up, and an editor's press on the image opens its sheet
 	const { data: session } = authClient().useSession()
@@ -118,7 +122,11 @@ export function TopicPageContent({
 			</View>
 			{/* full-width cards match the web's narrow reading column */}
 			<View className="mx-4">
-				<TopicVideoSection topic={topic} onVideoRenderingPoll={() => onScanned({ isPoll: true })} />
+				<TopicVideoSection
+					topic={topic}
+					onVideoRenderingPoll={() => onScanned({ isPoll: true })}
+					isVideoRenderingPollEnabled={isVideoRenderingPollEnabled}
+				/>
 				<PodcastEpisodePlayer
 					topic={topic}
 					topicFeedHandlers={state.handlers}
@@ -146,7 +154,9 @@ export function TopicPageContent({
 					/>
 				</SectionTargetContext>
 				{/* the topic's Topic Posts, right below its comment thread */}
-				{topic.topicPosts && <TopicPostsSection topicId={topic.id} {...topic.topicPosts} />}
+				{topic.topicPosts && (
+					<TopicPostsSection topicId={topic.id} {...topic.topicPosts} serverPages={toTopicTopicPostCardPages(topic)} />
+				)}
 			</View>
 			<PodcastEpisodeRemovalProvider key={JSON.stringify([topic.id, session?.user.id])}>
 				<TopicPageCards topic={topic} onNoteCountChange={setNoteCount} onTopicMemoryRemoved={onRefresh} />

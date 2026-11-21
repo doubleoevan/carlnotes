@@ -18,11 +18,9 @@ import {
 	desc,
 	eq,
 	exists,
-	gt,
 	inArray,
 	isNotNull,
 	isNull,
-	lte,
 	max,
 	or,
 	type SQL,
@@ -34,6 +32,14 @@ import {
 	toOpenSocialTargetFilter,
 	withSocialTargetJoins,
 } from "../social/socialTargetJoins"
+import {
+	toCommentCandidateIdReads,
+	toCommentReactionCandidateIdReads,
+	toOwnCandidateFilter,
+	toReactionCandidateIdReads,
+	toTopicPostCandidateIdReads,
+	toWindowFilter,
+} from "./newsCandidateIds"
 import { toNewsEventColumns } from "./newsEventColumns"
 import type { NewsGroup, NewsTopicIds } from "./newsTopics"
 
@@ -54,9 +60,12 @@ export type LoadNewsEventRowsOptions = {
 	until: Date
 	limit: number
 	offset: number
+	// whether the read counts the group's rows in the window. a read that takes the totals from a cursor does not
+	isWindowCounted: boolean
 }
 
-// a row of the news as the read returns it, with every row of its group in the window counted
+// a row of the news as the read returns it, with every row of its group in the window counted, or 0 if the read does
+// not count them
 export type NewsEventRow = Awaited<ReturnType<typeof loadNewsEventRows>>[number]
 
 /**
@@ -115,18 +124,13 @@ export async function loadNewsEventRows(options: LoadNewsEventRowsOptions) {
 			podcastEpisodeId: newsEvents.podcastEpisodeId,
 			podcastEpisodeImageHash: newsEvents.podcastEpisodeImageHash,
 			listenerCount: newsEvents.listenerCount,
-			// every row of the group in the window
-			total: sql<number>`count(*) over ()`.mapWith(Number),
+			// every row of the group in the window, if the read counts them
+			total: (options.isWindowCounted ? sql<number>`count(*) over ()` : sql<number>`0`).mapWith(Number),
 		})
 		.from(newsEvents)
 		.orderBy(desc(newsEvents.occurredAt), asc(newsEvents.kindRank), asc(newsEvents.id))
 		.limit(limit)
 		.offset(offset)
-}
-
-// a time column's rows inside the window
-function toWindowFilter(timeColumn: Column, { since, until }: LoadNewsEventRowsOptions): SQL | undefined {
-	return and(gt(timeColumn, since), lte(timeColumn, until))
 }
 
 // whether a column's Topic is one of the group's
@@ -136,8 +140,6 @@ function toGroupTopicFilter(topicIdColumn: Column, { group, topicIds }: LoadNews
 
 // a Comment's or a reaction's place in the group. the own group also holds what hangs on the person's Comments and
 // Topic Posts, on any Topic the reader may open, and a later group leaves those rows out
-// ponytail: the own group's read is not a Topic range read, so it walks the window's rows of every Topic. split it into
-// arms on the author indexes if a week of the site's Comments grows past what one walk reads quickly
 function toGroupScopeFilter(
 	topicIdColumn: Column,
 	isOnPersonTarget: SQL | undefined,
@@ -221,6 +223,7 @@ function toTopicPostRows(options: LoadNewsEventRowsOptions) {
 		.where(
 			and(
 				toGroupScopeFilter(topicPosts.topicId, isPersonPost, options),
+				toOwnCandidateFilter(topicPosts.id, options, toTopicPostCandidateIdReads),
 				toWindowFilter(topicPosts.publishedAt, options),
 				toActivatedAfterFilter(options.readerUserId, topicPosts.publishedAt),
 				toVisibleAuthorFilter(options.readerUserId, topicPosts.authorUserId),
@@ -259,6 +262,7 @@ function toCommentRows(options: LoadNewsEventRowsOptions) {
 		and(
 			toWindowFilter(comments.createdAt, options),
 			toGroupScopeFilter(comments.targetTopicId, isOnPersonTarget, options),
+			toOwnCandidateFilter(comments.id, options, toCommentCandidateIdReads),
 			toVisibleAuthorFilter(options.readerUserId, comments.authorUserId),
 			toOpenSocialTargetFilter(options.readerUserId),
 		),
@@ -292,6 +296,7 @@ function toReactionRows(options: LoadNewsEventRowsOptions) {
 			isNull(reactions.commentId),
 			toWindowFilter(reactions.createdAt, options),
 			toGroupScopeFilter(reactions.targetTopicId, isOnPersonTarget, options),
+			toOwnCandidateFilter(reactions.id, options, toReactionCandidateIdReads),
 			toVisibleAuthorFilter(options.readerUserId, reactions.userId),
 			toOpenSocialTargetFilter(options.readerUserId),
 		),
@@ -302,7 +307,8 @@ function toReactionRows(options: LoadNewsEventRowsOptions) {
 // the count leaves out a reaction by a person the reader does not see
 // biome-ignore lint/nursery/useExplicitReturnType: the union needs the query's generated type
 function toCommentReactionRows(options: LoadNewsEventRowsOptions) {
-	// each Comment's reactions in the window. a later group's read is a range read of its Topics
+	// each Comment's reactions in the window. the own group reads its candidates, and a later group's read is a range
+	// read of its Topics
 	const commentReactionCounts = db
 		.select({
 			commentId: reactions.commentId,
@@ -314,7 +320,9 @@ function toCommentReactionRows(options: LoadNewsEventRowsOptions) {
 			and(
 				isNotNull(reactions.commentId),
 				toWindowFilter(reactions.createdAt, options),
-				options.group === "own" ? undefined : toGroupTopicFilter(reactions.targetTopicId, options),
+				options.group === "own"
+					? toOwnCandidateFilter(reactions.id, options, toCommentReactionCandidateIdReads)
+					: toGroupTopicFilter(reactions.targetTopicId, options),
 				toVisibleAuthorFilter(options.readerUserId, reactions.userId),
 			),
 		)

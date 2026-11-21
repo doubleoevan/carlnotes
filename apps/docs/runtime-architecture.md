@@ -199,14 +199,25 @@ from person to person.
   one. The browser still asks Cloudflare on every load. A request with a session cookie always goes to the app, since
   the same url shows a signed-in user something else.
 - An avatar or a link-preview card names its version in its url. The browser caches it for a year and Cloudflare for a
-  day, and a new image gets a new url. Hashed assets are cached for a year.
+  day, and a new image gets a new url. A card url with any other query string redirects to the current version, which
+  Cloudflare keeps a minute, so a changing query string never reaches storage. Hashed assets are cached for a year.
 - Cloudflare compresses every text response on the way out, so the app sends them uncompressed.
 
-Every request reaches the app from a Cloudflare address, so `TRUSTED_PROXIES` lists Cloudflare's published ranges, and
-the client is the rightmost `x-forwarded-for` address outside them. Better Auth and the rate limiter read it with the
-same settings. None of Cloudflare's own settings live in this repo. The cache rules, the session cookie bypass, SSL, and
-the rule that lets Northflank renew its certificate are listed in the `cache-at-the-edge` change's design, under
-`openspec/changes/archive/`.
+What still reaches the origin: every signed-in request, every write, the chat and MCP routes, the SSE streams, the
+first request for each shared copy, and a refresh once that copy is a minute old. Behind the edge the origin keeps its
+own short copies in Redis, so a miss rarely costs a query: a visitor's page reads and the home for 30 to 60 seconds,
+each card's lookup for a minute, and the sitemap, llms.txt, and each Topic's RSS feed for ten minutes. The deep health
+check shares one query's result a second. A bundle file after `/assets/` that a release removed responds with a plain
+404 and never renders a page.
+
+Every request reaches the app from a Cloudflare address, so `TRUSTED_PROXIES` lists Cloudflare's published ranges. The
+client is the `cf-connecting-ip` address if a Cloudflare hop reported it, which is also how a request from a Cloudflare
+Worker counts as the Worker's own address, and otherwise the rightmost `x-forwarded-for` address outside those ranges.
+The api writes the address it resolves into a header of its own before it calls Better Auth, so Better Auth's limiter
+and the api's limiters name the same client. None of Cloudflare's own settings live in this repo. The cache rules, the
+session cookie bypass, SSL, and the rule that lets Northflank renew its certificate are recorded in the deployment
+guide's Edge cache section, and `bun run check:edge` reads after a release whether each shared path is stored at the
+edge.
 
 ## Deploy safety
 

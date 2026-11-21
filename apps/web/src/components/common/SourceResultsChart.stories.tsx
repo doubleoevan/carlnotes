@@ -1,6 +1,6 @@
 // the source footnotes chart in a scan recap: one bar row per Source with what it read and kept, each opening its
 // details, and the trash button a topic editor sees on a current Source
-import type { SourceResult } from "@carlnotes/contracts/topics"
+import type { SourceResult } from "@carlnotes/contracts/scanSourceResults"
 import { EARLIER_ROW_ID } from "@carlnotes/core/lib/sourceResults"
 import type { Meta, StoryObj } from "@storybook/tanstack-react"
 import { expect, fn, within } from "storybook/test"

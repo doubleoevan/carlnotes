@@ -8,7 +8,7 @@ import { topicPromptVersions, topics } from "@carlnotes/db/schema/topics"
 import { desc, eq } from "drizzle-orm"
 import { Hono } from "hono"
 import type { AppEnv } from "../currentUser"
-import { CALLER_RATE_LIMIT, toolCallerRateLimiter, toolCallerRateLimitStore, toRateLimitKey } from "../rateLimit"
+import { CALLER_RATE_LIMIT, mcpRateLimiter, mcpToolCallRateLimitStore, toRateLimitKey } from "../rateLimit"
 import { stopFirstScan } from "../topic/firstScanSmoke"
 import { toMcpToolContractIssues } from "./mcpContractTestFixtures"
 import { checkPageBounds, type SmokeClient } from "./mcpResultSmokeSections"
@@ -294,19 +294,19 @@ async function checkMcpUiResources(client: ReturnType<typeof toClient>["client"]
 }
 
 /**
- * Checks the per-tool-caller rate limit. A bearer nobody holds resolves to a visitor, so the requests share the
- * visitor bucket.
+ * Checks the MCP tool call rate limit. A bearer nobody holds resolves to a visitor, so the requests share the visitor
+ * bucket.
  */
 export async function checkRateLimit(): Promise<void> {
-	const limitedRoute = new Hono<AppEnv>().use("/mcp/*", toolCallerRateLimiter).route("/", mcpRoute)
+	const limitedRoute = new Hono<AppEnv>().use("/mcp/*", mcpRateLimiter).route("/", mcpRoute)
 
 	// start the visitor bucket's rate limit window empty. Redis may already count other visitor requests from the last minute
-	await toolCallerRateLimitStore.resetKey(toRateLimitKey({ userId: null, clientAddress: null }))
+	await mcpToolCallRateLimitStore.resetKey(toRateLimitKey({ userId: null, clientAddress: null }))
 
-	// send one more initialize than the limit allows, all as that visitor
+	// send one more tool call than the limit allows, all as that visitor. the tool is unknown, so no call reads anything
 	const statuses: number[] = []
 	for (let index = 0; index <= CALLER_RATE_LIMIT; index += 1) {
-		const initializeResponse = await limitedRoute.request("http://carlnotes.test/mcp", {
+		const toolCallResponse = await limitedRoute.request("http://carlnotes.test/mcp", {
 			method: "POST",
 			headers: {
 				"content-type": "application/json",
@@ -316,11 +316,11 @@ export async function checkRateLimit(): Promise<void> {
 			body: JSON.stringify({
 				jsonrpc: "2.0",
 				id: index,
-				method: "initialize",
-				params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "rate-limit", version: "1" } },
+				method: "tools/call",
+				params: { name: "rate_limit_check", arguments: {} },
 			}),
 		})
-		statuses.push(initializeResponse.status)
+		statuses.push(toolCallResponse.status)
 	}
 	check(
 		"the limiter lets the limit through and rejects the next request with 429",

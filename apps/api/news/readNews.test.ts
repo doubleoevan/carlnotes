@@ -237,3 +237,38 @@ test("an admin reads someone's news as the person does, followed Topics included
 	expect(isAllowedSpy).toHaveBeenCalledWith("admin-1", "admin:console")
 	isAllowedSpy.mockRestore()
 })
+
+test("a read with a cursor takes the totals from it and sends no count of the window", async () => {
+	// a later page of the own group, read with the cursor of a week that holds 12 own rows
+	const sentQueries = stubConnectionPool(() => [])
+	const cursor = toJsonCursor({ window: "week", until: Date.now(), groupTotals: [12, 0, 0] })
+	const newsRead = { profileUserId: "user-1", userId: null, window: "week" as const }
+	const news = await readNews({ ...newsRead, page: 2, cursor })
+	expect(news?.total).toBe(12)
+	expect(sentQueries.some(({ text }) => text.includes("news_events"))).toBe(true)
+	expect(sentQueries.some(({ text }) => text.includes("count(*) over ()"))).toBe(false)
+
+	// a first read counts the window
+	const firstReadQueries = stubConnectionPool(() => [])
+	await readNews({ ...newsRead, page: 1 })
+	expect(firstReadQueries.some(({ text }) => text.includes("count(*) over ()"))).toBe(true)
+	restoreConnectionPool()
+})
+
+test("the own group reads its Comments, reactions, and Topic Posts from candidate ids that start at the person", async () => {
+	const sentQueries = stubConnectionPool(() => [])
+	await readNews({ profileUserId: "user-1", userId: null, window: "week", page: 1 })
+	restoreConnectionPool()
+
+	// each arm keeps its filter and gains the candidate reads from the person's Comments and Topic Posts
+	const ownGroupText = sentQueries.find(({ text }) => text.includes("news_events"))?.text ?? ""
+	expect(ownGroupText).toContain('"comments"."id" in ((select "id" from "comments" "candidate_comments"')
+	expect(ownGroupText).toContain(
+		'"candidate_comments"."parent_comment_id" in (select "id" from "comments" "person_comments"',
+	)
+	expect(ownGroupText).toContain(
+		'"candidate_comments"."post_id" in (select "id" from "topic_posts" "person_topic_posts"',
+	)
+	expect(ownGroupText).toContain('"candidate_reactions"."comment_id" in (select "id" from "comments" "person_comments"')
+	expect(ownGroupText).toContain('"topic_posts"."id" in ((select "id" from "topic_posts" "candidate_topic_posts"')
+})

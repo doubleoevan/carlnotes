@@ -1,3 +1,4 @@
+import { useNewsWriteInvalidation } from "@carlnotes/core/hooks/useNews"
 import { type TopicFeedState, useTopicFeedState } from "@carlnotes/core/hooks/useTopicFeedState"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 import { focusManager, onlineManager, QueryClientProvider } from "@tanstack/react-query"
@@ -96,6 +97,8 @@ function AccountTopicFeedProvider({ userId, children }: { userId: string; childr
 			})
 		}
 	}, [queryCache])
+	// the account's own writes read its news again
+	useNewsWriteInvalidation(queryCache.client)
 	return (
 		<PersistQueryClientProvider client={queryCache.client} persistOptions={queryCache.persistOptions}>
 			<SearchBarProvider>

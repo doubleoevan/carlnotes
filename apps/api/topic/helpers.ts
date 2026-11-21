@@ -42,26 +42,23 @@ export function toTopicGateResponse(
 
 /**
  * Returns the latest succeeded topic scan with its duration, and the recap of the newest succeeded topic scan that
- * wrote one. A scan that reviewed nothing writes no recap, and never blanks the recap of the scan before it.
+ * wrote one, which the scan read reads. A scan that reviewed nothing writes no recap, and never blanks the recap of the
+ * scan before it.
  */
 export function toLastTopicScanFields(
 	scanHistory: TopicScan[],
-	scanRows: { id: string; scanSummary: string | null }[],
+	lastScanSummary: string | null,
 ): { lastSucceededTopicScan: TopicScan | null; scanSummary: string | null; lastScanDurationMs: number | null } {
 	// without a succeeded topic scan, there is nothing to read
 	const lastSucceededTopicScan = toLastSucceededTopicScan(scanHistory)
 	if (!lastSucceededTopicScan) {
 		return { lastSucceededTopicScan: null, scanSummary: null, lastScanDurationMs: null }
 	}
-
-	// the newest recap among the succeeded scans, read from the scan rows already in memory
-	const scanSummaryById = new Map(scanRows.map((scanRow) => [scanRow.id, scanRow.scanSummary]))
-	const scanSummary =
-		scanHistory
-			.filter((topicScan) => topicScan.status === "succeeded")
-			.map((topicScan) => scanSummaryById.get(topicScan.id))
-			.find((succeededScanSummary) => succeededScanSummary) ?? null
-	return { lastSucceededTopicScan, scanSummary, lastScanDurationMs: toScanDurationMs(lastSucceededTopicScan) }
+	return {
+		lastSucceededTopicScan,
+		scanSummary: lastScanSummary || null,
+		lastScanDurationMs: toScanDurationMs(lastSucceededTopicScan),
+	}
 }
 
 /**

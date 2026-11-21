@@ -117,3 +117,47 @@ test("a page window reads past the limit without a warning", async () => {
 	expect(topicFindings.length).toBe(21)
 	expect(reportSpy).not.toHaveBeenCalled()
 })
+
+// a podcast episode page's read of its chapters' findings keeps an invite topic's activation gate beside the chapters
+test("a read of a podcast episode's chapter findings keeps the invite gate", async () => {
+	const sentQueries = stubConnectionPool(() => [findingRow(0)])
+	const subscriberActivatedAt = new Date("2026-09-01T00:00:00Z")
+
+	// one read of an invite topic's findings for a subscriber, limited to one podcast episode's chapters
+	try {
+		await loadTopicFindings({
+			topicId: "topic-1",
+			userId: null,
+			subscriberActivatedAt,
+			chapterPodcastEpisodeId: "episode-1",
+		})
+	} finally {
+		restoreConnectionPool()
+	}
+
+	// the read filters by the scan's start after the activation and by the chapters' finding ids, in the same query
+	const [findingQuery] = sentQueries
+	expect(sentQueries).toHaveLength(1)
+	expect(findingQuery?.text).toContain('"scans"."started_at" > $')
+	expect(findingQuery?.text).toContain('"findings"."id" in (select "finding_id" from "episode_chapters"')
+	expect(findingQuery?.values).toContain("episode-1")
+})
+
+// an invite topic's reader with no active subscription reads no chapter findings and sends no query
+test("a read of a podcast episode's chapter findings without a subscription sends nothing", async () => {
+	const sentQueries = stubConnectionPool(() => [findingRow(0)])
+
+	// a read with the gate closed
+	try {
+		const topicFindings = await loadTopicFindings({
+			topicId: "topic-1",
+			userId: "reader-1",
+			subscriberActivatedAt: null,
+			chapterPodcastEpisodeId: "episode-1",
+		})
+		expect(topicFindings).toEqual([])
+	} finally {
+		restoreConnectionPool()
+	}
+	expect(sentQueries).toHaveLength(0)
+})

@@ -9,10 +9,10 @@ import {
 } from "@carlnotes/db/connectionPoolStub"
 // the modules the tests spy on, and the route
 import * as podcastFeedCache from "@carlnotes/db/podcastFeedCache"
+import * as visitorPageCaches from "@carlnotes/db/visitorPageCaches"
 import * as authorization from "../authorization"
 import * as currentUserModule from "../currentUser"
 import * as moderation from "../moderation"
-import * as feedCaches from "../topic/feedCaches"
 import * as homeOrder from "../topic/homeOrder"
 import { namedTopicColumns } from "../topic/permissions"
 import { podcastEpisodesRoute } from "./podcastEpisodes"
@@ -66,7 +66,7 @@ test("a save writes the trimmed words and clears the feed, the topic's visitor p
 	const { sentQueries } = stubEditor()
 	spyOn(moderation, "toObjectionableCategory").mockResolvedValue(null)
 	const deleteFeedCacheSpy = spyOn(podcastFeedCache, "deletePodcastFeedCache").mockResolvedValue()
-	const clearTopicPagesSpy = spyOn(feedCaches, "clearVisitorTopicPages").mockResolvedValue()
+	const clearTopicPagesSpy = spyOn(visitorPageCaches, "clearVisitorPagesOfTopic").mockResolvedValue()
 	const clearHomeSpy = spyOn(homeOrder, "clearHomeCaches").mockResolvedValue()
 	const response = await requestUpdate({ title: " Fresher beans ", description: "" })
 	expect(response.status).toBe(200)

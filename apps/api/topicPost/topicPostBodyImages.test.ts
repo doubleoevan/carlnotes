@@ -5,6 +5,7 @@ import { toTopicPostBodyImagePath } from "@carlnotes/contracts/topicPostBodyImag
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as quotas from "@carlnotes/db/quotas"
 import * as store from "@carlnotes/db/store"
+import * as visitorPageCaches from "@carlnotes/db/visitorPageCaches"
 import * as topicPostBodyImageFiles from "@carlnotes/pipeline/topicPosts/topicPostBodyImageFiles"
 import { ONE_PIXEL_PNG_BYTES, toBombPng } from "@carlnotes/pipeline/topicPosts/topicPostBodyImageTestFixtures"
 import * as edgePurge from "@carlnotes/server/edgePurge"
@@ -314,6 +315,7 @@ test("a removal whose post or image is already gone writes nothing, and an image
 	const sentQueries = stubConnectionPool()
 	const recordSpy = spyOn(store, "recordPendingObjectDeletions").mockResolvedValue()
 	const purgeSpy = spyOn(edgePurge, "purgeEdgeCacheTagAfterDeletion").mockResolvedValue()
+	const clearVisitorPagesSpy = spyOn(visitorPageCaches, "clearVisitorPagesOfTopic").mockResolvedValue()
 
 	// a post that is gone, then an image its body no longer shows
 	const loadSpy = spyOn(topicPosts, "loadTopicPostRow").mockResolvedValue(null)
@@ -323,7 +325,9 @@ test("a removal whose post or image is already gone writes nothing, and an image
 	expect(sentQueries).toHaveLength(0)
 	expect(recordSpy).not.toHaveBeenCalled()
 
-	// the image already gone from a public post's body leaves the edge again, in case an earlier purge failed
+	// the image already gone from a public post's body leaves the visitor copies and the edge again, in case an earlier
+	// clear or purge failed
+	expect(clearVisitorPagesSpy.mock.calls).toEqual([["topic-1"]])
 	expect(purgeSpy).toHaveBeenCalledWith(`topic-post:${TOPIC_POST_ID}`)
 	expect(purgeSpy).toHaveBeenCalledWith("topic-image:topic-1")
 })

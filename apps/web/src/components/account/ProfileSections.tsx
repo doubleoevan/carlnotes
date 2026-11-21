@@ -53,6 +53,7 @@ export function ProfileSections({
 			<SharedProfileSections
 				profile={profile}
 				isOwnProfile={isOwnProfile}
+				audience={audience}
 				newsList={
 					<NewsList
 						profileUserId={profile.userId}

@@ -47,15 +47,15 @@ const TOPIC_PAGE_PAIRS = [[FILM_SECTION, "<PodcastEpisodePlayer"]] as const
 // shows them: the film section, the podcast player, the comment thread, the Topic Posts section, then the cards with
 // the podcast episodes list
 const TOPIC_PAGE_ELEMENT_ORDERS: Record<string, string[]> = {
-	// the web page, whose cards follow the page in the same file
+	// the web page, then its cards
 	"apps/web/src/pages/TopicPage.tsx": [
 		FILM_SECTION,
 		"<PodcastEpisodePlayer",
 		"<SocialSection",
 		"<TopicPostsSection",
 		"<TopicViews",
-		PODCAST_EPISODE_LIST,
 	],
+	"apps/web/src/components/topic/TopicViews.tsx": [PODCAST_EPISODE_LIST],
 	// the mobile screen, then its cards
 	"apps/mobile/src/components/topic/TopicPageContent.tsx": [
 		FILM_SECTION,

@@ -1,4 +1,4 @@
-import type { StoredScanSourceResults, StoredSourceResult } from "@carlnotes/contracts/topics"
+import type { StoredScanSourceResults, StoredSourceResult } from "@carlnotes/contracts/scanSourceResults"
 import type { ResourceDiscovery } from "@carlnotes/pipeline/ingest/ingester"
 
 // a Source's result as ingest returns it, the Resources the Scan discovered, and the urls of the Scan's kept Findings

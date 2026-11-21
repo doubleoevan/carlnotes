@@ -4,6 +4,7 @@ import { db } from "./index"
 import * as personalSourcesAuthority from "./personalSourcesAuthority"
 import * as quotas from "./quotas"
 import * as topicPermissions from "./topicPermissions"
+import * as topicSubscriptions from "./topicSubscriptions"
 
 // a Finding on another user's Topic, with one join row for the Finding's Topic lookup
 function stubFindingTopic(visibility: "private" | "invite"): void {
@@ -57,7 +58,7 @@ test("a visitor sees no Finding on a private Topic", async () => {
 
 test("an admin sees a Finding on an invite Topic before any subscription", async () => {
 	stubFindingTopic("invite")
-	spyOn(topicPermissions, "subscriptionActivatedAt").mockResolvedValue(null)
+	spyOn(topicSubscriptions, "subscriptionActivatedAt").mockResolvedValue(null)
 	stubAccess({ isAdmin: true })
 	expect(await isTopicFindingVisible("admin-1", "finding-1")).toBe(true)
 })

@@ -2,25 +2,22 @@
 
 import { newsQuery, profileNewsQuery } from "@carlnotes/contracts/news"
 import { db } from "@carlnotes/db"
-import { cacheJson } from "@carlnotes/db/redis"
 import { users } from "@carlnotes/db/schema/users"
 import { zValidator } from "@hono/zod-validator"
 import { eq } from "drizzle-orm"
 import { Hono } from "hono"
 import { type AppEnv, currentProfileAudienceUser, currentUser } from "../currentUser"
 import { socialReadRateLimiter } from "../rateLimit"
-import { readNews } from "./readNews"
+import { readCachedNews } from "./newsCaches"
 
 // what a read with a cursor of another window, or with text that is no cursor, returns
 const INVALID_CURSOR_ERROR = { error: "That cursor is not one this window's news returned." }
 
-// how long the first page of a profile's news that every visitor shares is cached
-const VISITOR_NEWS_TTL_MS = 60_000
-
 /**
  * The news routes, both under the social read limit. A profile's news needs no session, and a session that is neither
  * the person's nor an admin's reads what a visitor reads, and so does any read in the visitor audience. A visitor's first
- * page of a window is cached for a minute, and a signed-in read is never cached.
+ * page of a window is cached for a minute, and so is a person's own, which their own writes clear. Any other signed-in
+ * read is never cached.
  */
 export const newsRoute = new Hono<AppEnv>()
 	.get("/news", socialReadRateLimiter, zValidator("query", newsQuery), async (context) => {
@@ -29,7 +26,7 @@ export const newsRoute = new Hono<AppEnv>()
 		if (!userId) {
 			return context.json({ error: "Sign in to read your news." }, 401)
 		}
-		const news = await readNews({ profileUserId: userId, userId, ...context.req.valid("query") })
+		const news = await readCachedNews({ profileUserId: userId, userId, ...context.req.valid("query") })
 		return news ? context.json(news) : context.json(INVALID_CURSOR_ERROR, 400)
 	})
 	.get("/profiles/:userId/news", socialReadRateLimiter, zValidator("query", profileNewsQuery), async (context) => {
@@ -45,16 +42,6 @@ export const newsRoute = new Hono<AppEnv>()
 		// the person and an admin read the news whole, and anyone else, or the visitor audience, its public rows
 		const { audience, ...newsRead } = context.req.valid("query")
 		const userId = currentProfileAudienceUser(context, audience)
-		const loadNews = (): ReturnType<typeof readNews> => readNews({ profileUserId: profileUser.id, userId, ...newsRead })
-
-		// every visitor shares one first page of a profile's window. a signed-in read and a later page read their own
-		const isVisitorFirstPage = userId === null && newsRead.page === 1 && !newsRead.cursor
-		const news = isVisitorFirstPage
-			? await cacheJson({
-					key: `visitor-news:${profileUser.id}:${newsRead.window}`,
-					ttlMs: VISITOR_NEWS_TTL_MS,
-					load: loadNews,
-				})
-			: await loadNews()
+		const news = await readCachedNews({ profileUserId: profileUser.id, userId, ...newsRead })
 		return news ? context.json(news) : context.json(INVALID_CURSOR_ERROR, 400)
 	})

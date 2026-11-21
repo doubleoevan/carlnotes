@@ -3,8 +3,9 @@
 
 import { z } from "zod"
 import type { ApiRouteContract } from "./apiRouteContracts"
+import { cardsPageQuery } from "./cardPages"
 import { topicFindingLinkPreviewResponse } from "./chat"
-import { homeResponse, yourTopicsPage, yourTopicsQuery } from "./home"
+import { homeQuery, homeResponse, podcastEpisodeCardsPage, yourTopicsPage } from "./home"
 import { inviteAcceptResponse, inviteCreateResponse } from "./invites"
 import {
 	note,
@@ -42,6 +43,7 @@ import {
 	topicPageQuery,
 	userIdParam,
 } from "./routeShapes"
+import { scanNote } from "./scanSourceResults"
 import { searchRequestPayload, searchResultsPage } from "./search"
 import {
 	regenerateTopicImagePayload,
@@ -61,15 +63,16 @@ import {
 	suggestSourcesPayload,
 	updateTopicPayload,
 } from "./topicPayloads"
+import { topicPostCardsPage } from "./topicPosts"
 import {
 	addableTopicsResponse,
 	manualScanResponse,
 	relatedTopicsResponse,
-	scanNote,
 	suggestSourcesResponse,
 	topicCreateResponse,
 	topicFeedResponse,
 	topicResponse,
+	topicScansPage,
 } from "./topics"
 import { updatesOpenerResponse, updatesRecapResponse } from "./updates"
 import { podcastEpisodeCounts, topicCounts, viewerCounts } from "./viewerCounts"
@@ -125,6 +128,13 @@ export const topicRouteContracts: Record<string, ApiRouteContract> = {
 		params: idParam,
 		query: topicPageQuery,
 		response: topicResponse,
+	},
+	"topicClient.fetchTopicScansPage": {
+		method: "GET",
+		path: "/api/topics/:id/scans",
+		params: idParam,
+		query: cardsPageQuery,
+		response: topicScansPage,
 	},
 	"topicClient.removeTopicSource": {
 		method: "DELETE",
@@ -250,12 +260,30 @@ export const topicRouteContracts: Record<string, ApiRouteContract> = {
 	},
 
 	// the home page and a topic's image
-	"homeClient.fetchHome": { method: "GET", path: "/api/home", response: homeResponse },
+	"homeClient.fetchHome": { method: "GET", path: "/api/home", query: homeQuery, response: homeResponse },
 	"homeClient.fetchYourTopicsPage": {
 		method: "GET",
 		path: "/api/home/your-topics",
-		query: yourTopicsQuery,
+		query: cardsPageQuery,
 		response: yourTopicsPage,
+	},
+	"homeClient.fetchNewestFilmsPage": {
+		method: "GET",
+		path: "/api/home/newest-films",
+		query: cardsPageQuery,
+		response: podcastEpisodeCardsPage,
+	},
+	"homeClient.fetchNewestPodcastEpisodesPage": {
+		method: "GET",
+		path: "/api/home/newest-podcast-episodes",
+		query: cardsPageQuery,
+		response: podcastEpisodeCardsPage,
+	},
+	"homeClient.fetchNewestTopicPostsPage": {
+		method: "GET",
+		path: "/api/home/newest-topic-posts",
+		query: cardsPageQuery,
+		response: topicPostCardsPage,
 	},
 	"topicImageClient.sendTopicImageRegeneration": {
 		method: "POST",

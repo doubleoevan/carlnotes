@@ -8,6 +8,7 @@ import { db } from "@carlnotes/db"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool, toTableRow } from "@carlnotes/db/connectionPoolStub"
 import { uncheckedImages } from "@carlnotes/db/schema/uncheckedImages"
 import * as store from "@carlnotes/db/store"
+import * as visitorPageCaches from "@carlnotes/db/visitorPageCaches"
 import { redrawUnpublishedImageFiles, unpublishTopicUncheckedImages } from "./publishedUncheckedImages"
 import * as topicCovers from "./topicImages/topicCovers"
 import * as topicVideoWorkflowClient from "./topicVideo/topicVideoWorkflowClient"
@@ -250,6 +251,7 @@ test("a write that fails throws its error out of the visibility change's transac
 test("the covers and the films drawn from a returned image are drawn again, each film once", async () => {
 	stubConnectionPool(({ text }) => (text.includes('from "topic_videos"') ? [["episode-1"], ["episode-2"]] : []))
 	const forgetTopicCoversSpy = spyOn(topicCovers, "forgetTopicCovers").mockResolvedValue(undefined)
+	const clearVisitorPagesSpy = spyOn(visitorPageCaches, "clearVisitorPagesOfTopic").mockResolvedValue(undefined)
 	const rebuildSpy = spyOn(topicVideoWorkflowClient, "startTopicVideoRebuild").mockResolvedValue(undefined)
 	await redrawUnpublishedImageFiles("topic-1", [
 		{ subjectKind: "topicImage", subjectId: "topic-1" },
@@ -261,6 +263,7 @@ test("the covers and the films drawn from a returned image are drawn again, each
 	// episode-1's film is rebuilt once for its own image, its podcast episode's, and the Topic's
 	expect(forgetTopicCoversSpy).toHaveBeenCalledTimes(1)
 	expect(forgetTopicCoversSpy).toHaveBeenCalledWith("topic-1")
+	expect(clearVisitorPagesSpy.mock.calls).toEqual([["topic-1"]])
 	expect(rebuildSpy.mock.calls.map(([podcastEpisodeId]) => podcastEpisodeId)).toEqual(["episode-1", "episode-2"])
 })
 
@@ -268,6 +271,7 @@ test("the covers and the films drawn from a returned image are drawn again, each
 test("a returned film image starts its film's rebuild once, and a returned Topic Post image starts nothing", async () => {
 	const sentQueries = stubConnectionPool()
 	const forgetTopicCoversSpy = spyOn(topicCovers, "forgetTopicCovers").mockResolvedValue(undefined)
+	const clearVisitorPagesSpy = spyOn(visitorPageCaches, "clearVisitorPagesOfTopic").mockResolvedValue(undefined)
 	const rebuildSpy = spyOn(topicVideoWorkflowClient, "startTopicVideoRebuild").mockResolvedValue(undefined)
 	await redrawUnpublishedImageFiles("topic-1", [
 		{ subjectKind: "topicPodcastEpisodeVideoImage", subjectId: "episode-1" },
@@ -279,5 +283,6 @@ test("a returned film image starts its film's rebuild once, and a returned Topic
 	await redrawUnpublishedImageFiles("topic-1", [])
 	expect(rebuildSpy).toHaveBeenCalledTimes(1)
 	expect(forgetTopicCoversSpy).not.toHaveBeenCalled()
+	expect(clearVisitorPagesSpy).toHaveBeenCalledTimes(1)
 	expect(sentQueries).toEqual([])
 })

@@ -24,6 +24,9 @@ export const podcastEpisodePageResponse = z.object({
 	}),
 	topicFindings: z.array(topicFinding),
 	canRate: z.boolean(),
+	// the podcast episode's listeners as last saved, which its counts line shows until its first poll a minute later.
+	// absent from an api older than the field
+	listenerCount: z.number().optional(),
 	// whether this user may remove the podcast episode
 	canRemovePodcastEpisode: z.boolean(),
 	// whether this user may edit the podcast episode. the image's origin, its image prompt, and the regenerations this

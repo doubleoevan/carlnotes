@@ -2,7 +2,7 @@
 // state, the text a client without an MCP view reads, and the model's fenced copy
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import type { McpFinishedScanStatus, McpRunningScanStatus, McpScanStatus } from "@carlnotes/contracts/mcpScanStatus"
-import type { StoredScanSourceResults } from "@carlnotes/contracts/topics"
+import type { StoredScanSourceResults } from "@carlnotes/contracts/scanSourceResults"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool, toTableRow } from "@carlnotes/db/connectionPoolStub"
 import { scans } from "@carlnotes/db/schema/scans"
 import type { topics } from "@carlnotes/db/schema/topics"

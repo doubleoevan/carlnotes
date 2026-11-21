@@ -1,8 +1,10 @@
 // read_profile: a person's profile page as the caller may see it, the caller's own by default, with its first page of
 // the week's news
-import { DEFAULT_NEWS_WINDOW } from "@carlnotes/contracts/news"
+import { DEFAULT_NEWS_WINDOW, type NewsResponse } from "@carlnotes/contracts/news"
+import type { ProfileResponse } from "@carlnotes/contracts/profilePage"
 import { z } from "zod"
-import { readNews } from "../news/readNews"
+import { readPageReadNews } from "../pageReadNews"
+import { readProfilePageRead } from "../profilePageRead"
 import { loadProfile } from "../profiles"
 import { loadMcpViewCardPodcastEpisodes, loadMcpViewSession, loadNewsMcpViewData, toMcpViewMeta } from "./mcpViewData"
 import { toMcpProfile } from "./profileResults"
@@ -40,11 +42,9 @@ export function registerProfileTool({ mcpServer, toolCaller, routeTopicId }: Reg
 				return toTextResult("Name a user_id. A profile of your own needs a connected account.", true)
 			}
 
-			// the page and the first page of its week's news that the page shows, as the caller may see them
-			const [profile, newsPage] = await Promise.all([
-				loadProfile(profileUserId, userId),
-				readNews({ profileUserId, userId, window: DEFAULT_NEWS_WINDOW, page: 1 }),
-			])
+			// the page and the first page of its week's news that the page shows, as the caller may see them: a visitor's
+			// from the profile page read's copy, and a user's from the profile's loader and the news caches
+			const { profile, newsPage } = await readToolProfile(profileUserId, userId)
 			if (!profile) {
 				return toTextResult("No person has that id.", true)
 			}
@@ -76,4 +76,23 @@ export function registerProfileTool({ mcpServer, toolCaller, routeTopicId }: Reg
 			}
 		},
 	)
+}
+
+// a profile as a tool caller may see it, and the first page of its week's news, null where either is missing
+type ToolProfile = { profile: ProfileResponse | null; newsPage: NewsResponse | null }
+
+// a visitor reads the profile page read's copy. a user reads the profile's loader and the news caches
+async function readToolProfile(profileUserId: string, userId: string | null): Promise<ToolProfile> {
+	// a visitor's from the copy
+	if (!userId) {
+		const profilePageRead = await readProfilePageRead({ profileUserId, sessionUserId: null, audienceUserId: null })
+		return { profile: profilePageRead?.profile ?? null, newsPage: profilePageRead?.news ?? null }
+	}
+
+	// a user's from the profile's loader and the news caches, together
+	const [profile, newsPage] = await Promise.all([
+		loadProfile(profileUserId, userId),
+		readPageReadNews({ profileUserId, userId }),
+	])
+	return { profile, newsPage }
 }

@@ -1,359 +1,269 @@
-// the page head of a topic, a podcast episode, a profile, a team, or an invitation, and the routes that serve it and
-// a Topic Post's
+// the page head of a topic, a podcast episode, a Topic Post, a profile, a team, or an invitation, which the page reads
+// hold, and the route that serves the join page's
 
-import { MINIMUM_SHOWN_FINDINGS } from "@carlnotes/contracts/enums"
 import type { PageHead } from "@carlnotes/contracts/pageHead"
-import type { PublishedPodcastEpisodeNumbers } from "@carlnotes/contracts/podcast"
-import { toProfilePageTitle } from "@carlnotes/contracts/profilePage"
-import {
-	toInvitePath,
-	toPageTitle,
-	toPodcastEpisodePath,
-	toPodcastFeedPath,
-	toTopicFeedPath,
-	toTopicPath,
-} from "@carlnotes/contracts/seo"
-import { toCountLabel } from "@carlnotes/contracts/text"
+import type { ProfileResponse } from "@carlnotes/contracts/profilePage"
+import { toInvitePath, toPodcastFeedPath } from "@carlnotes/contracts/seo"
+import type { TeamPageResponse } from "@carlnotes/contracts/teams"
 import { toTopicImageUrls } from "@carlnotes/contracts/topicImages"
-import { db } from "@carlnotes/db"
-import { topics } from "@carlnotes/db/schema/topics"
+import type { PodcastEpisodePageAddress } from "@carlnotes/db/visitorPageCaches"
 import { appUrl } from "@carlnotes/server/appUrl"
-import { eq } from "drizzle-orm"
 import { Hono } from "hono"
+import { loadUserAvatarRow, toPublishedAvatarFromUser } from "../avatars"
 import type { AppEnv } from "../currentUser"
 import { toInviteTarget } from "../invite/invites"
-import { lastScan, scanFindings, toCreativeWorkLd, toFindingListLd } from "../jsonLd"
+import { lastScan, type ScanFinding, scanFindings, toCreativeWorkLd, toFindingListLd } from "../jsonLd"
 import {
-	loadPublishedPodcastEpisode,
+	loadPodcastEpisodePageRow,
 	loadPublishedPodcastEpisodeRows,
-	type PodcastEpisodeRow,
+	type PodcastEpisodePageRow,
 } from "../podcast/podcastEpisodeRows"
-import { toPodcastEpisodeLd, toPodcastSeries, toPodcastSeriesLd } from "../podcast/podcastSeo"
+import { toPodcastSeries, toPodcastSeriesLd } from "../podcast/podcastSeo"
 import { loadTopicFeedUpdatedAt } from "../seo"
+import { loadTopicRow } from "../topic/accessibleFindings"
+import type { TopicPageHeadRows } from "../topic/topics"
 import { toTopicPostPageHead } from "../topicPost/topicPostPageHead"
-import { toPodcastEpisodePreview, toPodcastEpisodePreviewKey } from "./podcastEpisodeImage"
-import { loadTopicPostPreview, toInvitedTeamPreview, toProfilePreview, toTeamPreview, toTopicPreview } from "./preview"
+import {
+	type PodcastEpisodeTopicPreview,
+	toInvitePageHead,
+	toPodcastEpisodePageHead,
+	toProfilePageHead,
+	toTeamPageHead,
+	toTopicPageHead,
+	toTopicPageUrl,
+} from "./pageHeadBuilders"
+import { loadTopicPostPreview, toInvitedTeamPreview, toTopicPreview, toTopicPreviewDescription } from "./preview"
 import { toPreviewVersion } from "./previewImage"
-import { type ProfilePreview, toProfilePreviewKey } from "./profileImage"
+import type { ProfilePreview } from "./profileImage"
 import { type TeamPreview, toTeamPreviewKey } from "./teamImage"
 import { type TopicPreview, toTopicPreviewKey } from "./topicImage"
 import { toTopicPostPreviewKey } from "./topicPostImage"
 
-// the page head routes: a topic's, a podcast episode's, a Topic Post's, a profile's, a team's, and an invitation's
-export const pageHeadRoute = new Hono<AppEnv>()
-	// what a topic page puts in its head. a private or invite topic serves its card and never its findings
-	.get("/topics/:id/head", async (context) => {
-		const topicPreview = await toTopicPreview(context.req.param("id"))
-		if (!topicPreview) {
-			return context.json({ error: "not found" }, 404)
-		}
-		if (topicPreview.visibility !== "public") {
-			return context.json(toTopicPageHead({ topicPreview, appUrl: appUrl(), jsonLd: null }))
-		}
-
-		// build a public topic's structured data from its last scan's findings, dated by when its feed last changed
-		const [findingRows, feedUpdatedAt] = await Promise.all([
-			lastScan(topicPreview.topicId).then((lastScanRow) => (lastScanRow ? scanFindings(lastScanRow.id) : [])),
-			loadTopicFeedUpdatedAt(topicPreview.topicId),
-		])
-		const creativeWork = toCreativeWorkLd({
-			name: topicPreview.title,
-			description: topicPreview.description,
-			url: toTopicPageUrl(topicPreview, appUrl()),
-			dateModified: feedUpdatedAt,
-			authorUsername: topicPreview.ownerUsername,
-			findingList: toFindingListLd(findingRows),
-			imageUrl: topicPreview.imageHash
-				? `${appUrl()}${toTopicImageUrls(topicPreview.topicId, topicPreview.imageHash).page.url2x}`
-				: null,
-			appUrl: appUrl(),
-		})
-
-		// name the podcast feed and the podcast series if the topic has a published podcast episode
-		const [topic] = await db.select().from(topics).where(eq(topics.id, topicPreview.topicId))
-		const hasPublishedPodcastEpisode = topic ? (await loadPublishedPodcastEpisodeRows(topic, null)).length > 0 : false
-		const podcastFeedUrl = hasPublishedPodcastEpisode ? `${appUrl()}${toPodcastFeedPath(topicPreview.topicId)}` : null
-		const jsonLd = podcastFeedUrl
-			? [creativeWork, toPodcastSeriesLd(toPodcastSeries(topicPreview, appUrl()))]
-			: creativeWork
-		return context.json(toTopicPageHead({ topicPreview, appUrl: appUrl(), jsonLd, podcastFeedUrl }))
-	})
-	// what a podcast episode page puts in its head. a private or invite topic's episode serves its card alone
-	.get("/topics/:id/episodes/:season/:episodeNumber/head", async (context) => {
-		// respond 404 to a season or an episode number that is not a whole number
-		const { id: topicId, season, episodeNumber } = context.req.param()
-		const seasonNumber = Number(season)
-		const podcastEpisodeNumber = Number(episodeNumber)
-		if (!Number.isInteger(seasonNumber) || !Number.isInteger(podcastEpisodeNumber)) {
-			return context.json({ error: "not found" }, 404)
-		}
-
-		// the topic's preview, and the published podcast episode at that season and episode number
-		const [topicPreview, publishedPodcastEpisode] = await Promise.all([
-			toTopicPreview(topicId),
-			loadPublishedPodcastEpisode({ topicId, season: seasonNumber, episodeNumber: podcastEpisodeNumber }),
-		])
-		if (!topicPreview || !publishedPodcastEpisode) {
-			return context.json({ error: "not found" }, 404)
-		}
-		return context.json(
-			toPodcastEpisodePageHead({
-				topicPreview,
-				// the row was found by this season and number, which its own type leaves nullable until publish
-				podcastEpisodeRow: {
-					...publishedPodcastEpisode.podcastEpisodeRow,
-					season: seasonNumber,
-					episodeNumber: podcastEpisodeNumber,
-				},
-				appUrl: appUrl(),
-			}),
-		)
-	})
-	// what a Topic Post page puts in its head. a draft is not found, and a private or invite topic's post serves its
-	// card alone
-	.get("/topic-posts/:id/head", async (context) => {
-		const loadedTopicPostPreview = await loadTopicPostPreview(context.req.param("id"))
-		if (!loadedTopicPostPreview) {
-			return context.json({ error: "not found" }, 404)
-		}
-		return context.json(toTopicPostPageHead({ ...loadedTopicPostPreview, appUrl: appUrl() }))
-	})
-	// what a profile page puts in its head
-	.get("/profiles/:userId/head", async (context) => {
-		const profilePreview = await toProfilePreview(context.req.param("userId"))
-		if (!profilePreview) {
-			return context.json({ error: "not found" }, 404)
-		}
-		return context.json(toProfilePageHead(profilePreview, appUrl()))
-	})
-	// what a team page puts in its head. a private team is not found, the same as a missing one
-	.get("/teams/:teamId/head", async (context) => {
-		const teamPreview = await toTeamPreview(context.req.param("teamId"))
-		if (!teamPreview) {
-			return context.json({ error: "not found" }, 404)
-		}
-		return context.json(toTeamPageHead(teamPreview, appUrl()))
-	})
-	// what the join page puts in its head, found by the invite's token. a private team's invite still gets a card
-	.get("/invites/:token/head", async (context) => {
-		const token = context.req.param("token")
-		const inviteTarget = await toInviteTarget(token)
-		if (!inviteTarget) {
-			return context.json({ error: "not found" }, 404)
-		}
-
-		// a team invite is named by its team, and a topic invite by its topic
-		const invitedTeamPreview = "teamId" in inviteTarget ? await toInvitedTeamPreview(inviteTarget.teamId) : null
-		const invitedTopicPreview = "topicId" in inviteTarget ? await toTopicPreview(inviteTarget.topicId) : null
-		const name = invitedTeamPreview?.name ?? invitedTopicPreview?.title
-
-		// a topic invite shared from a Topic Post shows the post's card and title while the post is published
-		const invitedTopicPostPreview =
-			"topicId" in inviteTarget && inviteTarget.topicPostId
-				? ((await loadTopicPostPreview(inviteTarget.topicPostId))?.topicPostPreview ?? null)
-				: null
-		// find the card's storage key. the image url names the key's version
-		const invitePreviewKey =
-			(invitedTopicPostPreview && toTopicPostPreviewKey(invitedTopicPostPreview)) ??
-			(invitedTeamPreview && toTeamPreviewKey(invitedTeamPreview)) ??
-			(invitedTopicPreview && toTopicPreviewKey(invitedTopicPreview))
-		if (!name || !invitePreviewKey) {
-			return context.json({ error: "not found" }, 404)
-		}
-
-		// the join page's head, with the card at its current version
-		return context.json(
-			toInvitePageHead({
-				name,
-				imageUrl: `${appUrl()}/api/invites/${token}/preview.png?v=${toPreviewVersion(invitePreviewKey)}`,
-				inviteUrl: `${appUrl()}${toInvitePath(token)}`,
-				kind: invitedTeamPreview ? "team" : "topic",
-				topicPostTitle: invitedTopicPostPreview?.title,
-			}),
-		)
-	})
-
-// what a Topic page's head is built from. jsonLd is null for a page with no structured data,
-// and podcastFeedUrl is set once the topic has a published podcast episode
-type ToTopicPageHeadOptions = {
-	topicPreview: TopicPreview
-	appUrl: string
-	jsonLd: object | null
-	podcastFeedUrl?: string | null
-}
-
-/**
- * A Topic page's head: its title, its card, its canonical url, its feeds, and its structured data if given.
- */
-export function toTopicPageHead({ topicPreview, appUrl, jsonLd, podcastFeedUrl }: ToTopicPageHeadOptions): PageHead {
-	// a public topic names its feed, and is indexed with a canonical url once it is shown
-	const isPublicTopic = topicPreview.visibility === "public"
-	const isIndexed = isPublicTopic && topicPreview.keptCount >= MINIMUM_SHOWN_FINDINGS
-	const pageUrl = toTopicPageUrl(topicPreview, appUrl)
-	return {
-		title: toPageTitle(topicPreview.title),
-		cardTitle: topicPreview.title,
-		description: topicPreview.description,
-		canonicalUrl: isIndexed ? pageUrl : null,
-		cardUrl: pageUrl,
-		imageUrl: `${appUrl}/api/topics/${topicPreview.topicId}/preview.png?v=${toPreviewVersion(toTopicPreviewKey(topicPreview))}`,
-		feedUrl: isPublicTopic ? `${appUrl}${toTopicFeedPath(topicPreview.topicId)}` : null,
-		podcastFeedUrl: podcastFeedUrl ?? null,
-		isIndexed,
-		jsonLd,
+// the page head route of the join page, found by the invite's token. a private team's invite still gets a card
+export const pageHeadRoute = new Hono<AppEnv>().get("/invites/:token/head", async (context) => {
+	const token = context.req.param("token")
+	const inviteTarget = await toInviteTarget(token)
+	if (!inviteTarget) {
+		return context.json({ error: "not found" }, 404)
 	}
-}
 
-// the topic, the published podcast episode, whose season and number are set, and the app's url that a podcast episode
-// page's head is built from
-type ToPodcastEpisodePageHeadOptions = {
-	topicPreview: TopicPreview
-	podcastEpisodeRow: PodcastEpisodeRow & PublishedPodcastEpisodeNumbers
-	appUrl: string
-}
+	// a team invite is named by its team, and a topic invite by its topic
+	const invitedTeamPreview = "teamId" in inviteTarget ? await toInvitedTeamPreview(inviteTarget.teamId) : null
+	const invitedTopicPreview = "topicId" in inviteTarget ? await toTopicPreview(inviteTarget.topicId) : null
+	const name = invitedTeamPreview?.name ?? invitedTopicPreview?.title
 
-/**
- * Builds a podcast episode page's head, with the card alone for an episode of a private or invite topic.
- */
-export function toPodcastEpisodePageHead({
-	topicPreview,
-	podcastEpisodeRow,
-	appUrl,
-}: ToPodcastEpisodePageHeadOptions): PageHead {
-	// the podcast episode's page path comes after its topic's page path.
-	// a public topic's episode page is indexed once the topic is shown
-	const pageUrl = `${appUrl}${toPodcastEpisodePath({ id: topicPreview.topicId, name: topicPreview.title }, podcastEpisodeRow)}`
-	const isPublicTopic = topicPreview.visibility === "public"
-	const isIndexed = isPublicTopic && topicPreview.keptCount >= MINIMUM_SHOWN_FINDINGS
+	// a topic invite shared from a Topic Post shows the post's card and title while the post is published
+	const invitedTopicPostPreview =
+		"topicId" in inviteTarget && inviteTarget.topicPostId
+			? ((await loadTopicPostPreview(inviteTarget.topicPostId))?.topicPostPreview ?? null)
+			: null
+	// find the card's storage key. the image url names the key's version
+	const invitePreviewKey =
+		(invitedTopicPostPreview && toTopicPostPreviewKey(invitedTopicPostPreview)) ??
+		(invitedTeamPreview && toTeamPreviewKey(invitedTeamPreview)) ??
+		(invitedTopicPreview && toTopicPreviewKey(invitedTopicPreview))
+	if (!name || !invitePreviewKey) {
+		return context.json({ error: "not found" }, 404)
+	}
 
-	// the episode's title, its audio, its topic's podcast, and its card's key
-	const podcastEpisodeTitle = podcastEpisodeRow.title ?? topicPreview.title
-	const audioUrl = `${appUrl}/api/episodes/${podcastEpisodeRow.id}/audio.mp3`
-	const podcastSeries = toPodcastSeries(topicPreview, appUrl)
-	const podcastEpisodePreviewKey = toPodcastEpisodePreviewKey(
-		toPodcastEpisodePreview(podcastEpisodeRow, {
-			id: topicPreview.topicId,
-			name: topicPreview.title,
-			imageHash: topicPreview.imageHash,
+	// the join page's head, with the card at its current version
+	return context.json(
+		toInvitePageHead({
+			name,
+			imageUrl: `${appUrl()}/api/invites/${token}/preview.png?v=${toPreviewVersion(invitePreviewKey)}`,
+			inviteUrl: `${appUrl()}${toInvitePath(token)}`,
+			kind: invitedTeamPreview ? "team" : "topic",
+			topicPostTitle: invitedTopicPostPreview?.title,
 		}),
 	)
+})
 
-	// the head that every podcast episode page has, with its titles, its description, and its card. a private or invite
-	// topic's episode description summarizes its findings, which stay private, so its head describes the topic instead
-	const cardPageHead = {
-		title: toPageTitle(`${podcastEpisodeTitle} · ${topicPreview.title}`),
-		cardTitle: podcastEpisodeTitle,
-		description: isPublicTopic ? (podcastEpisodeRow.description ?? "") : topicPreview.description,
-		canonicalUrl: isIndexed ? pageUrl : null,
-		cardUrl: pageUrl,
-		imageUrl: `${appUrl}/api/episodes/${podcastEpisodeRow.id}/preview.png?v=${toPreviewVersion(podcastEpisodePreviewKey)}`,
-		feedUrl: null,
-		isIndexed,
+/**
+ * Loads a topic page's head, or null if no topic has that id. A private or invite topic's head is its card, and never
+ * names its findings.
+ */
+export async function loadTopicPageHead(topicId: string): Promise<PageHead | null> {
+	const topicPreview = await toTopicPreview(topicId)
+	if (!topicPreview) {
+		return null
+	}
+	if (topicPreview.visibility !== "public") {
+		return toTopicPageHead({ topicPreview, appUrl: appUrl(), jsonLd: null })
 	}
 
-	// a private or invite topic's episode page has its card alone
-	if (!isPublicTopic) {
-		return { ...cardPageHead, podcastFeedUrl: null, jsonLd: null }
+	// a public topic's last scan's findings, when its feed last changed, and whether it has a published podcast episode
+	const [lastScanFindings, feedUpdatedAt, hasPublishedPodcastEpisode] = await Promise.all([
+		lastScan(topicPreview.topicId).then((lastScanRow) => (lastScanRow ? scanFindings(lastScanRow.id) : [])),
+		loadTopicFeedUpdatedAt(topicPreview.topicId),
+		loadTopicRow(topicPreview.topicId).then(async (topic) =>
+			topic ? (await loadPublishedPodcastEpisodeRows(topic, null)).length > 0 : false,
+		),
+	])
+	return toPublicTopicPageHead({ topicPreview, lastScanFindings, feedUpdatedAt, hasPublishedPodcastEpisode })
+}
+
+/**
+ * Returns a topic page's head from the rows that the topic's page already loaded, with no read of its own.
+ */
+export function toTopicPageHeadFromRows({
+	topicWithOwner: { topic, owner },
+	sourceCount,
+	keptCount,
+	scanSummary,
+	lastScanFindings,
+	feedUpdatedAt,
+	hasPublishedPodcastEpisode,
+}: TopicPageHeadRows): PageHead {
+	// the topic's preview, as toTopicPreview reads it
+	const topicPreview: TopicPreview = {
+		topicId: topic.id,
+		title: topic.name,
+		visibility: topic.visibility,
+		ownerUserId: owner.userId,
+		ownerUsername: owner.username,
+		ownerAvatar: toPublishedAvatarFromUser(owner),
+		keptCount,
+		sourceCount,
+		imageHash: topic.imageHash,
+		description: toTopicPreviewDescription({
+			visibility: topic.visibility,
+			name: topic.name,
+			prompt: topic.prompt,
+			scanSummary,
+			ownerUsername: owner.username,
+			keptCount,
+		}),
 	}
 
-	// a public topic's episode page adds its topic's podcast feed and its structured data
+	// a private or invite topic's head is its card alone
+	if (topicPreview.visibility !== "public") {
+		return toTopicPageHead({ topicPreview, appUrl: appUrl(), jsonLd: null })
+	}
+	return toPublicTopicPageHead({ topicPreview, lastScanFindings, feedUpdatedAt, hasPublishedPodcastEpisode })
+}
+
+// a public topic's preview, its last scan's findings, when its feed last changed, and whether it has a published
+// podcast episode
+type ToPublicTopicPageHeadOptions = {
+	topicPreview: TopicPreview
+	lastScanFindings: ScanFinding[]
+	feedUpdatedAt: Date | null
+	hasPublishedPodcastEpisode: boolean
+}
+
+// a public topic's head, with structured data from its last scan's findings, dated by when its feed last changed, and
+// its podcast feed and podcast series if it has a published podcast episode
+function toPublicTopicPageHead({
+	topicPreview,
+	lastScanFindings,
+	feedUpdatedAt,
+	hasPublishedPodcastEpisode,
+}: ToPublicTopicPageHeadOptions): PageHead {
+	const creativeWork = toCreativeWorkLd({
+		name: topicPreview.title,
+		description: topicPreview.description,
+		url: toTopicPageUrl(topicPreview, appUrl()),
+		dateModified: feedUpdatedAt,
+		authorUsername: topicPreview.ownerUsername,
+		findingList: toFindingListLd(lastScanFindings),
+		imageUrl: topicPreview.imageHash
+			? `${appUrl()}${toTopicImageUrls(topicPreview.topicId, topicPreview.imageHash).page.url2x}`
+			: null,
+		appUrl: appUrl(),
+	})
+
+	// name the podcast feed and the podcast series if the topic has a published podcast episode
+	const podcastFeedUrl = hasPublishedPodcastEpisode ? `${appUrl()}${toPodcastFeedPath(topicPreview.topicId)}` : null
+	const jsonLd = podcastFeedUrl
+		? [creativeWork, toPodcastSeriesLd(toPodcastSeries(topicPreview, appUrl()))]
+		: creativeWork
+	return toTopicPageHead({ topicPreview, appUrl: appUrl(), jsonLd, podcastFeedUrl })
+}
+
+/**
+ * Loads a podcast episode page's head, or null if its topic has no published podcast episode at that season and
+ * number. A private or invite topic's podcast episode head is its card alone.
+ */
+export async function loadPodcastEpisodePageHead({
+	topicId,
+	season,
+	episodeNumber,
+}: PodcastEpisodePageAddress): Promise<PageHead | null> {
+	// the published podcast episode at that season and episode number, from the row the page reads too
+	const podcastEpisodePageRow = await loadPodcastEpisodePageRow({ topicId, season, episodeNumber })
+	if (!podcastEpisodePageRow) {
+		return null
+	}
+	return toPodcastEpisodePageHead({
+		topicPreview: toPodcastEpisodeTopicPreview(podcastEpisodePageRow),
+		// the row was found by this season and number, which its own type leaves nullable until publish
+		podcastEpisodeRow: { ...podcastEpisodePageRow.podcastEpisodeRow, season, episodeNumber },
+		appUrl: appUrl(),
+	})
+}
+
+// the topic fields of a podcast episode page's head, from the podcast episode's page row
+function toPodcastEpisodeTopicPreview({
+	topic,
+	owner,
+	topicHeadFields,
+}: PodcastEpisodePageRow): PodcastEpisodeTopicPreview {
 	return {
-		...cardPageHead,
-		podcastFeedUrl: podcastSeries.feedUrl,
-		jsonLd: toPodcastEpisodeLd({
-			name: podcastEpisodeTitle,
-			description: podcastEpisodeRow.description ?? "",
-			url: pageUrl,
-			publishedAt: podcastEpisodeRow.publishedAt ?? new Date(),
-			durationSeconds: podcastEpisodeRow.durationSeconds ?? 0,
-			// where the podcast episode sits in the series
-			season: podcastEpisodeRow.season,
-			episodeNumber: podcastEpisodeRow.episodeNumber,
-			audioUrl,
-			series: podcastSeries,
+		topicId: topic.id,
+		title: topic.name,
+		visibility: topic.visibility,
+		keptCount: topicHeadFields.keptCount,
+		imageHash: topic.imageHash,
+		description: toTopicPreviewDescription({
+			visibility: topic.visibility,
+			name: topic.name,
+			prompt: topic.prompt,
+			scanSummary: topicHeadFields.scanSummary,
+			ownerUsername: owner.username,
+			keptCount: topicHeadFields.keptCount,
 		}),
 	}
 }
 
 /**
- * A profile page's head: its title, its card, and its canonical url.
+ * Loads a published Topic Post page's head, or null for a draft and a missing post. A private or invite topic's post
+ * head is its card alone.
  */
-export function toProfilePageHead(profilePreview: ProfilePreview, appUrl: string): PageHead {
-	// the title and the profile page's url
-	const title = toPageTitle(toProfilePageTitle(profilePreview.username))
-	const pageUrl = `${appUrl}/profiles/${profilePreview.userId}`
-	return {
-		title,
-		cardTitle: title,
-		description: `${profilePreview.username} on CarlNotes. ${toCountLabel(profilePreview.publicTopicCount, "public topic")}, ${toCountLabel(profilePreview.followerCount, "follower")}.`,
-		// a profile is indexed and names a canonical url only once it has a public topic
-		canonicalUrl: profilePreview.publicTopicCount > 0 ? pageUrl : null,
-		cardUrl: pageUrl,
-		imageUrl: `${appUrl}/api/profiles/${profilePreview.userId}/preview.png?v=${toPreviewVersion(toProfilePreviewKey(profilePreview))}`,
-		feedUrl: null,
-		isIndexed: profilePreview.publicTopicCount > 0,
-		jsonLd: null,
-	}
+export async function loadTopicPostPageHead(topicPostId: string): Promise<PageHead | null> {
+	const loadedTopicPostPreview = await loadTopicPostPreview(topicPostId)
+	return loadedTopicPostPreview ? toTopicPostPageHead({ ...loadedTopicPostPreview, appUrl: appUrl() }) : null
 }
 
 /**
- * A team page's head: its title, its card, and its canonical url.
+ * Returns a profile page's head from the profile the page read already holds, with the person's published avatar from
+ * the user row the page read shares. Its public topics are the person's own public ones among the profile's topic
+ * cards.
  */
-export function toTeamPageHead(teamPreview: TeamPreview, appUrl: string): PageHead {
-	// the title and the team page's url
-	const title = toPageTitle(teamPreview.name)
-	const pageUrl = `${appUrl}/teams/${teamPreview.teamId}`
-	return {
-		title,
-		cardTitle: title,
-		description: `${teamPreview.name} on CarlNotes. ${toCountLabel(teamPreview.memberCount, "member")}, ${toCountLabel(teamPreview.topicCount, "public topic")}.`,
-		// a team is indexed and names a canonical url only once it has a public topic
-		canonicalUrl: teamPreview.topicCount > 0 ? pageUrl : null,
-		cardUrl: pageUrl,
-		imageUrl: `${appUrl}/api/teams/${teamPreview.teamId}/preview.png?v=${toPreviewVersion(toTeamPreviewKey(teamPreview))}`,
-		feedUrl: null,
-		isIndexed: teamPreview.topicCount > 0,
-		jsonLd: null,
+export async function loadProfilePageHeadFromProfile(profile: ProfileResponse): Promise<PageHead> {
+	const profilePreview: ProfilePreview = {
+		userId: profile.userId,
+		username: profile.username,
+		avatar: toPublishedAvatarFromUser(await loadUserAvatarRow(profile.userId)),
+		publicTopicCount: profile.profileTopics.filter((topicCard) => topicCard.isOwned && topicCard.isPublic).length,
+		followerCount: profile.subscriberCount,
 	}
+	return toProfilePageHead(profilePreview, appUrl())
 }
 
 /**
- * The join page's head. A token is a credential, so the page is never indexed. The card url is the invitation
- * itself, so a platform that rewrites a shared link to the card url keeps the token.
+ * Returns a public team's page head from the team's row and the page the page read already holds: its active members,
+ * the listed and the hidden, and its public topics among the page's topics.
  */
-export function toInvitePageHead(invitePreview: {
-	name: string
-	imageUrl: string
-	inviteUrl: string
-	kind: "team" | "topic"
-	// the title of the Topic Post a topic invitation was shared from, if any
-	topicPostTitle?: string
-}): PageHead {
-	// a team invitation joins the team, and a topic invitation follows the topic
-	const inviteVerb = invitePreview.kind === "team" ? "Join" : "Follow"
-	const invitedAction = `${inviteVerb.toLowerCase()} ${invitePreview.name}`
-
-	// an invitation shared from a Topic Post is titled by the post, and says that it opens the post
-	const { topicPostTitle } = invitePreview
-	const title = topicPostTitle
-		? `Read ${topicPostTitle} on CarlNotes`
-		: `${inviteVerb} ${invitePreview.name} on CarlNotes`
-	return {
-		title,
-		cardTitle: title,
-		description: topicPostTitle
-			? `You are invited to ${invitedAction} and read this post.`
-			: `You are invited to ${invitedAction}. Carl reads its sources and shares the notes.`,
-		canonicalUrl: null,
-		cardUrl: invitePreview.inviteUrl,
-		imageUrl: invitePreview.imageUrl,
-		feedUrl: null,
-		isIndexed: false,
-		jsonLd: null,
+export function toTeamPageHeadFromPage(
+	team: { id: string; name: string; avatarKey: string | null },
+	teamPage: Pick<TeamPageResponse, "members" | "hiddenMemberCount" | "topics">,
+): PageHead {
+	const teamPreview: TeamPreview = {
+		teamId: team.id,
+		name: team.name,
+		avatar: team.avatarKey ? { avatarKey: team.avatarKey } : null,
+		memberCount: teamPage.members.filter((member) => member.isActive).length + teamPage.hiddenMemberCount,
+		topicCount: teamPage.topics.filter((topic) => topic.visibility === "public").length,
 	}
-}
-
-// a Topic page's url, with the topic's slug
-function toTopicPageUrl(topicPreview: TopicPreview, appUrl: string): string {
-	return `${appUrl}${toTopicPath({ id: topicPreview.topicId, name: topicPreview.title })}`
+	return toTeamPageHead(teamPreview, appUrl())
 }

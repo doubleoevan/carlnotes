@@ -3,7 +3,6 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool, toTableRow } from "@carlnotes/db/connectionPoolStub"
 import { topicPosts } from "@carlnotes/db/schema/topicPosts"
-import * as store from "@carlnotes/db/store"
 import * as avatars from "../avatars"
 import type { TopicPostRow } from "../topicPost/topicPosts"
 import * as topicPostRows from "../topicPost/topicPosts"
@@ -30,7 +29,14 @@ const TOPIC_POST_ROW: TopicPostRow = {
 		name: "Coffee",
 		imageHash: "topichash",
 	},
-	author: { userId: "member-1", username: "CoffeeReader", avatarSource: "upload", avatarKey: "avatars/member-1.png" },
+	author: {
+		userId: "member-1",
+		username: "CoffeeReader",
+		avatarSource: "upload",
+		avatarKey: "avatars/member-1.png",
+		image: null,
+	},
+	topicCounts: { viewerCount: 0, subscriberCount: 0 },
 }
 
 // the Topic's preview, with its owner's byline and its image
@@ -116,7 +122,11 @@ test("a card's key holds the post's id, and changes with its title and with its 
 
 test("a post with no image of its own or of its Topic's renders the text card as a png", async () => {
 	const topicPostPreview = toTopicPostPreview({
-		topicPostRow: { ...TOPIC_POST_ROW, topicPost: { ...TOPIC_POST_ROW.topicPost, imageHash: null } },
+		topicPostRow: {
+			...TOPIC_POST_ROW,
+			topicPost: { ...TOPIC_POST_ROW.topicPost, imageHash: null },
+			topic: { ...TOPIC_POST_ROW.topic, imageHash: null },
+		},
 		topicPreview: { ...TOPIC_PREVIEW, imageHash: null },
 		authorAvatar: null,
 	})
@@ -135,24 +145,22 @@ test("a draft has no card", async () => {
 })
 
 test("an invite shared from a Topic Post shows the post's card, and the Topic's once the post is gone", async () => {
-	// a stored card for every key, so nothing renders, and the keys each read asks for
-	const cardKeys: string[] = []
-	spyOn(store, "attachmentExists").mockResolvedValue(true)
-	spyOn(store, "getAttachmentBytes").mockImplementation(async (cardKey) => {
-		cardKeys.push(cardKey)
-		return new Uint8Array([137, 80, 78, 71])
-	})
-
 	// the invite Topic's row and its counts, the author's avatar, and the post, which is then deleted
 	stubConnectionPool(({ text }) => (text.includes('from "topics"') ? [INVITE_TOPIC_PREVIEW_ROW] : [[0]]))
 	spyOn(avatars, "toPublishedAvatar").mockResolvedValue(AUTHOR_AVATAR)
 	const loadTopicPostRowSpy = spyOn(topicPostRows, "loadTopicPostRow").mockResolvedValue(TOPIC_POST_ROW)
-	await preview.toCachedInvitePreviewPng({ topicId: "topic-1", topicPostId: "post-1" })
+	const cardKeys = [await toInviteCardKey()]
 	loadTopicPostRowSpy.mockResolvedValue(null)
-	await preview.toCachedInvitePreviewPng({ topicId: "topic-1", topicPostId: "post-1" })
+	cardKeys.push(await toInviteCardKey())
 
 	// the post's card first, then the Topic's own
 	expect(cardKeys[0]).toContain("/topic-posts/post-1/")
 	expect(cardKeys[1]).toContain("/topic-1/")
 	expect(cardKeys[1]).not.toContain("topic-posts")
 })
+
+// the storage key of the card that the invite to topic-1, shared from post-1, shows
+async function toInviteCardKey(): Promise<string | undefined> {
+	const invitePreview = await preview.loadInvitePreview({ topicId: "topic-1", topicPostId: "post-1" })
+	return invitePreview ? preview.toInvitePreviewCard(invitePreview).previewKey : undefined
+}

@@ -38,6 +38,7 @@ function stubTeamPage(role: "member" | null, filmRows: unknown[][] = FILM_ROWS, 
 	})
 	spyOn(mentions, "loadTeamChatMentions").mockResolvedValue(new Map())
 	spyOn(topicTableRows, "toTopicTableRows").mockResolvedValue([])
+	spyOn(topicCards, "toTopicCards").mockResolvedValue([])
 
 	// each podcast episode's card by its id, and each Topic Post's card by its id, in place of the reactions read
 	spyOn(topicCards, "loadPodcastEpisodeCards").mockImplementation(async (podcastEpisodeIds) =>
@@ -53,13 +54,13 @@ function stubTeamPage(role: "member" | null, filmRows: unknown[][] = FILM_ROWS, 
 			return filmRows.filter(([, topicId]) => values.includes(topicId))
 		}
 
-		// the team's own topics, one public and one private. every other read returns no row, so the team has no member,
-		// no shared topic, no topic card, and no Topic Post
+		// the team's topics, one public and one private. every other read returns no row, so the team has no member, no
+		// topic card, and no Topic Post
 		const isOwnedTopicsRead = text.includes('from "topics"') && text.includes('"topics"."team_id" =')
 		return isOwnedTopicsRead
 			? [
-					toTableRow(topics, { id: "topic-public", visibility: "public" }),
-					toTableRow(topics, { id: "topic-private", visibility: "private" }),
+					toTableRow(topics, { id: "topic-public", visibility: "public", createdAt: new Date() }),
+					toTableRow(topics, { id: "topic-private", visibility: "private", createdAt: new Date() }),
 				]
 			: []
 	})
@@ -96,10 +97,12 @@ test("a pending invitee keeps every topic in the table and reads the cards of th
 	expect(await loadFilmPodcastEpisodeIds("user-invited")).toEqual(["episode-public"])
 	expect(toTopicPostReadValues(sentQueries)).toEqual(["topic-public"])
 
-	// the topic cards and the podcast episode ids read the public topic alone
-	const cardTopicReads = sentQueries.filter(({ text }) => text.includes('"topics"."id" in ('))
+	// the topic cards take the public topic alone, and the podcast episode ids read it alone
+	const toTopicCardsCalls = (topicCards.toTopicCards as ReturnType<typeof mock>).mock.calls
 	const podcastEpisodeIdReads = sentQueries.filter(({ text }) => text.includes('"episodes"."topic_id" in ('))
-	expect(cardTopicReads.map(({ values }) => values)).toEqual([["topic-public"]])
+	expect(toTopicCardsCalls.map(([topicRows]) => topicRows.map((topicRow: { id: string }) => topicRow.id))).toEqual([
+		["topic-public"],
+	])
 	expect(podcastEpisodeIdReads.every(({ values }) => !values.includes("topic-private"))).toBe(true)
 
 	// the topic table still lists both topics

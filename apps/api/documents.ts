@@ -4,8 +4,10 @@
 import { toAppleAppSiteAssociation, toAssetLinks } from "@carlnotes/contracts/appLinkPaths"
 import { MOBILE_APP_BUNDLE_IDENTIFIER } from "@carlnotes/contracts/mobileApp"
 import type { PodcastEpisodeFormat } from "@carlnotes/contracts/podcast"
+import { MINUTE_MS } from "@carlnotes/contracts/time"
 import { toBot } from "@carlnotes/contracts/userAgent"
 import { db } from "@carlnotes/db"
+import { cacheJson } from "@carlnotes/db/redis"
 import { podcastFeedTokens } from "@carlnotes/db/schema/podcast"
 import { topics } from "@carlnotes/db/schema/topics"
 import { trackEvent } from "@carlnotes/server/analytics"
@@ -21,17 +23,25 @@ import {
 	loadRenderedPodcastFeed,
 	toPodcastFeedResponse,
 } from "./podcast/podcastFeedTokens"
-import { loadPublicPodcastEpisodeRows } from "./podcast/podcastSeo"
 import { loadReleases, toReleasePath, toReleaseSummary } from "./releases"
 import { NOINDEX_HEADER } from "./responseHeaders"
-import { loadDocsPages, loadPublicTopics, toLlmsFullTxt, toLlmsTxt, toSecurityTxt, toSitemapXml } from "./seo"
+import { loadDocsPages, loadLlmsTxtRows, toLlmsFullTxt, toLlmsTxt, toSecurityTxt, toSitemapXml } from "./seo"
 import { toSiteFeedXml, toTopicFeedXml } from "./share/feed"
+import { toTopicFeedXmlKey } from "./topic/feedCaches"
+
+// how long the sitemap, llms.txt, and each Topic's RSS feed are kept in Redis before a read builds them again
+const DOCUMENT_CACHE_TTL_MS = 10 * MINUTE_MS
 
 // the document routes
 export const documentsRoute = new Hono<AppEnv>()
 	// a public Topic's RSS feed, at a path after the Topic's id without its slug
 	.get("/topics/:id/feed.xml", async (context) => {
-		const topicFeedXml = await toTopicFeedXml(context.req.param("id"), appUrl())
+		const topicId = context.req.param("id")
+		const topicFeedXml = await cacheJson({
+			key: toTopicFeedXmlKey(topicId),
+			ttlMs: DOCUMENT_CACHE_TTL_MS,
+			load: () => toTopicFeedXml(topicId, appUrl()),
+		})
 		if (!topicFeedXml) {
 			return context.text("not found", 404)
 		}
@@ -58,16 +68,19 @@ export const documentsRoute = new Hono<AppEnv>()
 	// the llms.txt index of the site, its docs and blog, the most recently changed public topics,
 	// and the newest podcast episodes of the public topics
 	.get("/llms.txt", async (context) => {
-		// build llms.txt from the docs, the blog, the public topics, and the public topics' podcast episodes
-		const [docsPages, blogPages, publicTopics] = await Promise.all([
-			loadDocsPages(),
-			loadPages("blog"),
-			loadPublicTopics(),
-		])
-		const publicPodcastEpisodeRows = await loadPublicPodcastEpisodeRows(
-			publicTopics.map((publicTopic) => publicTopic.id),
-		)
-		const llmsTxt = toLlmsTxt({ appUrl: appUrl(), docsPages, blogPages, publicTopics, publicPodcastEpisodeRows })
+		// build llms.txt from the docs, the blog, the public topics, and the public topics' podcast episodes, and keep it
+		const llmsTxt = await cacheJson({
+			key: "llms-txt",
+			ttlMs: DOCUMENT_CACHE_TTL_MS,
+			load: async () => {
+				const [docsPages, blogPages, llmsTxtRows] = await Promise.all([
+					loadDocsPages(),
+					loadPages("blog"),
+					loadLlmsTxtRows(),
+				])
+				return toLlmsTxt({ appUrl: appUrl(), docsPages, blogPages, ...llmsTxtRows })
+			},
+		})
 		return context.body(llmsTxt, 200, { ...toDocumentHeaders("text/plain; charset=utf-8", 900), ...NOINDEX_HEADER })
 	})
 	// the long form of llms.txt, with the docs and blog bodies in full
@@ -146,14 +159,18 @@ export const documentsRoute = new Hono<AppEnv>()
 			...NOINDEX_HEADER,
 		})
 	})
-	// the crawler map of every public page, generated from live data on each request
+	// the crawler map of every public page, generated from live data and kept in Redis for ten minutes, whatever the
+	// request's query string
 	.get("/sitemap.xml", async (context) => {
-		const blogPaths = ["/blog", ...(await loadPages("blog")).map((blogPage) => `/blog/${blogPage.slug}`)]
-		return context.body(
-			await toSitemapXml(appUrl(), blogPaths),
-			200,
-			toDocumentHeaders("application/xml; charset=utf-8", 3600),
-		)
+		const sitemapXml = await cacheJson({
+			key: "sitemap-xml",
+			ttlMs: DOCUMENT_CACHE_TTL_MS,
+			load: async () => {
+				const blogPaths = ["/blog", ...(await loadPages("blog")).map((blogPage) => `/blog/${blogPage.slug}`)]
+				return toSitemapXml(appUrl(), blogPaths)
+			},
+		})
+		return context.body(sitemapXml, 200, toDocumentHeaders("application/xml; charset=utf-8", 3600))
 	})
 
 // the signing fingerprints as Doppler lists them, comma separated, trimmed, and without empties

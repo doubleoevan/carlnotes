@@ -24,10 +24,7 @@ export function TopicLinkedFinding({
 	const handleClose = (): void => {
 		void navigate({
 			to: ".",
-			search: (search: Record<string, unknown>) => {
-				const { finding: _finding, ...remaining } = search
-				return remaining
-			},
+			search: (search) => ({ ...search, finding: undefined }),
 			replace: true,
 		})
 	}

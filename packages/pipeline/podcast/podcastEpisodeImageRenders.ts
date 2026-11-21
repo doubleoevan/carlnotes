@@ -5,6 +5,7 @@ import { type DbTransaction, db } from "@carlnotes/db"
 import { podcastEpisodeChapters, podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { topics } from "@carlnotes/db/schema/topics"
 import { recordPendingObjectDeletions } from "@carlnotes/db/store"
+import { clearVisitorPagesOfTopic } from "@carlnotes/db/visitorPageCaches"
 import { purgeEdgeCacheTagAfterDeletion, toTopicImageCacheTag } from "@carlnotes/server/edgePurge"
 import { asc, eq } from "drizzle-orm"
 import { toPodcastEpisodeImageObjectKeys } from "../topicImages/topicImageFiles"
@@ -92,9 +93,9 @@ export async function replacePodcastEpisodeImage({
 		return podcastEpisode
 	})
 
-	// a public topic's replaced files leave the edge
+	// the topic's visitor pages and a public topic's replaced files leave the caches
 	if (replacedImage?.previousHash && replacedImage.previousHash !== hash) {
-		await purgePublicImageFiles(replacedImage)
+		await clearReplacedImageCopies(replacedImage)
 	}
 }
 
@@ -139,25 +140,31 @@ export async function removePodcastEpisodeImageUpload(podcastEpisodeId: string):
 		return podcastEpisode
 	})
 
-	// a public topic's removed files leave the edge
+	// the topic's visitor pages and a public topic's removed files leave the caches
 	if (removedUpload) {
-		await purgePublicImageFiles(removedUpload)
+		await clearReplacedImageCopies(removedUpload)
 	}
 	return removedUpload?.topicId ?? null
 }
 
 /**
- * Purges a public topic's image files from the edge, where a podcast episode's and a film's files are tagged with
- * their topic.
+ * Deletes the visitor page copies of a topic that name a replaced or removed podcast episode or film image, and purges
+ * a public topic's image files from the edge, where a podcast episode's and a film's files are tagged with their topic.
  */
-export async function purgePublicImageFiles({
+export async function clearReplacedImageCopies({
 	topicId,
 	visibility,
 }: {
 	topicId: string | null
 	visibility: string | null
 }): Promise<void> {
-	if (topicId && visibility === "public") {
+	if (!topicId) {
+		return
+	}
+
+	// every visitor copy that shows the topic goes, and a public topic's files leave the edge
+	await clearVisitorPagesOfTopic(topicId)
+	if (visibility === "public") {
 		await purgeEdgeCacheTagAfterDeletion(toTopicImageCacheTag(topicId))
 	}
 }

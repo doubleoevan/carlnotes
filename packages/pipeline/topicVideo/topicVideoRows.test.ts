@@ -2,20 +2,27 @@
 // render is queued, the failure mark that keeps a ready film ready, and the swap that changes nothing for a film removed
 // or already swapped
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
+import { db } from "@carlnotes/db"
 import {
 	restoreConnectionPool,
 	type SentQuery,
 	stubConnectionPool,
 	toTableUpdates,
 } from "@carlnotes/db/connectionPoolStub"
+import * as statusReadCaches from "@carlnotes/db/statusReadCaches"
 import * as storage from "@carlnotes/db/store"
+import * as visitorPageCaches from "@carlnotes/db/visitorPageCaches"
 import * as monitoring from "@carlnotes/server/monitoring"
 import { markTopicVideoFailed } from "./topicVideoFailures"
+import * as topicVideoInputs from "./topicVideoInputs"
 import {
 	loadTopicVideoRenderState,
 	publishTopicVideoReplacement,
 	recordPlatformTopicVideoSpend,
+	saveImageTopicVideosRendering,
 	saveQueuedTopicVideoRendering,
+	saveTopicVideoReady,
+	saveTopicVideoSkipped,
 	TOPIC_VIDEO_RENDER_VERSION,
 } from "./topicVideoRows"
 
@@ -40,6 +47,11 @@ afterEach(() => {
 	restoreConnectionPool()
 	mock.restore()
 })
+
+// stub the delete of the status copies, and return its spy
+function stubClearStatusReads(): ReturnType<typeof spyOn> {
+	return spyOn(statusReadCaches, "clearStatusReads").mockResolvedValue()
+}
 
 // stub the bucket's listing of the shots a render kept and their delete, and return the delete's spy
 function stubStoredShots(storedShotKeys: string[] = []): ReturnType<typeof spyOn> {
@@ -66,12 +78,14 @@ test("a render reads the film's status and its render version", async () => {
 })
 
 test("a queued render writes its rendering row for a published podcast episode alone", async () => {
-	// a published podcast episode gets the row, which never replaces a ready film's
+	// a published podcast episode gets the row, which never replaces a ready film's, and its film's status copy goes
+	const clearStatusReadsSpy = stubClearStatusReads()
 	const publishedQueries = stubConnectionPool(({ text }) => (text.startsWith("select") ? [["published"]] : []))
 	await saveQueuedTopicVideoRendering("episode-1")
 	const rowInsert = publishedQueries.find((sentQuery) => sentQuery.text.startsWith('insert into "topic_videos"'))
 	expect(rowInsert?.values).toContain("rendering")
 	expect(rowInsert?.text).toContain('"status" <> $')
+	expect(clearStatusReadsSpy).toHaveBeenCalledWith("topicVideo", "episode-1")
 
 	// a removed podcast episode's render is skipped, so it gets no row
 	const removedQueries = stubConnectionPool(({ text }) => (text.startsWith("select") ? [["removed"]] : []))
@@ -79,9 +93,41 @@ test("a queued render writes its rendering row for a published podcast episode a
 	expect(removedQueries.map((sentQuery) => sentQuery.text.split(" ")[0])).toEqual(["select"])
 })
 
+test("a skipped render writes a failed row and clears the film's status copy", async () => {
+	// the row is failed for missing inputs, and never replaces a ready film's
+	const clearStatusReadsSpy = stubClearStatusReads()
+	const sentQueries = stubConnectionPool()
+	await saveTopicVideoSkipped("episode-1")
+	expect(sentQueries[0]?.values).toEqual(expect.arrayContaining(["failed", "missing-inputs"]))
+	expect(clearStatusReadsSpy).toHaveBeenCalledWith("topicVideo", "episode-1")
+})
+
+test("an image that no film may show marks its ready films rendering and clears their status copies", async () => {
+	// the Topic's image was drawn into two ready films
+	const clearStatusReadsSpy = stubClearStatusReads()
+	stubConnectionPool(({ text }) => (text.startsWith('update "topic_videos"') ? [["episode-1"], ["episode-2"]] : []))
+	const renderingPodcastEpisodeIds = await saveImageTopicVideosRendering(db, {
+		subjectKind: "topicImage",
+		subjectId: "topic-1",
+		imageHash: "image-1",
+	})
+	expect(renderingPodcastEpisodeIds).toEqual(["episode-1", "episode-2"])
+	expect(clearStatusReadsSpy).toHaveBeenCalledWith("topicVideo", "episode-1", "episode-2")
+})
+
+test("a ready film's write clears the film's status copy", async () => {
+	// the rendering row is found and marked ready
+	const clearStatusReadsSpy = stubClearStatusReads()
+	const sentQueries = stubConnectionPool(({ text }) => (text.startsWith('update "topic_videos"') ? [["film-1"]] : []))
+	await saveTopicVideoReady(RERENDERED_FILM)
+	expect(toTableUpdates(sentQueries, "topic_videos")[0]?.values).toContain("ready")
+	expect(clearStatusReadsSpy).toHaveBeenCalledWith("topicVideo", "episode-1")
+})
+
 test("the failure mark keeps a ready film ready and records the failed render version", async () => {
 	// the update that records the failed version finds a ready film
 	stubStoredShots()
+	const clearStatusReadsSpy = stubClearStatusReads()
 	const reportError = spyOn(monitoring, "reportError").mockImplementation(() => {})
 	const sentQueries = stubConnectionPool(({ text }) =>
 		text.startsWith('update "topic_videos" set "failed_render_version"') ? [["film-1"]] : [],
@@ -95,27 +141,45 @@ test("the failure mark keeps a ready film ready and records the failed render ve
 	expect(filmRowUpdates[0]?.values).toContain("ready")
 	expect(filmRowUpdates[0]?.values).not.toContain("failed")
 	expect(reportError).toHaveBeenCalledTimes(1)
+	expect(clearStatusReadsSpy).toHaveBeenCalledWith("topicVideo", "episode-1")
 })
 
 test("the failure mark marks a film that never was ready as failed", async () => {
 	// no ready film, so the update that records the failed version finds no row
 	const storedShotKeys = ["episodes/episode-1/video/shots/v3/shot-1.mp4"]
 	const deleteStoredShots = stubStoredShots(storedShotKeys)
+	const clearStatusReadsSpy = stubClearStatusReads()
 	const reportError = spyOn(monitoring, "reportError").mockImplementation(() => {})
 	const sentQueries = stubConnectionPool(() => [])
 	await markTopicVideoFailed({ podcastEpisodeId: "episode-1", reason: "ffmpeg exited with code 1" })
 
-	// the second update writes the failed status with the error
+	// the second update writes the failed status with the error, and the film's status copy goes
 	const [, failedUpdate] = toTableUpdates(sentQueries, "topic_videos")
 	expect(failedUpdate?.values).toContain("failed")
 	expect(failedUpdate?.values).toContain("ffmpeg exited with code 1")
 	expect(reportError).toHaveBeenCalledTimes(1)
+	expect(clearStatusReadsSpy).toHaveBeenCalledWith("topicVideo", "episode-1")
 
 	// no attempt is left to reuse the shots that the render kept, at any render version. each accepted delete clears its
 	// own pending deletion, so the failure mark clears none, and a failed delete keeps its row for the sweep
 	expect(storage.listStoredObjectKeys).toHaveBeenCalledWith("episodes/episode-1/video/shots/")
 	expect(deleteStoredShots).toHaveBeenCalledWith(storedShotKeys)
 	expect(toPendingDeletionWrites(sentQueries)).toEqual([])
+})
+
+test("the failure mark clears its topic's visitor pages, so the next page read shows the film failed", async () => {
+	// a published podcast episode of topic-1 whose first render fails
+	stubStoredShots()
+	stubClearStatusReads()
+	spyOn(monitoring, "reportError").mockImplementation(() => {})
+	spyOn(topicVideoInputs, "loadTopicVideoPodcastEpisode").mockResolvedValue({
+		topicId: "topic-1",
+		ownerId: "owner-1",
+	} as Awaited<ReturnType<typeof topicVideoInputs.loadTopicVideoPodcastEpisode>>)
+	const clearVisitorPagesSpy = spyOn(visitorPageCaches, "clearVisitorPagesOfTopic").mockResolvedValue()
+	stubConnectionPool(() => [])
+	await markTopicVideoFailed({ podcastEpisodeId: "episode-1", reason: "ffmpeg exited with code 1" })
+	expect(clearVisitorPagesSpy).toHaveBeenCalledWith("topic-1")
 })
 
 // a cancelled backfill must list a film it was rendering again on its next run

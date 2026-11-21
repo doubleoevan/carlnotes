@@ -95,16 +95,17 @@ const TOPIC_POST = {
 	topicImage: null,
 } satisfies TopicPostResponse
 
-// serve the published post and its head, and a 404 for the draft and every other path
+// the paths the fake fetch was asked for, oldest first
+const requestedPaths: string[] = []
+
+// serve the published post's page read, and a 404 for the draft and every other path
 const realFetch = globalThis.fetch
 beforeAll(() => {
 	globalThis.fetch = ((input: RequestInfo | URL) => {
 		const { pathname } = new URL(input instanceof Request ? input.url : input.toString())
-		if (pathname.endsWith(`${TOPIC_POST_ID}/head`)) {
-			return Promise.resolve(Response.json(TOPIC_POST_HEAD))
-		}
-		if (pathname.endsWith(TOPIC_POST_ID)) {
-			return Promise.resolve(Response.json(TOPIC_POST))
+		requestedPaths.push(pathname)
+		if (pathname.endsWith(`${TOPIC_POST_ID}/page`)) {
+			return Promise.resolve(Response.json({ head: TOPIC_POST_HEAD, topicPost: TOPIC_POST, userState: null }))
 		}
 		return Promise.resolve(Response.json({ error: "not found" }, { status: 404 }))
 	}) as typeof fetch
@@ -115,8 +116,12 @@ afterAll(() => {
 
 // a crawler reads the post's own head, its body's text, and the newest Comment, with no script run
 test("a public topic's post renders its head, its body, and its thread on the server", async () => {
+	requestedPaths.length = 0
 	const { router } = await loadRouter(TOPIC_POST_PATH)
 	const html = renderToString(<RouterProvider router={router} />)
+
+	// the server load sends the one page read
+	expect(requestedPaths).toEqual([`/api/topic-posts/${TOPIC_POST_ID}/page`])
 
 	// the head is the post's own
 	expect(html).toContain("<title>What agents shipped · Agents — CarlNotes</title>")

@@ -83,13 +83,8 @@ capability the app will never need, with the reason, or `deferred` for one an ac
 | `topicClient.uploadTopicAttachment` | web-only | The browser's File upload. The app uploads to the same route through `topicClient.uploadTopicAttachmentBody` |
 | `mcpClient.fetchMcpConsentClient` | web-only | The MCP OAuth consent page, which an AI client opens in a browser |
 | `mcpClient.sendMcpConsent` | web-only | The MCP OAuth consent page, which an AI client opens in a browser |
-| `pageHeadClient.fetchDashboardPageHead` | web-only | Server-rendered head tags. The app reads a Dashboard screen's snapshot through `dashboardClient.fetchDashboard` |
 | `pageHeadClient.fetchInvitePageHead` | web-only | Server-rendered head tags for crawlers and link previews. The app has no document head |
-| `pageHeadClient.fetchPodcastEpisodePageHead` | web-only | Server-rendered head tags. The app has no document head |
-| `pageHeadClient.fetchProfilePageHead` | web-only | Server-rendered head tags. The app has no document head |
-| `pageHeadClient.fetchTeamPageHead` | web-only | Server-rendered head tags. The app has no document head |
-| `pageHeadClient.fetchTopicPageHead` | web-only | Server-rendered head tags. The app has no document head |
-| `pageHeadClient.fetchTopicPostPageHead` | web-only | Server-rendered head tags. The app has no document head |
+| `pageReadClient.fetchDashboardPageRead` | web-only | The web's server render of a Dashboard page with its head. The app reads a Dashboard screen's snapshot through `dashboardClient.fetchDashboard` |
 | `profileClient.sendAvatarDecodeFailure` | web-only | A browser's image decode telemetry. The system photo picker returns images the app decodes |
 | `reportClient.fetchAdminReports` | web-only | The admin console's open reports. Admin stays on the web |
 | `reportClient.sendReportResolution` | web-only | The admin console's Remove, Block, and Clear. Admin stays on the web |

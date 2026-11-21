@@ -1,5 +1,7 @@
-// a streamed chat turn's save: a question asked from the podcast player is stored with its note and its podcast columns
+// a streamed chat turn's save: a question asked from the podcast player is stored with its note and its podcast columns,
+// and a page with nothing to chat about closes the stream with a failed line
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
+import { toChatReplyLineText } from "@carlnotes/contracts/chatTurns"
 import type { PodcastEpisodeSpeaker } from "@carlnotes/contracts/enums"
 import type { ChatReplyStream } from "@carlnotes/pipeline/chat/index"
 import { PODCAST_EPISODE_CHAPTER } from "@carlnotes/pipeline/chat/podcastEpisodeChapterTestFixtures"
@@ -36,7 +38,7 @@ async function streamPodcastChatTurn(
 		}),
 	}
 	const streamedChatTurn: StreamedChatTurn = {
-		chatReply,
+		loadedChatReply: Promise.resolve({ chatReply, agreementTokens: 0 }),
 		userId: "user-1",
 		page: { topicId: "topic-1" },
 		question: "why does it matter?",
@@ -47,7 +49,6 @@ async function streamPodcastChatTurn(
 		podcastEpisodeChapter: PODCAST_EPISODE_CHAPTER,
 		analyticsProperties: TEST_ANALYTICS_PROPERTIES,
 		litellmApiKey: "sk-user",
-		agreementTokens: 0,
 		reservation: {
 			release: async () => {
 				savedAndReleasedSteps.push("released")
@@ -87,4 +88,36 @@ test("a podcast chat turn with no speaker is stored as carl's", async () => {
 test("a streamed chat turn releases its reservation after its spend row is saved", async () => {
 	await streamPodcastChatTurn("host")
 	expect(savedAndReleasedSteps).toEqual(["saved", "released"])
+})
+
+// a page with nothing to chat about closes the opened stream with a failed line, releases the reservation, and saves
+// nothing
+test("a chat turn with nothing to chat about closes with a failed line", async () => {
+	// a reply that loads as nothing
+	const saveChatTurnSpy = spyOn(chatTurns, "saveChatTurn").mockImplementation(async () => "turn-1")
+	let isReleased = false
+	const streamedChatTurn: StreamedChatTurn = {
+		loadedChatReply: Promise.resolve(null),
+		userId: "user-1",
+		page: { topicId: "topic-1" },
+		question: "why does it matter?",
+		attachments: [],
+		isPersisted: true,
+		isSpoken: false,
+		toolCalls: toEmptyChatTurnToolCalls(),
+		analyticsProperties: TEST_ANALYTICS_PROPERTIES,
+		litellmApiKey: "sk-user",
+		reservation: {
+			release: async () => {
+				isReleased = true
+			},
+		},
+	}
+
+	// the response ends with the failed line, and nothing is saved
+	const app = new Hono().post("/", (context) => streamChatTurn(context, streamedChatTurn))
+	const responseText = await (await app.request("/", { method: "POST" })).text()
+	expect(responseText).toEndWith(toChatReplyLineText({ type: "failed" }))
+	expect(isReleased).toBe(true)
+	expect(saveChatTurnSpy).not.toHaveBeenCalled()
 })

@@ -13,10 +13,12 @@ import { PodcastEpisodeCard } from "./PodcastEpisodeCard"
 import { PodcastThemeSongNote } from "./PodcastThemeSongNote"
 import { PodcastEpisodeProgressLine } from "./UnpublishedPodcastEpisodeCard"
 
-// the topic, and the read of its screen again while its film renders
+// the topic, the read of its screen again once its film leaves rendering, and whether the film's poll may run, which a
+// covered screen turns off
 type TopicVideoSectionProps = {
 	topic: TopicResponse
 	onVideoRenderingPoll: () => void | Promise<void>
+	isVideoRenderingPollEnabled?: boolean
 }
 
 // the home's card cells, with the column of cards and the page buttons inside the topic screen's own side inset, the
@@ -41,7 +43,11 @@ const TOPIC_VIDEO_SECTION_ELEMENTS: Omit<TopicVideoSectionElements, "Section"> =
  * Adapts the topic video section to the screen's collapsible section and the home's cards. A topic with no film, ready
  * or rendering, shows nothing.
  */
-export function TopicVideoSection({ topic, onVideoRenderingPoll }: TopicVideoSectionProps) {
+export function TopicVideoSection({
+	topic,
+	onVideoRenderingPoll,
+	isVideoRenderingPollEnabled,
+}: TopicVideoSectionProps) {
 	// keep the section's renderer stable across the topic's reads, so its open state and page stay
 	const elements = useMemo<TopicVideoSectionElements>(
 		() => ({
@@ -51,7 +57,14 @@ export function TopicVideoSection({ topic, onVideoRenderingPoll }: TopicVideoSec
 		}),
 		[topic.id],
 	)
-	return <SharedTopicVideoSection topic={topic} onVideoRenderingPoll={onVideoRenderingPoll} elements={elements} />
+	return (
+		<SharedTopicVideoSection
+			topic={topic}
+			onVideoRenderingPoll={onVideoRenderingPoll}
+			isVideoRenderingPollEnabled={isVideoRenderingPollEnabled}
+			elements={elements}
+		/>
+	)
 }
 
 // the collapsible section, open on every screen load and kept mounted while closed, with the theme song's credits right

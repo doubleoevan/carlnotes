@@ -13,6 +13,8 @@ import { trackEvent } from "@carlnotes/server/analytics"
 import { and, count, eq, inArray, not, notInArray } from "drizzle-orm"
 import { isAdminRole, isLeaderRole } from "../authorization"
 import type { AnalyticsProperties } from "../currentUser"
+import { clearTeamMemberPages } from "../edgeCache"
+import { clearOwnNews } from "../news/newsCaches"
 import { deletePodcastFeedToken } from "../podcast/podcastFeedTokens"
 import { updateTopicSubscriberCount } from "../topic/subscriberCounts"
 
@@ -47,7 +49,7 @@ export async function joinTeam(userId: string, teamId: string, invitedByUserId: 
 	const memberLimit = await teamMemberLimit(teamId)
 
 	// the member limit check and the team membership write share one transaction.
-	return db.transaction(async (transaction) => {
+	const isJoined = await db.transaction(async (transaction) => {
 		// the team row is locked first, so a join lands either completely before its team is deleted or not at all
 		const [teamRow] = await transaction.select({ id: teams.id }).from(teams).where(eq(teams.id, teamId)).for("update")
 		if (!teamRow) {
@@ -68,6 +70,12 @@ export async function joinTeam(userId: string, teamId: string, invitedByUserId: 
 		await saveTeamTopicSubscriptions(transaction, teamId, [userId], await loadTeamTopics(transaction, teamId))
 		return true
 	})
+
+	// the team's page and the new member's profile show the membership
+	if (isJoined) {
+		await clearTeamMemberPages({ teamId, userId })
+	}
+	return isJoined
 }
 
 /**
@@ -223,9 +231,14 @@ export async function removeTeamMember(
 		return "lastLeader"
 	}
 
-	// the team member row and their chat mentions are deleted, and their cached comment mentions are cleared
+	// the team member row and their chat mentions are deleted, and their cached comment mentions, their own news that
+	// showed the team's topics, and the pages that showed the membership are cleared at the origin and the edge
 	await db.transaction((transaction) => removeTeamMemberInTransaction(transaction, teamId, removeUserId))
-	await clearUnseenCommentMentions([removeUserId])
+	await Promise.all([
+		clearUnseenCommentMentions([removeUserId]),
+		clearOwnNews(removeUserId),
+		clearTeamMemberPages({ teamId, userId: removeUserId }),
+	])
 	return "removed"
 }
 
@@ -334,11 +347,12 @@ export async function setTeamMemberRole(
 		return "lastLeader"
 	}
 
-	// update the team member's role
+	// update the team member's role, which the team's page and the member's profile show
 	await db
 		.update(teamMembers)
 		.set({ role })
 		.where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, targetUserId)))
+	await clearTeamMemberPages({ teamId, userId: targetUserId })
 	return "saved"
 }
 

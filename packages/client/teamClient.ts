@@ -14,7 +14,16 @@ import {
 	teamPageResponse,
 	teamsPageResponse,
 } from "@carlnotes/contracts/teams"
-import { apiClient, fetchApi, readApiErrorMessage, readApiResponse, showClientError } from "./apiClient"
+import { type TopicPostCardsPage, topicPostCardsPage } from "@carlnotes/contracts/topicPosts"
+import {
+	apiClient,
+	fetchApi,
+	readApiErrorMessage,
+	readApiResponse,
+	readPageResponse,
+	showClientError,
+} from "./apiClient"
+import { toTopicPostsPagedQuery } from "./cardPagesQuery"
 
 // how creating a team was rejected, for the modal to show which way it went. a failure is any other rejected response
 export type CreateTeamRejection = "quota" | "name-taken" | "failed"
@@ -50,8 +59,21 @@ export type TeamPageResult =
 	| { status: "gated"; teamName: string; hasRequestedToJoin: boolean }
 	| { status: "missing" }
 
-export async function fetchTeamPage(teamId: string): Promise<TeamPageResult> {
-	const response = await apiClient().api.teams[":id"].page.$get({ param: { id: teamId } })
+// whether the read asks for the visitors' shared copy with the user state beside it, which the team page merges into
+// the copy. a paged read holds one zero-based page of the team's Topic Posts
+type FetchTeamPageOptions = { isUserStateAsked?: boolean; isPaged?: boolean; topicPostsPage?: number }
+
+export async function fetchTeamPage(
+	teamId: string,
+	{ isUserStateAsked = false, isPaged = false, topicPostsPage }: FetchTeamPageOptions = {},
+): Promise<TeamPageResult> {
+	const response = await apiClient().api.teams[":id"].page.$get({
+		param: { id: teamId },
+		query: {
+			userState: isUserStateAsked ? "1" : undefined,
+			...toTopicPostsPagedQuery({ isPaged, topicPostsPage }),
+		},
+	})
 	if (response.ok) {
 		return { status: "visible", team: await readApiResponse(teamPageResponse, response) }
 	}
@@ -65,6 +87,20 @@ export async function fetchTeamPage(teamId: string): Promise<TeamPageResult> {
 	// its body is a missing team
 	const gate = await readApiResponse(teamGateResponse, response).catch(() => null)
 	return gate ? { status: "gated", ...gate } : { status: "missing" }
+}
+
+/**
+ * Fetches one zero-based page of a team's Topic Posts as the user may see them, rejecting a failed read.
+ */
+export async function fetchTeamTopicPostsPage(teamId: string, page: number): Promise<TopicPostCardsPage> {
+	return readPageResponse(
+		topicPostCardsPage,
+		apiClient().api.teams[":id"]["topic-posts"].$get({
+			param: { id: teamId },
+			query: { page: String(page) },
+		}),
+		"team topic posts",
+	)
 }
 
 // create a team, returning the new team's id or which way it was rejected

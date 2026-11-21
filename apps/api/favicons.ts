@@ -5,6 +5,7 @@ import type { TopicFinding } from "@carlnotes/contracts/findings"
 import type { PodcastEpisodeChapter } from "@carlnotes/contracts/podcast"
 import { toUrlHost } from "@carlnotes/contracts/sources"
 import { db } from "@carlnotes/db"
+import { memoizeRowsById } from "@carlnotes/db/requestMemo"
 import { favicons } from "@carlnotes/db/schema/storage"
 import { attachmentStream } from "@carlnotes/db/store"
 import { and, eq, inArray, isNotNull } from "drizzle-orm"
@@ -87,12 +88,16 @@ async function loadFaviconHosts(hosts: string[]): Promise<Set<string>> {
 		return new Set()
 	}
 
-	// one query for every host on the page
-	const faviconRows = await db
-		.select({ host: favicons.host })
-		.from(favicons)
-		.where(and(inArray(favicons.host, hosts), isNotNull(favicons.objectKey)))
-	return new Set(faviconRows.map((faviconRow) => faviconRow.host))
+	// one query for every host on the page that no earlier read in a GET request looked up
+	const faviconHostByHost = await memoizeRowsById("favicon-hosts", hosts, async (missingHosts) => {
+		// the hosts among the missing ones with a stored icon
+		const faviconRows = await db
+			.select({ host: favicons.host })
+			.from(favicons)
+			.where(and(inArray(favicons.host, missingHosts), isNotNull(favicons.objectKey)))
+		return new Map(faviconRows.map((faviconRow) => [faviconRow.host, faviconRow.host]))
+	})
+	return new Set(faviconHostByHost.values())
 }
 
 // serve a host's stored icon from this origin, cacheable for a month

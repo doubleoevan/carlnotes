@@ -6,8 +6,10 @@ import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as monthlyBudgetCutoffs from "@carlnotes/db/monthlyBudgetCutoffs"
 import * as podcastFeedCache from "@carlnotes/db/podcastFeedCache"
+import * as statusReadCaches from "@carlnotes/db/statusReadCaches"
 import * as storage from "@carlnotes/db/store"
 import { toTopicVideoChaptersKey, toTopicVideoRenderAttemptUploadKey } from "@carlnotes/db/topicVideoKeys"
+import * as visitorPageCaches from "@carlnotes/db/visitorPageCaches"
 import * as analytics from "@carlnotes/server/analytics"
 import { rebuildTopicVideo } from "./rebuildTopicVideo"
 import * as filmFiles from "./renderFilmFiles"
@@ -127,9 +129,11 @@ test("an owner past the spend cutoff keeps the stale film", async () => {
 
 // a film marked rendering because its image was unpublished shows that image again once the image passes its check
 test("a film marked rendering that is drawn from the current image is ready again, under the topic's lock", async () => {
+	const clearStatusReadsSpy = spyOn(statusReadCaches, "clearStatusReads").mockResolvedValue()
 	const sentQueries = stubRebuildReads("image-new", null, "rendering")
 	const rebuildResult = await rebuildTopicVideo("episode-1")
 	expect(rebuildResult).toEqual({ outcome: "skipped", reason: "current" })
+	expect(clearStatusReadsSpy).toHaveBeenCalledWith("topicVideo", "episode-1")
 
 	// the Topic's image visibility lock is shared and comes before the read of the image and the write
 	const lockIndex = sentQueries.findIndex(({ text }) => text.includes("pg_advisory_xact_lock_shared"))
@@ -233,6 +237,7 @@ test("a rebuild swaps only a film that still has the chapters part it read", asy
 	spyOn(videoImageParts, "renderVideoImageParts").mockResolvedValue({ introPath: "/work/intro.mp4", signOffPath: null })
 	spyOn(videoFilm, "rewriteVideoFilm").mockResolvedValue(undefined)
 	const clearFeed = spyOn(podcastFeedCache, "deletePodcastFeedCache").mockResolvedValue(undefined)
+	const clearStatusReadsSpy = spyOn(statusReadCaches, "clearStatusReads").mockResolvedValue()
 	const track = spyOn(analytics, "trackEvent").mockImplementation(() => {})
 
 	// each upload records its key
@@ -243,8 +248,11 @@ test("a rebuild swaps only a film that still has the chapters part it read", asy
 		}
 		return filePath ? key : null
 	})
+
+	// the rebuild is superseded, so nothing is cleared or tracked
 	expect(await rebuildTopicVideo("episode-1")).toEqual({ outcome: "skipped", reason: "superseded" })
 	expect(clearFeed).not.toHaveBeenCalled()
+	expect(clearStatusReadsSpy).not.toHaveBeenCalled()
 	expect(track).not.toHaveBeenCalled()
 
 	// the intro and the sign-off cut through the chapters' stored images, with none generated
@@ -286,6 +294,8 @@ test.each(["matching", "replaced", "changed-poster", "legacy"] as const)(
 				videoSceneImages: [{ sourceImageHash, origin: "resource", width: 1280, height: 720 }],
 			})
 		}
+
+		// the published plan, the current picture, and the film's one chapter
 		const published = createPlan(picture)
 		const current = scenario === "replaced" ? replacement : picture
 		const sceneSources = [{ position: 0, resourceId: "resource", resourceImageKeys: [] }]
@@ -293,6 +303,8 @@ test.each(["matching", "replaced", "changed-poster", "legacy"] as const)(
 		if (scenario === "changed-poster") {
 			segments.push({ kind: "hot-takes", position: 0, startSeconds: 5, frameCount: 240 })
 		}
+
+		// the posters, and the scene plan hashes of the published film and of a fresh render
 		const oldPoster = { stillPng: picture, zoomLimit: 2, isPodcastCard: false }
 		const newPoster = { ...oldPoster, stillPng: replacement }
 		const hash = toVideoScenePlansHash(
@@ -309,6 +321,8 @@ test.each(["matching", "replaced", "changed-poster", "legacy"] as const)(
 			toTopicVideoChaptersKey(episode, 4, scenario === "legacy" ? undefined : hash),
 			crypto.randomUUID(),
 		)
+
+		// the film row, read and published
 		const row = [scenario === "legacy" ? "rendering" : "ready", null, chaptersKey, null, "old.mp4", "image-old", 4]
 		const queries = stubConnectionPool(({ text }) => {
 			if (text.includes('from "episodes" inner join "topics"')) {
@@ -317,6 +331,8 @@ test.each(["matching", "replaced", "changed-poster", "legacy"] as const)(
 			if (text.includes("for share") && text.includes('from "episode_chapters"')) {
 				return [[0, "resource"]]
 			}
+
+			// the publication finds the film, and the film read returns the row
 			if (text.startsWith('update "topic_videos"')) {
 				return [["film"]]
 			}
@@ -359,6 +375,8 @@ test.each(["matching", "replaced", "changed-poster", "legacy"] as const)(
 		})
 		spyOn(videoImageParts, "renderVideoImageParts").mockResolvedValue({ introPath: null, signOffPath: null })
 		const rewrite = spyOn(videoFilm, "rewriteVideoFilm").mockResolvedValue(undefined)
+
+		// each upload with a file keeps its key
 		const upload = spyOn(topicVideoRows, "uploadTopicVideoFile").mockImplementation(
 			async ({ filePath, key, uploadedKeys }) => {
 				if (!filePath) {
@@ -368,22 +386,35 @@ test.each(["matching", "replaced", "changed-poster", "legacy"] as const)(
 				return key
 			},
 		)
+
+		// the feed cache, the status copy, the visitor pages, and the analytics stay in the process
 		spyOn(podcastFeedCache, "deletePodcastFeedCache").mockResolvedValue(undefined)
+		const clearStatusReadsSpy = spyOn(statusReadCaches, "clearStatusReads").mockResolvedValue()
+		const clearVisitorPagesSpy = spyOn(visitorPageCaches, "clearVisitorPagesOfTopic").mockResolvedValue()
 		const track = spyOn(analytics, "trackEvent").mockImplementation(() => {})
 
-		// a legacy film that lost its poster can become ready even above its owner's cutoff
+		// a legacy film that lost its poster can become ready even above its owner's cutoff, and its status copy and its
+		// topic's visitor pages go
 		expect((await rebuildTopicVideo(episode)).outcome).toBe("rebuilt")
 		expect(track).toHaveBeenCalledTimes(1)
+		expect(clearStatusReadsSpy).toHaveBeenCalledWith("topicVideo", episode)
+		expect(clearVisitorPagesSpy.mock.calls).toEqual([["topic-1"]])
+
+		// the publication makes the film ready with the chapters key and keeps the old film
 		const publication = queries.find((query) => query.text.startsWith('update "topic_videos"'))
 		expect(publication?.values).toContain("ready")
 		expect(publication?.values).toContain(chaptersKey)
 		expect(publication?.values).toContain("old.mp4")
+
+		// a matching plan reads the stored chapters and renders nothing
 		const downloadedKeys = downloads.mock.calls.map(([file]) => file.key)
 		if (scenario === "matching") {
 			expect(encode).not.toHaveBeenCalled()
 			expect(downloadedKeys).toEqual([chaptersKey, "old.mp4"])
 			return
 		}
+
+		// a legacy film is rebuilt without reading its owner's cutoff
 		if (scenario === "legacy") {
 			expect(cutoff).not.toHaveBeenCalled()
 		}

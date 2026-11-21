@@ -1,7 +1,6 @@
 // a request's place from Cloudflare's visitor location headers, read only if a Cloudflare hop reported the client
-import { BlockList, isIP } from "node:net"
 import type { Place } from "@carlnotes/contracts/dashboards"
-import { ipAddressOptions, isExternalAddress, toForwardedForHops } from "./trustedProxies"
+import { ipAddressOptions, isClientReportedByTrustedHop } from "./trustedProxies"
 
 // the longest region or city name kept. a real one is far shorter
 const PLACE_NAME_MAX_LENGTH = 100
@@ -40,53 +39,6 @@ export function readRequestPlace(request: Request, ipAddress = ipAddressOptions)
 		latitude: toCoordinate(request.headers.get("cf-iplatitude")),
 		longitude: toCoordinate(request.headers.get("cf-iplongitude")),
 	}
-}
-
-// whether the x-forwarded-for entry right of the client is a trusted public hop, which is Cloudflare's edge. a request
-// sent straight to the origin ends in the sender's own address, and a private platform hop never counts as Cloudflare
-function isClientReportedByTrustedHop(request: Request, trustedProxies: string[]): boolean {
-	const trustedProxyList = toTrustedProxyList(trustedProxies)
-	if (!trustedProxyList) {
-		return false
-	}
-
-	// the client is the rightmost entry outside every trusted range, as Better Auth resolves it
-	const hops = toForwardedForHops(request.headers.get("x-forwarded-for"))
-	const clientIndex = hops.findLastIndex((hop) => !isTrustedHop(trustedProxyList, hop))
-	const reportingHop = clientIndex >= 0 ? hops[clientIndex + 1] : undefined
-	return reportingHop !== undefined && isExternalAddress(reportingHop)
-}
-
-// the trusted ranges as a list to match addresses against, or null if none is set
-function toTrustedProxyList(trustedProxies: string[]): BlockList | null {
-	const trustedProxyList = new BlockList()
-	for (const trustedProxy of trustedProxies) {
-		// an entry is an address or an address with a prefix length, and an entry that is neither is skipped
-		const [address = "", prefixLength] = trustedProxy.split("/")
-		const family = toAddressFamily(address)
-		if (!family) {
-			continue
-		}
-		// add a range with its prefix length, or a single address
-		if (prefixLength) {
-			trustedProxyList.addSubnet(address, Number(prefixLength), family)
-		} else {
-			trustedProxyList.addAddress(address, family)
-		}
-	}
-	return trustedProxyList.rules.length > 0 ? trustedProxyList : null
-}
-
-// whether a hop is an address inside a trusted range. a hop that is no address is never trusted
-function isTrustedHop(trustedProxyList: BlockList, hop: string): boolean {
-	const family = toAddressFamily(hop)
-	return family !== null && trustedProxyList.check(hop, family)
-}
-
-// the family of an address, or null for a string that is no address
-function toAddressFamily(address: string): "ipv4" | "ipv6" | null {
-	const version = isIP(address)
-	return version === 4 ? "ipv4" : version === 6 ? "ipv6" : null
 }
 
 // a region or city name re-read as UTF-8, or null if empty or too long

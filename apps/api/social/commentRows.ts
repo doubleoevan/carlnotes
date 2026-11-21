@@ -15,6 +15,7 @@ import type { CommentMention } from "@carlnotes/contracts/socialText"
 import { DAY_MS } from "@carlnotes/contracts/time"
 import { db } from "@carlnotes/db"
 import { toVisibleAuthorFilter } from "@carlnotes/db/contentFilters"
+import { reports } from "@carlnotes/db/schema/reports"
 import { commentMentions, comments } from "@carlnotes/db/schema/social"
 import { users } from "@carlnotes/db/schema/users"
 import { loadSharedCommentSlots } from "@carlnotes/db/sharedComments"
@@ -357,6 +358,52 @@ async function loadFirstReplyRows(
 		.leftJoin(users, eq(users.id, comments.authorUserId))
 		.where(lte(rankedReplies.position, COMMENT_REPLY_PREVIEW_COUNT))
 		.orderBy(comments.createdAt, comments.id)
+}
+
+/**
+ * Counts the replies of each top-level comment, of the authors the reader sees, in one read. A comment with no reply
+ * has no entry.
+ */
+export async function loadReplyCounts(reader: SocialReader, parentCommentIds: string[]): Promise<Map<string, number>> {
+	if (parentCommentIds.length === 0) {
+		return new Map()
+	}
+
+	// each parent's replies that the reader sees, counted in one grouped read
+	const replyCountRows = await db
+		.select({ parentCommentId: comments.parentCommentId, replyCount: count() })
+		.from(comments)
+		.where(
+			and(
+				inArray(comments.parentCommentId, parentCommentIds),
+				toVisibleAuthorFilter(reader.userId, comments.authorUserId),
+			),
+		)
+		.groupBy(comments.parentCommentId)
+	return new Map(replyCountRows.map(({ parentCommentId, replyCount }) => [parentCommentId ?? "", replyCount]))
+}
+
+/**
+ * Loads the ids of the comments among these that the user reported, however an admin resolved the report, in one read.
+ */
+export async function loadReportedCommentIds(userId: string, commentIds: string[]): Promise<string[]> {
+	if (commentIds.length === 0) {
+		return []
+	}
+
+	// the user's reports of these comments that they have not withdrawn
+	const reportRows = await db
+		.select({ subjectId: reports.subjectId })
+		.from(reports)
+		.where(
+			and(
+				eq(reports.reporterUserId, userId),
+				eq(reports.subjectKind, "comment"),
+				inArray(reports.subjectId, commentIds),
+				isNull(reports.withdrawnAt),
+			),
+		)
+	return [...new Set(reportRows.map((reportRow) => reportRow.subjectId))]
 }
 
 // who reads, the top-level comment, and the cursor of the page before

@@ -6,9 +6,11 @@ import type { z } from "zod"
 import { accountRouteContracts } from "./accountRouteContracts"
 import { chatRouteContracts } from "./chatRouteContracts"
 import { dashboardRouteContracts } from "./dashboardRouteContracts"
+import { pageReadRouteContracts } from "./pageReadRouteContracts"
 import { personalSourcesRouteContracts } from "./personalSourcesRouteContracts"
 import { podcastRouteContracts } from "./podcastRouteContracts"
 import { socialRouteContracts } from "./socialRouteContracts"
+import { statusReadRouteContracts } from "./statusReadRouteContracts"
 import { teamRouteContracts } from "./teamRouteContracts"
 import { topicRouteContracts } from "./topicRouteContracts"
 
@@ -36,15 +38,20 @@ export const API_ROUTE_HELPERS: readonly string[] = [
 	"apiClient.fetchApi",
 	"apiClient.readApiErrorMessage",
 	"apiClient.readApiResponse",
+	"apiClient.readPageResponse",
 	"apiClient.showClientError",
 	"apiClient.showClientMessage",
 	"apiClient.toApiUrl",
 	"apiClient.toReadRequestInit",
 	"authClient.authClient",
 	"authClient.configureAuthClient",
+	"cardPagesQuery.toPageQuery",
+	"cardPagesQuery.toTopicPostsPagedQuery",
 	"chatClient.toChatRejection",
 	"clientWrite.showFailedWrite",
 	"clientWrite.WRITE_FAILED_TEXT",
+	"newsClient.addNewsWriteListener",
+	"newsClient.notifyNewsWrite",
 	"podcastEpisodeClient.isPodcastEpisodeAccessDenied",
 	"profileClient.uploadAvatar",
 	"teamClient.fetchLeaderTeams",
@@ -69,9 +76,11 @@ export const API_ROUTE_CONTRACTS: Record<string, ApiRouteContract> = {
 	...accountRouteContracts,
 	...chatRouteContracts,
 	...dashboardRouteContracts,
+	...pageReadRouteContracts,
 	...personalSourcesRouteContracts,
 	...podcastRouteContracts,
 	...socialRouteContracts,
+	...statusReadRouteContracts,
 	...teamRouteContracts,
 	...topicRouteContracts,
 }

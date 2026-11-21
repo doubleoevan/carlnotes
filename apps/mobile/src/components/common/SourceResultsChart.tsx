@@ -1,5 +1,5 @@
+import type { SourceResult } from "@carlnotes/contracts/scanSourceResults"
 import { toDotSeparatedText } from "@carlnotes/contracts/text"
-import type { SourceResult } from "@carlnotes/contracts/topics"
 import {
 	SourceResultsChart as SharedSourceResultsChart,
 	type SourceResultsChartComponents,

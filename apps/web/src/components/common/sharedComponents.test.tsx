@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test"
 import { TEST_NOTES } from "@carlnotes/contracts/noteTestFixtures"
-import type { SourceResult } from "@carlnotes/contracts/topics"
+import type { SourceResult } from "@carlnotes/contracts/scanSourceResults"
 import type { Rating } from "@carlnotes/core/components/RatingThumbs"
 import { act, useState } from "react"
 import { NotesTable } from "@/components/note/NotesTable"

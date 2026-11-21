@@ -1050,6 +1050,12 @@ Check for:
      `FILMS_NAME`, `PodcastEpisodesCardFilmList`, `PodcastEpisodeRow`'s `filmPlay`, the web route's `filmSeason`, and
      `apps/web/src/components/podcast/PodcastEpisodesCard.films.test.tsx` (now the topic read's
      `topicPodcastEpisodeVideoCards` and `TopicVideoSection`'s `FilmCard`)
+   - `packages/core/hooks/useYourTopicsPages.ts` and `apps/web/src/hooks/useYourTopicsPages.test.tsx` (now
+     `useServerPagedCards.ts` and its test), and the head routes `/api/topics/:id/head`, the podcast episode's,
+     `/api/topic-posts/:id/head`, `/api/profiles/:userId/head`, `/api/teams/:teamId/head`, and the Dashboard's, with
+     `fetchTopicPageHead`, `fetchPodcastEpisodePageHead`, `fetchTopicPostPageHead`, `fetchProfilePageHead`,
+     `fetchTeamPageHead`, and `fetchDashboardPageHead` (now the head inside each page read in
+     `packages/client/pageReadClient.ts`). the invite's head route stays
    - close-out, close out, and closed out for what the sweep does with a row left in progress (now reaper, reap,
      and reaped), and the `stale-work-close-out` capability folder of the `launch-hardening` change (now
      `stale-work-reaper`), with `failStaleScans` in `packages/pipeline/staleScans.ts` (now `reapStaleScans`) and

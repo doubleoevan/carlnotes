@@ -1,7 +1,7 @@
 // the Scan statuses the scan tools' tests read and the scan MCP view's stories and tests render, typed from the
 // contract, so a renamed field fails the type check
 import type { McpFinishedScanStatus, McpRunningScanStatus, McpScanPodcastEpisode, McpScanStatus } from "./mcpScanStatus"
-import type { ScanSourceResults } from "./topics"
+import type { ScanSourceResults } from "./scanSourceResults"
 
 // what a Topic's Sources found once gathering ended
 const SCAN_SOURCE_RESULTS: ScanSourceResults = {

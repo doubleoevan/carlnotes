@@ -1,12 +1,30 @@
 // what a Topic Post's discussion card reads: its copy, its line under the title, its transcript, and whether
 // Regenerate shows
+import { fetchTopicPostDiscussionStatus } from "@carlnotes/client/statusReadClient"
 import type { PodcastEpisodeTranscriptTurn } from "@carlnotes/contracts/podcast"
+import { STATUS_FIRST_POLL_MS, type TopicPostDiscussionStatusRead } from "@carlnotes/contracts/statusReads"
 import { TOPIC_POST_DISCUSSION_TITLE, type TopicPostResponse } from "@carlnotes/contracts/topicPosts"
 import { toPodcastEpisodeDayAndDurationLabels, toPodcastEpisodeDurationLabel } from "./labels"
 import { hasRegenerationLeft } from "./topicImageEditor"
 
 // how often a page reads its post again while a discussion records
-export const TOPIC_POST_DISCUSSION_POLL_MS = 15_000
+export const TOPIC_POST_DISCUSSION_POLL_MS = STATUS_FIRST_POLL_MS.topicPostDiscussion
+
+/**
+ * Returns the read of a Topic Post's discussion status that its page's poll sends: without credentials for a
+ * published post on a public Topic. A poll that is not enabled, such as a covered screen's,
+ * gets none, which stops it.
+ */
+export function toTopicPostDiscussionStatusRead(
+	topicPost: Pick<TopicPostResponse, "id" | "isTopicPublic" | "publishedAt">,
+	isPollEnabled = true,
+): (() => Promise<TopicPostDiscussionStatusRead | null>) | undefined {
+	if (!isPollEnabled) {
+		return undefined
+	}
+	const isPublic = topicPost.isTopicPublic && topicPost.publishedAt !== null
+	return () => fetchTopicPostDiscussionStatus({ id: topicPost.id, isPublic })
+}
 
 // the discussion card's copy
 export const TOPIC_POST_DISCUSSION_LABELS = {

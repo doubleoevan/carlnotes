@@ -1,7 +1,7 @@
 import type { TeamPageResponse } from "@carlnotes/contracts/teams"
 import { toCountLabel } from "@carlnotes/contracts/text"
 import type { ComponentType, ReactNode } from "react"
-import { TEAM_SECTIONS } from "../lib/cardSections"
+import { TEAM_SECTIONS, toTeamTopicPostCardPages } from "../lib/cardSections"
 import { toSectionCountLabel } from "../lib/labels"
 import type { PageSectionsElements } from "./pageSectionsElements"
 
@@ -64,6 +64,7 @@ export function TeamSections({
 				<PagedCardsSection
 					section={TEAM_SECTIONS.topicPostCards}
 					rows={teamPage.topicPostCards}
+					serverPages={toTeamTopicPostCardPages(teamPage)}
 					renderCard={(topicPost) => <TopicPostCard topicPost={topicPost} />}
 				/>
 

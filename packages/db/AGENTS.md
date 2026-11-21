@@ -125,10 +125,20 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   out from its upload, and the render deletes its shots by listing the prefix. `store.smoke.ts` (`bun run smoke:store`)
   uploads a fake resource's content, reads it back, and checks the key, size, and body round-trip against the live
   bucket.
+- `visitorPageCaches.ts` — the Redis copies of the page reads every visitor shares, under `visitor-page:`: the profile,
+  the team page, the home, and a Dashboard page for 60 seconds, and the topic, podcast episode, and Topic Post pages for
+  30. `readVisitorPage` stores a read only if it is shared. `clearVisitorPagesOfTopic` reads a topic's owner, teams,
+  published podcast episodes, and published Topic Posts with their authors in one statement and deletes every copy that
+  shows the topic in one delete; a delete reads the keys first through `loadVisitorPagesOfTopic`, which also returns
+  the people and teams whose pages show the topic, so the api purges their edge tags. The api, the pipeline, and
+  `avatars.ts` call it and the profile, team, team member, Topic Post, and Dashboard clears beside it.
 - `redis.ts` — the Redis store, on Bun's built-in client from `REDIS_URL`. `runWithRedis` runs one operation and returns
   null on any failure, including a command with no reply in two seconds, and three such commands in a row replace the
   client, so a wedged connection never holds every request. `cacheJson` returns a cached value, or loads the value and
-  caches it, and concurrent callers of one key in a process share one load. `redisGauges.ts` holds the extra gauges the
+  caches it, and concurrent callers of one key in a process share one load. `statusReadCaches.ts` holds the status
+  copies the api's status reads load through `cacheJson`, `status:<kind>:<subjectId>` for 10 seconds for a film, 5 for
+  a Topic Post Discussion, and 2 for a Scan, and `clearStatusReads`, which every status write calls, the reaper's
+  failed writes included. `redisGauges.ts` holds the extra gauges the
   minute line reads: the store's counts with the server's used and maximum memory, warning if the command connection is
   down, at eight tenths of the memory limit, and at ten errors in a minute. `redisRateLimits.ts` holds the rate limits
   over the store: `incrementRateLimitWindow` is the fixed window counter behind the api's shared limiters,
@@ -170,9 +180,10 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   `releaseTopicPostProfileOrder` for a deleted post. `featuredOrder.ts` is the write and the release both share.
   `topic_posts.home_order` and `topic_posts.profile_order` hold a Topic Post's two orders.
 - `quotas.ts` — the derived per-user limits, and `loadUserAccess`, the one read of a user's role, plan, budget override,
-  and admin block, which the api and the worker share. `startOfUtcDay` and `startOfUtcMonth` are when a quota day and
-  the month's spend roll over. `hasFullPodcastEpisodes` is true on a paid plan or for an admin, and the free plan gets
-  short podcast episodes.
+  and admin block, which the api and the worker share. `memoizeUserAccessInRequest` memoizes an access row that another
+  read joined in the request memo, so `loadUserAccess` sends no read of its own. `startOfUtcDay` and `startOfUtcMonth`
+  are when a quota day and the month's spend roll over. `hasFullPodcastEpisodes` is true on a paid plan or for an admin,
+  and the free plan gets short podcast episodes.
 - `recordedSpend.ts` — the recorded spend. `monthlySpendDollars` reads a user's spend for the month on scans, chat
   turns, and podcast episodes, once per request through the request memo. `loadSpendSince` sums eight tables for one
   user, for one plan's users who are not admins (`toPlanUserIdQuery`), or for every user, and `toSpendCents` adds a
@@ -244,7 +255,9 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   `deletePodcastFeedCache`, which clears both and which a publish, a removal, a rename, or a finished film runs.
 - `requestMemo.ts` — the reads one request repeats, its user's access, each topic role, and its monthly spend, kept
   in the request's async context. The api opens a memo for every request, the worker one for each podcast episode plan
-  and each sweep's limit reads, and outside a memo every read goes to the database.
+  and each sweep's limit reads, and outside a memo every read goes to the database. A GET request also opens a row
+  memo (`runWithRowMemo`), where `memoizeRowsById` reads each row of a table once a request and reads only the ids it
+  has not read yet.
 - `queryTracing.ts` — counts each statement a request sends and traces it under the request's span, and counts the
   request's cache hits and misses with the keys that missed, which `redis.ts` reports to it. A write statement clears
   the memo of the request that sent it. `countRequestStatement` is the one count, which the connection pool stub
@@ -333,13 +346,20 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
 - Schema changes edit the domain's file in `schema/`, then `bun run db:generate` writes the migration (offline, no
   doppler) and `bun run db:migrate` applies it (its script already runs under doppler). Never
   hand-edit an applied migration. `migrations/` is generated; never read it for the schema.
+- A new index on a table that already has rows is built by hand in production first, with
+  `CREATE INDEX CONCURRENTLY`, because every pending migration runs in one transaction and a plain build blocks the
+  table's writes. Its migration opens with `SET LOCAL lock_timeout = '3s'` and declares the index with
+  `IF NOT EXISTS`, as `0187_launch_hardening.sql` and `0188_episodes_published_at.sql` do. The steps and each such
+  statement are in the deployment guide's
+  [An index on a table that already has rows](../../apps/docs/deployment.md#an-index-on-a-table-that-already-has-rows).
 - All Postgres access goes through Drizzle here; no `Bun.sql`, `pg`, or raw clients anywhere.
 - Imports: `@carlnotes/server` and `@carlnotes/contracts` only; never `emails`, `models`, `pipeline`, or an app, which
   all come after it.
 - Tests: `bun test packages/db`; `*.smoke.ts` run under `doppler run`.
 
-`authorization.ts` owns the shared capability gate. `topicPermissions.ts` and `findingPermissions.ts` supply its
-existing visibility, subscription, and collection grant rules; the API keeps compatibility exports.
+`authorization.ts` owns the shared capability gate. `topicPermissions.ts`, `topicSubscriptions.ts`, and
+`findingPermissions.ts` supply its existing visibility, subscription, and collection grant rules; the API keeps
+compatibility exports.
 `personalSourcesAuthority.ts` adds the sender isolation within normal Topic edit authority and preserves cleanup after
 downgrade. `schema/personalSources.ts` stores encrypted Personal sources items, derived context and lasting activation,
 queue claims, retry identities, daily confirmation counters, API-key digests, encrypted private annotations and pending

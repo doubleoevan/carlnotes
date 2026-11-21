@@ -33,7 +33,8 @@ import { topics } from "./schema/topics"
 import { assertNever, canRequestTopicScan, canSeeTopic, toTopicEditRole } from "./topicPermissions"
 
 // collection grants share the Topic permission loaders
-export { loadSubscribedTopicIds as subscribedTopicIds, memberTopicIds } from "./topicPermissions"
+export { memberTopicIds } from "./topicPermissions"
+export { loadSubscribedTopicIds as subscribedTopicIds } from "./topicSubscriptions"
 
 // the topic fields that every resource capability needs: identity, owner, visibility, and the team that owns it
 type GatedTopic = Pick<typeof topics.$inferSelect, "id" | "ownerId" | "visibility" | "teamId">

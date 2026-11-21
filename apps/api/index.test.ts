@@ -1,7 +1,7 @@
 // tests for the rules that decide whether a request is served by the api or a 404, the health checks, the 500 for an
 // error no route handles, the 404 for a path with a NUL byte, the feed's edge caching, the security.txt noindex header,
-// the api's own validation, the mcp routes' body limit, the content security policy, a public file's cache headers, and
-// the baseline security headers
+// the api's own validation, the mcp routes' body limit, the content security policy, a public file's cache headers,
+// the baseline security headers, and the plain 404 for a missing bundle file
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { CHAT_QUESTION_CHARS } from "@carlnotes/contracts/chat"
 import { CHAT_HISTORY_TURNS } from "@carlnotes/contracts/chatTurns"
@@ -12,9 +12,11 @@ import { DEFAULT_BODY_LIMIT_BYTES } from "./bodyLimit"
 import * as chatTurnAuthorization from "./chat/chatTurnAuthorization"
 import { BASELINE_POLICY_DIRECTIVES, FRAME_SOURCE_DIRECTIVE } from "./contentSecurityPolicy"
 import { RENDERED_EDGE_CACHE_CONTROL } from "./edgeCache"
-import server from "./index"
+import server, { clearSharedDeepHealth } from "./index"
 import {
 	createBundleDirectory,
+	HASHED_ASSET_PATH,
+	HASHED_ASSET_TEXT,
 	PAGE_HTML,
 	PUBLIC_FILE_TEXT,
 	removeTestDirectories,
@@ -25,7 +27,7 @@ import {
 } from "./indexTestFixtures"
 import { CONNECT_ACCOUNT_TEXT } from "./mcp/results"
 import * as toolCallerModule from "./mcp/toolCaller"
-import { toolCallerRateLimitStore } from "./rateLimit"
+import { mcpToolCallRateLimitStore } from "./rateLimit"
 import { SESSION_COOKIE, signInAs, toJsonRequest } from "./testSession"
 
 // put each spied console method and the Redis client back, and remove the temporary directories after each test,
@@ -33,6 +35,7 @@ import { SESSION_COOKIE, signInAs, toJsonRequest } from "./testSession"
 afterEach(async () => {
 	mock.restore()
 	restoreRedisClient()
+	clearSharedDeepHealth()
 	await removeTestDirectories()
 })
 
@@ -64,6 +67,18 @@ test("the deep health check runs one query and responds with the pool's counts",
 		databaseLatencyMs: expect.any(Number),
 		pool: { totalCount: expect.any(Number), idleCount: expect.any(Number), waitingCount: expect.any(Number) },
 	})
+})
+
+// a flood of deep health checks shares one query a second, so a monitor or a loop never queues work in the connection pool
+test("deep health checks inside one second share one query", async () => {
+	const responses = []
+	for (let i = 0; i < 3; i++) {
+		responses.push(await requestWithQueryStub({ path: "/api/health/deep", toQueryRows: () => SELECT_ONE_ROWS }))
+	}
+
+	// three responses from the one query
+	expect(responses.map((response) => response.status)).toEqual([200, 200, 200])
+	expect(responses.reduce((queryCount, response) => queryCount + response.queryCount, 0)).toBe(1)
 })
 
 // a database that fails makes the deep health check fail, so a monitor alerts
@@ -219,7 +234,7 @@ test("an mcp request past the default body limit is rejected with a 413", async 
 test("mcp origin rejection precedes caller lookup and rate limiting for every method", async () => {
 	// fail if either account work or quota consumption is reached
 	const resolveCallerSpy = spyOn(toolCallerModule, "resolveToolCaller").mockRejectedValue(new Error("caller reached"))
-	const incrementSpy = spyOn(toolCallerRateLimitStore, "increment").mockImplementation(() => {
+	const incrementSpy = spyOn(mcpToolCallRateLimitStore, "increment").mockImplementation(() => {
 		throw new Error("quota reached")
 	})
 	for (const path of ["/mcp", "/mcp/t/topic-1"]) {
@@ -361,6 +376,26 @@ test("a public file is cached for an hour in the browser and a day at the edge",
 	expect(response.body).toBe(PUBLIC_FILE_TEXT)
 	expect(response.cacheControl).toBe("public, max-age=3600")
 	expect(response.edgeCacheControl).toBe("max-age=86400")
+})
+
+// a bundle file a stale page names is gone after a release, so its path is a plain 404 and never renders a page
+test("a missing bundle file responds with a plain 404, and the hashed one is served", async () => {
+	const bundleDirectory = await createBundleDirectory()
+	const [missingAsset, hashedAsset, missingAssetHead] = await withWorkingDirectory(bundleDirectory, () =>
+		Promise.all([
+			request("/assets/app-gone123.js"),
+			request(HASHED_ASSET_PATH),
+			request("/assets/app-gone123.css", { method: "HEAD" }),
+		]),
+	)
+
+	// the missing file is a text 404 with no page html, and the built one is still served
+	expect(missingAsset.status).toBe(404)
+	expect(missingAsset.body).toBe("Not found")
+	expect(missingAsset.body).not.toContain(PAGE_HTML)
+	expect(missingAssetHead.status).toBe(404)
+	expect(hashedAsset.status).toBe(200)
+	expect(hashedAsset.body).toBe(HASHED_ASSET_TEXT)
 })
 
 // every response names the referrer a cross-origin link sees, forbids type sniffing, and includes every baseline

@@ -1,7 +1,8 @@
-import { CARDS_PAGE_SIZE } from "@carlnotes/contracts/home"
+import { CARDS_PAGE_SIZE } from "@carlnotes/contracts/cardPages"
 import { toCountLabel } from "@carlnotes/contracts/text"
 import type { ComponentType, ReactNode } from "react"
 import { type PageSelection, usePagination } from "../hooks/usePagination"
+import { type ServerCardPages, useServerPagedCards } from "../hooks/useServerPagedCards"
 import type { CardSection } from "../lib/cardSections"
 
 // the platform elements of a card section: the collapsible section with its title, its count, the control a section
@@ -23,11 +24,14 @@ export type CardsSectionElements = {
 	}>
 	Grid: ComponentType<{ children: ReactNode }>
 	Cell: ComponentType<{ isOnPage: boolean; children: ReactNode }>
+	// a section the server pages names its page in the web's url under its page search key, so the web draws each
+	// page button as a link to its page
 	Pagination: ComponentType<{
 		label: string
 		pageNumber: number
 		pageCount: number
 		onOpenPage: (pageNumber: number) => void
+		pageSearchKey?: string
 	}>
 }
 
@@ -51,7 +55,7 @@ type CardsSectionProps<Row> = PagedCardsSectionProps<Row> & {
  * Shows a section of cards under its title and count, six to a page, with every card it holds, hidden while it has
  * none. The page is chosen outside the section.
  */
-export function CardsSection<Row>({
+function CardsSection<Row>({
 	section,
 	rows,
 	rowCount,
@@ -84,6 +88,7 @@ export function CardsSection<Row>({
 						pageNumber={pagination.page + 1}
 						pageCount={pagination.pageCount}
 						onOpenPage={(pageNumber) => pagination.setPage(pageNumber - 1)}
+						pageSearchKey={isPagedOnServer ? section.pageSearchKey : undefined}
 					/>
 				)
 			}
@@ -100,9 +105,51 @@ export function CardsSection<Row>({
 }
 
 /**
- * Shows a section of cards that pages through all of its rows by itself.
+ * Shows a section of cards six to a page. A section the server pages shows the page its page read holds first and
+ * reads ahead every page that a page button opens. Any other section pages through all of its rows by itself.
  */
-export function PagedCardsSection<Row>({ section, rows, action, renderCard, elements }: PagedCardsSectionProps<Row>) {
+export function PagedCardsSection<Row>({
+	serverPages,
+	...cardsSectionProps
+}: PagedCardsSectionProps<Row> & { serverPages?: ServerCardPages<Row> }) {
+	return serverPages ? (
+		<ServerPagedCardsSection {...cardsSectionProps} {...serverPages} />
+	) : (
+		<ClientPagedCardsSection {...cardsSectionProps} />
+	)
+}
+
+// a section the server pages: the rows of the page shown, and how many rows the whole section holds
+function ServerPagedCardsSection<Row>({
+	section,
+	queryKey,
+	loadedPage,
+	fetchPage,
+	action,
+	renderCard,
+	elements,
+}: Omit<PagedCardsSectionProps<Row>, "rows"> & ServerCardPages<Row>) {
+	const { pageRows, pagination } = useServerPagedCards({
+		queryKey: [section.value, ...queryKey],
+		loadedPage,
+		fetchPage,
+	})
+	return (
+		<CardsSection
+			section={section}
+			rows={pageRows}
+			rowCount={loadedPage.totalCount}
+			pagination={pagination}
+			isPagedOnServer
+			action={action}
+			renderCard={renderCard}
+			elements={elements}
+		/>
+	)
+}
+
+// a section that pages through all of its rows by itself
+function ClientPagedCardsSection<Row>({ section, rows, action, renderCard, elements }: PagedCardsSectionProps<Row>) {
 	const { pagination } = usePagination(rows, CARDS_PAGE_SIZE)
 	return (
 		<CardsSection

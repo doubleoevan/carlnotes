@@ -1,13 +1,16 @@
 // scan stage activity tests: the ingest stage runs no Source for a Scan that is already marked failed and passes on
-// only what the later stages read, each review attempt gets its own model call wait deadline, and a review that its
-// worker's shutdown cancelled fails for a retry while a stopped one returns
+// only what the later stages read, each review attempt gets its own model call wait deadline, a review that its
+// worker's shutdown cancelled fails for a retry while a stopped one returns, and each Scan write clears its Topic's scan
+// status copy
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
-import type { StoredSourceResult } from "@carlnotes/contracts/topics"
+import type { StoredSourceResult } from "@carlnotes/contracts/scanSourceResults"
 import { restoreConnectionPool, stubConnectionPool, toTableRow } from "@carlnotes/db/connectionPoolStub"
 import { scans } from "@carlnotes/db/schema/scans"
+import * as statusReadCaches from "@carlnotes/db/statusReadCaches"
 import { newBudget, toCheckpointBudget, toResumedBudget } from "@carlnotes/models/budget"
 import * as litellm from "@carlnotes/models/litellm"
 import * as ingest from "@carlnotes/pipeline/ingest/index"
+import * as meanVectors from "@carlnotes/pipeline/meanVectors"
 import * as review from "@carlnotes/pipeline/review/index"
 import { emptyReviewSummary } from "@carlnotes/pipeline/review/track"
 import { REVIEW_ATTEMPTS, REVIEW_MODEL_CALL_WAIT_DEADLINE_MS } from "@carlnotes/pipeline/stageTimeouts"
@@ -15,9 +18,12 @@ import { ApplicationFailure } from "@temporalio/activity"
 import { MockActivityEnvironment } from "@temporalio/testing"
 import { DefaultLogger } from "@temporalio/worker"
 import {
+	failScan,
+	finishScan,
 	type IngestStageResult,
 	ingestForScan,
 	reviewForScan,
+	stopScan,
 	toModelCallWaitDeadlineBudget,
 } from "./runTopicScanActivities"
 
@@ -49,9 +55,17 @@ test("a Scan that is already marked failed runs no Source and keeps its failure 
 test("the ingest stage passes on each Source's outcome as only the four fields the scan report reads", async () => {
 	// a running scan row, an owner key, and an ingest whose Sources found Resources and fetched a page body
 	const scanRow = toTableRow(scans, { id: "scan-1", ownerId: "owner-1", status: "running" })
-	const sentQueries = stubConnectionPool(({ text }) =>
-		text.startsWith("select") && text.includes('from "scans"') ? [scanRow] : [],
-	)
+	const clearStatusReadsSpy = spyOn(statusReadCaches, "clearStatusReads").mockResolvedValue()
+
+	// the progress update returns the Scan's Topic, and each read of the Scan returns its row
+	const sentQueries = stubConnectionPool(({ text }) => {
+		if (text.startsWith('update "scans"') && text.includes("returning")) {
+			return [["topic-1"]]
+		}
+		return text.startsWith("select") && text.includes('from "scans"') ? [scanRow] : []
+	})
+
+	// the owner's key, and the Sources' outcomes
 	spyOn(litellm, "loadOrProvisionUserLiteLLMKey").mockResolvedValue("sk-owner")
 	const fetchedBody = { markdown: "# The page", etag: null, lastModified: null }
 	const sourceOutcomes: ingest.SourceOutcome[] = [
@@ -84,6 +98,12 @@ test("the ingest stage passes on each Source's outcome as only the four fields t
 
 	// each outcome keeps its kind, status, and detail, the results come with it, and no page body crosses
 	const ingestStageResult = await ingestForScan("scan-1", "topic-1")
+
+	// the Topic's scan status copy goes after the pickup and again after the progress
+	expect(clearStatusReadsSpy.mock.calls).toEqual([
+		["scan", "topic-1"],
+		["scan", "topic-1"],
+	])
 
 	// the Scan's progress saves each Source for a status read, and its results stay unset
 	const progressUpdate = sentQueries.find((query) => query.text.includes('"ingest_source_results" ='))
@@ -183,4 +203,36 @@ test("a review that a person's stop cancelled still returns what it scored", asy
 	const reviewResult = await reviewRun
 	expect(reviewResult.review).toEqual(emptyReviewSummary())
 	expect(reviewResult.budget.spentDollars).toBe(0.1)
+})
+
+test("the write that completes a Scan clears its Topic's scan status copy", async () => {
+	// the completing update returns the finished Scan, and the Topic is gone afterward
+	const clearStatusReadsSpy = spyOn(statusReadCaches, "clearStatusReads").mockResolvedValue()
+	spyOn(meanVectors, "saveTopicVectors").mockResolvedValue(true)
+	const finishedScanRow = toTableRow(scans, { id: "scan-1", topicId: "topic-1", ownerId: "owner-1" })
+	stubConnectionPool(({ text }) => (text.startsWith('update "scans"') ? [finishedScanRow] : []))
+	const ingestResult = { resources: [], sourceOutcomes: [], foundCount: 0, status: "succeeded" } as unknown
+	await finishScan("scan-1", "topic-1", "owner-1", ingestResult as IngestStageResult, {
+		review: emptyReviewSummary(),
+		budget: newBudget(),
+	})
+	expect(clearStatusReadsSpy).toHaveBeenCalledWith("scan", "topic-1")
+})
+
+test("a stopped Scan and a failed Scan clear their Topic's scan status copy", async () => {
+	// each update returns the Scan's Topic
+	const clearStatusReadsSpy = spyOn(statusReadCaches, "clearStatusReads").mockResolvedValue()
+	spyOn(meanVectors, "saveTopicVectors").mockResolvedValue(true)
+	stubConnectionPool(({ text }) => (text.startsWith('update "scans"') ? [["topic-1"]] : []))
+	await stopScan("scan-1")
+	await failScan("scan-2", "the reason", newBudget())
+	expect(clearStatusReadsSpy.mock.calls).toEqual([
+		["scan", "topic-1"],
+		["scan", "topic-1"],
+	])
+
+	// a Scan that already finished matches no row, so nothing is cleared
+	stubConnectionPool()
+	await stopScan("scan-1")
+	expect(clearStatusReadsSpy).toHaveBeenCalledTimes(2)
 })

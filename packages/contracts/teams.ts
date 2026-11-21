@@ -1,8 +1,11 @@
 // the team contracts: the teams page rows, the team page, and the responses its write routes return
 import { z } from "zod"
+import { cardsPagePosition, optionalCardsPageNumber, pagedQuery } from "./cardPages"
 import { chatMention } from "./chat"
 import { avatarSources, teamRoles } from "./enums"
 import { podcastEpisodeCard, topicCard } from "./home"
+import { pageHead } from "./pageHead"
+import { teamUserState } from "./pageUserStates"
 import { profileIdentity, topic } from "./profiles"
 import { teamIdentity } from "./teamIdentity"
 import { displayEnum } from "./tolerantReads"
@@ -84,9 +87,27 @@ export const teamPageResponse = teamIdentity.extend({
 	// every published Topic Post of those topics as cards: the ones their authors featured on their profiles first in
 	// their order, then the rest newest first
 	topicPostCards: z.array(topicPostCard),
+	// which page topicPostCards holds, if the read asked for pages. absent otherwise, and then it holds every post
+	topicPostCardsPage: cardsPagePosition.optional(),
+	// the team page's head, which a public team's page renders, and the team's saved Visitors count. absent from an
+	// api older than the fields
+	head: pageHead.optional(),
+	viewerCount: z.number().int().nonnegative().optional(),
+	// the user state, for a signed-in reader who asked for the shared copy and shares the visitors' copy. absent for
+	// anyone else
+	userState: teamUserState.optional(),
 })
 
 export type TeamPageResponse = z.infer<typeof teamPageResponse>
+
+// a team page read's query: a read that asks for the visitors' shared copy with the user state beside it, which the
+// apps merge into the copy. a read without it, a released app's, takes the page built for the user. a read may also
+// page the team's Topic Posts, with the zero-based page it holds
+export const teamPageQuery = z.object({
+	userState: z.literal("1").optional(),
+	...pagedQuery.shape,
+	topicPostsPage: optionalCardsPageNumber,
+})
 
 // the gate a private team shows a non-member: its name, and whether the user has already asked to join
 export const teamGateResponse = z.object({ teamName: z.string(), hasRequestedToJoin: z.boolean() })

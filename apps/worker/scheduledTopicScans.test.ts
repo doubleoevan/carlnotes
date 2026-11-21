@@ -4,6 +4,7 @@ import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { SCHEDULED_SCAN_SPENT_BUDGET_REASON } from "@carlnotes/contracts/scanFailure"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as quotas from "@carlnotes/db/quotas"
+import * as statusReadCaches from "@carlnotes/db/statusReadCaches"
 import * as scan from "@carlnotes/pipeline/scan"
 import * as temporalClient from "@carlnotes/pipeline/temporalClient"
 import * as monitoring from "@carlnotes/server/monitoring"
@@ -167,6 +168,7 @@ test("each Topic whose owner's budget is spent saves a failed Scan with the budg
 	// owner-1's budget is spent and owner-2's is not, and both have scans left today
 	const sentQueries = stubConnectionPool()
 	spyOn(quotas, "scansRemainingToday").mockResolvedValue(5)
+	const clearStatusReadsSpy = spyOn(statusReadCaches, "clearStatusReads").mockResolvedValue()
 	const startTopicScanSpy = spyOn(scan, "startTopicScan").mockResolvedValue(STARTED_TOPIC_SCAN_START)
 
 	// start the scheduled Topics' Scans
@@ -201,6 +203,12 @@ test("each Topic whose owner's budget is spent saves a failed Scan with the budg
 	expect(scanInserts.map((scanInsert) => scanInsert.values)).toEqual([
 		expect.arrayContaining(["a", "owner-1", "failed", SCHEDULED_SCAN_SPENT_BUDGET_REASON]),
 		expect.arrayContaining(["b", "owner-1", "failed", SCHEDULED_SCAN_SPENT_BUDGET_REASON]),
+	])
+
+	// each failed Scan clears its Topic's scan status copy
+	expect(clearStatusReadsSpy.mock.calls).toEqual([
+		["scan", "a"],
+		["scan", "b"],
 	])
 })
 

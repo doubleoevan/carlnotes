@@ -296,6 +296,7 @@ bun test
 bun run check:workflows # every Temporal workflow file still bundles
 bun run check:built-dependencies # after build:ui, apps/web declares every package its server build leaves external
 bun run check:advisories # no high or critical advisory on the lockfile outside dependency-advisories.json. it asks the registry, so CI runs it in its own job and bun run check does not
+bun run check:edge       # after a release, read-only: every path the origin marks shared is stored at the edge, a public card too with a session cookie. takes an origin, https://carlnotes.com by default, then any extra shared paths
 ```
 
 Component conventions cover web components/pages, mobile components, and core components. Routes, entrypoints,

@@ -15,7 +15,7 @@ import {
 } from "./uiServer"
 
 // put each spy and the render limit back, and remove the temporary directories after each test
-const restoreEnvSettings = saveEnvSettings(["RENDER_CONCURRENCY"])
+const restoreEnvSettings = saveEnvSettings(["RENDER_CONCURRENCY", "RENDER_SLOT_WAIT_MS"])
 afterEach(async () => {
 	mock.restore()
 	restoreEnvSettings()
@@ -49,6 +49,17 @@ test("a blog or release page url with a click id redirects to the url without it
 	expect(locations).toEqual(["/blog", "/releases/v1.2.0?ref=x"])
 })
 
+// the email and search platforms' click ids are stripped like the ad platforms' ids
+test("an email or search click id redirects to the url without it", async () => {
+	const bundleDirectory = await createBundleDirectory()
+	const clickIds = ["_hsenc", "_hsmi", "mkt_tok", "_bhlid", "ck_subscriber_id", "yclid"]
+	const locations = await withWorkingDirectory(bundleDirectory, async () =>
+		Promise.all(clickIds.map(async (clickId) => (await request(`/topics/abc123?${clickId}=1&ref=x`)).location)),
+	)
+
+	expect(locations).toEqual(clickIds.map(() => "/topics/abc123?ref=x"))
+})
+
 // a path that starts with two slashes would read as another host in a Location header, so the click id redirect
 // collapses the leading slashes and stays on this site
 test("a click id redirect never leaves the site", async () => {
@@ -64,6 +75,7 @@ test("a click id redirect never leaves the site", async () => {
 test("a visitor's render past the limit responds 503 with a retry, and a signed-in render is not", async () => {
 	// two visitor renders and a signed-in render at once against a bundle that takes a moment to render
 	Bun.env.RENDER_CONCURRENCY = "1"
+	Bun.env.RENDER_SLOT_WAIT_MS = "0"
 	const bundleDirectory = await createBundleDirectory({ renderDelayMs: 50 })
 	const [firstResponse, secondResponse, signedInResponse] = await withWorkingDirectory(bundleDirectory, () =>
 		Promise.all([
@@ -90,6 +102,7 @@ test("a visitor's render past the limit responds 503 with a retry, and a signed-
 test("a shed visitor gets a page that retries after its Retry-After wait, and the minute counts the renders started and shed", async () => {
 	// start the minute's counts over, then shed one of two visitor renders beside a signed-in render
 	Bun.env.RENDER_CONCURRENCY = "1"
+	Bun.env.RENDER_SLOT_WAIT_MS = "0"
 	readAndResetRenderGauges()
 	const bundleDirectory = await createBundleDirectory({ renderDelayMs: 50 })
 	const responses = await withWorkingDirectory(bundleDirectory, () =>
@@ -112,16 +125,52 @@ test("a shed visitor gets a page that retries after its Retry-After wait, and th
 
 	// the minute started two renders and shed one, which crosses the render-shed threshold, and the counts start over
 	const renderGauges = readAndResetRenderGauges()
-	expect(renderGauges).toEqual({ startedCount: 2, shedCount: 1 })
+	expect(renderGauges).toEqual({ startedCount: 2, waitedCount: 1, shedCount: 1 })
 	expect(toRenderShedCrossings(renderGauges)).toEqual([
 		{
 			condition: "render-shed",
 			message: "a replica shed visitor page renders past its render limit",
-			values: { startedCount: 2, shedCount: 1 },
+			values: { startedCount: 2, waitedCount: 1, shedCount: 1 },
 		},
 	])
-	expect(readAndResetRenderGauges()).toEqual({ startedCount: 0, shedCount: 0 })
-	expect(toRenderShedCrossings({ startedCount: 40, shedCount: 0 })).toEqual([])
+	expect(readAndResetRenderGauges()).toEqual({ startedCount: 0, waitedCount: 0, shedCount: 0 })
+	expect(toRenderShedCrossings({ startedCount: 40, waitedCount: 3, shedCount: 0 })).toEqual([])
+})
+
+// a visitor's render past the limit waits for a free slot and renders
+test("a visitor's render past the limit waits for a free slot and renders, and the minute counts the wait", async () => {
+	// two visitor renders at once with one slot and a wait longer than a render
+	Bun.env.RENDER_CONCURRENCY = "1"
+	Bun.env.RENDER_SLOT_WAIT_MS = "2000"
+	readAndResetRenderGauges()
+	const bundleDirectory = await createBundleDirectory({ renderDelayMs: 50 })
+	const responses = await withWorkingDirectory(bundleDirectory, () =>
+		Promise.all([request("/topics/abc123"), request("/topics/def456")]),
+	)
+
+	// both render, one after the other, and the minute counts one wait and no shed render
+	expect(responses.map((response) => response.status)).toEqual([200, 200])
+	expect(readAndResetRenderGauges()).toEqual({ startedCount: 2, waitedCount: 1, shedCount: 0 })
+})
+
+// a slot that frees too late still sheds the render, so a visitor never waits past the slot wait
+test("a visitor's render whose wait ends before a slot frees is shed, and the next waiter still gets the slot", async () => {
+	// three visitor renders at once with one slot, a render slower than the wait, and the wait's end
+	Bun.env.RENDER_CONCURRENCY = "1"
+	Bun.env.RENDER_SLOT_WAIT_MS = "20"
+	readAndResetRenderGauges()
+	const bundleDirectory = await createBundleDirectory({ renderDelayMs: 100 })
+	const [firstResponse, secondResponse] = await withWorkingDirectory(bundleDirectory, () =>
+		Promise.all([request("/topics/abc123"), request("/topics/def456")]),
+	)
+
+	// the first renders and the second is shed after its wait
+	expect([firstResponse.status, secondResponse.status]).toEqual([200, 503])
+	expect(readAndResetRenderGauges()).toEqual({ startedCount: 1, waitedCount: 1, shedCount: 1 })
+
+	// the shed waiter left the line, so the slot is free for the next visitor
+	const nextResponse = await withWorkingDirectory(bundleDirectory, () => request("/topics/ghi789"))
+	expect(nextResponse.status).toBe(200)
 })
 
 // only a visitor's render counts against the limit, so signed-in renders in progress never shed a visitor

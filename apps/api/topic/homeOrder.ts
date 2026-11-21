@@ -72,7 +72,8 @@ export async function toHomeOrderAdmin(context: Context<AppEnv>): Promise<HomeOr
 }
 
 /**
- * Deletes the shared topic section ids, the home's card ids, and the visitors' feeds, and purges the home at the edge.
+ * Deletes the shared topic section ids, the home's card ids, the visitors' feeds, and the visitors' home, and purges
+ * the home at the edge.
  */
 export async function clearHomeCaches(): Promise<void> {
 	await clearSharedTopicFeedCaches()

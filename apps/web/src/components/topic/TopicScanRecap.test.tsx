@@ -1,6 +1,6 @@
 // render tests for allowed urls, and for where the source footnotes chart sits in the recap
 import { expect, test } from "bun:test"
-import type { ScanSourceResults } from "@carlnotes/contracts/topics"
+import type { ScanSourceResults } from "@carlnotes/contracts/scanSourceResults"
 import type { ScanRecapFields } from "@carlnotes/core/lib/topicScanRecap"
 import { renderToStaticMarkup } from "react-dom/server"
 import { ScrollNote, TopicScanRecap } from "./TopicScanRecap"

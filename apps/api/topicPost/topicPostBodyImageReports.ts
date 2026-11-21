@@ -3,6 +3,7 @@ import { toTopicPostBodyImageIds } from "@carlnotes/contracts/topicPostBodyImage
 import { db } from "@carlnotes/db"
 import { topicPosts } from "@carlnotes/db/schema/topicPosts"
 import { recordPendingObjectDeletions } from "@carlnotes/db/store"
+import { clearVisitorPagesOfTopic } from "@carlnotes/db/visitorPageCaches"
 import { toTopicPostBodyImageObjectKeys } from "@carlnotes/pipeline/topicPosts/topicPostBodyImageFiles"
 import { purgeEdgeCacheTagAfterDeletion, toTopicPostCacheTag } from "@carlnotes/server/edgePurge"
 import { and, eq, sql } from "drizzle-orm"
@@ -15,9 +16,9 @@ const REMOVAL_ATTEMPT_LIMIT = 3
 
 /**
  * Removes a reported body image, named "<topicPostId>/<imageId>", as an admin: the body is written again without it at
- * the next version with its files queued for deletion on the same transaction, and a public post's page and image
- * leave the edge. A post that is gone leaves nothing to remove, and an image already gone from the body is purged from
- * the edge again, so a removal whose purge failed purges on its retry.
+ * the next version with its files queued for deletion on the same transaction, its topic's visitor pages leave the
+ * cache, and a public post's page and image leave the edge. A post that is gone leaves nothing to remove, and an image
+ * already gone from the body is purged from the edge again, so a removal whose purge failed purges on its retry.
  */
 export async function removeReportedTopicPostBodyImage(subjectId: string): Promise<void> {
 	// the body without the image, unless the post is gone
@@ -27,7 +28,9 @@ export async function removeReportedTopicPostBodyImage(subjectId: string): Promi
 		return
 	}
 
-	// a public post's page and the image's files leave the edge
+	// the visitor pages that show the post leave the cache, and a public post's page and the image's files leave the
+	// edge
+	await clearVisitorPagesOfTopic(topicPostRow.topic.id)
 	if (isTopicPostPublic(topicPostRow)) {
 		await purgeEdgeCacheTagAfterDeletion(toTopicPostCacheTag(topicPostId))
 	}

@@ -9,10 +9,11 @@ import {
 } from "@carlnotes/contracts/payloads"
 import { toUrlHost } from "@carlnotes/contracts/sources"
 import { db, isFindingShown } from "@carlnotes/db"
+import { podcastEpisodeChapters } from "@carlnotes/db/schema/podcast"
 import { bookmarks, consumptions, findings, resources, scans } from "@carlnotes/db/schema/scans"
 import { reportThresholdCrossing } from "@carlnotes/server/monitoring"
 import { zValidator } from "@hono/zod-validator"
-import { and, desc, eq, gt, type SQL, sql } from "drizzle-orm"
+import { and, desc, eq, gt, inArray, type SQL, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { loadOrFetchLinkPreview } from "../chat/linkPreviews"
 import {
@@ -86,6 +87,8 @@ type LoadTopicFindingsOptions = {
 	pageWindow?: FindingPageWindow
 	// whether to leave out the findings rated thumbs down
 	isRatedDownExcluded?: boolean
+	// the podcast episode whose chapters narrate the only findings to read
+	chapterPodcastEpisodeId?: string
 }
 
 /**
@@ -99,6 +102,7 @@ export async function loadTopicFindings({
 	subscriberActivatedAt,
 	pageWindow,
 	isRatedDownExcluded = false,
+	chapterPodcastEpisodeId,
 }: LoadTopicFindingsOptions): Promise<TopicFinding[]> {
 	// no active subscription on an invite topic means no findings at all
 	if (subscriberActivatedAt === null) {
@@ -110,7 +114,11 @@ export async function loadTopicFindings({
 	const topicFindingFilter = subscriberActivatedAt
 		? and(eq(findings.topicId, topicId), gt(scans.startedAt, subscriberActivatedAt))
 		: eq(findings.topicId, topicId)
-	const findingFilter = isRatedDownExcluded ? and(topicFindingFilter, isFindingShown) : topicFindingFilter
+	const findingFilter = and(
+		topicFindingFilter,
+		isRatedDownExcluded ? isFindingShown : undefined,
+		chapterPodcastEpisodeId ? toChapterFindingFilter(chapterPodcastEpisodeId) : undefined,
+	)
 
 	// join each topic finding with its resource and its scan, with the user's consumed and bookmarked dates
 	const findingQuery = db
@@ -145,6 +153,15 @@ export async function loadTopicFindings({
 
 	// shape each row into a topic finding and set its isConsumed flag
 	return findingRows.map(toTopicFinding)
+}
+
+// the findings that a podcast episode's chapters narrate
+function toChapterFindingFilter(podcastEpisodeId: string): SQL {
+	const chapterFindingIds = db
+		.select({ findingId: podcastEpisodeChapters.findingId })
+		.from(podcastEpisodeChapters)
+		.where(eq(podcastEpisodeChapters.podcastEpisodeId, podcastEpisodeId))
+	return inArray(findings.id, chapterFindingIds)
 }
 
 // the joined row a finding read returns: the finding, its resource metadata, and the user's own columns
@@ -229,6 +246,7 @@ export const findingsRoute = new Hono<AppEnv>()
 		return context.json({ linkPreview: await loadOrFetchLinkPreview(findingRow.url) })
 	})
 	.get("/topic-findings/:id/rating", async (context) => {
+		// the user's own rating, never cached, for a signed-in user alone
 		const userId = currentUser(context)
 		context.header("Cache-Control", "private, no-store")
 		if (!userId) {
@@ -241,6 +259,8 @@ export const findingsRoute = new Hono<AppEnv>()
 		if (feedback) {
 			return context.json(feedback)
 		}
+
+		// no rating: a Finding the user may see is a 403, and any other a 404
 		return (await isTopicFindingVisible(userId, findingId))
 			? context.json({ error: "forbidden" }, 403)
 			: context.json({ error: "not found" }, 404)

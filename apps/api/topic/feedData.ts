@@ -11,7 +11,7 @@ import { and, count, desc, eq, gte, inArray, lte, sql } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core"
 import { memberTopicIds, subscribedTopicIds } from "../authorization"
 import { loadTopicChatMentions } from "../chat/mentions"
-import { loadLatestPodcastEpisodes } from "../podcast/podcastEpisodeShapes"
+import { loadLatestPodcastEpisodes } from "../podcast/latestPodcastEpisodes"
 import {
 	TOPIC_FINDING_COLUMNS,
 	type TopicFindingRow,
@@ -81,11 +81,8 @@ export type TopicBylines = {
 	teamLinkByTopic: Map<string, { teamId: string; name: string; avatarVersion: string | null }>
 }
 
-/**
- * Reads every topic's owner and owning team at once, each by topic id. A private team's link goes to its own members
- * alone.
- */
-export async function loadTopicBylines(topicIds: string[], userId: string | null): Promise<TopicBylines> {
+// every topic's owner and owning team at once, each by topic id. A private team's link goes to its own members alone
+async function loadTopicBylines(topicIds: string[], userId: string | null): Promise<TopicBylines> {
 	const [ownerRows, teamRows] = await Promise.all([loadFeedOwnerRows(topicIds), loadFeedTeamRows(topicIds, userId)])
 	return {
 		ownerByTopic: new Map(ownerRows.map((ownerRow) => [ownerRow.topicId, ownerRow])),
@@ -199,32 +196,29 @@ const recapScans = alias(scans, "recap_scans")
 export async function loadLastSucceededScanRows(
 	topicIds: string[],
 ): Promise<Pick<typeof scans.$inferSelect, "topicId" | "startedAt" | "finishedAt" | "scanSummary" | "cost">[]> {
-	// the latest succeeded scan per topic, sorted so that it is the distinct row kept
+	// each topic's latest succeeded scan, read newest first on the topic's scans index and stopped at one row
 	const latestScans = db
-		.selectDistinctOn([scans.topicId], {
-			topicId: scans.topicId,
-			startedAt: scans.startedAt,
-			finishedAt: scans.finishedAt,
-			cost: scans.cost,
-		})
+		.select({ startedAt: scans.startedAt, finishedAt: scans.finishedAt, cost: scans.cost })
 		.from(scans)
-		.where(and(inArray(scans.topicId, topicIds), eq(scans.status, "succeeded")))
-		.orderBy(scans.topicId, desc(scans.startedAt))
+		.where(and(eq(scans.topicId, topics.id), eq(scans.status, "succeeded")))
+		.orderBy(desc(scans.startedAt))
+		.limit(1)
 		.as("latest_scans")
 
 	// the recap reads once per topic's latest scan instead of once per succeeded scan. a sql fragment prints an
-	// aliased table as its alias alone, so the from clause names the table and then the alias. drizzle drops the table
-	// name from a top-level column in a one-table select, so the recap's subquery nests in an outer sql fragment
-	const lastScanRecapQuery = sql`(select ${recapScans.scanSummary} from ${scans} ${sql.identifier("recap_scans")} where ${recapScans.topicId} = ${latestScans.topicId} and ${recapScans.status} = 'succeeded' and ${recapScans.scanSummary} <> '' order by ${recapScans.startedAt} desc limit 1)`
+	// aliased table as its alias alone, so the from clause names the table and then the alias
+	const lastScanRecapQuery = sql`(select ${recapScans.scanSummary} from ${scans} ${sql.identifier("recap_scans")} where ${recapScans.topicId} = ${topics.id} and ${recapScans.status} = 'succeeded' and ${recapScans.scanSummary} <> '' order by ${recapScans.startedAt} desc limit 1)`
 	return db
 		.select({
-			topicId: latestScans.topicId,
+			topicId: topics.id,
 			startedAt: latestScans.startedAt,
 			finishedAt: latestScans.finishedAt,
 			scanSummary: sql<string | null>`${lastScanRecapQuery}`,
 			cost: latestScans.cost,
 		})
-		.from(latestScans)
+		.from(topics)
+		.innerJoinLateral(latestScans, sql`true`)
+		.where(inArray(topics.id, topicIds))
 }
 
 // this month's scan spend per topic

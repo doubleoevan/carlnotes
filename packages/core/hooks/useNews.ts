@@ -1,7 +1,8 @@
-import { fetchNews, fetchProfileNews } from "@carlnotes/client/newsClient"
+import { addNewsWriteListener, fetchNews, fetchProfileNews } from "@carlnotes/client/newsClient"
 import { DEFAULT_NEWS_WINDOW, type NewsResponse, type NewsWindow } from "@carlnotes/contracts/news"
 import type { ProfileAudience } from "@carlnotes/contracts/profiles"
-import { type UseQueryResult, useQuery, useQueryClient } from "@tanstack/react-query"
+import { type QueryClient, type UseQueryResult, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useEffect } from "react"
 
 // the query key a news page is cached under, and how long a page stays fresh
 const NEWS_QUERY_KEY = "news"
@@ -75,4 +76,16 @@ export function useNews({
 			previousQuery?.queryKey[3] === window && previousQuery.queryKey[5] === audience ? previousNewsPage : undefined,
 		staleTime: NEWS_STALE_MS,
 	})
+}
+
+/**
+ * Reads every news page again after each of the signed-in user's own writes that their news shows, so a page held for
+ * its fresh minute never hides the user's own Comment, reaction, Topic Post, or follow. An app calls it once with the
+ * query client every page shares.
+ */
+export function useNewsWriteInvalidation(queryClient: QueryClient): void {
+	useEffect(
+		() => addNewsWriteListener(() => void queryClient.invalidateQueries({ queryKey: [NEWS_QUERY_KEY] })),
+		[queryClient],
+	)
 }

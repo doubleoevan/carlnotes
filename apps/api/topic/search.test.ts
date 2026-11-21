@@ -16,11 +16,12 @@ test("a visitor searches public topics with enough findings alone", async () => 
 
 	// the name match and the shown-findings count, and none of a user's rules
 	expect(statementText).toContain('lower("topics"."name") like $1')
-	expect(statementText).toContain('(select count(*) from "findings"')
+	expect(statementText).toContain('(select count(*) from (select 1 from "findings"')
+	expect(statementText).toContain(`'down' limit $3) as "shown_findings") >= $4`)
 	expect(statementText).not.toContain('"owner_id" = $')
 	expect(statementText).not.toContain('"team_members"')
 	expect(statementText).not.toContain('"invites"')
-	expect(sentQueries[0]?.values).toEqual(["%agents%", "public", 3, 50])
+	expect(sentQueries[0]?.values).toEqual(["%agents%", "public", 3, 3, 50])
 })
 
 // a user's search also names their own topics, their teams' topics, and the invite topics they are invited to or

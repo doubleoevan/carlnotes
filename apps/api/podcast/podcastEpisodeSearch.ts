@@ -4,7 +4,7 @@
 import { isPublishedPodcastEpisode, type PodcastEpisodeSummary } from "@carlnotes/contracts/podcast"
 import type { PodcastEpisodeSearchRow } from "@carlnotes/contracts/search"
 import { toPodcastEpisodePath } from "@carlnotes/contracts/seo"
-import { DAY_MS } from "@carlnotes/contracts/time"
+import { HOUR_MS } from "@carlnotes/contracts/time"
 import { type DbHandle, db, isPublicAndShown, runWithIterativeIndexScan } from "@carlnotes/db"
 import { cacheJson } from "@carlnotes/db/redis"
 import { countRateLimitHit } from "@carlnotes/db/redisRateLimits"
@@ -18,7 +18,7 @@ import { embedRetrievalQuery } from "@carlnotes/pipeline/chat/retrieveDocs"
 import { reportError } from "@carlnotes/server/monitoring"
 import { and, desc, eq, like, notInArray, or, type SQL, sql } from "drizzle-orm"
 import { toContainsLikePattern } from "../likePattern"
-import { toRateLimitKey } from "../rateLimit"
+import { isUncountedToolCaller, toRateLimitKey } from "../rateLimit"
 import { podcastEpisodeColumns, toPodcastEpisodeViewFilter } from "./podcastEpisodeRows"
 import { loadPodcastEpisodeSummaries } from "./podcastEpisodeShapes"
 
@@ -29,11 +29,18 @@ const MAX_MEANING_MATCH_DISTANCE = 0.6
 const MEANING_MATCH_MIN_CHARS = 3
 
 // how long Redis keeps a query's vector
-const QUERY_VECTOR_TTL_MS = DAY_MS
+const QUERY_VECTOR_TTL_MS = HOUR_MS
 
-// how many embeddings a visitor's address may request in one rate limit window, and how long the window is
-export const VISITOR_EMBEDDING_LIMIT = 20
-const VISITOR_EMBEDDING_WINDOW_MS = 60_000
+// how many embeddings one user or visitor's address may request in one rate limit window, and how long the window is
+export const QUERY_EMBEDDING_LIMIT = 20
+
+// how many query embeddings every page render's own searches send together a minute. a render brings no visitor to
+// count, so the renders share one bucket, wide enough that one visitor's search never fills it
+export const PAGE_RENDER_QUERY_EMBEDDING_LIMIT = 200
+const QUERY_EMBEDDING_WINDOW_MS = 60_000
+
+// how long a search waits on the query's embedding before it returns the text matches alone
+const QUERY_EMBEDDING_TIME_LIMIT_MS = 2000
 
 // who is searching, whether they are an admin, the trimmed query, the client address that a visitor's embedding rate
 // limit counts under, and the most rows to read
@@ -187,32 +194,53 @@ export function toMeaningMatchQuery(
 type LoadQueryVectorOptions = { userId: string | null; query: string; clientAddress: string | null }
 
 /**
- * Returns the query's vector from Redis, or embeds and caches it. Returns null for a visitor over the rate limit, a
- * visitor with no public key, a spent key, and a failed embedding, which is reported.
+ * Returns the query's vector from Redis, or embeds and caches it. Returns null for a user or visitor over the rate
+ * limit, a visitor with no public key, a spent key, an embedding past its time limit, and a failed embedding, which is
+ * reported.
  */
 export async function loadQueryVector(loadQueryVectorOptions: LoadQueryVectorOptions): Promise<number[] | null> {
-	// a cached vector costs no embedding, and a query the search could not embed caches nothing
-	return cacheJson({
+	// a cached vector costs no embedding, and a query the search could not embed caches nothing. the vector is kept as
+	// base64 of its 32-bit floats
+	const storedQueryVector = await cacheJson({
 		key: toQueryVectorKey(loadQueryVectorOptions.query),
 		ttlMs: QUERY_VECTOR_TTL_MS,
-		load: () => embedQuery(loadQueryVectorOptions),
-		isStorable: (queryVector) => queryVector !== null,
+		load: async () => {
+			const queryVector = await embedQuery(loadQueryVectorOptions)
+			return queryVector ? toStoredQueryVector(queryVector) : null
+		},
+		isStorable: (storedQueryVector) => storedQueryVector !== null,
 	})
+	return storedQueryVector ? toQueryVector(storedQueryVector) : null
 }
 
-// embed the query on the user's own key or the public key. a visitor embeds only with a public key and within the
-// address's rate limit. a spent key returns null, and any other failure is reported first
+/**
+ * Returns a query vector as Redis keeps it: base64 of its 32-bit floats, a quarter of the size of its json.
+ */
+export function toStoredQueryVector(queryVector: number[]): string {
+	return Buffer.from(new Float32Array(queryVector).buffer).toString("base64")
+}
+
+// the query vector that Redis keeps as base64 of its 32-bit floats
+function toQueryVector(storedQueryVector: string): number[] {
+	const queryVectorBytes = Buffer.from(storedQueryVector, "base64")
+	return [...new Float32Array(queryVectorBytes.buffer, queryVectorBytes.byteOffset, queryVectorBytes.byteLength / 4)]
+}
+
+// embed the query on the user's own key or the public key, within the user's or the address's rate limit, giving it
+// two seconds and no retry. a visitor embeds only with a public key. a spent key and an embedding past its time limit
+// return null, and any other failure is reported first
 async function embedQuery({ userId, query, clientAddress }: LoadQueryVectorOptions): Promise<number[] | null> {
+	const embedAbortSignal = AbortSignal.timeout(QUERY_EMBEDDING_TIME_LIMIT_MS)
 	try {
-		// the key, and whether a visitor may embed
+		// the key, and whether the user or the visitor may embed
 		const litellmApiKey = await loadUserOrPublicLiteLLMKey(userId)
-		if (!litellmApiKey || (!userId && !(await isVisitorEmbeddingAllowed(clientAddress)))) {
+		if (!litellmApiKey || !(await isQueryEmbeddingAllowed({ userId, clientAddress }))) {
 			return null
 		}
-		return await embedRetrievalQuery(query, litellmApiKey)
+		return await embedRetrievalQuery(query, litellmApiKey, { maxRetries: 0, abortSignal: embedAbortSignal })
 	} catch (error) {
-		// report any failure except a spent key
-		if (!isBudgetRejection(error)) {
+		// report any failure except a spent key and an embedding past its time limit
+		if (!isBudgetRejection(error) && !embedAbortSignal.aborted) {
 			reportError(error, "api-route", { route: "podcast-episode-search" })
 		}
 		return null
@@ -226,17 +254,27 @@ async function embedQuery({ userId, query, clientAddress }: LoadQueryVectorOptio
 export function toQueryVectorKey(query: string): string {
 	const normalizedQuery = query.toLowerCase().split(/\s+/).filter(Boolean).join(" ")
 	const queryHash = new Bun.CryptoHasher("sha256").update(normalizedQuery).digest("hex")
-	return `podcast-episode-search-vector:${EMBED_MODEL_NAME}:${queryHash}`
+	return `podcast-episode-search-vector-base64:${EMBED_MODEL_NAME}:${queryHash}`
 }
 
-// count one embedding against the visitor's address and return whether it is within the rate limit. a visitor whose
-// address cannot be trusted counts in the shared bucket
-async function isVisitorEmbeddingAllowed(clientAddress: string | null): Promise<boolean> {
-	const rateLimitKey = toRateLimitKey({ userId: null, clientAddress })
+// count one embedding against the user, else the visitor's address, and return whether it is within the rate limit. a
+// request the search limit skips, a page render's own search, counts in the renders' own wider bucket, so no visitor
+// shares the visitors' count and the renders' embeddings still have a limit
+async function isQueryEmbeddingAllowed(toolCaller: {
+	userId: string | null
+	clientAddress: string | null
+}): Promise<boolean> {
+	if (isUncountedToolCaller(toolCaller)) {
+		return countRateLimitHit({
+			key: "rate-limit:podcast-episode-search:page-renders",
+			rateLimitWindowMs: QUERY_EMBEDDING_WINDOW_MS,
+			limit: PAGE_RENDER_QUERY_EMBEDDING_LIMIT,
+		})
+	}
 	return countRateLimitHit({
-		key: `rate-limit:podcast-episode-search:${rateLimitKey}`,
-		rateLimitWindowMs: VISITOR_EMBEDDING_WINDOW_MS,
-		limit: VISITOR_EMBEDDING_LIMIT,
+		key: `rate-limit:podcast-episode-search:${toRateLimitKey(toolCaller)}`,
+		rateLimitWindowMs: QUERY_EMBEDDING_WINDOW_MS,
+		limit: QUERY_EMBEDDING_LIMIT,
 	})
 }
 

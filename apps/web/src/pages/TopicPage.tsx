@@ -1,49 +1,40 @@
 import { authClient } from "@carlnotes/client/authClient"
 import { sendTopicHomeOrder, sendTopicSubscription, type TopicGate } from "@carlnotes/client/topicClient"
 import { isAdminRole } from "@carlnotes/contracts/enums"
-import type { TopicFinding } from "@carlnotes/contracts/findings"
-import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { PodcastEpisodeRemovalProvider } from "@carlnotes/core/components/PodcastEpisodeRemovalProvider"
+import { toTopicTopicPostCardPages } from "@carlnotes/core/lib/cardSections"
+import { toSavedTopicCounts } from "@carlnotes/core/lib/pageReads"
 import { sendTopicViewOnce } from "@carlnotes/core/lib/pageViews"
 import type { FeaturedOrderMove } from "@carlnotes/core/lib/rankDialog"
-import { selectTopicFindings } from "@carlnotes/core/lib/topicFeed"
-import { cn } from "@carlnotes/nightshift/classNames"
 import { useNavigate, useParams } from "@tanstack/react-router"
-import type * as React from "react"
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
-import { NotesSection } from "@/components/note/NotesSection"
 import { PodcastEpisodePlayer } from "@/components/podcast/PodcastEpisodePlayer"
-import { PodcastEpisodesCard } from "@/components/podcast/PodcastEpisodesCard"
 import { TopicVideoSection } from "@/components/podcast/TopicVideoSection"
 import { toSignupNavigation } from "@/components/session/signupPrompts"
 import { SocialSection } from "@/components/social/SocialSection"
 import { JoinTeamButton } from "@/components/team/JoinTeamButton"
-import { STACKED_CLOSED_DIVIDER_CLASS } from "@/components/topic/CollapsibleSection"
-import { RelatedTopicsSection } from "@/components/topic/RelatedTopicsSection"
-import { NewCountInfo } from "@/components/topic/Topic"
+import { HydrateSection } from "@/components/topic/HydrateSection"
 import { TopicActionBar, toTopicActionLayout, toTopicActionOptions } from "@/components/topic/TopicActions"
 import { TopicCountsLine } from "@/components/topic/TopicCountsLine"
 import { type TopicDialog, TopicDialogs } from "@/components/topic/TopicDialogs"
 import { useNewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
-import { TopicFindingsSection } from "@/components/topic/TopicFindingsSection"
+import { TopicFindings } from "@/components/topic/TopicFindings"
 import { TopicGateNotice } from "@/components/topic/TopicGateNotice"
-import { TopicInfoCard } from "@/components/topic/TopicInfoCard"
 import { TopicLinkedFinding } from "@/components/topic/TopicLinkedFinding"
 import { TopicHeader } from "@/components/topic/TopicPageHeader"
 import { TopicScanButton } from "@/components/topic/TopicScanButton.tsx"
-import { TopicScanHistory } from "@/components/topic/TopicScanHistory"
-import { TopicSettingsCard } from "@/components/topic/TopicSettingsCard"
 import { TopicSkeleton } from "@/components/topic/TopicSkeleton"
+import { TopicViews } from "@/components/topic/TopicViews"
 import { TopicPostsSection } from "@/components/topicPost/TopicPostsSection"
 import { usePageTitle } from "@/hooks/usePageTitle"
-import { useRevealClassName } from "@/hooks/useRevealClassName"
+import { useTopicFindings } from "@/hooks/useTopicFindings"
 import { useTopicPagePayload } from "@/hooks/useTopicPagePayload"
 import { sendFeaturedOrderMoves } from "@/lib/featuredOrderMoves"
 import { PAGE_CLASS } from "@/lib/styleClasses"
 import { NEXT_SCAN_DISCLAIMER } from "@/lib/utils"
 import { captureVisitEvent, toPublicTopicProperties } from "@/lib/visitAnalytics"
-import { type TopicFeedHandlers, usePageTopicFeedHandlers, useTopicFeed } from "@/providers/TopicFeedProvider"
+import { usePageTopicFeedHandlers, useTopicFeed } from "@/providers/TopicFeedProvider"
 import { useRegisterChatContext } from "@/stores/chatPanelStore"
 import { useRegisterPageActions } from "@/stores/pageActionsStore"
 
@@ -270,7 +261,13 @@ export function TopicPage() {
 						/>
 					</HydrateSection>
 					{/* the topic's Topic Posts, right below its comment thread */}
-					{topic.topicPosts && <TopicPostsSection topicId={topic.id} {...topic.topicPosts} />}
+					{topic.topicPosts && (
+						<TopicPostsSection
+							topicId={topic.id}
+							{...topic.topicPosts}
+							serverPages={toTopicTopicPostCardPages(topic)}
+						/>
+					)}
 					<PodcastEpisodeRemovalProvider key={JSON.stringify([topic.id, session?.user.id])}>
 						<TopicViews
 							topic={topic}
@@ -280,7 +277,11 @@ export function TopicPage() {
 						/>
 					</PodcastEpisodeRemovalProvider>
 					{/* the topic's viewer and follower counts */}
-					<TopicCountsLine topicId={topic.id} isPublic={topic.visibility === "public"} />
+					<TopicCountsLine
+						topicId={topic.id}
+						isPublic={topic.visibility === "public"}
+						savedCounts={toSavedTopicCounts(topic)}
+					/>
 					<TopicDialogs
 						topic={topic}
 						openDialog={openDialog}
@@ -298,100 +299,6 @@ export function TopicPage() {
 				</>
 			)}
 		</main>
-	)
-}
-
-/**
- * The topic's findings, narrowed and sorted by the shared feed filters. A filter change remounts the section
- * and its hydrate entrance replays.
- */
-function TopicFindings({ topic, topicFeedHandlers }: { topic: TopicResponse; topicFeedHandlers: TopicFeedHandlers }) {
-	const { findingFilter, sort, resourceKinds, bookmarkScope } = useTopicFeed()
-	const topicFindings = useTopicFindings(topic)
-	const viewKey = `${findingFilter}-${sort}-${bookmarkScope}-${[...resourceKinds].sort().join()}`
-	return (
-		<HydrateSection key={viewKey} index={2}>
-			<TopicFindingsSection
-				topicFindings={topicFindings}
-				hasAnyFindings={topic.findings.length > 0}
-				isRatable={topic.canRate}
-				isBookmarkable={topic.isTopicOwner || topic.isTeamMember}
-				topicFeedHandlers={topicFeedHandlers}
-				topic={{
-					id: topic.id,
-					name: topic.name,
-					prompt: topic.prompt,
-					visibility: topic.visibility,
-					isTopicOwner: topic.isTopicOwner,
-					owner: topic.owner,
-					teamLink: topic.teamLink,
-					image: topic.image,
-				}}
-				newCountInfo={topic.newCount > 0 ? <NewCountInfo topic={topic} /> : undefined}
-				latestPodcastEpisode={topic.latestPodcastEpisode}
-			/>
-		</HydrateSection>
-	)
-}
-
-// the findings of a loaded topic that this user sees, narrowed and sorted by the shared feed filters
-function useTopicFindings(topic: TopicResponse | null | undefined): TopicFinding[] {
-	const { findingFilter, sort, resourceKinds, bookmarkScope } = useTopicFeed()
-	return selectTopicFindings({ findings: topic?.findings ?? [], resourceKinds, findingFilter, sort, bookmarkScope })
-}
-
-/**
- * The topic info card and its settings on the left, its podcast episodes, scan history, notes, and related topics on
- * the right.
- */
-function TopicViews({
-	topic,
-	onMakeTopicPublic,
-	onReloadTopicPage,
-	onNoteCountChange,
-}: {
-	topic: TopicResponse
-	onMakeTopicPublic: () => void
-	onReloadTopicPage: () => Promise<void>
-	onNoteCountChange: (noteCount: number | null) => void
-}) {
-	return (
-		<HydrateSection index={4}>
-			<div className="grid gap-x-8 lg:grid-cols-[32rem_minmax(0,1fr)]">
-				{/* the topic info card, then the settings card under it */}
-				<div className="min-w-0">
-					<TopicInfoCard topic={topic} onMakeTopicPublic={onMakeTopicPublic} />
-					<TopicSettingsCard topic={topic} />
-				</div>
-				{/* a grid item sizes to its widest content unless told not to, so long urls inside these cards
-				    would push the column past the viewport instead of truncating */}
-				<div className="min-w-0">
-					<PodcastEpisodesCard topic={topic} onPodcastEpisodeRemoved={onReloadTopicPage} />
-					<TopicScanHistory
-						scans={topic.scans}
-						topicMemoryCount={topic.topicMemoryCount}
-						canRateTopicMemories={topic.canRateTopicMemories}
-						allowedUrls={new Set(topic.findings.map((finding) => finding.url))}
-						findings={topic.findings}
-						topic={{ id: topic.id, name: topic.name, prompt: topic.prompt }}
-						canEdit={topic.canEdit}
-						topicSources={topic.sources}
-						onReloadTopicPage={onReloadTopicPage}
-					/>
-					{/* the notes on this topic, expanded by default with no note bodies loaded */}
-					<NotesSection
-						pageType="topic"
-						pageId={topic.id}
-						titleClassName="font-display text-xl"
-						hasCompactHeader
-						accordionItemClassName={topic.relatedTopics.length > 0 ? STACKED_CLOSED_DIVIDER_CLASS : undefined}
-						onNoteCountChange={onNoteCountChange}
-					/>
-					{/* the topics nearest this one that the user may open */}
-					<RelatedTopicsSection relatedTopics={topic.relatedTopics} />
-				</div>
-			</div>
-		</HydrateSection>
 	)
 }
 
@@ -419,26 +326,5 @@ function TopicPagePlaceholder({
 			<TopicSkeleton topicTitle={topicGate.topicName ?? undefined} />
 			<TopicGateNotice isSignedIn={isSignedIn} returnPath={`/topics/${topicId}`} />
 		</>
-	)
-}
-
-// the index of the last section in view when the page opens
-const LAST_TOP_SECTION_INDEX = 2
-
-// a section that plays the staggered hydrate animation as it appears. a server-rendered page shows every section before
-// any script runs and animates only the top ones, and a page rendered in the browser reveals each section as it scrolls into view
-function HydrateSection({ index, children }: { index: number; children: React.ReactNode }) {
-	const { ref, revealClassName } = useRevealClassName<HTMLDivElement>({
-		isAnimatedOnServer: index <= LAST_TOP_SECTION_INDEX,
-	})
-	return (
-		<div
-			ref={ref}
-			data-reveal
-			className={cn(revealClassName, "motion-reduce:animate-none motion-reduce:opacity-100")}
-			style={{ animationDelay: `${Math.min(index, 3) * 50}ms` }}
-		>
-			{children}
-		</div>
 	)
 }

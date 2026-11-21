@@ -51,26 +51,29 @@ import { topicVideoHomeOrderRoute } from "./podcast/topicVideoHomeOrder"
 import { topicVideoImagesRoute } from "./podcast/topicVideoImagesRoute"
 import { topicVideosRoute } from "./podcast/topicVideoRoutes"
 import { profileOrderRoute } from "./profileOrder"
+import { profilePageReadRoute } from "./profilePageRead"
 import { profilesRoute } from "./profiles"
 import { pushDevicesRoute } from "./pushDevices"
 import { apiRateLimiter, topicFeedRateLimiter } from "./rateLimit"
 import { flagContentRoute } from "./report/flagContent"
 import { searchRoute } from "./search/search"
+import { toCardResponse } from "./share/cardResponse"
 import { pageHeadRoute } from "./share/pageHead"
 import {
-	toCachedInvitePreviewPng,
-	toCachedProfilePreviewPng,
-	toCachedTeamPreviewPng,
-	toCachedTopicPreviewPng,
-	toPreviewPngResponse,
+	loadInvitePreview,
+	toInvitePreviewCard,
 	toProfilePreview,
+	toProfilePreviewCard,
 	toTeamPreview,
+	toTeamPreviewCard,
 	toTopicPreview,
+	toTopicPreviewCard,
 } from "./share/preview"
 import { setGateCookie, signGateToken, verifyGateToken, verifyTurnstileToken } from "./signupGate"
 import { commentMentionsRoute } from "./social/commentMentionsRoute"
 import { commentsRoute } from "./social/commentsRoute"
 import { reactionsRoute } from "./social/reactionsRoute"
+import { statusReadsRoute } from "./status/statusReadsRoute"
 import { teamsRoute } from "./team/teamsRoute"
 import { termsAcceptanceRoute } from "./termsAcceptance"
 import { TOPIC_ATTACHMENT_UPLOAD_PATH, topicAttachmentsRoute } from "./topic/attachments"
@@ -87,6 +90,7 @@ import { topicPostDiscussionsRoute } from "./topicPost/topicPostDiscussionsRoute
 import { topicPostHomeOrderRoute } from "./topicPost/topicPostHomeOrder"
 import { TOPIC_POST_BODY_IMAGE_UPLOAD_PATH, topicPostImagesRoute } from "./topicPost/topicPostImagesRoute"
 import { TOPIC_POST_PATH, topicPostsRoute } from "./topicPost/topicPostsRoute"
+import { toAuthRequest } from "./trustedProxies"
 import {
 	confirmUnsubscribePage,
 	invalidUnsubscribePage,
@@ -167,7 +171,7 @@ export const apiRoute = new Hono<AppEnv>()
 			if (!authorizeUrl.searchParams.has("resource")) {
 				authorizeUrl.searchParams.set("resource", MCP_RESOURCE_URL)
 			}
-			return auth.handler(new Request(authorizeUrl, context.req.raw))
+			return auth.handler(toAuthRequest(context.req.raw, authorizeUrl))
 		}
 
 		// the reset-password request sends mail to any address on demand, so it includes the same turnstile gate that signup does
@@ -177,7 +181,7 @@ export const apiRoute = new Hono<AppEnv>()
 				return context.json({ error: "missing or expired turnstile check" }, 400)
 			}
 		}
-		return auth.handler(context.req.raw)
+		return auth.handler(toAuthRequest(context.req.raw))
 	})
 	// only the password signup form calls this
 	.post("/signup-gate", zValidator("json", signupGatePayload), async (context) => {
@@ -267,6 +271,8 @@ export const apiRoute = new Hono<AppEnv>()
 	.route("/", profileOrderRoute)
 	// a topic page's view, and the counts the topic and podcast episode pages read
 	.route("/", countsRoute)
+	// the film, discussion, and Scan status reads that a page's poll sends in place of its page
+	.route("/", statusReadsRoute)
 	// the Dashboard pages' snapshots and share images
 	.route("/", dashboardsRoute)
 	// the flag content route
@@ -325,50 +331,64 @@ export const apiRoute = new Hono<AppEnv>()
 	.route("/", pageHeadRoute)
 	// the link-preview card that a social platform fetches for topic links
 	.get("/topics/:id/preview.png", async (context) => {
-		const topicPreviewCard = await toTopicPreview(context.req.param("id"))
-		if (!topicPreviewCard) {
+		const topicId = context.req.param("id")
+		const topicCardResponse = await toCardResponse({
+			context,
+			cardKey: `topic:${topicId}`,
+			loadPreview: () => toTopicPreview(topicId),
+			toPreviewCard: toTopicPreviewCard,
+		})
+		if (!topicCardResponse) {
 			return context.json({ error: "not found" }, 404)
 		}
 		// name the topic this card shows, for the bot analytics
 		context.set("analyticsTopic", {
-			topicId: topicPreviewCard.topicId,
-			isPublic: topicPreviewCard.visibility === "public",
+			topicId: topicCardResponse.preview.topicId,
+			isPublic: topicCardResponse.preview.visibility === "public",
 		})
-		return toPreviewPngResponse(context, await toCachedTopicPreviewPng(topicPreviewCard))
+		return topicCardResponse.response
 	})
 	// the link-preview card that a social platform fetches for profile links
 	.get("/profiles/:userId/preview.png", async (context) => {
-		const profilePreviewCard = await toProfilePreview(context.req.param("userId"))
-		if (!profilePreviewCard) {
-			return context.json({ error: "not found" }, 404)
-		}
-		return toPreviewPngResponse(context, await toCachedProfilePreviewPng(profilePreviewCard))
+		const profileUserId = context.req.param("userId")
+		const profileCardResponse = await toCardResponse({
+			context,
+			cardKey: `profile:${profileUserId}`,
+			loadPreview: () => toProfilePreview(profileUserId),
+			toPreviewCard: toProfilePreviewCard,
+		})
+		return profileCardResponse?.response ?? context.json({ error: "not found" }, 404)
 	})
 	// the link-preview card that a social platform fetches for team links
 	.get("/teams/:teamId/preview.png", async (context) => {
-		const teamPreviewCard = await toTeamPreview(context.req.param("teamId"))
-		if (!teamPreviewCard) {
-			return context.json({ error: "not found" }, 404)
-		}
-		return toPreviewPngResponse(context, await toCachedTeamPreviewPng(teamPreviewCard))
+		const teamId = context.req.param("teamId")
+		const teamCardResponse = await toCardResponse({
+			context,
+			cardKey: `team:${teamId}`,
+			loadPreview: () => toTeamPreview(teamId),
+			toPreviewCard: toTeamPreviewCard,
+		})
+		return teamCardResponse?.response ?? context.json({ error: "not found" }, 404)
 	})
 	// the card an invitation shows, addressed by its token so a private team still gets one.
 	// the token already opens the team, so its card discloses less than the link it came on
 	.get("/invites/:token/preview.png", async (context) => {
-		const inviteTarget = await toInviteTarget(context.req.param("token"))
-		if (!inviteTarget) {
-			return context.json({ error: "not found" }, 404)
-		}
-
-		// the token's target, a team or a topic, decides which card is rendered, at any visibility
-		const invitePreviewPng = await toCachedInvitePreviewPng(inviteTarget)
-		if (!invitePreviewPng) {
-			return context.json({ error: "not found" }, 404)
-		}
-		return toPreviewPngResponse(context, invitePreviewPng)
+		// the token's target, a team, a Topic Post, or a topic, decides which card is rendered, at any visibility
+		const inviteToken = context.req.param("token")
+		const inviteCardResponse = await toCardResponse({
+			context,
+			cardKey: `invite:${inviteToken}`,
+			loadPreview: async () => {
+				const inviteTarget = await toInviteTarget(inviteToken)
+				return inviteTarget ? loadInvitePreview(inviteTarget) : null
+			},
+			toPreviewCard: toInvitePreviewCard,
+		})
+		return inviteCardResponse?.response ?? context.json({ error: "not found" }, 404)
 	})
-	// the public profile routes
+	// the public profile routes, and the profile's page read
 	.route("/", profilesRoute)
+	.route("/", profilePageReadRoute)
 	// the username update route
 	.route("/", usernamesRoute)
 	// closing an account, by an admin or by its own user

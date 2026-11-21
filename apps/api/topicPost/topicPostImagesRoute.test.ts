@@ -53,10 +53,13 @@ const TOPIC_POST_ROW = {
 	author: { userId: "member-1", username: "member-1", avatarSource: "generated", avatarKey: null },
 } as TopicPostRow
 
-// the post's read, the stored file, and no row for any other read
+// the post's read and its access row's, the stored file, and no row for any other read
 function stubTopicPost(topicPostRow: TopicPostRow = TOPIC_POST_ROW): void {
 	stubConnectionPool()
 	spyOn(topicPosts, "loadTopicPostRow").mockResolvedValue(topicPostRow)
+	spyOn(topicPosts, "loadTopicPostAccessRow").mockResolvedValue(
+		topicPostRow as Awaited<ReturnType<typeof topicPosts.loadTopicPostAccessRow>>,
+	)
 	spyOn(store, "attachmentStream").mockReturnValue(new Blob([new Uint8Array([1, 2, 3])]).stream())
 }
 

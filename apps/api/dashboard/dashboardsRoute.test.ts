@@ -1,6 +1,7 @@
 // the dashboard route: a visitor reads the public snapshot shared at the edge, the owner reads the full one never
 // stored, a team's non-member reads its summary alone, a bad kind, selection, or subject is refused, the read limit
-// skips a page render's read, and a page's head holds no private item
+// skips a page render's read, a page read's head holds no private item, and a page read is one copy for every reader
+// without full access
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
@@ -159,8 +160,8 @@ test("an unknown kind on every route, a selection the kind lacks, and a missing 
 	stubRedisClient()
 	stubConnectionPool()
 
-	// an unknown kind fails the path's check on the read, the head, and the share image
-	for (const unknownKindPath of ["", "/head", `/share-image/${PUBLIC_HASH}.png`]) {
+	// an unknown kind fails the path's check on the read, the page read, and the share image
+	for (const unknownKindPath of ["", "/page", `/share-image/${PUBLIC_HASH}.png`]) {
 		expect((await dashboardsRoute.request(`/dashboards/noteDashboard/user-1${unknownKindPath}`)).status).toBe(400)
 	}
 
@@ -219,7 +220,8 @@ test("the share image serves only at its current hash", async () => {
 	expect((await dashboardsRoute.request("/dashboards/topicDashboard/user-1/share-image/x.png")).status).toBe(404)
 })
 
-test("a Dashboard page's head reads the public snapshot alone, and a team's head leaves out its paragraph", async () => {
+test("a Dashboard page read's head reads the public snapshot alone, and a team's head leaves out its paragraph", async () => {
+	stubRedisClient()
 	spyOn(preview, "toProfilePreview").mockResolvedValue({
 		userId: "user-1",
 		username: "vienna",
@@ -228,10 +230,12 @@ test("a Dashboard page's head reads the public snapshot alone, and a team's head
 		followerCount: 0,
 	} as never)
 	stubConnectionPool((sentQuery) => toTopicDashboardRows(sentQuery))
-	const response = await dashboardsRoute.request("/dashboards/topicDashboard/user-1/head")
+	const response = await dashboardsRoute.request("/dashboards/topicDashboard/user-1/page")
 
-	// the public paragraph and share image, and nothing of the full snapshot
-	const pageHead = await response.json()
+	// the public paragraph and share image, and nothing of the full snapshot, with no user's own part for a visitor
+	const dashboardPageRead = await response.json()
+	const pageHead = dashboardPageRead.head
+	expect(dashboardPageRead.userState).toBeNull()
 	expect(pageHead).toMatchObject({
 		title: expect.stringContaining("vienna's Topic Specials"),
 		description: "Public paragraph.",
@@ -239,7 +243,7 @@ test("a Dashboard page's head reads the public snapshot alone, and a team's head
 		cardUrl: expect.stringContaining("/profiles/user-1/specials/topics"),
 		isIndexed: true,
 	})
-	expect(JSON.stringify(pageHead)).not.toContain("Full paragraph.")
+	expect(JSON.stringify(dashboardPageRead)).not.toContain("Full paragraph.")
 
 	// a team's head is the strip's counts, never its paragraph
 	spyOn(preview, "toTeamPreview").mockResolvedValue({
@@ -268,6 +272,39 @@ test("a Dashboard page's head reads the public snapshot alone, and a team's head
 				]
 			: [],
 	)
-	const teamHead = await (await dashboardsRoute.request("/dashboards/teamDashboard/team-1/head")).json()
+	spyOn(teamPageAccess, "loadTeamPageAccess").mockResolvedValue({ team: TEAM, canOpen: true, role: null } as never)
+	const teamHead = (await (await dashboardsRoute.request("/dashboards/teamDashboard/team-1/page")).json()).head
 	expect(teamHead.description).toBe("1 topic, 2 findings, 0 posts, 3 members, 21 visitors.")
+})
+
+test("a Dashboard page read is one copy for visitors and readers without full access, and the owner reads fresh", async () => {
+	// one Redis, and the person's Topic Dashboard with its public and full rows
+	spyOn(preview, "toProfilePreview").mockResolvedValue({
+		userId: "user-1",
+		username: "vienna",
+		avatar: { kind: "none" },
+		publicTopicCount: 1,
+		followerCount: 0,
+	} as never)
+	const storedValueByKey = stubRedisClient()
+	const sentQueries = stubConnectionPool((sentQuery) => toTopicDashboardRows(sentQuery))
+
+	// a visitor fills the copy, and another user reads it with their own part and sends only the access read
+	const visitorPageRead = await (await dashboardsRoute.request("/dashboards/topicDashboard/user-1/page")).json()
+	expect(storedValueByKey.has("visitor-page:dashboard:topicDashboard:user-1")).toBe(true)
+	const queryCountBeforeUser = sentQueries.length
+	const userResponse = await toSignedInApp(dashboardsRoute, "user-2").request("/dashboards/topicDashboard/user-1/page")
+	const userPageRead = await userResponse.json()
+	expect(userPageRead).toEqual({ ...visitorPageRead, userState: { hasFullAccess: false } })
+	expect(sentQueries.slice(queryCountBeforeUser).every(({ text }) => text.includes('from "users"'))).toBe(true)
+	expect(userResponse.headers.get("Cache-Control")).toBe("private, no-cache")
+
+	// the owner reads the full snapshot fresh, and the copy keeps the public one
+	storedValueByKey.clear()
+	const ownerPageRead = await (
+		await toSignedInApp(dashboardsRoute, "user-1").request("/dashboards/topicDashboard/user-1/page")
+	).json()
+	expect(ownerPageRead.userState).toEqual({ hasFullAccess: true })
+	expect(ownerPageRead.dashboard.paragraph).toBe("Full paragraph.")
+	expect(storedValueByKey.size).toBe(0)
 })

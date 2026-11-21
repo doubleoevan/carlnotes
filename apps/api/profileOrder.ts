@@ -19,7 +19,7 @@ import { eq } from "drizzle-orm"
 import { type Context, Hono } from "hono"
 import { isAllowed } from "./authorization"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "./currentUser"
-import { purgeProfileAtEdge } from "./edgeCache"
+import { clearProfilePage } from "./edgeCache"
 
 // whether the profile order was applied, and if not, which rule rejected it: no such row for this user, a topic that
 // is not public, a podcast episode or a Topic Post that is not published, or a film that is not ready, or a profile
@@ -190,7 +190,7 @@ async function respondToProfileOrder(
 	}
 
 	// the owner's profile page shows the change at once, and the event names ids alone
-	await purgeProfileAtEdge(userId)
+	await clearProfilePage(userId)
 	trackEvent("social_profile_order_change", userId, {
 		...toAnalyticsProperties(context),
 		kind,

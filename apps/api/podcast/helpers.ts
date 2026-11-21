@@ -1,5 +1,5 @@
-// the podcast pages' reads: a topic page's podcast, a season's podcast episodes, and a podcast episode page, each limited
-// to what the user may listen to
+// the podcast reads of a topic's page: its podcast and a season's podcast episodes, each limited to what the user may
+// listen to
 import type { PodcastEpisodeCard } from "@carlnotes/contracts/home"
 import type {
 	PodcastEpisode,
@@ -7,46 +7,29 @@ import type {
 	SeasonPodcastEpisodes,
 	TopicPodcast,
 } from "@carlnotes/contracts/podcast"
-import type { PodcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpisodePage"
 import { toPodcastFeedPath, toPodcastVideoFeedPath } from "@carlnotes/contracts/seo"
+import type { ReactionSummary } from "@carlnotes/contracts/social"
 import type { TopicScan } from "@carlnotes/contracts/topics"
-import { db } from "@carlnotes/db"
-import { podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { isPodcastEpisodeRecordingConfigured } from "@carlnotes/server/podcastEpisodeSettings"
-import { and, desc, eq, ne } from "drizzle-orm"
-import { isAllowed, loadUserAccess } from "../authorization"
-import { attachPodcastEpisodeChapterFaviconPaths } from "../favicons"
-import { loadPodcastEpisodeCards } from "../home/topicCards"
-import { toTranscriptBlocks } from "../share/podcastFeed"
-import { attachReactionSummaries } from "../social/findingReactions"
-import { loadPageCommentThread } from "../social/pageCommentThread"
-import { loadTopicAccessAndFindings } from "../topic/accessibleFindings"
-import { canRateTopic } from "../topic/findingPermissions"
-import { loadTopicOwner, toTeamFields } from "../topic/helpers"
-import { loadEditorImageRegenerationQuota } from "../topic/imageEdits"
-import { toHomePodcastEpisodes } from "./podcastEpisodeHomeOrder"
+import { isAllowed } from "../authorization"
+import { loadPodcastEpisodeCardsFromRows } from "../home/topicCards"
 import {
-	type AccessiblePodcastEpisode,
 	loadAccessiblePodcastEpisode,
 	loadPodcastEpisodeListenRows,
-	loadPublishedPodcastEpisode,
+	loadPublishedAndNewestPodcastEpisodeRows,
 	loadPublishedPodcastEpisodeRows,
-	type PodcastEpisodePageRef,
 	type PodcastEpisodeRow,
 	type PodcastEpisodeTopic,
+	type PublishedAndNewestPodcastEpisodeRows,
 	type TopicRow,
 } from "./podcastEpisodeRows"
 import {
-	loadPodcastEpisode,
 	loadPodcastEpisodeSummaries,
 	loadPodcastEpisodes,
 	loadTopicVideos,
 	type TopicVideos,
 	toPodcastEpisode,
 } from "./podcastEpisodeShapes"
-import { loadRelatedPodcastEpisodeRows, loadTopicPodcastEpisodeRows } from "./relatedPodcastEpisodes"
-import { toHomeTopicVideos } from "./topicVideoHomeOrder"
-import { loadTopicVideoImageEdit } from "./topicVideos"
 
 // the topic page's podcast, its latest podcast episode with chapters, and each scan's published podcast episode
 // by the scan's id
@@ -65,10 +48,23 @@ type LoadSeasonPodcastEpisodesOptions = {
 	hasVideo?: "true" | "false"
 }
 
+// the published and newest podcast episode rows the topic page already started reading, the page's reaction read,
+// which includes the published podcast episodes for the film cards, and the ids of the scans that a page of the scan
+// history lists, if the page holds one page
+type TopicPodcastReads = {
+	publishedAndNewestPodcastEpisodeRows?: Promise<PublishedAndNewestPodcastEpisodeRows>
+	pageReactionRead?: Promise<{ reactionSummaryByTarget: Map<string, ReactionSummary> }>
+	pageScanIds?: Promise<ReadonlySet<string>>
+}
+
 /**
  * Loads the topic page's podcast, or a null podcast if episode recording is not configured.
  */
-export async function loadTopicPodcast(topic: TopicRow, userId: string | null): Promise<TopicPodcastFields> {
+export async function loadTopicPodcast(
+	topic: TopicRow,
+	userId: string | null,
+	{ publishedAndNewestPodcastEpisodeRows, pageReactionRead, pageScanIds }: TopicPodcastReads = {},
+): Promise<TopicPodcastFields> {
 	if (!isPodcastEpisodeRecordingConfigured()) {
 		return {
 			podcast: null,
@@ -78,17 +74,12 @@ export async function loadTopicPodcast(topic: TopicRow, userId: string | null): 
 		}
 	}
 
-	// load the published podcast episodes that the user may listen to, newest first, and the newest episode that was not removed.
-	// check whether the owner's plan gets full episodes and whether the user may remove an episode
-	const [publishedPodcastEpisodeRows, [newestPodcastEpisodeRow], hasFullPodcastEpisodes, canRemovePodcastEpisodes] =
+	// load the published podcast episodes that the user may listen to, newest first, and the newest podcast episode that
+	// was not removed, in one read. check whether the owner's plan gets full podcast episodes and whether the user may
+	// remove a podcast episode
+	const [{ publishedPodcastEpisodeRows, newestPodcastEpisodeRow }, hasFullPodcastEpisodes, canRemovePodcastEpisodes] =
 		await Promise.all([
-			loadPublishedPodcastEpisodeRows(topic, userId),
-			db
-				.select({ id: podcastEpisodes.id, status: podcastEpisodes.status })
-				.from(podcastEpisodes)
-				.where(and(eq(podcastEpisodes.topicId, topic.id), ne(podcastEpisodes.status, "removed")))
-				.orderBy(desc(podcastEpisodes.createdAt))
-				.limit(1),
+			publishedAndNewestPodcastEpisodeRows ?? loadPublishedAndNewestPodcastEpisodeRows(topic, userId),
 			isAllowed(topic.ownerId, "podcastEpisode:full", topic),
 			isAllowed(userId, "podcastEpisode:remove", topic),
 		])
@@ -111,14 +102,15 @@ export async function loadTopicPodcast(topic: TopicRow, userId: string | null): 
 		(podcastEpisodeRow) => podcastEpisodeRow ?? [],
 	)
 
-	// whether the newest podcast episode is recording or failed to record, and the published podcast episodes that a
-	// scan recorded
+	// whether the newest podcast episode is recording or failed to record, and the published podcast episodes that the
+	// listed scans recorded
 	const isNewestPodcastEpisodeUnpublished =
 		newestPodcastEpisodeRow?.status === "recording" || newestPodcastEpisodeRow?.status === "failed"
-	const scanPodcastEpisodeRows = publishedPodcastEpisodeRows.filter((podcastEpisodeRow) => podcastEpisodeRow.scanId)
+	const scanPodcastEpisodeRows = toScanPodcastEpisodeRows(publishedPodcastEpisodeRows, await pageScanIds)
 
 	// the unpublished newest podcast episode if the user may see it, the player's podcast episodes with their chapters,
-	// the latest season's podcast episodes, each scan's podcast episode summary, and the ready films' cards
+	// the latest season's podcast episodes, each scan's podcast episode summary, and the ready films' cards from the rows
+	// read above
 	// ponytail: the whole latest season goes with every topic page. page the list if a season reaches the hundreds
 	const [latestSeason] = seasons
 	// ponytail: every ready film's card goes with every topic page. page the cards on the server if a topic reaches the
@@ -151,10 +143,14 @@ export async function loadTopicPodcast(topic: TopicRow, userId: string | null): 
 			scanPodcastEpisodeRows.map((podcastEpisodeRow) => ({ podcastEpisodeRow, topic })),
 			topicVideos,
 		),
-		loadPodcastEpisodeCards(
+		loadPodcastEpisodeCardsFromRows(
 			publishedPodcastEpisodeRows.flatMap((podcastEpisodeRow) =>
-				topicVideos.readyTopicVideos.has(podcastEpisodeRow.id) ? podcastEpisodeRow.id : [],
+				topicVideos.readyTopicVideos.has(podcastEpisodeRow.id) ? { podcastEpisodeRow, topic } : [],
 			),
+			{
+				topicVideos,
+				reactionSummaryByTarget: pageReactionRead?.then(({ reactionSummaryByTarget }) => reactionSummaryByTarget),
+			},
 		),
 	])
 
@@ -191,6 +187,36 @@ export async function loadTopicPodcast(topic: TopicRow, userId: string | null): 
 		topicPodcastEpisodeVideoCards,
 		podcastEpisodeByScanId: toPodcastEpisodeByScanId(scanPodcastEpisodeRows, scanPodcastEpisodeSummaries),
 	}
+}
+
+/**
+ * Loads the published podcast episodes that the user may listen to of the scans listed, by the scan's id.
+ */
+export async function loadScanPodcastEpisodes({
+	topic,
+	userId,
+	scanIds,
+}: {
+	topic: TopicRow
+	userId: string | null
+	scanIds: ReadonlySet<string>
+}): Promise<Map<string, TopicScan["podcastEpisode"]>> {
+	// the listed scans' published podcast episodes, then their summaries
+	const scanPodcastEpisodeRows = toScanPodcastEpisodeRows(await loadPublishedPodcastEpisodeRows(topic, userId), scanIds)
+	const scanPodcastEpisodeSummaries = await loadPodcastEpisodeSummaries(
+		scanPodcastEpisodeRows.map((podcastEpisodeRow) => ({ podcastEpisodeRow, topic })),
+	)
+	return toPodcastEpisodeByScanId(scanPodcastEpisodeRows, scanPodcastEpisodeSummaries)
+}
+
+// the published podcast episodes that a scan recorded, of the listed scans alone if a list is given
+function toScanPodcastEpisodeRows(
+	publishedPodcastEpisodeRows: PodcastEpisodeRow[],
+	scanIds: ReadonlySet<string> | undefined,
+): PodcastEpisodeRow[] {
+	return publishedPodcastEpisodeRows.filter(
+		(podcastEpisodeRow) => podcastEpisodeRow.scanId && (!scanIds || scanIds.has(podcastEpisodeRow.scanId)),
+	)
 }
 
 // each scan's published podcast episode summary that has its season and number, by the scan's id. the summaries are
@@ -270,126 +296,5 @@ async function toSeasonPodcastEpisodes({
 				isVideoRendering: videoRenderingPodcastEpisodeIds.has(podcastEpisodeRow.id),
 			}),
 		),
-	}
-}
-
-/**
- * Loads a podcast episode's own page for a user who may listen to the episode, or null.
- */
-export async function loadPodcastEpisodePage(
-	podcastEpisodePageRef: PodcastEpisodePageRef,
-	userId: string | null,
-): Promise<PodcastEpisodePageResponse | null> {
-	// the published podcast episode that the page ref names, with the user's access read started beside it. the access
-	// check below shares that read through the request memo
-	const [publishedPodcastEpisode] = await Promise.all([
-		loadPublishedPodcastEpisode(podcastEpisodePageRef),
-		userId ? loadUserAccess(userId) : null,
-	])
-
-	// the podcast episode, if the user may listen to it
-	const accessiblePodcastEpisode = publishedPodcastEpisode
-		? await loadAccessiblePodcastEpisode({ userId, podcastEpisodeId: publishedPodcastEpisode.podcastEpisodeRow.id })
-		: null
-	if (!accessiblePodcastEpisode) {
-		return null
-	}
-
-	// the related podcast episodes that the user may listen to, each with its description and with its chapter count
-	// for its play button. the page's slowest read, which loads beside everything else the page shows
-	const { podcastEpisodeRow, topic } = accessiblePodcastEpisode
-	const [relatedPodcastEpisodes, podcastEpisodePageFields] = await Promise.all([
-		loadRelatedPodcastEpisodeRows({ podcastEpisodeId: podcastEpisodeRow.id, topic, userId }).then(
-			loadPodcastEpisodeSummaries,
-		),
-		loadPodcastEpisodePageFields(accessiblePodcastEpisode, userId),
-	])
-	return { ...podcastEpisodePageFields, relatedPodcastEpisodes }
-}
-
-// everything a podcast episode's page shows but its related podcast episodes
-async function loadPodcastEpisodePageFields(
-	{ podcastEpisodeRow, topic, subscriberActivatedAt }: AccessiblePodcastEpisode,
-	userId: string | null,
-): Promise<Omit<PodcastEpisodePageResponse, "relatedPodcastEpisodes">> {
-	// load the podcast episode, its script and home order, the findings that the user may see, whether the user may rate the findings
-	// or remove the episode, the topic's byline, the owning team, the holding teams that the user is on, and the topic's
-	// other podcast episodes
-	const podcastEpisodeId = podcastEpisodeRow.id
-	const [
-		[podcastEpisodeScriptRow],
-		podcastEpisode,
-		{ topicFindings, isAdmin },
-		canRate,
-		canRemovePodcastEpisode,
-		canEditPodcastEpisode,
-		owner,
-		{ teamLink, team, roomTeams },
-		topicPodcastEpisodes,
-		commentThread,
-	] = await Promise.all([
-		db
-			.select({
-				script: podcastEpisodes.script,
-				homeOrder: podcastEpisodes.homeOrder,
-				imageOrigin: podcastEpisodes.imageOrigin,
-				imagePrompt: podcastEpisodes.imagePrompt,
-			})
-			.from(podcastEpisodes)
-			.where(eq(podcastEpisodes.id, podcastEpisodeId)),
-		loadPodcastEpisode({ podcastEpisodeRow, topic, userId }),
-		loadTopicAccessAndFindings({ topic, userId, isReactionReadSkipped: true }),
-		canRateTopic(userId, topic),
-		isAllowed(userId, "podcastEpisode:remove", topic),
-		isAllowed(userId, "topic:edit", topic),
-		// the owner and the team that the topic's byline credits
-		loadTopicOwner(topic.ownerId),
-		toTeamFields(topic.id, topic.teamId, userId),
-		// the topic's other podcast episodes that the user may listen to, each with its description and with its chapter
-		// count for its play button
-		loadTopicPodcastEpisodeRows({ podcastEpisodeId, topic, subscriberActivatedAt }).then(loadPodcastEpisodeSummaries),
-		// the first page of the podcast episode's comment thread
-		loadPageCommentThread({ userId, topic, target: { kind: "podcastEpisode", id: podcastEpisodeId } }),
-	])
-
-	// keep the findings that the chapters narrate
-	const chapterFindingIds = new Set(
-		podcastEpisode.chapters.map((podcastEpisodeChapter) => podcastEpisodeChapter.findingId),
-	)
-	const chapterTopicFindings = topicFindings.filter((topicFinding) => chapterFindingIds.has(topicFinding.findingId))
-
-	// read the chapters' findings' reactions and the page's own, the editor's regenerations this month and the film's
-	// image fields, and the admin's home lists, and fill the chapters' favicons, all together
-	const [reactions, imageRegenerationQuota, topicVideoImageEdit, homePodcastEpisodes, homeTopicPodcastEpisodeVideos] =
-		await Promise.all([
-			attachReactionSummaries({
-				topicFindings: chapterTopicFindings,
-				userId,
-				pageSocialTarget: { kind: "podcastEpisode", id: podcastEpisodeId },
-			}),
-			canEditPodcastEpisode && userId ? loadEditorImageRegenerationQuota(userId) : null,
-			loadTopicVideoImageEdit({ podcastEpisodeId, canEditPodcastEpisode }),
-			toHomePodcastEpisodes(podcastEpisodeScriptRow?.homeOrder ?? null, isAdmin),
-			toHomeTopicVideos(podcastEpisodeId, isAdmin),
-			attachPodcastEpisodeChapterFaviconPaths(podcastEpisode.chapters),
-		])
-	const { id, name, prompt, visibility } = topic
-	return {
-		podcastEpisode,
-		topic: { id, name, prompt, visibility, owner, teamLink, team, roomTeams, isTopicOwner: topic.ownerId === userId },
-		topicFindings: chapterTopicFindings,
-		canRate,
-		canRemovePodcastEpisode,
-		canEditPodcastEpisode,
-		podcastEpisodeImageOrigin: canEditPodcastEpisode ? (podcastEpisodeScriptRow?.imageOrigin ?? null) : null,
-		podcastEpisodeImagePrompt: canEditPodcastEpisode ? (podcastEpisodeScriptRow?.imagePrompt ?? null) : null,
-		imageRegenerationQuota,
-		...topicVideoImageEdit,
-		...homePodcastEpisodes,
-		...homeTopicPodcastEpisodeVideos,
-		transcript: podcastEpisodeScriptRow?.script ? toTranscriptBlocks(podcastEpisodeScriptRow.script) : [],
-		topicPodcastEpisodes,
-		reactions,
-		commentThread,
 	}
 }

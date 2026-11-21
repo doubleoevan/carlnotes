@@ -23,13 +23,14 @@ import {
 	toStoredObjectKeys,
 	uploadAttachment,
 } from "@carlnotes/db/store"
+import { clearVisitorDashboardPages } from "@carlnotes/db/visitorPageCaches"
 import {
 	type DashboardParagraphInput,
 	takeDashboardParagraphAllowance,
 	writeDashboardParagraph,
 } from "@carlnotes/pipeline/dashboardParagraph"
 import { toDashboardShareImagePng } from "@carlnotes/pipeline/dashboardShareImage"
-import { purgeEdgeCacheTags, toDashboardCacheTag } from "@carlnotes/server/edgePurge"
+import { EDGE_PURGE_FAILED_MESSAGE, purgeEdgeCacheTags, toDashboardCacheTag } from "@carlnotes/server/edgePurge"
 import { reportError } from "@carlnotes/server/monitoring"
 import { and, eq, lt, type SQL } from "drizzle-orm"
 import { toRangeFirstDay } from "../dashboards/dashboardSeries"
@@ -168,18 +169,23 @@ export async function deleteExpiredDailyCountsActivity(lastDay: string): Promise
 	await db.delete(dailyPlayCounts).where(lt(dailyPlayCounts.day, firstKeptDay))
 }
 
-// purge the Dashboards' public snapshots from the edge, a request per 30 tags, and report a failed purge
+// clear the Dashboards' page copies, then purge their public snapshots from the edge, a request per 30 tags, and
+// report a failed purge
 async function purgeDashboardCacheTags(subjects: DashboardSubject[]): Promise<void> {
+	await clearVisitorDashboardPages(...subjects)
 	const tags = subjects.map(toDashboardCacheTag)
 	for (const tagChunk of toChunks(tags, PURGE_TAG_LIMIT)) {
-		// send one purge, and report a failure without failing the build
+		// send one purge, and report a failure under the fixed message without failing the build
 		const edgePurgeResult = await purgeEdgeCacheTags({
 			tags: tagChunk,
 			zoneId: Bun.env.CLOUDFLARE_ZONE_ID,
 			apiToken: Bun.env.CLOUDFLARE_API_TOKEN,
 		})
 		if (edgePurgeResult.status === "failed") {
-			reportError(new Error(`the dashboard edge purge failed: ${edgePurgeResult.reason}`), "dashboard")
+			reportError(new Error(EDGE_PURGE_FAILED_MESSAGE), "dashboard", {
+				tags: tagChunk.join(", "),
+				reason: edgePurgeResult.reason,
+			})
 		}
 	}
 }
@@ -227,6 +233,8 @@ async function drawDashboardShareImage(subject: DashboardSubject): Promise<void>
 			.set({ imageKey })
 			.where(toDashboardSnapshotVersionFilter(summaryRow))
 			.returning({ id: dashboardSnapshots.id })
+
+		// no snapshot of the version that supplied the image is left, so the upload stays unattached
 		if (updatedSnapshots.length === 0) {
 			return
 		}

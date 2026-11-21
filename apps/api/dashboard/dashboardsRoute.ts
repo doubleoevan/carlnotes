@@ -1,14 +1,14 @@
 // the Dashboard pages' reads of the map settings, a snapshot for one chart selection at the user's access, the page
-// head, and the public share image
+// read, and the public share image
 import { dashboardParam, dashboardQuery, toDefaultDashboardSelection } from "@carlnotes/contracts/dashboards"
 import { attachmentStream } from "@carlnotes/db/store"
 import { toDashboardCacheTag } from "@carlnotes/server/edgePurge"
 import { zValidator } from "@hono/zod-validator"
 import { Hono } from "hono"
 import { type AppEnv, currentUser } from "../currentUser"
-import { setDashboardCacheHeaders, toVersionedImageHeaders } from "../edgeCache"
+import { renderedPageReadCacheHeaders, setDashboardCacheHeaders, toVersionedImageHeaders } from "../edgeCache"
 import { dashboardReadRateLimiter } from "../rateLimit"
-import { loadDashboardPageHead } from "./dashboardPageHead"
+import { readDashboardPageRead } from "./dashboardPageRead"
 import { loadDashboard, loadDashboardAccess, loadDashboardShareImageKey } from "./dashboards"
 
 // a share image's file name: its public summary's hash and the png extension
@@ -56,12 +56,20 @@ export const dashboardsRoute = new Hono<AppEnv>()
 			return response
 		},
 	)
-	// what a Dashboard page puts in its head, from the public snapshot alone. a private team is not found
-	.get("/dashboards/:dashboardKind/:subjectId/head", zValidator("param", dashboardParam), async (context) => {
-		const { dashboardKind, subjectId } = context.req.valid("param")
-		const pageHead = await loadDashboardPageHead(dashboardKind, subjectId)
-		return pageHead ? context.json(pageHead) : context.json({ error: "not found" }, 404)
-	})
+	// the Dashboard's page read: the head from the public snapshot alone, the default selection's snapshot at the
+	// reader's access, and the user's own part. a private team is not found
+	.get(
+		"/dashboards/:dashboardKind/:subjectId/page",
+		renderedPageReadCacheHeaders,
+		zValidator("param", dashboardParam),
+		async (context) => {
+			const dashboardPageRead = await readDashboardPageRead({
+				userId: currentUser(context),
+				...context.req.valid("param"),
+			})
+			return dashboardPageRead ? context.json(dashboardPageRead) : context.json({ error: "not found" }, 404)
+		},
+	)
 	// the public share image the page head's og:image names, immutable at its hash and purged with the Dashboard
 	.get(
 		"/dashboards/:dashboardKind/:subjectId/share-image/:imageFile",

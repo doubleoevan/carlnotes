@@ -33,6 +33,8 @@ import {
 	topicPostResponse,
 	topicPostSavePayload,
 	topicPostSaveResponse,
+	topicPostsQuery,
+	topicPostsResponse,
 } from "./topicPosts"
 
 // the social and report clients' routes, keyed as the client parity check names them
@@ -108,6 +110,13 @@ export const socialRouteContracts: Record<string, ApiRouteContract> = {
 		path: "/api/topic-posts/:id",
 		params: idParam,
 		response: topicPostResponse,
+	},
+	"topicPostClient.fetchTopicPostsPage": {
+		method: "GET",
+		path: "/api/topics/:id/topic-posts",
+		params: idParam,
+		query: topicPostsQuery,
+		response: topicPostsResponse,
 	},
 	"topicPostClient.publishTopicPost": {
 		method: "POST",

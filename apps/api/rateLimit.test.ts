@@ -1,12 +1,10 @@
-// rate limit tests: a request's limiter key, the client address that a visitor resolves to behind Cloudflare,
-// and the store that counts each limiter key's hits in Redis
+// rate limit tests: a request's limiter key, the store that counts each limiter key's hits in Redis, and each
+// limiter's limit, key, and skip of a page render's own calls
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import * as redis from "@carlnotes/db/redis"
 import { restoreRedisClient, stubRedisClient, stubUnreachableRedisClient } from "@carlnotes/db/redisClientStub"
 import * as redisRateLimits from "@carlnotes/db/redisRateLimits"
-import { getIP } from "better-auth/api"
-import { Hono, type MiddlewareHandler } from "hono"
-import { auth, type SessionUser } from "./auth"
+import { Hono } from "hono"
 import type { AppEnv } from "./currentUser"
 import {
 	API_RATE_LIMIT,
@@ -33,26 +31,20 @@ import {
 	topicFeedRateLimiter,
 	toRateLimitKey,
 } from "./rateLimit"
+import {
+	CLOUDFLARE_WORKER_ADDRESS,
+	CLOUDFLARE_WORKER_CLIENT_ADDRESS,
+	toLimitedApp,
+	toLimitedStatuses,
+	withCloudflareTrustedProxies,
+} from "./rateLimitTestFixtures"
 import { SESSION_COOKIE } from "./testSession"
-import { ipAddressOptions, resolveClientAddress } from "./trustedProxies"
 
 // put the spied Redis functions and the Redis client back after each test
 afterEach(() => {
 	mock.restore()
 	restoreRedisClient()
 })
-
-// a few of Cloudflare's published ranges, read the way production reads TRUSTED_PROXIES
-const CLOUDFLARE_IP_ADDRESS_OPTIONS = {
-	...ipAddressOptions,
-	trustedProxies: ["173.245.48.0/20", "172.64.0.0/13", "2606:4700::/32"],
-}
-
-// the client address that a request resolves to behind Cloudflare, for a given x-forwarded-for header
-function toCloudflareClientAddress(forwardedFor: string): string | null {
-	const request = new Request("http://localhost/mcp", { headers: { "x-forwarded-for": forwardedFor } })
-	return resolveClientAddress(request, CLOUDFLARE_IP_ADDRESS_OPTIONS)
-}
 
 // a user is one tool caller, no matter what address the request also has
 test("a user is keyed by their id ahead of any address", () => {
@@ -63,28 +55,6 @@ test("a user is keyed by their id ahead of any address", () => {
 test("a visitor is keyed by their address, else by the shared bucket", () => {
 	expect(toRateLimitKey({ userId: null, clientAddress: "203.0.113.7" })).toBe("address:203.0.113.7")
 	expect(toRateLimitKey({ userId: null, clientAddress: null })).toBe("shared")
-})
-
-// the header ends with the Cloudflare edge's address, which is trusted, so the visitor before it is the client
-test("the visitor behind a Cloudflare hop is the client", () => {
-	expect(toCloudflareClientAddress("203.0.113.7, 172.70.1.1")).toBe("203.0.113.7")
-})
-
-// the walk from the right stops at the visitor, so an entry that the visitor wrote to its left is never read
-test("a forged left entry is ignored", () => {
-	expect(toCloudflareClientAddress("198.51.100.9, 203.0.113.7, 172.70.1.1")).toBe("203.0.113.7")
-})
-
-// the header of a request sent straight to the origin ends with its untrusted sender, no matter what came before
-test("a request that skips the edge resolves to its sender", () => {
-	expect(toCloudflareClientAddress("172.70.1.1, 203.0.113.7")).toBe("203.0.113.7")
-})
-
-// Better Auth is configured with the limiter's own options object, so both always name the same client
-test("Better Auth and the limiter resolve the same client address", () => {
-	const request = new Request("http://localhost/mcp", { headers: { "x-forwarded-for": "203.0.113.7" } })
-	expect(auth.options.advanced?.ipAddress).toBe(ipAddressOptions)
-	expect(resolveClientAddress(request)).toBe(getIP(request, auth.options))
 })
 
 // the store counts a limiter key under a prefixed Redis key and returns the count as the limiter's hits and reset time
@@ -214,31 +184,6 @@ test.each([
 	},
 )
 
-// an app behind one limiter, with the given user signed in or none
-function toLimitedApp(limiter: MiddlewareHandler<AppEnv>, userId: string | null = null): Hono<AppEnv> {
-	// set the signed-in user, or none
-	const limitedApp = new Hono<AppEnv>().use(async (context, next) => {
-		context.set("user", userId ? ({ id: userId } as SessionUser) : null)
-		await next()
-	})
-
-	// the limiter, then a route that always succeeds
-	return limitedApp.use(limiter).get("/limited", (context) => context.json({ ok: true }))
-}
-
-// sends requests to the app with the given headers, and returns each status
-async function toLimitedStatuses(
-	limitedApp: Hono<AppEnv>,
-	requestCount: number,
-	headers: Record<string, string> = {},
-): Promise<number[]> {
-	const statuses: number[] = []
-	for (let i = 0; i < requestCount; i++) {
-		statuses.push((await limitedApp.request("/limited", { headers })).status)
-	}
-	return statuses
-}
-
 test("a limiter no page render reaches counts a request with no user and no external address in the shared bucket", async () => {
 	stubRedisClient()
 
@@ -254,9 +199,9 @@ test("a limiter over the reads a page render calls skips a request with no user 
 	// count each hit in a stubbed Redis
 	stubRedisClient()
 
-	// a page render's loopback calls send no cookie and no forwarded address, so none is counted
-	const loopbackStatuses = await toLimitedStatuses(toLimitedApp(socialReadRateLimiter), 200)
-	expect(new Set(loopbackStatuses)).toEqual(new Set([200]))
+	// a page render's own calls send no cookie and no forwarded address, so none is counted
+	const pageRenderStatuses = await toLimitedStatuses(toLimitedApp(socialReadRateLimiter), 200)
+	expect(new Set(pageRenderStatuses)).toEqual(new Set([200]))
 
 	// a signed-in user and an external address are still limited
 	const signedInStatuses = await toLimitedStatuses(toLimitedApp(socialReadRateLimiter, "user-31"), 121)
@@ -340,3 +285,56 @@ test.each(QUIET_LIMITERS)(
 		expect(statuses.at(-1)).toBe(429)
 	},
 )
+
+// the limiters over the reads a page render calls: the quiet ones and the search limiter
+const PAGE_RENDER_READ_LIMITERS = [
+	...QUIET_LIMITERS,
+	{ limiterName: "search", limiter: searchRateLimiter, limit: SEARCH_RATE_LIMIT, keyPrefix: "rate-limit:search" },
+]
+
+test.each(PAGE_RENDER_READ_LIMITERS)(
+	"the $limiterName limiter skips a page render's own calls, over loopback or the private network",
+	async ({ limiter, limit }) => {
+		const storedValueByKey = stubRedisClient()
+
+		// a burst past the limit with no user and no forwarded header, as a render's call over loopback sends it
+		const loopbackStatuses = await toLimitedStatuses(toLimitedApp(limiter), limit + 1)
+		expect(new Set(loopbackStatuses)).toEqual(new Set([200]))
+
+		// the same burst with a private address in the header, as a call from another service on the private network
+		const privateNetworkStatuses = await toLimitedStatuses(toLimitedApp(limiter), limit + 1, {
+			"x-forwarded-for": "10.0.0.5",
+		})
+		expect(new Set(privateNetworkStatuses)).toEqual(new Set([200]))
+		expect([...storedValueByKey.keys()]).toEqual([])
+	},
+)
+
+test.each(PAGE_RENDER_READ_LIMITERS)(
+	"the $limiterName limiter counts a visitor's chain of an internal entry then an external one under the external one",
+	async ({ limiter, limit, keyPrefix }) => {
+		const storedValueByKey = stubRedisClient()
+		await withCloudflareTrustedProxies(async () => {
+			// a visitor who wrote an internal address ahead of their own is counted under their own, and limited
+			const visitorStatuses = await toLimitedStatuses(toLimitedApp(limiter), limit + 1, {
+				"x-forwarded-for": "10.0.0.5, 203.0.113.41, 172.70.1.1",
+				"cf-connecting-ip": "203.0.113.41",
+			})
+			expect(visitorStatuses.at(-1)).toBe(429)
+		})
+		expect([...storedValueByKey.keys()]).toEqual([`${keyPrefix}:address:203.0.113.41`])
+	},
+)
+
+// a request a Worker relays is counted under the Workers address, so it never reads as a page render's
+test("a limiter over the reads a page render calls counts a Worker's request under the Workers address", async () => {
+	const storedValueByKey = stubRedisClient()
+	await withCloudflareTrustedProxies(async () => {
+		const workerStatuses = await toLimitedStatuses(toLimitedApp(searchRateLimiter), SEARCH_RATE_LIMIT + 1, {
+			"x-forwarded-for": "172.64.0.9, 2606:4700::1",
+			"cf-connecting-ip": CLOUDFLARE_WORKER_ADDRESS,
+		})
+		expect(workerStatuses.at(-1)).toBe(429)
+	})
+	expect([...storedValueByKey.keys()]).toEqual([`rate-limit:search:address:${CLOUDFLARE_WORKER_CLIENT_ADDRESS}`])
+})

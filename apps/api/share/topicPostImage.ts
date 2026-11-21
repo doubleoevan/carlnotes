@@ -35,10 +35,11 @@ export type TopicPostPreview = {
 	topicImageHash: string | null
 }
 
-// the published Topic Post, its Topic's preview, and its author's published avatar that a card is built from
+// the published Topic Post, its Topic's preview, null for a public Topic's post, and its author's published avatar
+// that a card is built from
 type ToTopicPostPreviewOptions = {
 	topicPostRow: TopicPostRow
-	topicPreview: TopicPreview
+	topicPreview: TopicPreview | null
 	authorAvatar: PublishedAvatar
 }
 
@@ -52,17 +53,17 @@ export function toTopicPostPreview({
 	authorAvatar,
 }: ToTopicPostPreviewOptions): TopicPostPreview {
 	// the post's title over its Topic's name, on every card
-	const { topicPost, author } = topicPostRow
+	const { topicPost, topic, author } = topicPostRow
 	const titledPreview = {
 		topicPostId: topicPost.id,
 		title: topicPost.title,
-		topicId: topicPreview.topicId,
-		topicName: topicPreview.title,
-		topicImageHash: topicPreview.imageHash,
+		topicId: topic.id,
+		topicName: topic.name,
+		topicImageHash: topic.imageHash,
 	}
 
 	// a private or invite Topic's card names its owner and draws its image, so its post's card does the same
-	if (topicPreview.visibility !== "public") {
+	if (topicPreview && topicPreview.visibility !== "public") {
 		return {
 			...titledPreview,
 			bylineUserId: topicPreview.ownerUserId,

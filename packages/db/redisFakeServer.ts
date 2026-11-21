@@ -118,11 +118,14 @@ function toFakeRedisClient(fakeRedisServer: FakeRedisServer): FakeRedisClient {
 			return storedValue
 		},
 		// a set hangs while commands are stalled, then writes the shared keys and ignores the expiry.
-		// the XX option writes only a key that exists
+		// the XX option writes only a key that exists, and the NX option only a key that does not
 		async set(key: string, value: string | Uint8Array, ...options: string[]): Promise<"OK" | null> {
 			throwIfCommandFailing()
 			await stallIfCommandStalled()
-			if (options.includes("XX") && !fakeRedisServer.storedValueByKey.has(key)) {
+
+			// skip the write the option rules out, and store the value otherwise
+			const isKeyStored = fakeRedisServer.storedValueByKey.has(key)
+			if (options.includes("XX") ? !isKeyStored : options.includes("NX") && isKeyStored) {
 				return null
 			}
 			fakeRedisServer.storedValueByKey.set(key, toFakeStoredValue(value))

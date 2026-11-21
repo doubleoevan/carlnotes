@@ -15,27 +15,24 @@ import { db } from "@carlnotes/db"
 import { deletePodcastFeedCache } from "@carlnotes/db/podcastFeedCache"
 import { podcastEpisodeChapters, podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { topics } from "@carlnotes/db/schema/topics"
+import { clearVisitorPagesOfTopic } from "@carlnotes/db/visitorPageCaches"
 import { removePodcastEpisode } from "@carlnotes/pipeline/podcast/removePodcastEpisode"
 import { zValidator } from "@hono/zod-validator"
 import { and, eq } from "drizzle-orm"
 import { Hono } from "hono"
 import { isAllowed } from "../authorization"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
-import { PRIVATE_NO_STORE_CACHE_CONTROL, purgeProfileAtEdge } from "../edgeCache"
+import { clearProfilePage, PRIVATE_NO_STORE_CACHE_CONTROL, renderedPageReadCacheHeaders } from "../edgeCache"
 import { toObjectionableCategory, toObjectionableContentResponse } from "../moderation"
 import { readRequestPlace } from "../requestPlace"
+import { toCardResponse } from "../share/cardResponse"
 import { toPodcastEpisodePreview } from "../share/podcastEpisodeImage"
-import { toCachedPodcastEpisodePreviewPng, toPreviewPngResponse } from "../share/preview"
+import { toPodcastEpisodePreviewCard } from "../share/preview"
 import { updateTopicFields } from "../tool/topicTools"
-import { clearVisitorTopicPages } from "../topic/feedCaches"
 import { canRateTopic } from "../topic/findingPermissions"
-import { toTopicGateResponse } from "../topic/helpers"
 import { clearHomeCaches } from "../topic/homeOrder"
-import {
-	overlayUncheckedPodcastEpisodeImages,
-	overlayUncheckedPodcastEpisodePageImages,
-} from "../uncheckedImageOverlays"
-import { loadPodcastEpisodePage, loadSeasonPodcastEpisodes } from "./helpers"
+import { overlayUncheckedPodcastEpisodeImages } from "../uncheckedImageOverlays"
+import { loadSeasonPodcastEpisodes } from "./helpers"
 import { loadPodcastEpisodeEditor } from "./podcastEpisodeEditor"
 import {
 	countPodcastEpisodePlayRequest,
@@ -45,11 +42,8 @@ import {
 	toPodcastEpisodeTranscriptResponse,
 } from "./podcastEpisodeFiles"
 import { loadNextUnplayedPodcastEpisode, savePodcastEpisodeListen } from "./podcastEpisodeListens"
-import {
-	loadAccessiblePodcastEpisode,
-	loadPublishedPodcastEpisode,
-	loadPublishedPodcastEpisodeById,
-} from "./podcastEpisodeRows"
+import { loadPodcastEpisodePageOrGate, readPodcastEpisodePageRead } from "./podcastEpisodePageRead"
+import { loadAccessiblePodcastEpisode, loadPublishedPodcastEpisodeById } from "./podcastEpisodeRows"
 import { loadPodcastEpisode } from "./podcastEpisodeShapes"
 
 // the podcast episode routes
@@ -70,26 +64,32 @@ export const podcastEpisodesRoute = new Hono<AppEnv>()
 	})
 	// a podcast episode page with the episode, its topic, and its transcript, for anyone who may listen to the episode
 	.get("/topics/:id/episodes/:season/:episodeNumber", zValidator("param", podcastEpisodePageParam), async (context) => {
-		// return the podcast episode page that the url names if the user may listen to the episode
-		const userId = currentUser(context)
-		const { id: topicId, season, episodeNumber } = context.req.valid("param")
-		const podcastEpisodePage = await loadPodcastEpisodePage({ topicId, season, episodeNumber }, userId)
-		if (podcastEpisodePage) {
-			// an editor's page shows their unchecked uploads in place of the podcast episode's image and its film's poster
-			return context.json(await overlayUncheckedPodcastEpisodePageImages(podcastEpisodePage, userId))
-		}
-
 		// respond 403 with the gate of an invite topic to a user or visitor who may not see it, and 404 for a private
 		// topic, which does not exist for them, or a missing podcast episode
-		const publishedPodcastEpisode = await loadPublishedPodcastEpisode({ topicId, season, episodeNumber })
-		const podcastEpisodeTopic = publishedPodcastEpisode?.topic
-		const isTopicHidden =
-			podcastEpisodeTopic !== undefined && !(await isAllowed(userId, "topic:view", podcastEpisodeTopic))
-
-		// the gate of a hidden invite topic, which names the topic
-		const topicGateResponse = isTopicHidden && podcastEpisodeTopic ? toTopicGateResponse(podcastEpisodeTopic) : null
-		return topicGateResponse ? context.json(topicGateResponse, 403) : context.json({ error: "not found" }, 404)
+		const { id: topicId, season, episodeNumber } = context.req.valid("param")
+		const { podcastEpisodePage, topicGate } = await loadPodcastEpisodePageOrGate({
+			userId: currentUser(context),
+			podcastEpisodePageAddress: { topicId, season, episodeNumber },
+		})
+		if (podcastEpisodePage) {
+			return context.json(podcastEpisodePage)
+		}
+		return topicGate ? context.json(topicGate, 403) : context.json({ error: "not found" }, 404)
 	})
+	// the podcast episode's page read: the head with the page, or with its invite topic's gate
+	.get(
+		"/topics/:id/episodes/:season/:episodeNumber/page",
+		renderedPageReadCacheHeaders,
+		zValidator("param", podcastEpisodePageParam),
+		async (context) => {
+			const { id: topicId, season, episodeNumber } = context.req.valid("param")
+			const podcastEpisodePageRead = await readPodcastEpisodePageRead({
+				userId: currentUser(context),
+				podcastEpisodePageAddress: { topicId, season, episodeNumber },
+			})
+			return podcastEpisodePageRead ? context.json(podcastEpisodePageRead) : context.json({ error: "not found" }, 404)
+		},
+	)
 	.put("/topics/:id/podcast", zValidator("json", topicPodcastPayload), async (context) => {
 		// save the podcast switch through updateTopicFields
 		const updateTopicFieldsResult = await updateTopicFields({
@@ -179,18 +179,20 @@ export const podcastEpisodesRoute = new Hono<AppEnv>()
 	})
 	// the link-preview card that a social platform fetches for a published podcast episode of any topic
 	.get("/episodes/:id/preview.png", async (context) => {
-		// respond 404 unless the podcast episode has published
-		const publishedPodcastEpisode = await loadPublishedPodcastEpisodeById(context.req.param("id"))
-		if (!publishedPodcastEpisode) {
-			return context.json({ error: "not found" }, 404)
-		}
-
-		// draw the preview card on its first request, and read the card from storage after
-		const podcastEpisodePreview = toPodcastEpisodePreview(
-			publishedPodcastEpisode.podcastEpisodeRow,
-			publishedPodcastEpisode.topic,
-		)
-		return toPreviewPngResponse(context, await toCachedPodcastEpisodePreviewPng(podcastEpisodePreview))
+		// respond 404 unless the podcast episode has published, and draw the card on its first request
+		const podcastEpisodeId = context.req.param("id")
+		const podcastEpisodeCardResponse = await toCardResponse({
+			context,
+			cardKey: `podcast-episode:${podcastEpisodeId}`,
+			loadPreview: async () => {
+				const publishedPodcastEpisode = await loadPublishedPodcastEpisodeById(podcastEpisodeId)
+				return publishedPodcastEpisode
+					? toPodcastEpisodePreview(publishedPodcastEpisode.podcastEpisodeRow, publishedPodcastEpisode.topic)
+					: null
+			},
+			toPreviewCard: toPodcastEpisodePreviewCard,
+		})
+		return podcastEpisodeCardResponse?.response ?? context.json({ error: "not found" }, 404)
 	})
 	.post("/episodes/:id/listen", zValidator("json", podcastEpisodeListenPayload), async (context) => {
 		// reject a visitor
@@ -280,7 +282,7 @@ export const podcastEpisodesRoute = new Hono<AppEnv>()
 		await deletePodcastFeedCache(podcastEpisodeTopicRow.topic.id)
 		// a home podcast episode left the home, and the podcast episode left its topic owner's profile page
 		await clearHomeCaches()
-		await purgeProfileAtEdge(podcastEpisodeTopicRow.topic.ownerId)
+		await clearProfilePage(podcastEpisodeTopicRow.topic.ownerId)
 		return context.json({ ok: true })
 	})
 	// an editor's change to a podcast episode's title and description, after the text moderation
@@ -310,7 +312,7 @@ export const podcastEpisodesRoute = new Hono<AppEnv>()
 			.where(eq(podcastEpisodes.id, editor.podcastEpisodeId))
 		await Promise.all([
 			deletePodcastFeedCache(editor.topicId),
-			clearVisitorTopicPages(editor.topicId),
+			clearVisitorPagesOfTopic(editor.topicId),
 			clearHomeCaches(),
 		])
 		return context.json({ ok: true })

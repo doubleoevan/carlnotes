@@ -1,7 +1,8 @@
 // stored Topic Post summary tests: a published post's summary is written on its author's key and kept while its words
-// are the ones summarized, and a draft or a missing post has none written
+// are the ones summarized, which clears its topic's visitor pages, and a draft or a missing post has none written
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
+import * as visitorPageCaches from "@carlnotes/db/visitorPageCaches"
 import * as litellm from "@carlnotes/models/litellm"
 import * as summarizeTopicPostModule from "./summarizeTopicPost"
 import { writeStoredTopicPostSummary } from "./topicPostSummaries"
@@ -14,9 +15,15 @@ afterEach(() => {
 
 test("a published post's summary is written on its author's key and stored on the post", async () => {
 	// the post's title, body, author, and publish time, the author's key, and the summary the model writes
-	const sentQueries = stubConnectionPool(({ text }) =>
-		text.startsWith("select") ? [["Light Roasts", "<p>Start light.</p>", "author-1", new Date()]] : [],
-	)
+	const sentQueries = stubConnectionPool(({ text }) => {
+		if (text.startsWith("select")) {
+			return [["Light Roasts", "<p>Start light.</p>", "author-1", new Date()]]
+		}
+		return text.startsWith('update "topic_posts"') ? [["topic-1"]] : []
+	})
+
+	// the visitor pages' clear, the author's key, and the model's summary
+	const clearVisitorPagesSpy = spyOn(visitorPageCaches, "clearVisitorPagesOfTopic").mockResolvedValue()
 	spyOn(litellm, "loadOrProvisionUserLiteLLMKey").mockResolvedValue("author-key")
 	const summarizeSpy = spyOn(summarizeTopicPostModule, "summarizeTopicPost").mockResolvedValue({
 		summary: "A year of roasts.",
@@ -40,6 +47,9 @@ test("a published post's summary is written on its author's key and stored on th
 	// the call's cost adds to what the post's summaries cost before it
 	expect(updateQuery?.text).toContain('"cost" = "topic_posts"."cost" +')
 	expect(updateQuery?.values).toContain(0.0004)
+
+	// the topic's visitor pages that show the summary leave the cache
+	expect(clearVisitorPagesSpy.mock.calls).toEqual([["topic-1"]])
 })
 
 test("a draft and a missing post have no summary written", async () => {

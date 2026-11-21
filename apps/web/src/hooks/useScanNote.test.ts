@@ -1,6 +1,6 @@
 // a scan note's read: started early and reused by the open, kept once its scan finished, and never stuck loading
 import { expect, type Mock, mock, test } from "bun:test"
-import { EMPTY_SCAN_NOTE, type ScanNote } from "@carlnotes/contracts/topics"
+import { EMPTY_SCAN_NOTE, type ScanNote } from "@carlnotes/contracts/scanSourceResults"
 import { createScanNoteReader } from "./useScanNote"
 
 // a finished scan's note

@@ -1,7 +1,6 @@
-import { CARDS_PAGE_SIZE } from "@carlnotes/contracts/home"
+import { CARDS_PAGE_SIZE } from "@carlnotes/contracts/cardPages"
 import {
 	type CardsSectionElements,
-	CardsSection as SharedCardsSection,
 	PagedCardsSection as SharedPagedCardsSection,
 } from "@carlnotes/core/components/CardsSection"
 import { cn } from "@carlnotes/nightshift/classNames"
@@ -94,14 +93,7 @@ function CardSkeleton() {
 }
 
 /**
- * A section of cards on a screen in the app, with its page chosen outside it.
- */
-export function CardsSection<Row>(props: Omit<ComponentProps<typeof SharedCardsSection<Row>>, "elements">) {
-	return <SharedCardsSection {...props} elements={CARDS_SECTION_ELEMENTS} />
-}
-
-/**
- * A section of cards on a screen in the app, which pages through all of its rows by itself.
+ * A section of cards on a screen in the app, which pages through all of its rows by itself or which the server pages.
  */
 export function PagedCardsSection<Row>(props: Omit<ComponentProps<typeof SharedPagedCardsSection<Row>>, "elements">) {
 	return <SharedPagedCardsSection {...props} elements={CARDS_SECTION_ELEMENTS} />

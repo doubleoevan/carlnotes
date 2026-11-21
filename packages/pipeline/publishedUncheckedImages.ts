@@ -16,6 +16,7 @@ import {
 	saveUncheckedImageUnpublished,
 	type UncheckedImageRow,
 } from "@carlnotes/db/uncheckedImages"
+import { clearVisitorPagesOfTopic } from "@carlnotes/db/visitorPageCaches"
 import { reportError } from "@carlnotes/server/monitoring"
 import { and, eq, isNotNull, isNull, or } from "drizzle-orm"
 import { clearPodcastEpisodeImage } from "./podcast/podcastEpisodeImageRenders"
@@ -77,16 +78,19 @@ export async function unpublishTopicUncheckedImages(
 
 /**
  * Draws again what was drawn from the images that went back to their uploaders, once the transaction that unpublished
- * them has committed: a Topic's cached podcast feeds and stored covers are deleted, and the rebuild starts for each
- * film whose intro and sign-off show one of the images.
+ * them has committed: a Topic's cached podcast feeds, stored covers, and visitor page copies are deleted, and the
+ * rebuild starts for each film whose intro and sign-off show one of the images.
  */
 export async function redrawUnpublishedImageFiles(
 	topicId: string,
 	uncheckedImageSubjects: UncheckedImageHashSubject[],
 ): Promise<void> {
-	// the Topic's image is drawn into its covers
+	// the Topic's image is drawn into its covers, and its visitor pages name the published images
 	if (uncheckedImageSubjects.some(({ subjectKind }) => subjectKind === "topicImage")) {
 		await forgetTopicCovers(topicId)
+	}
+	if (uncheckedImageSubjects.length > 0) {
+		await clearVisitorPagesOfTopic(topicId)
 	}
 	await startImageTopicVideoRebuilds(uncheckedImageSubjects)
 }

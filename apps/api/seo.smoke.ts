@@ -164,7 +164,7 @@ try {
 	apiServer = (await waitForApi()) ? null : Bun.serve((await import("./index")).default)
 
 	// a public topic with too few findings has a head that is not indexed and names no canonical url
-	const unshownTopicHead = (await (await fetch(`${API_ORIGIN}/api/topics/${unshownTopicId}/head`)).json()) as PageHead
+	const unshownTopicHead = await fetchTopicPageHead(unshownTopicId)
 	failUnless(
 		!unshownTopicHead.isIndexed && unshownTopicHead.canonicalUrl === null,
 		"a thin public topic's head is indexed",
@@ -288,7 +288,8 @@ try {
 			signedOutResponse.headers.get("cdn-cache-control") === RENDERED_EDGE_CACHE_CONTROL,
 			`${renderedPath} is not shared at the edge`,
 		)
-		failUnless(signedOutResponse.headers.get("cache-tag") === RENDERED_CACHE_TAG, `${renderedPath} has no purge tag`)
+		const cacheTags = signedOutResponse.headers.get("cache-tag")?.split(",") ?? []
+		failUnless(cacheTags.includes(RENDERED_CACHE_TAG), `${renderedPath} has no purge tag`)
 		failUnless(
 			signedOutResponse.headers.get("content-encoding") === null,
 			`${renderedPath} is compressed at the origin`,
@@ -301,18 +302,18 @@ try {
 	}
 
 	// the public topic's card url names its version, and the card is immutable only at that version
-	const publicTopicHead = (await (await fetch(`${API_ORIGIN}/api/topics/${topicIds.public}/head`)).json()) as PageHead
+	const publicTopicHead = await fetchTopicPageHead(topicIds.public)
 	const cardUrl = new URL(publicTopicHead.imageUrl)
 	failUnless(cardUrl.searchParams.has("v"), "the public topic's card url names no version")
 	const currentCardResponse = await fetch(`${API_ORIGIN}${cardUrl.pathname}${cardUrl.search}`)
-	const oldCardResponse = await fetch(`${API_ORIGIN}${cardUrl.pathname}?v=old`)
+	const oldCardResponse = await fetch(`${API_ORIGIN}${cardUrl.pathname}?v=old`, { redirect: "manual" })
 	failUnless(
 		currentCardResponse.headers.get("cache-control") === "public, max-age=31536000, immutable",
 		"the card at its current version is not immutable",
 	)
 	failUnless(
-		oldCardResponse.headers.get("cache-control") === "public, max-age=60",
-		"the card at an old version is not cached for a minute",
+		oldCardResponse.status === 302 && oldCardResponse.headers.get("cache-control") === "public, max-age=60",
+		"the card at an old version is not redirected with a minute's cache",
 	)
 	console.log("seo smoke: the edge shares a signed-out page and the feed, and a card is immutable at its version")
 } finally {
@@ -354,6 +355,12 @@ async function fetchPage({ uiServer, path, headers = {} }: FetchPageOptions): Pr
 // whether a page's html has an h1 that includes the given text
 function hasHeading(contentHtml: string, text: string): boolean {
 	return [...contentHtml.matchAll(/<h1[^>]*>([\s\S]*?)<\/h1>/g)].some((match) => match[1]?.includes(text))
+}
+
+// a topic's head, from the topic's page read
+async function fetchTopicPageHead(topicId: string): Promise<PageHead> {
+	const topicPageRead = (await (await fetch(`${API_ORIGIN}/api/topics/${topicId}/page`)).json()) as { head: PageHead }
+	return topicPageRead.head
 }
 
 // whether an api responds on the port the ui's loaders read within a few seconds. a dev api that watches the ui

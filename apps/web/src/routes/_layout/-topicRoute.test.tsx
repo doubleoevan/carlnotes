@@ -125,29 +125,26 @@ const realFetch = globalThis.fetch
 // the head and the topic a fake fetch serves for the fixture topic's id
 type ToFakeFetchOptions = { topicHead: PageHead; topic: TopicResponse }
 
+// the paths the fake fetch was asked for, oldest first
+const requestedPaths: string[] = []
+
 // a fake fetch that serves this head and topic, and the invite topic's fixtures, in place of the api
 function toFakeFetch({ topicHead, topic }: ToFakeFetchOptions): typeof fetch {
 	return ((input: RequestInfo | URL) => {
 		// read the path the client requested
 		const requestUrl = input instanceof Request ? input.url : input.toString()
 		const { pathname } = new URL(requestUrl)
+		requestedPaths.push(pathname)
 
-		// serve the topic's head and the topic
-		if (pathname.endsWith(`${TOPIC_ID}/head`)) {
-			return Promise.resolve(Response.json(topicHead))
-		}
-		if (pathname.endsWith(TOPIC_ID)) {
-			return Promise.resolve(Response.json(topic))
+		// serve the topic's page read: its head with the topic
+		if (pathname.endsWith(`${TOPIC_ID}/page`)) {
+			return Promise.resolve(Response.json({ head: topicHead, topic, topicGate: null }))
 		}
 
-		// serve the invite topic's head, the gate a visitor gets in place of the invite topic, or a 404 for any other path
-		if (pathname.endsWith(`${INVITE_TOPIC_ID}/head`)) {
-			return Promise.resolve(Response.json(INVITE_TOPIC_HEAD))
-		}
-		if (pathname.endsWith(INVITE_TOPIC_ID)) {
-			return Promise.resolve(
-				Response.json({ error: "forbidden", gatedVisibility: "invite", topicName: "Night shift" }, { status: 403 }),
-			)
+		// serve the invite topic's page read with the gate a visitor gets in place of the topic, or a 404 for any other path
+		if (pathname.endsWith(`${INVITE_TOPIC_ID}/page`)) {
+			const topicGate = { error: "forbidden", gatedVisibility: "invite", topicName: "Night shift" }
+			return Promise.resolve(Response.json({ head: INVITE_TOPIC_HEAD, topic: null, topicGate }))
 		}
 		return Promise.resolve(Response.json({ error: "not found" }, { status: 404 }))
 	}) as typeof fetch
@@ -179,8 +176,12 @@ async function renderTopicPage({ topicHead, topic }: ToFakeFetchOptions): Promis
 // a crawler reads the topic's own title, description, card, structured data, heading, and finding link, with no
 // script run
 test("the public topic route renders its head and its findings on the server", async () => {
+	requestedPaths.length = 0
 	const { router } = await loadRouter(`/topics/${TOPIC_ID}/${TOPIC_SLUG}`)
 	const html = renderToString(<RouterProvider router={router} />)
+
+	// the server load sends the one page read
+	expect(requestedPaths).toEqual([`/api/topics/${TOPIC_ID}/page`])
 
 	expect(html).toContain("<title>Agents — CarlNotes</title>")
 	expect(html).toContain(`<link rel="canonical" href="https://carlnotes.com/topics/${TOPIC_ID}/${TOPIC_SLUG}"`)

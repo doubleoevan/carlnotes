@@ -1,13 +1,14 @@
 // the Scan pipeline as three activities: ingest, review, and the write that completes the Scan
 
 import { WORKER_SHUTDOWN_FAILURE_TYPE } from "@carlnotes/contracts/scanFailure"
+import type { StoredScanSourceResults, StoredSourceResult } from "@carlnotes/contracts/scanSourceResults"
 import { toTopicPath } from "@carlnotes/contracts/seo"
-import type { StoredScanSourceResults, StoredSourceResult } from "@carlnotes/contracts/topics"
 import { db } from "@carlnotes/db"
 import { findingPersonalAnnotations } from "@carlnotes/db/schema/personalSources"
 import { findings, resources, scanSearchResults, scans } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
+import { clearStatusReads } from "@carlnotes/db/statusReadCaches"
 import { type Budget, newBudget, toCheckpointBudget, toResumedBudget } from "@carlnotes/models/budget"
 import { loadOrProvisionUserLiteLLMKey } from "@carlnotes/models/litellm"
 import { notifyIndexNow } from "@carlnotes/pipeline/indexNow"
@@ -55,11 +56,13 @@ export type ReviewStageResult = { review: ReviewSummary; budget: Budget }
  * so a second ingest attempt reaches the same set of resources instead of ingesting again.
  */
 export async function ingestForScan(scanId: string, topicId: string): Promise<IngestStageResult> {
-	// record when a worker first picks up the Scan. a retried ingest keeps the first attempt's time
+	// record when a worker first picks up the Scan, and clear the Topic's scan status copy. a retried ingest keeps the
+	// first attempt's time
 	await db
 		.update(scans)
 		.set({ pickedUpAt: new Date() })
 		.where(and(eq(scans.id, scanId), isNull(scans.pickedUpAt)))
+	await clearStatusReads("scan", topicId)
 
 	// run no Source for a Scan that is already marked failed.
 	// throw the Scan's own failure reason as a failure that Temporal does not retry
@@ -221,6 +224,9 @@ export async function finishScan(
 		return
 	}
 
+	// the Topic's scan status copy goes, so a poll reads the finished Scan
+	await clearStatusReads("scan", topicId)
+
 	// save the topic's vectors from what the scan kept
 	await saveTopicVectorsAfterScan({ scanId, topicId })
 
@@ -274,8 +280,9 @@ export async function stopScan(scanId: string): Promise<void> {
 		.where(and(eq(scans.id, scanId), isNull(scans.finishedAt)))
 		.returning({ topicId: scans.topicId })
 
-	// save the topic's vectors from what the stopped scan kept
+	// clear the Topic's scan status copy, and save the topic's vectors from what the stopped scan kept
 	if (stoppedScan?.topicId) {
+		await clearStatusReads("scan", stoppedScan.topicId)
 		await saveTopicVectorsAfterScan({ scanId, topicId: stoppedScan.topicId })
 	}
 }
@@ -294,7 +301,7 @@ async function recordScanProgress(
 ): Promise<void> {
 	// the Findings are the count, the same source a Scan that runs to the end counts from
 	const [keptRow] = await db.select({ count: count() }).from(findings).where(eq(findings.scanId, scanId))
-	await db
+	const [progressScan] = await db
 		.update(scans)
 		.set({
 			keptCount: keptRow?.count ?? 0,
@@ -306,6 +313,12 @@ async function recordScanProgress(
 			ingestSourceResults,
 		})
 		.where(eq(scans.id, scanId))
+		.returning({ topicId: scans.topicId })
+
+	// the Topic's scan status copy goes, so a poll reads the new kept count
+	if (progressScan?.topicId) {
+		await clearStatusReads("scan", progressScan.topicId)
+	}
 }
 
 /**
@@ -360,8 +373,10 @@ export async function failScan(scanId: string, reason: string, budget?: Budget):
 		.where(eq(scans.id, scanId))
 		.returning({ topicId: scans.topicId })
 
-	// save the topic's vectors from what the failed scan kept before its stage threw
+	// clear the Topic's scan status copy, and save the topic's vectors from what the failed scan kept before its stage
+	// threw
 	if (failedScan?.topicId) {
+		await clearStatusReads("scan", failedScan.topicId)
 		await saveTopicVectorsAfterScan({ scanId, topicId: failedScan.topicId })
 	}
 }

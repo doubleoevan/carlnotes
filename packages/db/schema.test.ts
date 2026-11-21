@@ -393,3 +393,12 @@ test("each summed table and users are indexed by time, and the running Scans and
 		expect(migrationsSql).toContain(`CREATE INDEX IF NOT EXISTS ${indexSql}`)
 	}
 })
+
+// the home's reads of the week's new podcast episodes and films read the published rows newest first through an index
+// that holds those rows alone
+test("episodes index their published rows by the publish time, newest first", () => {
+	// if not exists skips the index built concurrently by hand before the deploy
+	expect(allMigrationsSql()).toContain(
+		`CREATE INDEX IF NOT EXISTS "episodes_published_at_idx" ON "episodes" USING btree ("published_at" DESC NULLS LAST) WHERE "episodes"."status" = 'published'`,
+	)
+})

@@ -106,10 +106,17 @@ function toRateLimitStore(keyPrefix: string): Store<AppEnv> {
 	}
 }
 
-// whether a request has no user and no external address to count it under. a page render's loopback call has
-// neither, and so does every visitor if a proxy hop is missing from the trusted proxies
+// whether a request has no user and no external address to count it under
 function isUncountedRequest(context: Context<AppEnv>): boolean {
-	const toolCaller = toRateLimitToolCaller(context)
+	return isUncountedToolCaller(toRateLimitToolCaller(context))
+}
+
+/**
+ * Returns whether a tool caller has no user and no external address to count it under. A page render's own call to
+ * the api has neither: it brings no session and no external address, over loopback or the private network. So does
+ * every visitor if a proxy hop is missing from the trusted proxies.
+ */
+export function isUncountedToolCaller(toolCaller: RateLimitToolCaller): boolean {
 	return !toolCaller.userId && !isExternalAddress(toolCaller.clientAddress)
 }
 
@@ -193,6 +200,59 @@ export const toolCallerRateLimitStore = toRateLimitStore("rate-limit")
 
 // the per-tool-caller limiter, which counts hits in the Redis store
 export const toolCallerRateLimiter = toRateLimiter({ limit: CALLER_RATE_LIMIT, store: toolCallerRateLimitStore })
+
+// how many MCP protocol messages one caller may send in one rate limit window: an initialize, a notification, a tools
+// or resources list, and a resource read
+export const MCP_PROTOCOL_RATE_LIMIT = 600
+
+// the MCP tool calls' limiter and the MCP protocol messages' limiter, each in its own rate limit window apart from the
+// chat posts' window
+export const mcpToolCallRateLimitStore = toRateLimitStore("rate-limit:mcp-tool-call")
+const mcpToolCallRateLimiter = toRateLimiter({ limit: CALLER_RATE_LIMIT, store: mcpToolCallRateLimitStore })
+const mcpProtocolRateLimiter = toRateLimiter({
+	limit: MCP_PROTOCOL_RATE_LIMIT,
+	store: toRateLimitStore("rate-limit:mcp-protocol"),
+})
+
+/**
+ * Counts each tools/call message of an MCP request against the tool call limit, so a batch of calls spends one hit per
+ * call, and any other MCP request against the protocol limit.
+ */
+export const mcpRateLimiter: MiddlewareHandler<AppEnv> = async (context, next) => {
+	const toolCallCount = await countMcpToolCalls(context.req.raw)
+	if (toolCallCount === 0) {
+		return mcpProtocolRateLimiter(context, next)
+	}
+
+	// a batch's tool calls past the first count first, and the limiter counts the request itself as the last one
+	const rateLimitKey = toRateLimitKey(toRateLimitToolCaller(context))
+	await Promise.all(Array.from({ length: toolCallCount - 1 }, () => mcpToolCallRateLimitStore.increment(rateLimitKey)))
+	return mcpToolCallRateLimiter(context, next)
+}
+
+// how many tools/call messages an MCP request's json-rpc body holds, alone or in a batch. a body that is no json holds
+// none. the body is read from a copy, so the transport still reads the request's own
+async function countMcpToolCalls(request: Request): Promise<number> {
+	if (request.method !== "POST") {
+		return 0
+	}
+
+	// read the body's messages from a copy, a lone message as a batch of one
+	const rpcBody: unknown = await request
+		.clone()
+		.json()
+		.catch(() => null)
+	const rpcMessages: unknown[] = Array.isArray(rpcBody) ? rpcBody : [rpcBody]
+
+	// count the tool calls among the messages
+	return rpcMessages.filter(
+		(rpcMessage) =>
+			typeof rpcMessage === "object" &&
+			rpcMessage !== null &&
+			"method" in rpcMessage &&
+			rpcMessage.method === "tools/call",
+	).length
+}
 
 // the note body save's own limiter. the editor saves a second after each pause, so the caller limit is too low for it
 const NOTE_BODY_SAVE_RATE_LIMIT = 120

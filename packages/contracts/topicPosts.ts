@@ -1,6 +1,7 @@
 // a Topic Post: long-form writing on a Topic by its owner or a member of a team that holds it, a draft until it is
 // published. customer copy calls a Topic's section of them Open Mic
 import { z } from "zod"
+import { optionalCardsPageNumber } from "./cardPages"
 import { topicImageOrigins, visibilities } from "./enums"
 import { NOTE_HTML_MAX_CHARS } from "./notes"
 import { type PodcastEpisode, podcastEpisodeTranscriptTurn } from "./podcast"
@@ -129,8 +130,23 @@ export const homeTopicPostsResponse = z.object({
 export type HomeTopicPostsResponse = z.infer<typeof homeTopicPostsResponse>
 
 // a Topic's Topic Posts: the caller's own drafts first, then the published ones newest first, and whether the caller
-// may write one
-export const topicPostsResponse = z.object({ topicPosts: z.array(topicPostCard), canPublish: z.boolean() })
+// may write one. a read that asks for one page holds that page and how many the whole list holds
+export const topicPostsResponse = z.object({
+	topicPosts: z.array(topicPostCard),
+	canPublish: z.boolean(),
+	totalCount: z.number().int().nonnegative().optional(),
+})
+
+// the query of a Topic's Topic Posts: one zero-based page, or every post if it names none
+export const topicPostsQuery = z.object({ page: optionalCardsPageNumber })
+
+// one page of a person's, a team's, or the home's Topic Posts as cards, and how many the whole list holds
+export const topicPostCardsPage = z.object({
+	topicPosts: z.array(topicPostCard),
+	totalCount: z.number().int().nonnegative(),
+})
+
+export type TopicPostCardsPage = z.infer<typeof topicPostCardsPage>
 
 export type TopicPostsResponse = z.infer<typeof topicPostsResponse>
 
@@ -149,6 +165,9 @@ export const topicPostResponse = topicPostCard.extend({
 	// its Topic's viewers and followers, as the Topic's own page counts them, which its info popup shows under the
 	// Topic's name. absent from an api older than the field
 	topicCounts: topicCounts.optional(),
+	// its own viewers as last saved, which its viewer count line shows until its first poll a minute later. absent from
+	// an api older than the field
+	viewerCount: z.number().optional(),
 	reactions: reactionSummary,
 	// the first page of a published post's comment thread. absent on a write's response
 	commentThread: commentThreadResponse.optional(),

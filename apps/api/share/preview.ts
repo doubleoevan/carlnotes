@@ -5,22 +5,18 @@ import { findings } from "@carlnotes/db/schema/scans"
 import { teams } from "@carlnotes/db/schema/teams"
 import { sources, topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
-import { attachmentExists, getAttachmentBytes, uploadAttachment } from "@carlnotes/db/store"
 import { countActiveTeamMembers } from "@carlnotes/db/teamMembers"
 import { and, count, eq } from "drizzle-orm"
-import type { Context } from "hono"
-import { publishedAvatarColumns, toPublishedAvatar, toPublishedAvatarFromUser } from "../avatars"
-import { toVersionedImageHeaders } from "../edgeCache"
+import { loadUserAvatarRow, publishedAvatarColumns, toPublishedAvatarFromUser } from "../avatars"
 import { countDistinctSubscribers } from "../profiles"
 import { lastScanSummary, toTeamPublicTopicsFilter, toTopicDescription } from "../seo"
 import { loadTopicPostRow, type TopicPostRow } from "../topicPost/topicPosts"
-import { loadUsername } from "../usernames"
+import type { PreviewCard } from "./cardResponse"
 import {
 	type PodcastEpisodePreview,
 	toPodcastEpisodePreviewKey,
 	toPodcastEpisodePreviewPng,
 } from "./podcastEpisodeImage"
-import { toPreviewVersion } from "./previewImage"
 import { type ProfilePreview, toProfilePreviewKey, toProfilePreviewPng } from "./profileImage"
 import { type TeamPreview, toTeamPreviewKey, toTeamPreviewPng } from "./teamImage"
 import { type TopicPreview, toTopicPreviewKey, toTopicPreviewPng } from "./topicImage"
@@ -30,9 +26,6 @@ import {
 	toTopicPostPreviewKey,
 	toTopicPostPreviewPng,
 } from "./topicPostImage"
-
-// a card's png bytes, and the version that its url names
-export type PreviewPng = { bytes: Uint8Array; version: string }
 
 /**
  * What a Topic's preview shows, or null if no Topic has that id.
@@ -82,27 +75,57 @@ export async function toTopicPreview(topicId: string): Promise<TopicPreview | nu
 		keptCount: keptFindingCount,
 		sourceCount: sourceRow?.sources ?? 0,
 		imageHash: topicRow.imageHash,
-		// a public topic's description is its last scan summary, prompt, or name. any other topic's scan summary and
-		// prompt stay private, so its description names only its owner and how many findings Carl kept
-		description:
-			topicRow.visibility === "public"
-				? toTopicDescription({ name: topicRow.title, prompt: topicRow.prompt, scanSummary: topicRow.scanSummary })
-				: `A topic by ${topicRow.ownerUsername}. ${keptFindingCount} findings Carl kept.`,
+		description: toTopicPreviewDescription({
+			visibility: topicRow.visibility,
+			name: topicRow.title,
+			prompt: topicRow.prompt,
+			scanSummary: topicRow.scanSummary,
+			ownerUsername: topicRow.ownerUsername,
+			keptCount: keptFindingCount,
+		}),
 	}
 }
 
-/**
- * A Topic's preview bytes, rendered on the first request and read from storage after.
- * Rendering the image requires a font parse and a rasterize, so it only happens once per distinct preview.
- */
-export async function toCachedTopicPreviewPng(topicPreview: TopicPreview): Promise<PreviewPng> {
-	return toCachedPng(toTopicPreviewKey(topicPreview), () => toTopicPreviewPng(topicPreview))
+// what a topic preview's description is written from
+type TopicPreviewDescriptionFields = {
+	visibility: TopicPreview["visibility"]
+	name: string
+	prompt: string
+	scanSummary: string | null
+	ownerUsername: string
+	keptCount: number
 }
 
-// a published Topic Post with its Topic's preview and its own card's fields
+/**
+ * Returns a topic preview's description. A public topic's description is its last scan summary, prompt, or name. Any
+ * other topic's scan summary and prompt stay private, so its description names only its owner and how many findings
+ * Carl kept.
+ */
+export function toTopicPreviewDescription({
+	visibility,
+	name,
+	prompt,
+	scanSummary,
+	ownerUsername,
+	keptCount,
+}: TopicPreviewDescriptionFields): string {
+	return visibility === "public"
+		? toTopicDescription({ name, prompt, scanSummary })
+		: `A topic by ${ownerUsername}. ${keptCount} findings Carl kept.`
+}
+
+/**
+ * A Topic's card, rendered on the first request and read from storage after.
+ * Rendering the image requires a font parse and a rasterize, so it only happens once per distinct preview.
+ */
+export function toTopicPreviewCard(topicPreview: TopicPreview): PreviewCard {
+	return { previewKey: toTopicPreviewKey(topicPreview), renderPng: () => toTopicPreviewPng(topicPreview) }
+}
+
+// a published Topic Post with its Topic's preview, null for a public Topic's post, and its own card's fields
 export type LoadedTopicPostPreview = {
 	topicPostRow: TopicPostRow
-	topicPreview: TopicPreview
+	topicPreview: TopicPreview | null
 	topicPostPreview: TopicPostPreview
 }
 
@@ -116,14 +139,13 @@ export async function loadTopicPostPreview(topicPostId: string): Promise<LoadedT
 		return null
 	}
 
-	// the Topic's preview and the author's published avatar, read together
-	const [topicPreview, authorAvatar] = await Promise.all([
-		toTopicPreview(topicPostRow.topic.id),
-		toPublishedAvatar(topicPostRow.author.userId),
-	])
-	if (!topicPreview) {
+	// a public Topic's post is drawn from its own row, with its author's published avatar from the author's columns. any
+	// other Topic's post draws its Topic's card, which its Topic's preview reads
+	const topicPreview = topicPostRow.topic.visibility === "public" ? null : await toTopicPreview(topicPostRow.topic.id)
+	if (topicPostRow.topic.visibility !== "public" && !topicPreview) {
 		return null
 	}
+	const authorAvatar = toPublishedAvatarFromUser(topicPostRow.author)
 	return {
 		topicPostRow,
 		topicPreview,
@@ -132,90 +154,57 @@ export async function loadTopicPostPreview(topicPostId: string): Promise<LoadedT
 }
 
 /**
- * A Topic Post's preview bytes, rendered on the first request and read from storage after.
+ * A Topic Post's card, rendered on the first request and read from storage after.
  */
-export async function toCachedTopicPostPreviewPng(topicPostPreview: TopicPostPreview): Promise<PreviewPng> {
-	return toCachedPng(toTopicPostPreviewKey(topicPostPreview), () => toTopicPostPreviewPng(topicPostPreview))
+export function toTopicPostPreviewCard(topicPostPreview: TopicPostPreview): PreviewCard {
+	return {
+		previewKey: toTopicPostPreviewKey(topicPostPreview),
+		renderPng: () => toTopicPostPreviewPng(topicPostPreview),
+	}
 }
 
 /**
- * A podcast episode's preview bytes, rendered on the first request and read from storage after.
+ * A podcast episode's card, rendered on the first request and read from storage after.
  */
-export async function toCachedPodcastEpisodePreviewPng(
-	podcastEpisodePreview: PodcastEpisodePreview,
-): Promise<PreviewPng> {
-	return toCachedPng(toPodcastEpisodePreviewKey(podcastEpisodePreview), () =>
-		toPodcastEpisodePreviewPng(podcastEpisodePreview),
-	)
+export function toPodcastEpisodePreviewCard(podcastEpisodePreview: PodcastEpisodePreview): PreviewCard {
+	return {
+		previewKey: toPodcastEpisodePreviewKey(podcastEpisodePreview),
+		renderPng: () => toPodcastEpisodePreviewPng(podcastEpisodePreview),
+	}
 }
 
 /**
- * A profile's preview bytes, rendered on the first request and read from storage after.
+ * A profile's card, rendered on the first request and read from storage after.
  * Rendering the image requires a font parse and a rasterize, so it only happens once per distinct preview.
  */
-export async function toCachedProfilePreviewPng(profilePreview: ProfilePreview): Promise<PreviewPng> {
-	return toCachedPng(toProfilePreviewKey(profilePreview), () => toProfilePreviewPng(profilePreview))
-}
-
-/**
- * Returns a card's png response, cached long only if the url names the card's current version.
- */
-export function toPreviewPngResponse(context: Context, previewPng: PreviewPng): Response {
-	// return the png, cached long only if the url names the card's current version
-	const isCurrentVersion = context.req.query("v") === previewPng.version
-	return context.body(previewPng.bytes as unknown as ArrayBuffer, 200, {
-		"Content-Type": "image/png",
-		...toVersionedImageHeaders(isCurrentVersion),
-	})
-}
-
-// track pending render by their preview key
-const pendingRenderByPreviewKey = new Map<string, Promise<Uint8Array>>()
-
-// the stored bytes for the key, or a render and store on the first request for this exact preview
-async function toCachedPng(previewKey: string, renderPng: () => Promise<Uint8Array>): Promise<PreviewPng> {
-	const previewVersion = toPreviewVersion(previewKey)
-	if (await attachmentExists(previewKey)) {
-		return { bytes: await getAttachmentBytes(previewKey), version: previewVersion }
-	}
-
-	// a miss joins the render already running for this key, or starts one and drops the entry once settled
-	let render = pendingRenderByPreviewKey.get(previewKey)
-	if (!render) {
-		render = renderAndStorePng(previewKey, renderPng)
-		pendingRenderByPreviewKey.set(previewKey, render)
-		render.finally(() => pendingRenderByPreviewKey.delete(previewKey)).catch(() => {})
-	}
-	return { bytes: await render, version: previewVersion }
-}
-
-// render the png and store it, so the next fetch of this exact preview is a storage read
-async function renderAndStorePng(previewKey: string, renderPng: () => Promise<Uint8Array>): Promise<Uint8Array> {
-	const bytes = await renderPng()
-	await uploadAttachment(previewKey, bytes, "image/png")
-	return bytes
+export function toProfilePreviewCard(profilePreview: ProfilePreview): PreviewCard {
+	return { previewKey: toProfilePreviewKey(profilePreview), renderPng: () => toProfilePreviewPng(profilePreview) }
 }
 
 /**
  * What a profile's preview shows, or null if no user has that id.
  */
 export async function toProfilePreview(userId: string): Promise<ProfilePreview | null> {
-	const username = await loadUsername(userId)
-	if (username === null) {
+	// the person's name and avatar, one read a request that only reads shares
+	const userAvatarRow = await loadUserAvatarRow(userId)
+	if (!userAvatarRow?.username) {
 		return null
 	}
 
-	// the public figures the profile page itself shows a stranger
-	const [topicRow] = await db
-		.select({ publicTopics: count() })
-		.from(topics)
-		.where(and(eq(topics.ownerId, userId), eq(topics.visibility, "public")))
+	// the public figures the profile page itself shows a stranger, read together
+	const [[topicRow], followerCount] = await Promise.all([
+		db
+			.select({ publicTopics: count() })
+			.from(topics)
+			.where(and(eq(topics.ownerId, userId), eq(topics.visibility, "public"))),
+		countDistinctSubscribers(userId),
+	])
 	return {
 		userId,
-		username,
-		avatar: await toPublishedAvatar(userId),
+		username: userAvatarRow.username,
+		avatar: toPublishedAvatarFromUser(userAvatarRow),
 		publicTopicCount: topicRow?.publicTopics ?? 0,
-		followerCount: await countDistinctSubscribers(userId),
+		followerCount,
 	}
 }
 
@@ -232,27 +221,46 @@ export async function toTeamPreview(teamId: string): Promise<TeamPreview | null>
 	return team ? toTeamPreviewWithCounts(team) : null
 }
 
+// what an invitation's card shows: the team, the Topic Post, or the topic its token opens
+type InvitePreview =
+	| { kind: "team"; teamPreview: TeamPreview }
+	| { kind: "topicPost"; topicPostPreview: TopicPostPreview }
+	| { kind: "topic"; topicPreview: TopicPreview }
+
 /**
- * An invitation's card bytes for the team, the topic, or the Topic Post its token opens, or null if none renders one.
+ * What an invitation's card shows for the team, the topic, or the Topic Post its token opens, or null if none renders
+ * one.
  */
-export async function toCachedInvitePreviewPng(
+export async function loadInvitePreview(
 	target: { teamId: string } | { topicId: string; topicPostId: string | null },
-): Promise<PreviewPng | null> {
-	// a team's card ignores the public check here, since the token already opens the team
+): Promise<InvitePreview | null> {
+	// a team's card ignores the public check here, because the token already opens the team
 	if ("teamId" in target) {
 		const teamPreview = await toInvitedTeamPreview(target.teamId)
-		return teamPreview ? toCachedTeamPreviewPng(teamPreview) : null
+		return teamPreview ? { kind: "team", teamPreview } : null
 	}
 
 	// an invite shared from a Topic Post shows the post's card while the post is published
 	const loadedTopicPostPreview = target.topicPostId ? await loadTopicPostPreview(target.topicPostId) : null
 	if (loadedTopicPostPreview) {
-		return toCachedTopicPostPreviewPng(loadedTopicPostPreview.topicPostPreview)
+		return { kind: "topicPost", topicPostPreview: loadedTopicPostPreview.topicPostPreview }
 	}
 
 	// a topic's card is shown at any visibility already, so the token does not need a separate loader
 	const topicPreview = await toTopicPreview(target.topicId)
-	return topicPreview ? toCachedTopicPreviewPng(topicPreview) : null
+	return topicPreview ? { kind: "topic", topicPreview } : null
+}
+
+/**
+ * An invitation's card, drawn as the card of the team, the Topic Post, or the topic it shows.
+ */
+export function toInvitePreviewCard(invitePreview: InvitePreview): PreviewCard {
+	if (invitePreview.kind === "team") {
+		return toTeamPreviewCard(invitePreview.teamPreview)
+	}
+	return invitePreview.kind === "topicPost"
+		? toTopicPostPreviewCard(invitePreview.topicPostPreview)
+		: toTopicPreviewCard(invitePreview.topicPreview)
 }
 
 /**
@@ -288,8 +296,8 @@ async function toTeamPreviewWithCounts(team: {
 }
 
 /**
- * A team's preview image bytes, rendered on the first request and read from storage after.
+ * A team's card, rendered on the first request and read from storage after.
  */
-export async function toCachedTeamPreviewPng(teamPreview: TeamPreview): Promise<PreviewPng> {
-	return toCachedPng(toTeamPreviewKey(teamPreview), () => toTeamPreviewPng(teamPreview))
+export function toTeamPreviewCard(teamPreview: TeamPreview): PreviewCard {
+	return { previewKey: toTeamPreviewKey(teamPreview), renderPng: () => toTeamPreviewPng(teamPreview) }
 }

@@ -25,6 +25,7 @@ import { spendControlSettings } from "@carlnotes/db/schema/spendControlSettings"
 import { users } from "@carlnotes/db/schema/users"
 import { loadWorstCaseMonthlySpend } from "@carlnotes/db/worstCaseMonthlySpend"
 import { count, eq } from "drizzle-orm"
+import { clearHomeCaches } from "./topic/homeOrder"
 
 /**
  * Loads the console's daily spend card straight from the database: the day's free-plan spend, the worst case monthly
@@ -122,7 +123,8 @@ export type SaveSpendControlSettingsOptions = { payload: SpendControlSettingsPay
 
 /**
  * Writes the overrides over the one row, then drops the cached settings and the day's cached free-plan spend, so every
- * replica reads the new settings on its next read. A setting the payload leaves out keeps its stored value.
+ * replica reads the new settings on its next read, and the home's caches if the home's featured-only setting changed. A
+ * setting the payload leaves out keeps its stored value.
  */
 export async function saveSpendControlSettings({
 	payload,
@@ -145,12 +147,26 @@ export async function saveSpendControlSettings({
 		updatedByUserId: adminUserId,
 	}
 
+	// whether the home shows featured items alone before the write, which a changed setting clears the home's caches for
+	const [previousRow] = await db
+		.select({ isHomeFeaturedOnly: spendControlSettings.isHomeFeaturedOnly })
+		.from(spendControlSettings)
+		.where(eq(spendControlSettings.id, 1))
+	const isHomeFeaturedOnlyChanged =
+		payload.isHomeFeaturedOnly !== undefined &&
+		payload.isHomeFeaturedOnly !== (previousRow?.isHomeFeaturedOnly ?? false)
+
 	// write the one row, then drop both cached reads
 	await db
 		.insert(spendControlSettings)
 		.values({ id: 1, ...row })
 		.onConflictDoUpdate({ target: spendControlSettings.id, set: row })
 	await deleteRedisKeys(SPEND_CONTROL_SETTINGS_KEY, toFreePlanSpendKey(new Date()))
+
+	// the home's cached sections and visitor copy read the new setting
+	if (isHomeFeaturedOnlyChanged) {
+		await clearHomeCaches()
+	}
 }
 
 // a dollar amount in whole cents, null for no override, or undefined for a cutoff the payload leaves out

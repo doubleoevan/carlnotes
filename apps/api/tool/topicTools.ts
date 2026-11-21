@@ -191,6 +191,7 @@ export async function updateTopicFields({
 	}
 	await clearVisitorTopicCaches({
 		topicId,
+		ownerId: editableTopic.topic.ownerId,
 		visibility: savedTopic.visibility,
 		previousVisibility: editableTopic.topic.visibility,
 		isHomeOrderReleased,

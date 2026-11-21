@@ -12,6 +12,7 @@ import { runWithRequestMemo } from "@carlnotes/db/requestMemo"
 import { podcastEpisodeChapters, podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { findings, resources, scans } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
+import { clearStatusReads } from "@carlnotes/db/statusReadCaches"
 import { podcastEpisodeSpeechModel } from "@carlnotes/server/podcastEpisodeSettings"
 import { and, desc, eq, inArray, isNotNull } from "drizzle-orm"
 import { toCanonicalUrl } from "../ingest/normalize"
@@ -155,10 +156,12 @@ async function planPodcastEpisodeInMemo({
 		return podcastEpisode
 	})
 
-	// a Topic whose podcast is off, or whose personal sources are still converting, records nothing
+	// a Topic whose podcast is off, or whose personal sources are still converting, records nothing. a recording's Topic
+	// loses its scan status copy, which names its newest podcast episode's status
 	if (createdPodcastEpisode === null) {
 		return skipPodcastEpisode({ scanId, skipReason: "personal sources privacy conversion is pending" })
 	}
+	await clearStatusReads("scan", topicId)
 
 	// return the plan, or throw an error if the insert returned no row
 	if (!createdPodcastEpisode) {

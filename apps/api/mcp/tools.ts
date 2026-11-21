@@ -27,6 +27,7 @@ import {
 	readTopicFeed,
 	searchFindings,
 	sendFindingFeedback,
+	type TopicFeed,
 	toToolTopicId,
 } from "./results"
 import { registerScanTools } from "./scanTools"
@@ -144,8 +145,13 @@ function registerReadTools({ mcpServer, toolCaller, routeTopicId, clientAddress 
 			if ("rejection" in toolTopic) {
 				return toTextResult(toolTopic.rejection, true)
 			}
-			const mcpPage = await readTopicFeed(toolCaller, toolTopic.topicId, cursor ?? null)
-			return toFindingsMcpViewResult({ toolCaller, topicId: toolTopic.topicId, mcpPage })
+			const topicFeed = await readTopicFeed(toolCaller, toolTopic.topicId, cursor ?? null)
+			return toFindingsMcpViewResult({
+				toolCaller,
+				topicId: toolTopic.topicId,
+				mcpPage: topicFeed?.mcpPage ?? null,
+				topicFeed: topicFeed ?? undefined,
+			})
 		},
 	)
 	mcpServer.registerTool(
@@ -384,14 +390,20 @@ async function toTopicSectionMcpViewResult(
 	})
 }
 
-// who read the findings, their topic, and the page of them
-type ToFindingsMcpViewResultOptions = { toolCaller: ToolCaller; topicId: string; mcpPage: McpPage<McpFinding> | null }
+// who read the findings, their topic, the page of them, and the feed that read them if a feed did
+type ToFindingsMcpViewResultOptions = {
+	toolCaller: ToolCaller
+	topicId: string
+	mcpPage: McpPage<McpFinding> | null
+	topicFeed?: TopicFeed
+}
 
 // a page of findings as a tool result, with the findings MCP view's data in its _meta
 async function toFindingsMcpViewResult({
 	toolCaller,
 	topicId,
 	mcpPage,
+	topicFeed,
 }: ToFindingsMcpViewResultOptions): Promise<CallToolResult> {
 	if (!mcpPage) {
 		return toPageResult(mcpPage)
@@ -400,6 +412,6 @@ async function toFindingsMcpViewResult({
 
 	// the topic and the page's findings in the site's shape, for the MCP view alone
 	const findingIds = mcpPage.items.map((mcpFinding) => mcpFinding.findingId)
-	const findingsMcpViewData = await loadFindingsMcpViewData(toolCaller, { topicId, findingIds })
+	const findingsMcpViewData = await loadFindingsMcpViewData(toolCaller, { topicId, findingIds, topicFeed })
 	return findingsMcpViewData ? { ...pageResult, _meta: toMcpViewMeta(findingsMcpViewData) } : pageResult
 }

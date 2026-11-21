@@ -2,9 +2,10 @@
 // topic page's scan history, a scan note with its source results, and the topic names the paged tables list
 import type { ActivityScan, OwnerTopic } from "@carlnotes/contracts/activity"
 import type { Topic } from "@carlnotes/contracts/profiles"
+import type { ScanNote, ScanSourceResults, SourceResult } from "@carlnotes/contracts/scanSourceResults"
 import { DAY_MS, MINUTE_MS } from "@carlnotes/contracts/time"
 import type { TopicImageUrls } from "@carlnotes/contracts/topicImages"
-import type { ScanNote, ScanSourceResults, SourceResult, TopicScan } from "@carlnotes/contracts/topics"
+import type { TopicScan } from "@carlnotes/contracts/topics"
 import { FIXTURE_DATE, LLM_TOOLING_TOPIC_FIXTURE, STORY_USER } from "../fixtures"
 import { LATEST_PODCAST_EPISODE_FIXTURE } from "./podcastEpisodes"
 

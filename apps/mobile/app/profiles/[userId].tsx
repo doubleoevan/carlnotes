@@ -1,8 +1,10 @@
 import { showClientError } from "@carlnotes/client/apiClient"
 import { authClient } from "@carlnotes/client/authClient"
-import { fetchProfile } from "@carlnotes/client/profileClient"
+import { fetchProfilePageRead } from "@carlnotes/client/pageReadClient"
 import type { ProfileAudience } from "@carlnotes/contracts/profiles"
 import { useProfileAudience } from "@carlnotes/core/hooks/useProfileAudience"
+import { toTopicPostsPageOptions } from "@carlnotes/core/lib/cardSections"
+import { toProfileWithUserState } from "@carlnotes/core/lib/pageUserStates"
 import { sendProfileViewOnce } from "@carlnotes/core/lib/pageViews"
 import {
 	sendProfileOrderMoves,
@@ -68,10 +70,20 @@ export default function ProfileScreen() {
 	const profileAudience = useProfileAudience({ profileUserId: userId, isOwnProfile })
 	const query = useQuery({
 		queryKey: ["profile", session?.user.id, userId, profileAudience.audience],
-		queryFn: () => fetchProfile(userId, profileAudience.audience),
-		placeholderData: (previousProfile) => (previousProfile?.userId === userId ? previousProfile : undefined),
+		queryFn: async () => {
+			// the page read with the user state merged into the shared copy, and the first page of the Topic Posts
+			const profilePageRead = await fetchProfilePageRead(userId, profileAudience.audience, toTopicPostsPageOptions())
+			return (
+				profilePageRead && {
+					...profilePageRead,
+					profile: toProfileWithUserState(profilePageRead),
+				}
+			)
+		},
+		placeholderData: (previousProfilePageRead) =>
+			previousProfilePageRead?.profile.userId === userId ? previousProfilePageRead : undefined,
 	})
-	const profile = query.data
+	const profile = query.data?.profile
 
 	// count a loaded profile once per app runtime, as the web counts it once per tab
 	const loadedProfileUserId = profile?.userId
@@ -207,13 +219,13 @@ function ProfileContent({
 	onAudienceChange,
 	onReload,
 }: {
-	query: ReturnType<typeof useQuery<Awaited<ReturnType<typeof fetchProfile>>>>
+	query: ReturnType<typeof useQuery<Awaited<ReturnType<typeof fetchProfilePageRead>>>>
 	isOwnProfile: boolean
 	audience: ProfileAudience
 	onAudienceChange?: (audience: ProfileAudience) => void
 	onReload: () => void
 }) {
-	const profile = query.data
+	const profile = query.data?.profile
 	const pathname = usePathname()
 	if (query.isPending) {
 		return <PageSkeleton kind="profile" />
@@ -229,6 +241,7 @@ function ProfileContent({
 		<>
 			<ProfileSections
 				profile={profile}
+				firstNewsPage={query.data?.news ?? undefined}
 				isOwnProfile={isOwnProfile}
 				audience={audience}
 				onAudienceChange={onAudienceChange}
@@ -237,6 +250,7 @@ function ProfileContent({
 			{/* the profile's visitors, read while this profile is the active route */}
 			<ViewerCountLine
 				viewerCountPage={{ kind: "profile", id: profile.userId }}
+				savedViewerCount={profile.viewerCount}
 				isActiveRoute={pathname === `/profiles/${profile.userId}`}
 			/>
 		</>

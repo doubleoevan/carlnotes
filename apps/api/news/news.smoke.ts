@@ -1,6 +1,7 @@
 // a live smoke test for the news read against the dev database: the windows, the three groups and their order, ties,
 // the reactions on one Comment as one row, a Finding rated thumbs down, an invite Topic's activation, the user blocks
-// in both directions, the person's own Topic Posts, someone else's profile, an admin's read and audiences, and the pages.
+// in both directions, the person's own Topic Posts, what hangs on the person's post and Comments on someone else's Topic,
+// a reply that fits the own group two ways, someone else's profile, an admin's read and audiences, and the pages.
 // the profile's Team Topics share the news's membership rule, so a profile check runs on the same rows
 // run it with: bun run smoke:news. needs Doppler secrets
 
@@ -186,6 +187,33 @@ async function checkPersonNews(): Promise<void> {
 			weekIds.filter((weekId) => weekId === toEventId("topicPost", "followed-post")).length === 1,
 	)
 	check("the person's Topic Post on a Topic they may not open is absent", !hasRow("topicPost", "closed-post"))
+
+	// what hangs on the person's post and Comments on someone else's Topic is in the own group
+	const teamCommentPosition = toPosition("comment", "team-comment")
+	const isOwnRow = (kind: NewsEvent["kind"], name: string): boolean =>
+		hasRow(kind, name) && toPosition(kind, name) < teamCommentPosition
+	const postReactionPosition = week.newsEvents.findIndex(
+		(newsEvent) => newsEvent.kind === "reaction" && newsEvent.topicPostId === toRunId("other-post"),
+	)
+	check(
+		"a Comment on the person's Topic Post on someone else's Topic is in the own group",
+		isOwnRow("comment", "post-comment"),
+	)
+	check(
+		"a reaction on the person's Topic Post on someone else's Topic is in the own group",
+		postReactionPosition >= 0 && postReactionPosition < teamCommentPosition,
+	)
+	check(
+		"a reaction on the person's Comment on someone else's Topic is in the own group",
+		isOwnRow("reaction", "person-other-comment"),
+	)
+
+	// a reply to the person's Comment on their own Topic fits the own group two ways and shows once
+	check(
+		"a reply that fits the own group two ways shows once",
+		isOwnRow("comment", "own-topic-reply") &&
+			weekIds.filter((weekId) => weekId === toEventId("comment", "own-topic-reply")).length === 1,
+	)
 
 	// a Comment's row
 	const ownCommentRow = week.newsEvents.find((newsEvent) => newsEvent.id === toEventId("comment", "own-comment"))

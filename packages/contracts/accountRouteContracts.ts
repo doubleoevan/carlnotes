@@ -5,6 +5,7 @@ import { z } from "zod"
 import { activityResponse } from "./activity"
 import type { ApiRouteContract } from "./apiRouteContracts"
 import { inviteAcceptResponse } from "./invites"
+import { profileTopicPostsQuery } from "./pageReads"
 import {
 	inviteAccessPayload,
 	inviteDeletePayload,
@@ -27,6 +28,7 @@ import {
 } from "./routeShapes"
 import { appSignupProofPayload } from "./signupGate"
 import { termsAcceptanceResponse } from "./terms"
+import { topicPostCardsPage } from "./topicPosts"
 
 // the entries, in client module order
 export const accountRouteContracts: Record<string, ApiRouteContract> = {
@@ -102,6 +104,13 @@ export const accountRouteContracts: Record<string, ApiRouteContract> = {
 		params: userIdParam,
 		query: profileQuery,
 		response: profileResponse,
+	},
+	"profileClient.fetchProfileTopicPostsPage": {
+		method: "GET",
+		path: "/api/profiles/:userId/topic-posts",
+		params: userIdParam,
+		query: profileTopicPostsQuery,
+		response: topicPostCardsPage,
 	},
 	"profileClient.fetchProfileTeamStatuses": {
 		method: "GET",

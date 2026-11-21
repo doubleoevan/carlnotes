@@ -1,5 +1,6 @@
 import { SITE_TITLE } from "@carlnotes/contracts/seo"
 import { SITE_URL } from "@carlnotes/contracts/site"
+import { useNewsWriteInvalidation } from "@carlnotes/core/hooks/useNews"
 import { DARK_CLASS_SCRIPT } from "@carlnotes/nightshift/theme"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { createRootRoute, HeadContent, Outlet, Scripts, useLocation } from "@tanstack/react-router"
@@ -97,6 +98,8 @@ function RootComponent() {
 	const [queryClient] = useState(
 		() => new QueryClient({ defaultOptions: { queries: { refetchOnWindowFocus: false, retry: false } } }),
 	)
+	// the user's own writes read their news again
+	useNewsWriteInvalidation(queryClient)
 	return (
 		<QueryClientProvider client={queryClient}>
 			<VisitAnalytics />

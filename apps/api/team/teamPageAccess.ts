@@ -8,7 +8,7 @@ import { verifiedEmailQuery } from "../topic/permissions"
 
 // a team with what the user is to it: their role if they are an active member, whether they asked to join, whether a
 // pending invite names them, and whether the team's page opens for them
-type TeamPageAccess = {
+export type TeamPageAccess = {
 	team: typeof teams.$inferSelect
 	role: (typeof teamMembers.$inferSelect)["role"] | null
 	hasRequestedToJoin: boolean

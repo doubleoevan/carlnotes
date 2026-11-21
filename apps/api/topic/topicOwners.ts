@@ -3,6 +3,7 @@
 import type { ProfileIdentity } from "@carlnotes/contracts/profiles"
 import type { TeamIdentity } from "@carlnotes/contracts/teamIdentity"
 import { db } from "@carlnotes/db"
+import { memoizeInRequest } from "@carlnotes/db/requestMemo"
 import { teamMembers, teams } from "@carlnotes/db/schema/teams"
 import { topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
@@ -14,13 +15,19 @@ export type TopicOwner = { owner: ProfileIdentity; team: TeamIdentity | null }
 
 /**
  * Loads each topic's owner and owning team by topic id. A private team is named only to its active members, so
- * anyone else, a visitor included, gets null for it.
+ * anyone else, a visitor included, gets null for it. A request that asks again for the same user and topics, as a
+ * page's table and its cards do, shares the first read.
  */
-export async function loadTopicOwners(topicIds: string[], userId: string | null): Promise<Map<string, TopicOwner>> {
+export function loadTopicOwners(topicIds: string[], userId: string | null): Promise<Map<string, TopicOwner>> {
 	if (topicIds.length === 0) {
-		return new Map()
+		return Promise.resolve(new Map())
 	}
+	const topicIdsKey = topicIds.toSorted().join(",")
+	return memoizeInRequest(`topic-owners:${userId ?? ""}:${topicIdsKey}`, () => readTopicOwners(topicIds, userId))
+}
 
+// each topic's owner and owning team, read for one request
+async function readTopicOwners(topicIds: string[], userId: string | null): Promise<Map<string, TopicOwner>> {
 	// each topic's owner and team, with the user's active membership of that team
 	const topicOwnerRows = await db
 		.select({

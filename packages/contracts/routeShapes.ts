@@ -2,6 +2,7 @@
 // the api validates with, the one-field bodies a write returns, and the lines and events the chat streams send
 
 import { z } from "zod"
+import { optionalCardsPageNumber, pagedQuery } from "./cardPages"
 import { chatConversation, chatRoomMessage } from "./chat"
 import { podcastEpisodeSpeakers } from "./enums"
 import { topicInviteBadge } from "./invites"
@@ -15,9 +16,17 @@ export const okResponse = z.object({ ok: z.literal(true) })
 // the home feed's query: every finding, or the unread ones
 export const topicFeedQuery = z.object({ all: z.enum(["true", "false"]).optional() })
 
-// the topic page's query: a poll while a scan runs, and the related topics left out for a client that reads them in
-// a read of their own
-export const topicPageQuery = z.object({
+// the topic page read's query: whether the read pages the Topic Posts, with the zero-based page it holds, and whether it
+// holds the newest page of scans alone. a read without them holds both lists whole
+export const topicPageReadQuery = z.object({
+	...pagedQuery.shape,
+	topicPostsPage: optionalCardsPageNumber,
+	scans: z.literal("newest").optional(),
+})
+
+// the topic page's query: the page read's query, a poll while a scan runs, and the related topics left out for a
+// client that reads them in a read of their own
+export const topicPageQuery = topicPageReadQuery.extend({
 	poll: z.literal("1").optional(),
 	related: z.literal("separate").optional(),
 })

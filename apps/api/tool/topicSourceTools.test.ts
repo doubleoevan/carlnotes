@@ -5,7 +5,7 @@ import { SCAN_COST_CENTS } from "@carlnotes/contracts/plans"
 import { MAX_TOPIC_SOURCES } from "@carlnotes/contracts/topics"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
-import { toVisitorTopicPageKey } from "../topic/feedCaches"
+import { toVisitorTopicPageKey } from "@carlnotes/db/visitorPageCaches"
 import {
 	addTopicSource,
 	isSameTopicSource,
@@ -152,11 +152,17 @@ function toRemovalQueryRows({
 	sourceKind: string
 	sourceCount: number
 }): (sentQuery: { text: string }) => unknown[][] {
-	// the count query returns the source count, and every other select returns the source row
+	// the count query returns the source count, the read of the topic's page copies finds no topic, and every other
+	// select returns the source row
 	return ({ text }) => {
 		if (text.includes("count(")) {
 			return [[sourceCount]]
 		}
+		if (text.includes("array_agg")) {
+			return []
+		}
+
+		// any other select reads the source row
 		return text.startsWith("select") ? [["t1", sourceKind, { url: "https://a.test/feed" }]] : []
 	}
 }

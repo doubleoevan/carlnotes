@@ -1,5 +1,6 @@
-// the counts poll behind a page's viewer, follower, or listener counts: a read once the page shows, then every minute
-// while the app is focused and online, on activePoll. a failed read keeps the counts already shown
+// the counts poll behind a page's viewer, follower, or listener counts: a read once the page shows, or a minute later
+// for a page that shows its saved counts, then every minute while the app is focused and online, on activePoll. a
+// failed read keeps the counts already shown
 import { startActivePoll } from "./activePoll"
 import { isFocusedAndOnline, subscribeToFocusAndOnline } from "./focusAndOnline"
 
@@ -11,6 +12,8 @@ export type StartCountsPollOptions<Counts> = {
 	onCounts: (counts: Counts) => void
 	// the wait between reads, a minute outside a test
 	pollMs?: number
+	// whether the first read runs at once. false waits one interval first, for a page that already shows its saved counts
+	isReadingAtStart?: boolean
 }
 
 /**
@@ -21,6 +24,7 @@ export function startCountsPoll<Counts>({
 	readCounts,
 	onCounts,
 	pollMs = COUNTS_POLL_MS,
+	isReadingAtStart = true,
 }: StartCountsPollOptions<Counts>): () => void {
 	// the stop aborts the read in progress, and a read that settles after it feeds nothing
 	const abortController = new AbortController()
@@ -35,7 +39,7 @@ export function startCountsPoll<Counts>({
 		toPollMs: () => pollMs,
 		isActive: isFocusedAndOnline,
 		subscribe: subscribeToFocusAndOnline,
-		isReloadingAtStart: true,
+		isReloadingAtStart: isReadingAtStart,
 	})
 	return () => {
 		abortController.abort()

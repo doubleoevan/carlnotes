@@ -8,16 +8,13 @@ import { hasUnconvertedPersonalSources } from "./personalSourcesAuthority"
 import { loadUserAccess } from "./quotas"
 import { findings, scans } from "./schema/scans"
 import { topics } from "./schema/topics"
+import { assertNever, gatedTopicColumns, toTopicEditRole, toTopicRole } from "./topicPermissions"
 import {
-	assertNever,
-	gatedTopicColumns,
 	hasSubscription,
 	isVisibleAfterActivation,
 	loadSubscribedTopicIds,
 	subscriptionActivatedAt,
-	toTopicEditRole,
-	toTopicRole,
-} from "./topicPermissions"
+} from "./topicSubscriptions"
 
 /**
  * Whether the user may rate a topic. The owner always may, and a non-owner only as a subscriber.

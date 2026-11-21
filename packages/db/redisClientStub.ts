@@ -65,9 +65,10 @@ function toFakeRedisClient(storedValueByKey: Map<string, string>): RedisConnecti
 		async getBuffer(key: string): Promise<Uint8Array | null> {
 			return readFakeBuffer(storedValueByKey, key)
 		},
-		// the XX option writes only a key that exists, and the expiry options are ignored
+		// the XX option writes only a key that exists, the NX option only a key that does not, and the expiry options are
+		// ignored
 		async set(key: string, value: string | Uint8Array, ...options: string[]): Promise<"OK" | null> {
-			if (options.includes("XX") && !storedValueByKey.has(key)) {
+			if (options.includes("XX") ? !storedValueByKey.has(key) : options.includes("NX") && storedValueByKey.has(key)) {
 				return null
 			}
 			storedValueByKey.set(key, toFakeStoredValue(value))

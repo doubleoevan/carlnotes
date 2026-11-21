@@ -3,11 +3,12 @@
 // buttons under the card as in the scan history
 import { showClientError } from "@carlnotes/client/apiClient"
 import { createTopicPostDraft } from "@carlnotes/client/topicPostClient"
-import type { TopicPostsResponse } from "@carlnotes/contracts/topicPosts"
+import type { TopicPostCard as TopicPostCardFields, TopicPostsResponse } from "@carlnotes/contracts/topicPosts"
 import {
 	TopicPostsSection as SharedTopicPostsSection,
 	type TopicPostsSectionElements,
 } from "@carlnotes/core/components/TopicPostsSection"
+import type { ServerCardPages } from "@carlnotes/core/hooks/useServerPagedCards"
 import { TOPIC_POST_LABELS, toTopicPostFailureMessage } from "@carlnotes/core/lib/topicPosts"
 import { router } from "expo-router"
 import { NotebookPen } from "lucide-react-native"
@@ -61,7 +62,12 @@ const ELEMENTS: TopicPostsSectionElements = {
 /**
  * A Topic's Topic Posts section on the topic screen. The button creates a draft and opens its editor.
  */
-export function TopicPostsSection({ topicId, topicPosts, canPublish }: TopicPostsResponse & { topicId: string }) {
+export function TopicPostsSection({
+	topicId,
+	topicPosts,
+	canPublish,
+	serverPages,
+}: TopicPostsResponse & { topicId: string; serverPages?: ServerCardPages<TopicPostCardFields> }) {
 	const [isCreating, setIsCreating] = useState(false)
 
 	// create the draft, then open its screen, which shows its author the editor
@@ -81,6 +87,7 @@ export function TopicPostsSection({ topicId, topicPosts, canPublish }: TopicPost
 			canPublish={canPublish}
 			isCreating={isCreating}
 			onNewPost={() => void handleNewPost()}
+			serverPages={serverPages}
 			elements={ELEMENTS}
 		/>
 	)

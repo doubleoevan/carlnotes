@@ -98,55 +98,82 @@ export async function loadProfileCards({
 	}
 }
 
-// the cards of topics in their profile order, and of the podcast episodes of those topics that a section shows
-type ProfileOrderCards = {
+// the cards of a team's topic, podcast episode, film, and Topic Post sections
+type TeamCards = {
 	topicCards: TopicCard[]
 	podcastEpisodeCards: PodcastEpisodeCard[]
-	pinnedPodcastEpisodeCount: number
+	topicVideoCards: PodcastEpisodeCard[]
+	topicPostCards: TopicPostCard[]
 }
-
-// the cards of topic rows already in their profile order, and of the podcast episodes of those topics
-async function loadProfileOrderCards(
-	topicRows: (typeof topics.$inferSelect)[],
-	userId: string | null,
-): Promise<ProfileOrderCards> {
-	const { podcastEpisodeIds, pinnedPodcastEpisodeCount } = await loadProfilePodcastEpisodeIds(
-		topicRows.map((topicRow) => topicRow.id),
-	)
-	const [topicCards, podcastEpisodeCards] = await Promise.all([
-		toTopicCards(topicRows, userId),
-		loadPodcastEpisodeCards(podcastEpisodeIds),
-	])
-	return { topicCards, podcastEpisodeCards, pinnedPodcastEpisodeCount }
-}
-
-// the cards of a team's topic, podcast episode, and Topic Post sections
-type TeamCards = Omit<ProfileOrderCards, "pinnedPodcastEpisodeCount"> & { topicPostCards: TopicPostCard[] }
 
 /**
- * Loads the cards of a team's topic, podcast episode, and Topic Post sections from the ids of its topics that the
- * reader may open. The topics that their owners featured lead in their profile order, the newer first where two owners
- * featured at one position, and the rest follow in the home's trending order. The podcast episodes of those topics
- * follow the same rule. Every published Topic Post of those topics is listed, the ones that their authors featured
- * first in their profile order, then the rest newest first.
+ * Loads the cards of a team's topic, podcast episode, film, and Topic Post sections from its topic rows that the reader
+ * may open. The topics that their owners featured lead in their profile order, the newer first where two owners
+ * featured at one position, and the rest follow in the home's trending order. The podcast episodes and the films of
+ * those topics follow the same rule, both read as cards at once. Every published Topic Post of those topics is listed,
+ * the ones that their authors featured first in their profile order, then the rest newest first.
  */
-export async function loadTeamCards(topicIds: string[], userId: string | null): Promise<TeamCards> {
-	if (topicIds.length === 0) {
-		return { topicCards: [], podcastEpisodeCards: [], topicPostCards: [] }
+export async function loadTeamCards(
+	topicRows: (typeof topics.$inferSelect)[],
+	userId: string | null,
+): Promise<TeamCards> {
+	if (topicRows.length === 0) {
+		return { topicCards: [], podcastEpisodeCards: [], topicVideoCards: [], topicPostCards: [] }
 	}
 
-	// the topics in their profile order as cards with their podcast episodes' cards, beside one read of the topics'
-	// published Topic Posts as cards
-	const [{ topicCards, podcastEpisodeCards }, topicPostCards] = await Promise.all([
-		db
-			.select()
-			.from(topics)
-			.where(inArray(topics.id, topicIds))
-			.orderBy(...PROFILE_TOPIC_ORDER)
-			.then((topicRows) => loadProfileOrderCards(topicRows, userId)),
+	// the topics' cards in their profile order, the ids of their podcast episodes and films, and their Topic Posts' cards
+	const profileOrderTopicRows = topicRows.toSorted(compareTeamTopicProfileOrder)
+	const topicIds = profileOrderTopicRows.map((topicRow) => topicRow.id)
+	const [topicCards, profilePodcastEpisodeIds, profileFilmIds, topicPostCards] = await Promise.all([
+		toTopicCards(profileOrderTopicRows, userId),
+		loadProfilePodcastEpisodeIds(topicIds),
+		loadProfileTopicVideoIds(topicIds),
 		loadProfileOrderTopicPostRows(inArray(topicPosts.topicId, topicIds)).then(toTopicPostCards),
 	])
-	return { topicCards, podcastEpisodeCards, topicPostCards }
+
+	// one read of both sections' podcast episodes as cards, each podcast episode once
+	const { podcastEpisodeIds } = profilePodcastEpisodeIds
+	const filmPodcastEpisodeIds = profileFilmIds.podcastEpisodeIds
+	const podcastEpisodeCards = await loadPodcastEpisodeCards([
+		...new Set([...podcastEpisodeIds, ...filmPodcastEpisodeIds]),
+	])
+	return {
+		topicCards,
+		podcastEpisodeCards: toPodcastEpisodeCardList(podcastEpisodeCards, podcastEpisodeIds),
+		topicVideoCards: toPodcastEpisodeCardList(podcastEpisodeCards, filmPodcastEpisodeIds),
+		topicPostCards,
+	}
+}
+
+/**
+ * Compares two of a team's topics in their profile order, as the profile order's sql sorts them: each owner's
+ * featured topics first by position, then the rest most viewed, then most followed, and the newest first last.
+ */
+export function compareTeamTopicProfileOrder(
+	topicRowA: Pick<typeof topics.$inferSelect, "profileOrder" | "viewerCount" | "subscriberCount" | "createdAt">,
+	topicRowB: Pick<typeof topics.$inferSelect, "profileOrder" | "viewerCount" | "subscriberCount" | "createdAt">,
+): number {
+	// a featured topic leads, by its position
+	const [positionA, positionB] = [topicRowA.profileOrder, topicRowB.profileOrder]
+	if ((positionA === null) !== (positionB === null)) {
+		return positionA === null ? 1 : -1
+	}
+	if (positionA !== null && positionB !== null && positionA !== positionB) {
+		return positionA - positionB
+	}
+
+	// an unfeatured topic by its views, then its followers
+	if (positionA === null) {
+		const trendingDifference =
+			Number(topicRowB.viewerCount) - Number(topicRowA.viewerCount) ||
+			topicRowB.subscriberCount - topicRowA.subscriberCount
+		if (trendingDifference !== 0) {
+			return trendingDifference
+		}
+	}
+
+	// the newer first among the rest
+	return topicRowB.createdAt.getTime() - topicRowA.createdAt.getTime()
 }
 
 // the Topic Post cards of a profile, with how many of the first are featured
@@ -187,9 +214,6 @@ function toProfileTopicOrder(featurePosition: SQL | AnyPgColumn): SQL[] {
 		desc(topics.createdAt),
 	]
 }
-
-// the profile order of a team's topics, where each owner's featured items count
-const PROFILE_TOPIC_ORDER = toProfileTopicOrder(topics.profileOrder)
 
 // a topic's featured position on a profile, which counts only on a topic that the person owns
 function toOwnFeaturePosition(topicRow: typeof topics.$inferSelect, profileUserId: string): number | null {

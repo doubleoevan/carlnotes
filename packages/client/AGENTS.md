@@ -39,7 +39,9 @@ session-only account routes. The one-time key response must remain in the curren
   `passAppSignupGate` for the mobile app's attestation, the second through the auth client's own fetch, whose cookie jar
   keeps the gate cookie for the sign-up request.
 - Most clients build on `apiClient()`. Some calls, and all of `chatClient.ts`, `flagContentClient.ts`, and
-  `voiceClient.ts`, use `fetchApi` instead. `pageHeadClient.ts` reads a page's head data.
+  `voiceClient.ts`, use `fetchApi` instead. `pageReadClient.ts` reads each page's one page read, its head with the page,
+  and returns null for a 404, with `cardPagesQuery.ts`'s `toPageQuery` for a paged read's page value.
+  `pageHeadClient.ts` reads an invite page's head.
   `updatesClient.ts` reads the day's recap. `newsClient.ts` reads one page of the signed-in user's news or of a
   profile's, and `commentMentionClient.ts` reads the signed-in user's unseen Comment Mentions and marks them seen.
   `dashboardClient.ts` reads a Dashboard page's snapshot for one chart selection, the full one for its owner or a
@@ -49,6 +51,8 @@ session-only account routes. The one-time key response must remain in the curren
   its author's featured profile items, and for an admin its place among the home's featured items, with the rows the admin's dialog lists.
   `viewerCountsClient.ts` sends a topic page's view and reads a topic's or a podcast episode's counts, a public
   topic's through `toReadRequestInit` without credentials so the edge can cache them, as `dashboardClient.ts` does.
+  `statusReadClient.ts` reads the status reads a page's poll sends in place of its page, a film's, a Topic Post
+  Discussion's, and a Topic's latest Scan's, a public subject's without credentials, each null on a failed read.
   `userBlockClient.ts` blocks and unblocks a user and reads the block list, `pushClient.ts` registers and unregisters
   the phone's push token and saves one push preference, passing the token through and keeping nothing, `reportClient.ts`
   reads the admin console's open reports and resolves one, and `termsClient.ts` records the signed-in user's acceptance

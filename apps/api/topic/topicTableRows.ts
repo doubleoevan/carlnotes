@@ -4,7 +4,7 @@ import { db, isFindingShown } from "@carlnotes/db"
 import { findings, scans } from "@carlnotes/db/schema/scans"
 import { subscriptions, type topics } from "@carlnotes/db/schema/topics"
 import { and, count, eq, inArray, sql } from "drizzle-orm"
-import { loadLatestPodcastEpisodeSummaries } from "../podcast/podcastEpisodeShapes"
+import { loadLatestPodcastEpisodeSummaries } from "../podcast/latestPodcastEpisodes"
 import { loadTopicOwners } from "./topicOwners"
 
 /**
@@ -60,8 +60,10 @@ export async function toTopicTableRows(
 	})
 }
 
-// the user's own email switch on each of their followed topics
-async function loadTopicsEmailPreferences(
+/**
+ * Loads the user's own email switch on each of their followed topics among the ids, by topic id.
+ */
+export async function loadTopicsEmailPreferences(
 	userId: string | null | undefined,
 	topicIds: string[],
 ): Promise<Map<string, boolean>> {

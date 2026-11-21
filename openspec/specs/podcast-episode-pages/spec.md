@@ -10,16 +10,16 @@ TBD - created by archiving change coffee-break-podcast. Update Purpose after arc
 Each published Podcast Episode of a public Topic SHALL have a page at a path after the Topic's slugged url,
 `/episodes/<season>/<number>`, rendered on the server like the other public pages. The page SHALL show the Podcast
 Episode's title as its heading with the Podcast Episode's cover beside it, the Topic's byline under the Podcast
-Episode's description on a phone, a player for the Podcast Episode, a table of the chapters under the heading "Episode chapters",
-and the full transcript as readable text under the heading "Episode transcript". The byline SHALL credit the Topic's
-team to anyone who can open the team's page, and the Topic's owner otherwise. The chapters' section SHALL collapse and
-expand on a press of its heading, SHALL be open when the page loads, and SHALL stay open in a browser without
-JavaScript. On a narrow screen the page SHALL hide the cover, and SHALL hide the chapters' section if JavaScript runs,
-and its html SHALL still include both. A browser without JavaScript SHALL show the chapters' section at every width,
-with every chapter's row and no pagination. The table SHALL show each chapter's play button, title, start time, length,
-and Topic Finding, a last row with the totals, and the pagination that the app's other tables use. A chapter's play
-button SHALL play the Podcast Episode from that chapter, SHALL pause it while that chapter plays, and SHALL be in the
-primary color on the chapter that the player is at. The Topic Finding column SHALL show the chapter's Finding by its
+Episode's description on a phone, a player for the Podcast Episode, a table of the chapters under the heading "Episode
+chapters", and the full transcript as readable text under the heading "Episode transcript". The byline SHALL credit the
+Topic's team to anyone who can open the team's page, and the Topic's owner otherwise. The chapters' section SHALL
+collapse and expand on a press of its heading, SHALL be open when the page loads, and SHALL stay open in a browser
+without JavaScript. On a narrow screen the page SHALL hide the cover, and SHALL hide the chapters' section if JavaScript
+runs, and its html SHALL still include both. A browser without JavaScript SHALL show the chapters' section at every
+width, with every chapter's row and no pagination. The table SHALL show each chapter's play button, title, start time,
+length, and Topic Finding, a last row with the totals, and the pagination that the app's other tables use. A chapter's
+play button SHALL play the Podcast Episode from that chapter, SHALL pause it while that chapter plays, and SHALL be in
+the primary color on the chapter that the player is at. The Topic Finding column SHALL show the chapter's Finding by its
 title and its source's favicon, host, and age. The title SHALL be a link to the Finding's source, marked as user
 content, which a browser without JavaScript opens in a new tab. In a browser with JavaScript a press on the row or on
 the title SHALL open the Finding's note, the same note that the topic page opens. A chapter whose Finding a later Scan
@@ -102,7 +102,7 @@ topic page does.
 #### Scenario: A removed Podcast Episode's page is missing
 
 - **WHEN** a client requests the page of a Podcast Episode that its Topic's owner removed
-- **THEN** the response is not found, and the sitemap no longer lists the page
+- **THEN** the response is not found, and the sitemap no longer lists the page once its cached copy ends
 
 #### Scenario: An unknown number is missing
 
@@ -459,3 +459,31 @@ Confirming removal SHALL dismiss the prompt and hide the episode and its film fr
 #### Scenario: The server refuses deletion
 - **WHEN** the pending removal fails
 - **THEN** both rows return and the reader can retry
+
+### Requirement: The podcast episode page arrives in one page read
+
+`GET /api/topics/:id/episodes/:season/:episodeNumber/page` SHALL return the podcast episode page's head with the page. A
+visitor's read of a public Topic's Podcast Episode SHALL be served from that page's 30-second copy, as the page-reads
+capability states, and the copy SHALL be cleared with its Topic's. The page's released route SHALL stay as it is.
+
+#### Scenario: A podcast episode render is one request
+
+- **WHEN** the server renders a public Topic's podcast episode page
+- **THEN** its loader sends the page read alone, where it sent the head and the page as two, and the HTML holds the
+  chapters' table and the whole transcript
+
+#### Scenario: The page reads its chapters' Findings alone
+
+- **WHEN** a page read loads a Podcast Episode with eight chapters on a Topic with hundreds of Findings
+- **THEN** it reads the Findings that those chapters narrate by id, and never the Topic's whole Finding list
+
+#### Scenario: A film's swap reaches the page at once
+
+- **WHEN** the Podcast Episode's film becomes ready, or a re-render swaps its files
+- **THEN** the page's copy is cleared with its Topic's, and the next visitor's read holds the film
+
+#### Scenario: A removed Podcast Episode leaves its Topic's page
+
+- **WHEN** an owner removes a Podcast Episode
+- **THEN** the Topic's copies are cleared, the next visitor's read of the Topic's page does not list it, and its own
+  page read is not found

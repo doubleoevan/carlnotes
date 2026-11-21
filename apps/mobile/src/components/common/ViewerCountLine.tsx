@@ -26,18 +26,21 @@ const VIEWER_COUNT_LINE_ELEMENTS: ViewerCountLineElements = {
 
 /**
  * Shows the Visitors line at the end of a profile, team, or Topic Post screen. The count is read only while the screen
- * is the active route.
+ * is the active route, and a screen whose read saved its count shows that count first.
  */
 export function ViewerCountLine({
 	viewerCountPage,
+	savedViewerCount,
 	isActiveRoute,
 }: {
 	viewerCountPage: ViewerCountPage
+	savedViewerCount?: number
 	isActiveRoute: boolean
 }) {
 	return (
 		<SharedViewerCountLine
 			viewerCountPage={viewerCountPage}
+			savedViewerCount={savedViewerCount}
 			isEnabled={isActiveRoute}
 			elements={VIEWER_COUNT_LINE_ELEMENTS}
 		/>

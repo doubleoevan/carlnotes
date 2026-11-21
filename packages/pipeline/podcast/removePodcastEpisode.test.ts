@@ -1,8 +1,11 @@
-// removing a Podcast Episode clears the cached unseen Comment Mentions of the users its deleted comments mentioned
+// removing a Podcast Episode clears the cached unseen Comment Mentions of the users its deleted comments mentioned, and
+// its Topic's visitor pages and Dashboards
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as redis from "@carlnotes/db/redis"
 import * as store from "@carlnotes/db/store"
+import * as visitorPageCaches from "@carlnotes/db/visitorPageCaches"
+import * as dashboardRebuild from "../dashboardRebuild"
 import { removePodcastEpisode } from "./removePodcastEpisode"
 
 // put the connection pool and the spies back after each test
@@ -35,4 +38,20 @@ test("a removed Podcast Episode clears the cached reads of the users its comment
 		"unseen-comment-mentions:user-ava",
 		"unseen-comment-mentions:user-ben",
 	)
+})
+
+test("a removed Podcast Episode clears its Topic's visitor pages and rebuilds its Dashboards", async () => {
+	// the published Podcast Episode of topic-1, with no script, no image, and no comment mentions
+	stubConnectionPool(({ text }) =>
+		text.startsWith("select") && text.includes('"status"') ? [["episode-1", "published", null, null, "topic-1"]] : [],
+	)
+	spyOn(redis, "deleteRedisKeys").mockResolvedValue(0)
+	spyOn(store, "deleteStoredObjects").mockResolvedValue()
+	const clearVisitorPagesSpy = spyOn(visitorPageCaches, "clearVisitorPagesOfTopic").mockResolvedValue()
+	const rebuildDashboardsSpy = spyOn(dashboardRebuild, "rebuildTopicDashboardsById").mockResolvedValue()
+
+	// the removal clears the Topic's visitor pages once the row is marked
+	expect(await removePodcastEpisode("episode-1")).toBe(true)
+	expect(clearVisitorPagesSpy.mock.calls).toEqual([["topic-1"]])
+	expect(rebuildDashboardsSpy.mock.calls).toEqual([["topic-1"]])
 })

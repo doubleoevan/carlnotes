@@ -114,7 +114,7 @@ test("the public related podcast episodes are other topics' public and shown epi
 	// each candidate's topic is checked again before the ranking is cached, so an out-of-date flag never reaches it
 	const scoredText = publicRead.text.split(' from "related_episode_candidates" ')[1] ?? ""
 	expect(scoredText).toContain('"topics"."visibility" = $')
-	expect(scoredText).toContain(`"findings"."rating" is distinct from 'down') >= $`)
+	expect(scoredText).toContain(`"findings"."rating" is distinct from 'down' limit $`)
 	expect(publicRead.values.at(-1)).toBe(NO_SCRIPT_ROW_LIMIT)
 
 	// a visitor has no account to reach other episodes through

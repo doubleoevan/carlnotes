@@ -44,7 +44,7 @@ export const newsCursor = z.object({
 type NewsCursor = z.infer<typeof newsCursor>
 
 // whose news it is, who reads it, the window, the page, and the cursor an earlier page of the window returned
-type ReadNewsOptions = {
+export type ReadNewsOptions = {
 	profileUserId: string
 	userId: string | null
 	window: NewsWindow
@@ -81,14 +81,22 @@ export async function readNews({
 	const topicIds = await loadNewsTopicIds({ profileUserId, profileReader })
 	const groupRead = { topicIds, profileUserId, readerUserId, since, until }
 
-	// one group's rows from an offset
+	// one group's rows from an offset, counted only if the read has no totals yet
 	const loadGroupRows = (group: NewsGroup, offset: number, limit: number): Promise<NewsEventRow[]> =>
-		loadNewsEventRows({ ...groupRead, group, offset, limit })
+		loadNewsEventRows({ ...groupRead, group, offset, limit, isWindowCounted: false })
 
-	// a read with no cursor reads every group from its start, which counts each group
+	// a read with no cursor reads every group from its start, which counts each group. a read with a cursor takes the
+	// totals from it and counts nothing
 	const firstNewsPage = windowCursor
 		? null
-		: toFirstNewsPage(await Promise.all(newsGroups.map((group) => loadGroupRows(group, 0, pageSize))), pageSize)
+		: toFirstNewsPage(
+				await Promise.all(
+					newsGroups.map((group) =>
+						loadNewsEventRows({ ...groupRead, group, offset: 0, limit: pageSize, isWindowCounted: true }),
+					),
+				),
+				pageSize,
+			)
 	const groupTotals = windowCursor?.groupTotals ?? firstNewsPage?.groupTotals ?? [0, 0, 0]
 
 	// the first page is those first rows, and any other page reads from its offset

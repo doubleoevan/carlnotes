@@ -4,8 +4,10 @@
 import type { TopicVideoRenderVersion } from "@carlnotes/contracts/topicVideoWork"
 import { db } from "@carlnotes/db"
 import { topicVideos } from "@carlnotes/db/schema/podcast"
+import { clearStatusReads } from "@carlnotes/db/statusReadCaches"
 import { deleteStoredObjects, listStoredObjectKeys } from "@carlnotes/db/store"
 import { toTopicVideoShotKeyPrefix } from "@carlnotes/db/topicVideoKeys"
+import { clearVisitorPagesOfTopic } from "@carlnotes/db/visitorPageCaches"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { reportError } from "@carlnotes/server/monitoring"
 import { and, eq, ne } from "drizzle-orm"
@@ -64,6 +66,14 @@ export async function markTopicVideoFailed({
 				.set({ status: "failed", error: reason.slice(0, 500) })
 				.where(isUnfinished)
 				.returning({ id: topicVideos.id })
+
+	// the film's status copy and its topic's visitor pages go, so a poll and the next page read show it failed
+	await clearStatusReads("topicVideo", podcastEpisodeId)
+	if (topicVideoPodcastEpisode) {
+		await clearVisitorPagesOfTopic(topicVideoPodcastEpisode.topicId).catch((error: unknown) => {
+			reportError(error, "topic-video", { podcastEpisodeId, step: "clear-visitor-pages" })
+		})
+	}
 
 	// a cancelled render with no first render in progress changed nothing, so it reports nothing
 	if (isCancelled && failedRows.length === 0) {

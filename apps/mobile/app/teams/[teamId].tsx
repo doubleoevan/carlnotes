@@ -3,6 +3,8 @@ import { fetchTeamPage, sendDeleteTeam } from "@carlnotes/client/teamClient"
 import { isLeaderRole } from "@carlnotes/contracts/enums"
 import { toTeamPath } from "@carlnotes/contracts/seo"
 import type { TeamPageResponse } from "@carlnotes/contracts/teams"
+import { toTopicPostsPageOptions } from "@carlnotes/core/lib/cardSections"
+import { toTeamPageResultWithUserState } from "@carlnotes/core/lib/pageUserStates"
 import { sendTeamViewOnce } from "@carlnotes/core/lib/pageViews"
 import { ADD_TEAM_MEMBER_LABEL } from "@carlnotes/core/lib/teamFields"
 import { useQuery } from "@tanstack/react-query"
@@ -45,7 +47,14 @@ export default function TeamScreen() {
 	const [dialog, setDialog] = useState<"edit" | "invite" | "share" | "new-topic" | null>(null)
 	// how many notes the notes section lists once they load, for the header's details line
 	const [noteCount, setNoteCount] = useState<number | null>(null)
-	const query = useQuery({ queryKey: ["team", session?.user.id, teamId], queryFn: () => fetchTeamPage(teamId) })
+	// the team page with the user state merged into the shared copy, and the first page of the Topic Posts
+	const query = useQuery({
+		queryKey: ["team", session?.user.id, teamId],
+		queryFn: async () =>
+			toTeamPageResultWithUserState(
+				await fetchTeamPage(teamId, { isUserStateAsked: true, ...toTopicPostsPageOptions() }),
+			),
+	})
 	const handleReload = (): void => {
 		void query.refetch()
 	}
@@ -240,6 +249,7 @@ function TeamContent({
 			{/* the team's visitors, read while this team is the active route */}
 			<ViewerCountLine
 				viewerCountPage={{ kind: "team", id: teamId, isPublic: team.isPublic }}
+				savedViewerCount={team.viewerCount}
 				isActiveRoute={pathname === toTeamPath(teamId)}
 			/>
 		</>

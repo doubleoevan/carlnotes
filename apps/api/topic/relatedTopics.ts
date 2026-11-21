@@ -8,7 +8,7 @@ import { EMBED_MODEL_NAME } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
 import { topicVectors } from "@carlnotes/db/schema/vectors"
 import { and, eq, exists, inArray, lte, ne, sql } from "drizzle-orm"
-import { loadLatestPodcastEpisodeSummaries } from "../podcast/podcastEpisodeShapes"
+import { loadLatestPodcastEpisodeSummaries } from "../podcast/latestPodcastEpisodes"
 import { toTopicAccessFilter, toTopicViewFilter } from "./permissions"
 import {
 	loadRelatedIds,

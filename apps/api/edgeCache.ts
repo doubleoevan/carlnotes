@@ -1,14 +1,28 @@
 // how long the edge and the browser may cache a response, and the purge by tag that clears a response early
-import { purgeEdgeCacheTagAfterDeletion, toTopicPostCacheTag } from "@carlnotes/server/edgePurge"
+import { type DashboardKind, type DashboardSubject, dashboardKinds } from "@carlnotes/contracts/dashboards"
+import { deleteRedisKeys } from "@carlnotes/db/redis"
+import {
+	toVisitorDashboardPageKey,
+	toVisitorProfilePageKey,
+	toVisitorTeamPageKey,
+	toVisitorTopicPostPageKey,
+} from "@carlnotes/db/visitorPageCaches"
+import {
+	HOME_PAGE_CACHE_TAG,
+	purgeEdgeCacheTagAfterDeletion,
+	toDashboardCacheTag,
+	toProfilePageCacheTag,
+	toTeamPageCacheTag,
+	toTopicPageCacheTag,
+	toTopicPostCacheTag,
+} from "@carlnotes/server/edgePurge"
 import { getSessionCookie } from "better-auth/cookies"
 import type { Context } from "hono"
 import { createMiddleware } from "hono/factory"
+import type { AppEnv } from "./currentUser"
 
 // the tag that every shared rendered response is cached under, which the release purge clears
 export const RENDERED_CACHE_TAG = "rendered"
-
-// the tag the home page and its payload also carry
-const HOME_CACHE_TAG = "home"
 
 // the edge shares a rendered response for a minute, then serves it stale for up to a minute while it fetches a new one,
 // and for up to two minutes while the origin responds with an error, such as a shed render's 503
@@ -38,9 +52,10 @@ export const PRIVATE_NO_STORE_CACHE_CONTROL = "private, no-store"
 const OLD_IMAGE_CACHE_CONTROL = "public, max-age=60"
 
 /**
- * Marks a rendered page or a permanent redirect shared at the edge, or private if it is personal.
+ * Marks a rendered page or a permanent redirect shared at the edge, or private if it is personal. A shared response
+ * carries the tags its path names and the tags its route added.
  */
-export function setRenderedCacheHeaders(request: Request, response: Response): void {
+export function setRenderedCacheHeaders(request: Request, response: Response, routeCacheTags: string[] = []): void {
 	// mark the response private if the request has a session cookie or an authorization header, or if the response is
 	// not a page or a permanent redirect, or sets a cookie
 	const isShareableStatus = response.status === 200 || response.status === 301 || response.status === 308
@@ -54,50 +69,139 @@ export function setRenderedCacheHeaders(request: Request, response: Response): v
 	// under the home tag too
 	response.headers.set("Cache-Control", REVALIDATE_CACHE_CONTROL)
 	response.headers.set("CDN-Cache-Control", RENDERED_EDGE_CACHE_CONTROL)
-	response.headers.set("Cache-Tag", [RENDERED_CACHE_TAG, ...toPageCacheTags(request)].join(","))
+	response.headers.set("Cache-Tag", [RENDERED_CACHE_TAG, ...toPageCacheTags(request), ...routeCacheTags].join(","))
 }
 
-// a profile page's path or its payload's, with the profile's user id
+// a profile page's path or its payloads', with the profile's user id
 const PROFILE_PATH_PATTERN = /^\/(?:api\/)?profiles\/([^/]+)/
 
-// a Topic Post page's path, with the post's id after its Topic's id and slug
+// a team page's path or its page read's, with the team's id
+const TEAM_PATH_PATTERN = /^\/(?:api\/)?teams\/([^/]+)(?:\/page)?$/
+
+// a Topic Post page's path, with the post's id after its Topic's id and slug, or its page read's path
 const TOPIC_POST_PATH_PATTERN = /^\/topics\/[^/]+\/[^/]+\/posts\/([^/]+)/
+const TOPIC_POST_PAGE_READ_PATH_PATTERN = /^\/api\/topic-posts\/([^/]+)\/page$/
+
+// a Dashboard's page read's path, with the Dashboard's kind and its person's or team's id
+const DASHBOARD_PAGE_READ_PATH_PATTERN = /^\/api\/dashboards\/([^/]+)\/([^/]+)\/page$/
+
+// a topic page's path, with or without its slug, a podcast episode page's or a Topic Post page's after it, or the
+// topic's or its podcast episode's page read, with the topic's id
+const TOPIC_PATH_PATTERN = /^\/(?:api\/)?topics\/([^/]+)(?:\/|$)/
 
 // the tags a page carries beside the rendered tag: the home's for the home page and its payload, a profile's own for
-// a profile page and its payloads, and a Topic Post's own for its page
+// a profile page and its payloads, a team's own for a team page and its page read, a Dashboard's own for its page
+// read, and a topic's own for its page, its podcast episode pages, and their page reads, with a Topic Post's own for
+// its page and its page read, whose route adds its topic's
 function toPageCacheTags(request: Request): string[] {
 	const { pathname } = new URL(request.url)
 	if (pathname === "/" || pathname === "/api/home") {
-		return [HOME_CACHE_TAG]
+		return [HOME_PAGE_CACHE_TAG]
 	}
 
-	// a profile's page or payload, then a Topic Post's page
+	// a profile's page or payloads, then a team's page or page read
 	const profileUserId = PROFILE_PATH_PATTERN.exec(pathname)?.[1]
 	if (profileUserId) {
-		return [toProfileCacheTag(profileUserId)]
+		return [toProfilePageCacheTag(profileUserId)]
 	}
+	const teamId = TEAM_PATH_PATTERN.exec(pathname)?.[1]
+	if (teamId) {
+		return [toTeamPageCacheTag(teamId)]
+	}
+
+	// a Dashboard's page read names the Dashboard, which its rebuild purges
+	const [, dashboardKind, subjectId] = DASHBOARD_PAGE_READ_PATH_PATTERN.exec(pathname) ?? []
+	if (dashboardKind && subjectId && isDashboardKind(dashboardKind)) {
+		return [toDashboardCacheTag({ dashboardKind, subjectId })]
+	}
+
+	// a Topic Post's page read names its post here and its topic in its route, and a topic's pages name the topic and a
+	// Topic Post's own
+	const topicPostPageReadId = TOPIC_POST_PAGE_READ_PATH_PATTERN.exec(pathname)?.[1]
+	if (topicPostPageReadId) {
+		return [toTopicPostCacheTag(topicPostPageReadId)]
+	}
+	const topicId = TOPIC_PATH_PATTERN.exec(pathname)?.[1]
 	const topicPostId = TOPIC_POST_PATH_PATTERN.exec(pathname)?.[1]
-	return topicPostId ? [toTopicPostCacheTag(topicPostId)] : []
+	return [
+		...(topicId ? [toTopicPageCacheTag(topicId)] : []),
+		...(topicPostId ? [toTopicPostCacheTag(topicPostId)] : []),
+	]
 }
 
-// the tag one user's profile page and its payloads are cached under at the edge
-function toProfileCacheTag(profileUserId: string): string {
-	return `profile:${profileUserId}`
+// whether a path segment names a Dashboard's kind
+function isDashboardKind(pathSegment: string): pathSegment is DashboardKind {
+	return (dashboardKinds as readonly string[]).includes(pathSegment)
+}
+
+// the pages a change left stale, by kind, and any further edge tags to purge with them, such as an avatar's
+type ClearPagesOptions = {
+	profileUserIds?: string[]
+	teamIds?: string[]
+	topicPostIds?: string[]
+	dashboardSubjects?: DashboardSubject[]
+	extraCacheTags?: string[]
 }
 
 /**
- * Purges a user's profile page and its payloads at the edge, after the topics, podcast episodes, or Topic Posts featured
- * to it change.
+ * Deletes the visitor copies of the named profiles, team pages, Topic Post pages, and Dashboards, then purges them and
+ * the further tags at the edge in one request.
  */
-export function purgeProfileAtEdge(profileUserId: string): Promise<unknown> {
-	return purgeEdgeCacheTagAfterDeletion(toProfileCacheTag(profileUserId))
+export async function clearPages({
+	profileUserIds = [],
+	teamIds = [],
+	topicPostIds = [],
+	dashboardSubjects = [],
+	extraCacheTags = [],
+}: ClearPagesOptions): Promise<void> {
+	// the visitor copies first in one delete, so the edge's next fill reads fresh pages
+	const pageKeys = [
+		...profileUserIds.map(toVisitorProfilePageKey),
+		...teamIds.map(toVisitorTeamPageKey),
+		...topicPostIds.map(toVisitorTopicPostPageKey),
+		...dashboardSubjects.map(toVisitorDashboardPageKey),
+	]
+	if (pageKeys.length > 0) {
+		await deleteRedisKeys(...pageKeys)
+	}
+
+	// one purge for every page's tag and the further tags
+	const cacheTags = [
+		...extraCacheTags,
+		...profileUserIds.map(toProfilePageCacheTag),
+		...teamIds.map(toTeamPageCacheTag),
+		...topicPostIds.map(toTopicPostCacheTag),
+		...dashboardSubjects.map(toDashboardCacheTag),
+	]
+	await purgeEdgeCacheTagAfterDeletion(...cacheTags)
+}
+
+/**
+ * Clears a user's profile page, after the profile or the topics, podcast episodes, or Topic Posts featured to it change.
+ */
+export function clearProfilePage(profileUserId: string): Promise<void> {
+	return clearPages({ profileUserIds: [profileUserId] })
+}
+
+/**
+ * Clears the Topic Posts' pages, after a comment their first screen shows is deleted or hidden.
+ */
+export function clearTopicPostPages(...topicPostIds: string[]): Promise<void> {
+	return clearPages({ topicPostIds })
+}
+
+/**
+ * Clears a team's page and a member's profile, which lists their teams, after the membership changes.
+ */
+export function clearTeamMemberPages({ teamId, userId }: { teamId: string; userId: string }): Promise<void> {
+	return clearPages({ teamIds: [teamId], profileUserIds: [userId] })
 }
 
 /**
  * Purges the home page and its payload at the edge, after the home topics, podcast episodes, or Topic Posts change.
  */
 export function purgeHomeAtEdge(): Promise<unknown> {
-	return purgeEdgeCacheTagAfterDeletion(HOME_CACHE_TAG)
+	return purgeEdgeCacheTagAfterDeletion(HOME_PAGE_CACHE_TAG)
 }
 
 /**
@@ -111,6 +215,22 @@ export function setCountsCacheHeaders(request: Request, response: Response, isPu
 		return
 	}
 	setPublicReadCacheHeaders({ request, response, edgeCacheControl: COUNTS_EDGE_CACHE_CONTROL })
+}
+
+// the edge shares a visitor's poll read and a public status read for three seconds, with no stale copy
+const POLL_EDGE_CACHE_CONTROL = "max-age=3"
+
+/**
+ * Marks a topic page's poll reload or a status read shared at the edge for three seconds if its subject is public, it
+ * is a 200 read with no credentials, and the page reads are shared at the edge. Any other is private.
+ */
+export function setPollCacheHeaders(request: Request, response: Response, isPublic: boolean): void {
+	// a subject that is not public, and every read while the page reads stay at the origin, stay in the browser alone
+	if (!(isPublic && isPageReadEdgeCached())) {
+		response.headers.set("Cache-Control", PRIVATE_CACHE_CONTROL)
+		return
+	}
+	setPublicReadCacheHeaders({ request, response, edgeCacheControl: POLL_EDGE_CACHE_CONTROL })
 }
 
 // the edge caches a public Dashboard's snapshot for a day unless a purge by its tag clears it first
@@ -183,6 +303,24 @@ function hasCredentials(request: Request): boolean {
 export const renderedCacheHeaders = createMiddleware(async (context, next) => {
 	await next()
 	setRenderedCacheHeaders(context.req.raw, context.res)
+})
+
+// whether the page reads are shared at the edge, which waits until Cloudflare's cache rule names their paths
+function isPageReadEdgeCached(): boolean {
+	return Bun.env.PAGE_READS_EDGE_CACHED === "true"
+}
+
+/**
+ * Sets the rendered cache headers on a page read's response, with the tags its route added, once the page reads are
+ * shared at the edge, and marks it private until then, so visitors share it at the origin alone.
+ */
+export const renderedPageReadCacheHeaders = createMiddleware<AppEnv>(async (context, next) => {
+	await next()
+	if (isPageReadEdgeCached()) {
+		setRenderedCacheHeaders(context.req.raw, context.res, context.get("pageCacheTags"))
+		return
+	}
+	context.res.headers.set("Cache-Control", PRIVATE_CACHE_CONTROL)
 })
 
 // the response a static file's cache header goes on, and whether the file's name holds a content hash

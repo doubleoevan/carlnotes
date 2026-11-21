@@ -1,7 +1,8 @@
-// the topic routes: the page, the poll, the related topics, create, update, delete, removing one Source, and the
+// the topic routes: the page, the page read, the poll, the related topics, create, update, delete, removing one Source, and the
 // per-topic settings
 
-import { topicPageQuery } from "@carlnotes/contracts/routeShapes"
+import { cardsPageQuery } from "@carlnotes/contracts/cardPages"
+import { topicPageQuery, topicPageReadQuery } from "@carlnotes/contracts/routeShapes"
 import { suggestSourcesPayload, updateTopicPayload } from "@carlnotes/contracts/topicPayloads"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { incrementDaySuggestionCount } from "@carlnotes/db/quotas"
@@ -9,25 +10,29 @@ import { cacheJson } from "@carlnotes/db/redis"
 import { loadOrProvisionUserLiteLLMKey } from "@carlnotes/models/litellm"
 import { suggestSources } from "@carlnotes/pipeline/suggest"
 import { trackEvent } from "@carlnotes/server/analytics"
-import { traceRequestStage } from "@carlnotes/server/monitoringTracing"
 import { zValidator } from "@hono/zod-validator"
 import { type Context, Hono } from "hono"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
+import { renderedPageReadCacheHeaders, setPollCacheHeaders } from "../edgeCache"
 import { toObjectionableContentResponse } from "../moderation"
 import { socialReadRateLimiter, toolCallerRateLimiter } from "../rateLimit"
 import { toTermsOutdatedRejection } from "../termsAcceptance"
 import { removeTopicSource } from "../tool/topicSourceTools"
-import { overlayUncheckedTopicImage } from "../uncheckedImageOverlays"
 import { loadViewableTopic } from "./accessibleFindings"
 import { deleteTopic } from "./deleteTopic"
 import { TOPIC_PAGE_KEY_PREFIX } from "./feedCaches"
-import { readVisitorTopicPage } from "./feeds"
 import { loadTopicGateResponse } from "./helpers"
 import { loadRelatedTopics } from "./relatedTopics"
 import { toYoutubeSourceRejectionMessage } from "./saveHelpers"
 import { createTopic, updateTopic } from "./saveTopic"
 import { loadTeamTopicOptions } from "./teamTopicOptions"
-import { loadTopicPage } from "./topics"
+import {
+	loadTracedTopicPageWithHeadRows,
+	readTopicPageRead,
+	readVisitorTopicPage,
+	toPagedTopicPage,
+} from "./topicPageRead"
+import { loadTopicScansPage } from "./topicScansPage"
 
 // how long Redis caches a topic page for poll reloads
 const TOPIC_PAGE_POLL_TTL_MS = 2000
@@ -123,32 +128,68 @@ export const topicsRoute = new Hono<AppEnv>()
 		// the topic detail payload's traced loader, gated by visibility. a signed-out visitor may only view a public topic
 		const userId = currentUser(context)
 		const topicId = context.req.param("id")
-		const { poll, related } = context.req.valid("query")
+		const { poll, related, paged, topicPostsPage = 0, scans } = context.req.valid("query")
 		const isPoll = poll === "1"
 		// a signed-in client that reads the related topics in a read of their own gets the page without them. a visitor's
-		// page always holds them
+		// page always holds them. a page that asks for the newest scans alone holds the newest page of them
 		const isRelatedTopicsSeparate = related === "separate" && userId !== null
-		const loadTracedTopicPage = (): Promise<TopicResponse | null> =>
-			traceRequestStage("topic_page.load", async () => {
-				// the page, with a signed-in editor's unchecked upload in the topic's image's place
-				const topicPage = await loadTopicPage(userId, topicId, { isPoll, isRelatedTopicsSeparate })
-				return topicPage ? overlayUncheckedTopicImage(topicPage, userId) : null
-			})
+		const isNewestScans = scans === "newest"
+		const loadUserTopicPage = async (): Promise<TopicResponse | null> =>
+			(await loadTracedTopicPageWithHeadRows({ userId, topicId, isPoll, isRelatedTopicsSeparate, isNewestScans }))
+				?.topicPage ?? null
 
 		// read the page, then respond with it if it is visible
 		let topicPage: TopicResponse | null
 		if (isPoll) {
-			// read a poll from a short Redis cache per user and topic
-			const pollKey = `${TOPIC_PAGE_KEY_PREFIX}:${userId ?? "visitor"}:${topicId}`
-			topicPage = await cacheJson({ key: pollKey, ttlMs: TOPIC_PAGE_POLL_TTL_MS, load: loadTracedTopicPage })
+			// read a poll from a short Redis cache per user, topic, and scan list
+			const pollKey = `${TOPIC_PAGE_KEY_PREFIX}:${userId ?? "visitor"}:${topicId}${isNewestScans ? ":newest-scans" : ""}`
+			topicPage = await cacheJson({ key: pollKey, ttlMs: TOPIC_PAGE_POLL_TTL_MS, load: loadUserTopicPage })
 		} else if (userId) {
 			// load a signed-in user's page from the database
-			topicPage = await loadTracedTopicPage()
+			topicPage = await loadUserTopicPage()
 		} else {
-			// read a visitor's page from the visitors' cached page
-			topicPage = await readVisitorTopicPage(topicId, loadTracedTopicPage)
+			// read a visitor's page from the topic's visitor copy
+			topicPage = await readVisitorTopicPage(topicId, { isNewestScans })
 		}
-		return topicPage ? context.json(topicPage) : toHiddenTopicResponse(context, topicId)
+		// a paged read holds one page of the Topic Posts
+		const shownTopicPage = topicPage && paged ? toPagedTopicPage(topicPage, topicPostsPage) : topicPage
+		const response = shownTopicPage ? context.json(shownTopicPage) : await toHiddenTopicResponse(context, topicId)
+
+		// a visitor's poll of a public topic is shared at the edge for three seconds
+		if (isPoll) {
+			setPollCacheHeaders(context.req.raw, response, topicPage?.visibility === "public")
+		}
+		return response
+	})
+	// the topic's page read: the head with the page, or with the gate of an invite topic, served to visitors from the
+	// topic's copy
+	.get("/topics/:id/page", renderedPageReadCacheHeaders, zValidator("query", topicPageReadQuery), async (context) => {
+		// a user's read may hold the newest page of scans alone, as a visitor's copy always does, and a paged read holds
+		// one page of the Topic Posts
+		const { paged, topicPostsPage = 0, scans } = context.req.valid("query")
+		const topicPageRead = await readTopicPageRead({
+			userId: currentUser(context),
+			topicId: context.req.param("id"),
+			isNewestScans: scans === "newest",
+		})
+		if (!topicPageRead) {
+			return context.json({ error: "not found" }, 404)
+		}
+		return context.json(
+			paged && topicPageRead.topic
+				? { ...topicPageRead, topic: toPagedTopicPage(topicPageRead.topic, topicPostsPage) }
+				: topicPageRead,
+		)
+	})
+	// one later page of the topic's scan history, gated by the page's own visibility rule
+	.get("/topics/:id/scans", socialReadRateLimiter, zValidator("query", cardsPageQuery), async (context) => {
+		// the topic the user may open, and its page of scans, or the page's 403 gate or 404
+		const userId = currentUser(context)
+		const topicId = context.req.param("id")
+		const topic = await loadViewableTopic(userId, topicId)
+		return topic
+			? context.json(await loadTopicScansPage({ userId, topic, page: context.req.valid("query").page }))
+			: toHiddenTopicResponse(context, topicId)
 	})
 	.get("/topics/:id/related-topics", socialReadRateLimiter, async (context) => {
 		// the topic's related topics, gated by the page's own visibility rule, for a client that reads them apart from

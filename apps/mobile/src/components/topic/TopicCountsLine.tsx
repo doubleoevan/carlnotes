@@ -2,6 +2,7 @@ import { fetchTopicCounts } from "@carlnotes/client/viewerCountsClient"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { VIEWER_COUNT_LABEL } from "@carlnotes/contracts/viewerCounts"
 import { usePolledCounts } from "@carlnotes/core/hooks/usePolledCounts"
+import { toSavedTopicCounts } from "@carlnotes/core/lib/pageReads"
 import { usePathname } from "expo-router"
 import { useCallback } from "react"
 import { View } from "react-native"
@@ -12,13 +13,16 @@ import { COUNTS_LINE_CLASS } from "@/sectionClasses"
  * Shows the Topic's live Visitors and Followers with the web's display labels and emphasized counts.
  */
 export function TopicCountsLine({ topic }: { topic: TopicResponse }) {
-	// read the same counts endpoint as web, every minute while this Topic is the active route
+	// show the counts saved with the page, then read the same counts endpoint as web a minute later and every minute
+	// while this Topic is the active route
 	const pathname = usePathname()
 	const readTopicCounts = useCallback(
 		(signal: AbortSignal) => fetchTopicCounts(topic.id, topic.visibility === "public", signal),
 		[topic.id, topic.visibility],
 	)
-	const counts = usePolledCounts(readTopicCounts, pathname === `/topics/${topic.id}`)
+	const counts = usePolledCounts(readTopicCounts, pathname === `/topics/${topic.id}`, toSavedTopicCounts(topic))
+
+	// the Visitors and Followers, once the saved counts or the first read arrive
 	return (
 		<View className={COUNTS_LINE_CLASS}>
 			{counts ? (

@@ -47,23 +47,28 @@ wait its turn, oldest first and one at a time for each user, so the large chat b
 `CHAT_BODY_BYTES_IN_PROGRESS_LIMIT` (104 MB), each until its response ends. A body whose turn does not come in 20
 seconds gets its route's busy response, the private chat's 503 with `Retry-After` or the chat room's 400, and a request
 dropped while it waits is never read. `chat/chatTurnAuthorizationTestFixtures.ts` holds the stubbed rows the chat turn
-tests share. No app imports it as a value: `@carlnotes/client` and `apps/web` read `AppType` and the `auth` type from it
-as types only, and `evals/` and `scripts/` at the root import it by name.
+tests share. A chat turn's reply stream writes `OPENING_LINE`, a blank line the client skips, before its retrieval
+starts, because Bun sends no response headers until the first body chunk. A failed retrieval then ends the stream with
+its failed line instead of a 500. No app imports it as a value: `@carlnotes/client` and `apps/web` read `AppType` and
+the `auth` type from it as types only, and `evals/` and `scripts/` at the root import it by name.
 
 `authorization.ts`, `topic/permissions.ts`, and `topic/findingPermissions.ts` retain compatibility exports for the
 shared gate in `@carlnotes/db`. `chat/encryption.ts` keeps chat's plaintext compatibility and SQL length estimate;
 authenticated encryption itself lives in `@carlnotes/server/privateText`.
 
-- `index.ts` opens each request's memo (`@carlnotes/db/requestMemo`) in its first middleware, and its `onError` reports
-  an error no route handles to Sentry and keeps Hono's 500. `requestTracing.ts` runs next: it counts the request's
-  queries and cache reads, names a traced request's Sentry transaction by its route and attaches its query count, the
-  connection pool's counts, and the event loop's lag, and outside production sets a `Server-Timing` header with the
-  duration and the counts. In dev it also logs one line per request with the same numbers and the cache keys that
-  missed. `queryBudgets.test.ts` holds the cached routes' query budgets, each a route requested twice against the
-  connection pool and Redis stubs. `index.ts` also serves `/api/health`, which the platform polls and which sends no
-  query and names the process that answered, so a request on the public domain shows which service a path route reached,
-  `/api/health/deep`, which runs one query and returns the connection pool's counts for a monitor, and
-  `/api/health/ready`, the readiness probe, which renders the privacy page through `uiServer.ts` with no cookie and
+- `index.ts` opens each request's memo (`@carlnotes/db/requestMemo`) in its first middleware, with a row memo for a GET
+  request, and its `onError` reports an error no route handles to Sentry and keeps Hono's 500. `requestTracing.ts` runs
+  next: it counts the request's queries and cache reads, names a traced request's Sentry transaction by its route and
+  attaches its query count, the connection pool's counts, and the event loop's lag, and outside production sets a
+  `Server-Timing` header with the duration and the counts. In dev it also logs one line per request with the same
+  numbers and the cache keys that missed. `queryBudgets.test.ts` holds the cached routes' query budgets, each a route
+  requested twice against the connection pool and Redis stubs, and `dailySpendCutoffBudgets.test.ts` the manual scan
+  route's daily spend cutoff reads. `queryBudgetsTestFixtures.ts` holds the stubbed connection pool, the counted
+  request, the page read fixture, and the concurrent query tracker that the query budget tests share. `index.ts` also
+  serves `/api/health`, which the platform polls and which sends no query and names the process that answered, so a
+  request on the public domain shows which service a path route reached, `/api/health/deep`, which runs one query and
+  returns the connection pool's counts for a monitor, sharing one query's result with every check in the same second,
+  and `/api/health/ready`, the readiness probe, which renders the privacy page through `uiServer.ts` with no cookie and
   responds 503 with a reason if it cannot, reusing one render for five seconds, tested in `readiness.test.ts`. None of
   them looks up a session. `drain.ts` is the drain the entry runs on SIGTERM, as `app` and as `web`: the readiness probe
   answers 503 `draining`, the replica keeps answering for `API_DRAIN_ROUTING_GRACE_MS` (5 seconds in production and none
@@ -92,57 +97,58 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   required read fails, and that page returns a 503 with a `Retry-After`, is reported, and is never cached at the edge.
   Any other page rendered with a 5xx status is reported in the `page-render` stage too. Ahead of a page render,
   `index.ts` limits a visitor's origin requests by address through `rateLimit.ts` and redirects a page url with a click
-  id (`fbclid`, `gclid`, and the like) permanently to the url without it, which is the one the edge caches.
-  `uiServer.ts` sheds a visitor's render past `RENDER_CONCURRENCY` with a 503 and a small page that asks for the same
-  address again after two seconds, while the edge serves its stale copy; a signed-in render is never shed. It counts the
-  renders a minute started and shed, which `apiGauges.ts` puts in the minute line as `renders` beside Redis and
-  `coverChainLength`, the podcast cover draws waiting in the process, and a minute with a shed render crosses the
-  `render-shed` threshold. Every response includes the content security policy, `Referrer-Policy`, and
-  `X-Content-Type-Options`, and an unhashed public file from the ui bundle is cached an hour in the browser and a day at
-  the edge under the `rendered` tag. `contentSecurityPolicy.ts` holds `BASELINE_POLICY_DIRECTIVES`, the directives every
-  policy ends with: `object-src 'none'`, and `base-uri` and `form-action` on this origin. Its `toContentSecurityPolicy`
-  builds a policy from a route's own directives and the baseline, for the default policy in `index.ts`, `nightshift.ts`,
-  and `favicons.ts`. It also holds `FRAME_SOURCE_DIRECTIVE`, the frames a page may load: this origin, YouTube's
-  privacy-enhanced player, and Cloudflare's Turnstile challenge. The default policy and the component browser's policy
-  both use it, so a story frames what the app frames. `responseHeaders.ts` holds `NOINDEX_HEADER`, the `X-Robots-Tag:
-  noindex` header that `documents.ts` and `nightshift.ts` set.
+  id (`fbclid`, `gclid`, the email platforms' `_hsenc` and `mkt_tok`, and the like) permanently to the url without it,
+  which is the one the edge caches. A GET after `/assets/` that matches no built file responds with a plain 404 ahead of
+  the page guards, so a bundle url an old page names never renders a page. `uiServer.ts` holds a visitor's render past
+  `RENDER_CONCURRENCY` for up to `RENDER_SLOT_WAIT_MS` (2 seconds) in a line for a free slot, and sheds it only if none
+  frees, with a 503 and a small page that asks for the same address again after two to six seconds, while the edge
+  serves its stale copy; a signed-in render never waits and is never shed. It counts the renders a minute started,
+  waited, and shed, which `apiGauges.ts` puts in the minute line as `renders` beside Redis and `coverChainLength`, the
+  podcast cover draws waiting in the process, and a minute with a shed render crosses the `render-shed` threshold. Every
+  response includes the content security policy, `Referrer-Policy`, and `X-Content-Type-Options`, and an unhashed public
+  file from the ui bundle is cached an hour in the browser and a day at the edge under the `rendered` tag.
+  `contentSecurityPolicy.ts` holds `BASELINE_POLICY_DIRECTIVES`, the directives every policy ends with: `object-src
+  'none'`, and `base-uri` and `form-action` on this origin. Its `toContentSecurityPolicy` builds a policy from a route's
+  own directives and the baseline, for the default policy in `index.ts`, `nightshift.ts`, and `favicons.ts`. It also
+  holds `FRAME_SOURCE_DIRECTIVE`, the frames a page may load: this origin, YouTube's privacy-enhanced player, and
+  Cloudflare's Turnstile challenge. The default policy and the component browser's policy both use it, so a story frames
+  what the app frames. `responseHeaders.ts` holds `NOINDEX_HEADER`, the `X-Robots-Tag: noindex` header that
+  `documents.ts` and `nightshift.ts` set.
 - Domain folders: `topic/`, `team/`, `chat/`, `invite/`, `note/`, `podcast/`, `social/`, `share/`, `tool/`, `mcp/`,
-  `home/`, `dashboard/`. Root
-  files
-  serve more than one domain (auth, billing, admin, avatars, favicons, profiles, SEO, `likePattern.ts` for the contains
-  pattern the name and text searches match with, `canonicalJson.ts` for the json a keyed digest signs, `content.ts` for
-  the blog under `content/blog/`, and `seed.ts`, the entry behind `bun run db:seed` over `@carlnotes/db/seed`).
-  `profileCards.ts` reads the cards of a profile's and a team's three Featured sections in one profile order: the
-  topics, their podcast episodes, and the published Topic Posts, a person's own and their led teams' on a profile and
-  those of the team's topics on a team. It also reads the person's own All Topics table, their topics and those of every
-  team they are on. A visitor sees a team's topics only through a public team that shows the person's membership, and a
-  private topic another member owns stays out until its Personal sources text is converted. `team/memberTeamTopics.ts`
-  holds that membership query and topic filter, which `news/newsTopics.ts` shares. `profileReader.ts` decides who reads
-  a profile, the person, an admin, or a visitor, and filters the person's own topics for each: an admin reads all but
-  a private topic whose Personal sources text is not converted. `topic/topicOwners.ts` reads each
-  table row's owner and team for the Owner column. On a profile only the person's own featured items count. Each featured row leads, then one podcast episode and one Topic Post of each other topic. A profile
-  lists every Topic Post of its person after the featured items, newest first, in `profileTopicPosts`, and an author's featured
-  Topic Posts have no limit. A profile also gets its films, the podcast episodes with a ready film, by the same rule
-  over the films' own featured items, right before its podcast episodes.
-  `profileOrder.ts` is the four `profile-order` routes: a topic's, a podcast episode's, and
-  `PATCH /api/podcast-episodes/:id/video/profile-order` for a ready film's, each for the topic's owner, and
-  `PATCH /api/topic-posts/:id/profile-order` for a published Topic Post's author on a public topic.
-  `team/defaultTeam.ts` reads a user's default team, the Team of their oldest leader membership, which a public or
-  invite topic goes on when it is created or made public, unless a team already holds it.
-  `team/teamPage.ts` reads a team's page, and `team/teamPageAccess.ts` reads who the page opens for, apart from the
-  page so the viewer counts load it without the cards. The page's cards are those of the topics the reader may open:
+  `home/`, `dashboard/`. Root files serve more than one domain (auth, billing, admin, avatars, favicons, profiles, SEO,
+  `likePattern.ts` for the contains pattern the name and text searches match with, `canonicalJson.ts` for the json a
+  keyed digest signs, `content.ts` for the blog under `content/blog/`, and `seed.ts`, the entry behind `bun run db:seed`
+  over `@carlnotes/db/seed`). `profileCards.ts` reads the cards of a profile's and a team's three Featured sections in
+  one profile order: the topics, their podcast episodes, and the published Topic Posts, a person's own and their led
+  teams' on a profile and those of the team's topics on a team. It also reads the person's own All Topics table, their
+  topics and those of every team they are on. A visitor sees a team's topics only through a public team that shows the
+  person's membership, and a private topic another member owns stays out until its Personal sources text is converted.
+  `team/memberTeamTopics.ts` holds that membership query and topic filter, which `news/newsTopics.ts` shares.
+  `profileReader.ts` decides who reads a profile, the person, an admin, or a visitor, and filters the person's own
+  topics for each: an admin reads all but a private topic whose Personal sources text is not converted.
+  `topic/topicOwners.ts` reads each table row's owner and team for the Owner column. On a profile only the person's own
+  featured items count. Each featured row leads, then one podcast episode and one Topic Post of each other topic. A
+  profile lists every Topic Post of its person after the featured items, newest first, in `profileTopicPosts`, and an
+  author's featured Topic Posts have no limit. A profile also gets its films, the podcast episodes with a ready film, by
+  the same rule over the films' own featured items, right before its podcast episodes. `profileOrder.ts` is the four
+  `profile-order` routes: a topic's, a podcast episode's, and `PATCH /api/podcast-episodes/:id/video/profile-order` for
+  a ready film's, each for the topic's owner, and `PATCH /api/topic-posts/:id/profile-order` for a published Topic
+  Post's author on a public topic. `team/defaultTeam.ts` reads a user's default team, the Team of their oldest leader
+  membership, which a public or invite topic goes on when it is created or made public, unless a team already holds it.
+  `team/teamPage.ts` reads a team's page, and `team/teamPageAccess.ts` reads who the page opens for, apart from the page
+  so the viewer counts load it without the cards. The page's cards are those of the topics the reader may open:
   `loadTeamCards` for the topics, their podcast episodes, and every published Topic Post of them from one read of the
   posts, the featured ones first and then the rest newest first, and the page's own read for their films, by the
-  profile's film read, right before the podcast episodes.
-  `apiPageStyle.ts` holds `API_PAGE_BASE_STYLE`, the body and link rules in the emails' palette that the api's own pages
-  start with: the pages `content.ts` renders and the unsubscribe page in `unsubscribe.ts`. `billingRoute.ts` holds the
-  billing routes over `billing.ts` (Stripe) and `storeBilling.ts` (the App Store and Google Play through RevenueCat);
-  its Stripe webhook responds 400 to a bad signature and its RevenueCat webhook to a missing or wrong Authorization
-  value, and each 500 to a verified event it could not apply, so the provider retries it. `storeBilling.ts` re-reads the
-  RevenueCat customer an event or the app's store sync names and projects it, counting a sandbox purchase only in dev
-  and for the ids in `REVENUECAT_SANDBOX_USER_IDS`, and deletes the customer when the account closes. It reaches a
-  customer by the user's random `revenueCatAppUserId`, never the user id. Both providers write the one billing row
-  through `billingProjection.ts`, where a row from another provider stays unless the new plan ranks higher, and a Stripe
+  profile's film read, right before the podcast episodes. `apiPageStyle.ts` holds `API_PAGE_BASE_STYLE`, the body and
+  link rules in the emails' palette that the api's own pages start with: the pages `content.ts` renders and the
+  unsubscribe page in `unsubscribe.ts`. `billingRoute.ts` holds the billing routes over `billing.ts` (Stripe) and
+  `storeBilling.ts` (the App Store and Google Play through RevenueCat); its Stripe webhook responds 400 to a bad
+  signature and its RevenueCat webhook to a missing or wrong Authorization value, and each 500 to a verified event it
+  could not apply, so the provider retries it. `storeBilling.ts` re-reads the RevenueCat customer an event or the app's
+  store sync names and projects it, counting a sandbox purchase only in dev and for the ids in
+  `REVENUECAT_SANDBOX_USER_IDS`, and deletes the customer when the account closes. It reaches a customer by the user's
+  random `revenueCatAppUserId`, never the user id. Both providers write the one billing row through
+  `billingProjection.ts`, where a row from another provider stays unless the new plan ranks higher, and a Stripe
   subscription that a higher store plan replaces is set to cancel at its period end. `stripeClient.ts` holds the Stripe
   client that `billing.ts` and `billingProjection.ts` call. Stripe checkout responds 409 to a store subscriber.
   `storeBillingTestFixtures.ts` holds the RevenueCat customers and the stubbed sync the store billing tests share.
@@ -152,8 +158,77 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   `ANDROID_SIGNING_FINGERPRINTS`, each 404 while its value is unset. `seo.ts` builds what they read, and `jsonLd.ts`
   the JSON-LD the topic page head includes. The blog and docs Markdown (`apps/docs/src/content/docs`) are read through
   `ttlCache.ts`, which keeps the parsed pages for a minute, so a new file appears within that minute without a restart.
-- `share/pageHead.ts` — the `/api/<page>/:id/head` routes that return a topic, profile, team, or invite page's
-  `PageHead`, which each ui route's `head()` turns into tags.
+  The sitemap, llms.txt, and each Topic's RSS feed are read through `cacheJson` for ten minutes whatever the query
+  string, and llms.txt reads its 50 topics and its 50 newest public podcast episodes in two reads of its own. A public
+  Topic's podcast feeds keep their rendered feed in Redis and read the Topic's row on each request, so a Topic made
+  private stops serving them at once.
+- `share/pageHead.ts` — the loaders of a topic, profile, team, podcast episode, Topic Post, and Dashboard page's
+  `PageHead`, which the page reads return, and `GET /api/invites/:token/head`, the one head route left.
+  `share/pageHeadBuilders.ts` builds each head from a page's preview with no read of its own.
+- The page reads, one request per page with its head: `profilePageRead.ts` (`GET /api/profiles/:userId/page`, with the
+  first news page through `pageReadNews.ts`, which returns null on its own failure), `topic/topicPageRead.ts` (`GET
+  /api/topics/:id/page`), `podcast/podcastEpisodePageRead.ts` (`GET
+  /api/topics/:id/episodes/:season/:episodeNumber/page`), `topicPost/topicPostPageRead.ts` (`GET
+  /api/topic-posts/:id/page`), `team/teamPageRead.ts` (`GET /api/teams/:id/page`), and `dashboard/dashboardPageRead.ts`
+  (`GET /api/dashboards/:dashboardKind/:subjectId/page`); a signed-in `GET /api/home` takes `newsWindow` for its first
+  news page. A visitor's read comes from one Redis copy per page through `@carlnotes/db/visitorPageCaches`, stored only
+  if it is the page every visitor shares, never a gated or missing one, and never with an unchecked image overlay or a
+  person's own news. The subject's owner, an editor, an admin, a reader of a subject that is not public, and every
+  signed-in reader of a topic or a podcast episode get the full read built for them and never stored. Any other
+  signed-in user gets the visitor copy and their user state, `userState`, which the apps merge into it with
+  `@carlnotes/core/lib/pageUserStates`: on a profile from `topic/topicsUserState.ts` with the block and the reader's own
+  news, on a team page from the same with the join request and chat mentions for a read that asks with `?userState=1`,
+  on a Topic Post from `topicPost/topicPostUserState.ts`, and on a Dashboard page `hasFullAccess`. The page reads have
+  no address rate limiter, because the web service's render calls them with no session and no forwarded header.
+  `renderedPageReadCacheHeaders` in `edgeCache.ts` shares a visitor's page read at the edge only once
+  `PAGE_READS_EDGE_CACHED` is `true`. The copies clear on the writes that change what they show:
+  `clearVisitorTopicCaches` in `topic/feedCaches.ts` and `clearVisitorPagesOfTopic` in `@carlnotes/db/visitorPageCaches`
+  for a topic's edit, delete, Sources, and team attach, `clearPages` in `edgeCache.ts`, which deletes the named
+  profiles', team pages', Topic Post pages', and Dashboards' copies and purges their tags in one request, with its
+  `clearProfilePage` for a profile's featured items, `usernames.ts` for a username, `clearTeamMemberPages` in
+  `edgeCache.ts`, from `team/members.ts` and `team/teamsRoute.ts`, for a membership, `team/teams.ts` for a team edit or
+  a topic detach, and `clearHomeCaches` in `topic/homeOrder.ts`, which `spendControlSettings.ts` calls if the
+  featured-only home changes. Each page read's query budget and concurrent query bound are held in
+  `pageReadBudgets.test.ts`, on the full rows of `pageReadBudgetTestFixtures.ts` (a scan, a Finding, a Source, a
+  chapter, a ready film, a comment, related rows, and a discussion), with the signed-in home's budget beside them.
+  `topic/topicTestFixtures.ts` matches the topic's read with its owner, `loadTopicWithOwner` in
+  `topic/accessibleFindings.ts`, which also keeps the owner's access in the request memo, and holds the owning team's
+  members. `topic/topicsRoute.test.ts` tests the topic page's routes and `topic/removeTopicSourceRoute.test.ts` the
+  remove Source route. The topic page builds its head from the rows it loads, and its reaction read includes its films'
+  cards. The profile, topic, Topic Post, and podcast episode pages include their saved viewer or listener count, which
+  the counts poll shows until its first read a minute later. A visitor's `read_team` reads the team page read's visitor
+  copy.
+- Card lists a page at a time, only if the request asks: a profile's, a team's, and a topic's page read, the topic
+  page's `GET /api/topics/:id`, and `GET /api/home` take `paged=1` with the zero-based page of each list they page
+  (`topicPostsPage`, and the home's `newestFilmsPage`, `newestPodcastEpisodesPage`, and `newestTopicPostsPage`), and
+  return that page with its position in `profileTopicPostsPage`, `topicPostCardsPage`, `topicPostsPage`, or
+  `newestPages`. A read without `paged` returns every list whole, as
+  a released app and a stored MCP view read it. Each page is cut from the read's whole list, the visitor copy's
+  included, with `toCardsPage` from `@carlnotes/contracts/cardPages`. The person's own profile read holds every Topic
+  Post, because their rank dialog ranks them all. The later pages are `GET /api/profiles/:userId/topic-posts`,
+  `GET /api/teams/:id/topic-posts`, and `GET /api/home/newest-films`, `newest-podcast-episodes`, and
+  `newest-topic-posts`, each `?page=N`, cut by `cardPages.ts` from the visitor copy for a visitor and from the
+  reader's own read for anyone else (`readTeamTopicPostCards` in `team/teamPageRead.ts` builds a member's team page).
+  `home/homeNewestPages.ts` cuts the home's three new lists. A topic's later pages of Topic Posts are
+  `GET /api/topics/:id/topic-posts?page=N`, and `toPagedTopicPage` in `topic/topicPageRead.ts` cuts the topic page's.
+- A topic's scans a page at a time, only if the request asks: a topic read and a topic page read take `scans=newest` and
+  hold the newest 50 scans (`TOPIC_SCANS_PAGE_SIZE`) with `scansPage`, which counts the history's scans. A page of the
+  history leaves out a stopped scan in its read (`toHistoryScansFilter`), so the pages and the count hold the scans the
+  history lists. A visitor's topic copy always holds the newest page, and `readVisitorTopicPage` in
+  `topic/topicPageRead.ts` gives a released read with no flag the whole history, from the copy if it holds every scan or
+  with the whole history's read if it does not. `GET /api/topics/:id/scans?page=N` (`topic/topicScansPage.ts`) returns a
+  later page with each scan's podcast episode. `topic/topics.ts` builds the topic page, and `topic/topicScanRows.ts`
+  holds its scan rows read and the scan fields the newest row holds. Every scan read in `topic/topicScanRows.ts`
+  (`toTopicScanRowsQuery`) reads no scan's recap: the newest scan's row holds the newest recap, a head read's recap of
+  the newest scan that kept findings, and the month's cost, and the scan to podcast episode map covers the listed scans
+  alone.
+- `share/preview.ts` — the cards' previews. `share/cardResponse.ts`'s `toCardResponse` serves every `preview.png` route:
+  the topic, profile, team, and invite cards in `api.ts`, the Topic Post's in `topicPost/topicPostsRoute.ts`, and the
+  podcast episode's in `podcast/podcastEpisodes.ts`. It reads the card's lookup through `cacheJson` for a minute,
+  redirects a request whose query string is anything but the current `v` to the versioned url before storage is asked,
+  with a minute's cache, and serves the png at its current version as immutable. A request at a version the cached
+  lookup does not draw reads the lookup again, at most once a second per card, so a card that just changed is never
+  redirected to an earlier version.
 - `releases.ts` — the `/releases` index and each release's own page, both
   rendered through `content.ts`, plus the signed GitHub webhook that upserts the rows they read.
   `releases.sync.ts` (`bun run sync:releases`) re-reads the GitHub API through the same write, which
@@ -175,19 +250,19 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   slot is free, a top-level comment by default, edits inside the edit time, deletes, and shares a comment with the
   podcast or takes it back through `@carlnotes/db/sharedComments`. `sharedCommentRows.ts` lists a Topic's shared
   comments for its sources list. `findingReactions.ts` attaches each Finding's reaction summary and comment count to a
-  feed's Findings. `reactionsRoute.ts` and `commentsRoute.ts` are the routes, the first with `GET
-  /api/reactions/summary` for a list whose read came without summaries, and the second with `GET
-  /api/comments/:id/replies`, `PUT /api/comments/:id/share`, `GET /api/topics/:id/shared-comments`, and `GET
-  /api/usernames` for mention suggestions. `pageCommentThread.ts` loads a Topic page's and a Podcast Episode page's
-  first thread page. A write runs the Terms check, the daily count in `@carlnotes/db/socialLimits`, and the
-  classification, in that order. `commentMentions.ts` holds a user's unseen Comment Mentions, one read cached in Redis,
-  the seen mark, and the mention rows a Comment's post and edit write, and `commentMentionsRoute.ts` is `GET
-  /api/comment-mentions/unseen` and `POST /api/comment-mentions/seen`, both for a signed-in user. A write that changes
-  the read clears it through `@carlnotes/db/unseenCommentMentions`: a Comment's post, edit, and delete
-  (`deleteCommentThread` in `comments.ts`, which the admin's report removal shares), a seen mark, a user block, an admin
-  block, and the delete of a Topic or a Topic Post. `socialTargetJoins.ts` joins a read of many Comments or reactions to
-  what each hangs on, with the filter that keeps what the reader may open. `bun run smoke:social` runs `social.smoke.ts`
-  against the dev database.
+  feed's Findings, in one read with the page's own and any other targets the page names. `reactionsRoute.ts` and
+  `commentsRoute.ts` are the routes, the first with `GET /api/reactions/summary` for a list whose read came without
+  summaries, and the second with `GET /api/comments/:id/replies`, `PUT /api/comments/:id/share`, `GET
+  /api/topics/:id/shared-comments`, and `GET /api/usernames` for mention suggestions. `pageCommentThread.ts` loads a
+  Topic page's and a Podcast Episode page's first thread page. A write runs the Terms check, the daily count in
+  `@carlnotes/db/socialLimits`, and the classification, in that order. `commentMentions.ts` holds a user's unseen
+  Comment Mentions, one read cached in Redis, the seen mark, and the mention rows a Comment's post and edit write, and
+  `commentMentionsRoute.ts` is `GET /api/comment-mentions/unseen` and `POST /api/comment-mentions/seen`, both for a
+  signed-in user. A write that changes the read clears it through `@carlnotes/db/unseenCommentMentions`: a Comment's
+  post, edit, and delete (`deleteCommentThread` in `comments.ts`, which the admin's report removal shares), a seen mark,
+  a user block, an admin block, and the delete of a Topic or a Topic Post. `socialTargetJoins.ts` joins a read of many
+  Comments or reactions to what each hangs on, with the filter that keeps what the reader may open. `bun run
+  smoke:social` runs `social.smoke.ts` against the dev database.
 - `note/` — the tasting-notes routes: `notes.ts` (a page's note list, the create, the badges, the read that returns the
   body's html and version, the rename and visibility change, the delete, and the save, `PUT /api/notes/:id/body` at
   `NOTE_BODY_PATH`: it rejects a visitor with a 404 before reading the body, bounds the body at `NOTE_HTML_MAX_CHARS * 4
@@ -209,32 +284,45 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   mailto `href`, `h1` to `h6`, `ul` with `data-type` only when it is exactly `checkbox`, `ol`, `li` with `checked`,
   `blockquote`, and `codeblock`; images, scripts, styles, mentions, and unknown tags are dropped with their text
   kept, and the editor's empty document is stored as `""`.
-- `topicPost/` — a Topic's Topic Posts: `topicPostsRoute.ts` (`GET /api/topics/:id/topic-posts`, the caller's own
-  drafts first, and `POST` there for a draft behind `topicPost:publish`; `GET /api/topic-posts/:id`, a draft for its
-  author alone; `PUT /api/topic-posts/:id` at `TOPIC_POST_PATH`, the save at the version its editor opened at, with the
-  note save's body limit and sanitizer, where a stale version is a 409 before anything is classified and a published
-  post is edited at any time, keeps its title and `TOPIC_POST_MIN_WORDS`, counts toward no daily limit, and has only
-  its changed title and its new paragraphs and alt texts classified; `POST /api/topic-posts/:id/publish`, which counts
-  against the day and classifies the title, the text, and the alt texts; and `DELETE` for the author, the Topic's
-  owner, and an admin. `topicPostModeration.ts` holds the texts a reader sees in a body and their classification. An
-  access rejection is a 404, a newer version a 409 `conflict` with the version, a short post a 400 `incomplete`, the
-  day's limit a 429, and a flagged text a 422. Each write sends its `social_topic_post_*` event with the two ids and
-  `isOwner`, and no text), `topicPosts.ts` (the row a card and a page read, `canReadTopicPost`, the cards, and the
-  page's response), and `topicPostWrites.ts` (the conditional save, the publish, the draft's create, and the delete,
-  which releases the post's home order and its profile order first. A published post's delete clears the home's caches
-  and purges its author's profile page). `topicPostsRoute.test.ts` and `topicPostEditsRoute.test.ts`, the published
-  edits, share the draft and the stubbed reads and writes in `topicPostsRouteTestFixtures.ts`.
-- `news/` — a person's news: `newsRoute.ts` (`GET /api/news`, the signed-in user's own, and
-  `GET /api/profiles/:userId/news`, a profile's as anyone may read it, or as a visitor with the `audience=visitor` that
-  an admin's select sends, both under the social read limit), `readNews.ts` (one numbered page of a window, whose first
-  read fixes the window's end and each group's row count in the cursor that a later page passes back, read whole by the
-  person and an admin), `newsTopics.ts` (the Topic ids of the three groups in order: the person's own Topics, their
-  Teams' Topics, and the Topics they follow, each Topic in the first group that holds it, narrowed for anyone else to
-  the person's public rows), `newsEventRows.ts` (one group's Podcast Episodes, Topic Posts, Comments, reactions, and
-  Findings inside the window, newest first), `newsEventColumns.ts` (the one set of columns every kind of row selects, so
-  the six reads union together), and `newsPodcastEpisodes.ts` (the Podcast Episodes that a page's rows play).
-  `bun run smoke:news` runs `news.smoke.ts` against the dev database over the people, Teams, Topics, and events that
-  `newsSmokeFixtures.ts` seeds.
+- `topicPost/` — a Topic's Topic Posts: `topicPostsRoute.ts` (`GET /api/topics/:id/topic-posts`, the caller's own drafts
+  first, every post, or with `?page=N` one page of six and the count of every post through `loadTopicPostCardsPage`, and
+  `POST` there for a draft behind `topicPost:publish`; `GET /api/topic-posts/:id`, a draft for its author alone; `PUT
+  /api/topic-posts/:id` at `TOPIC_POST_PATH`, the save at the version its editor opened at, with the note save's body
+  limit and sanitizer, where a stale version is a 409 before anything is classified and a published post is edited at
+  any time, keeps its title and `TOPIC_POST_MIN_WORDS`, counts toward no daily limit, and has only its changed title and
+  its new paragraphs and alt texts classified; `POST /api/topic-posts/:id/publish`, which counts against the day and
+  classifies the title, the text, and the alt texts; and `DELETE` for the author, the Topic's owner, and an admin.
+  `topicPostModeration.ts` holds the texts a reader sees in a body and their classification. An access rejection is a
+  404, a newer version a 409 `conflict` with the version, a short post a 400 `incomplete`, the day's limit a 429, and a
+  flagged text a 422. Each write sends its `social_topic_post_*` event with the two ids and `isOwner`, and no text),
+  `topicPosts.ts` (the row a card and a page read, `canReadTopicPost`, and the cards), `topicPostResponse.ts` (the
+  page's response for one reader), and `topicPostWrites.ts` (the conditional save, the publish, the draft's create, and
+  the delete, which releases the post's home order and its profile order first. A published post's delete clears the
+  home's caches and purges its author's profile page). `topicPostsRoute.test.ts` and `topicPostEditsRoute.test.ts`, the
+  published edits, share the draft and the stubbed reads and writes in `topicPostsRouteTestFixtures.ts`.
+- `news/` — a person's news: `newsRoute.ts` (`GET /api/news`, the signed-in user's own, and `GET
+  /api/profiles/:userId/news`, a profile's as anyone may read it, or as a visitor with the `audience=visitor` that an
+  admin's select sends, both under the social read limit), `newsCaches.ts` (the news caches: a window's first page of a
+  profile that every visitor shares for 60 seconds under `visitor-news:`, and a person's own first page of each window
+  for 60 seconds under `own-news:`, never read by another reader, which `clearOwnNews` deletes in one delete after the
+  person's own Comment, reaction, Topic Post publish or delete, and follow or unfollow), `readNews.ts` (one numbered
+  page of a window, whose first read fixes the window's end and each group's row count in the cursor that a later page
+  passes back, so a read with a cursor counts nothing, read whole by the person and an admin), `newsTopics.ts` (the
+  Topic ids of the three groups in order: the person's own Topics, their Teams' Topics, and the Topics they follow, each
+  Topic in the first group that holds it, narrowed for anyone else to the person's public rows), `newsEventRows.ts` (one
+  group's Podcast Episodes, Topic Posts, Comments, reactions, and Findings inside the window, newest first. the own
+  group's Comments, reactions, and Topic Posts keep their filter and read only the candidate ids that index reads inside
+  the window find from the person's Topics, Topic Posts, and Comments, which `newsCandidateIds.ts` reads),
+  `newsEventColumns.ts` (the one set of columns every kind of row selects, so the six reads union together), and
+  `newsPodcastEpisodes.ts` (the Podcast Episodes that a page's rows play). `bun run smoke:news` runs `news.smoke.ts`
+  against the dev database over the people, Teams, Topics, and events that `newsSmokeFixtures.ts` seeds.
+- `status/` — the status reads a page's poll sends in place of its page: `statusReadsRoute.ts`
+  (`GET /api/status/episodes/:id/topic-video`, a film's status, `GET /api/status/topic-posts/:id/discussion`, a Topic
+  Post's newest discussion status, and `GET /api/status/topics/:id/scan`, a Topic's latest Scan with its found and kept
+  counts and its newest podcast episode's status) over `statusReads.ts`, which loads one subject's row through its
+  status copy in `@carlnotes/db/statusReadCaches` (10 seconds for a film, 5 for a discussion, and 2 for a Scan, cleared
+  by every status write) and returns the status alone. A public subject's status goes to anyone, any other passes the
+  page's own access check or reads as a 404, and a status read counts no view and no play.
 - `dashboard/` — the Dashboard pages' reads: `dashboardsRoute.ts` (`GET /api/dashboards/:dashboardKind/:subjectId`, one
   chart selection's snapshot at the user's or visitor's access, shared at the edge under the Dashboard's cache tag for a
   public read and never cached for a full one, `GET /api/dashboards/map-settings`, the Google Maps key and Map ID for
@@ -256,99 +344,101 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   limits in `index.ts`, allowing an absent header, production, and the configured app origin), `tools.ts` (the reads,
   the site search, and the per-user writes it registers, with their schemas and annotations), `topicEditTools.ts`
   (`edit_topic`, `suggest_sources`, and `create_topic`), `topicImageTool.ts` (`set_topic_image`, a regenerate or a
-  public image url, returning the topic MCP view. If the image set from a url stays unchecked, it returns the
-  Topic's current image and says only the caller can see the new one), `topicAttachmentTool.ts`
-  (`add_topic_attachment`, a url's page or
-  pasted text, owner only), `noteTools.ts` (`read_notes`, `save_note`, and `delete_note` through the note routes' own
-  reads and writes, with body saves on the note body save limit), `noteResults.ts` (what `read_notes` returns: a page's
-  notes fenced and paged, or one note with its html cut at a top-level block and no version once cut),
+  public image url, returning the topic MCP view. If the image set from a url stays unchecked, it returns the Topic's
+  current image and says only the caller can see the new one), `topicAttachmentTool.ts` (`add_topic_attachment`, a url's
+  page or pasted text, owner only), `noteTools.ts` (`read_notes`, `save_note`, and `delete_note` through the note
+  routes' own reads and writes, with body saves on the note body save limit), `noteResults.ts` (what `read_notes`
+  returns: a page's notes fenced and paged, or one note with its html cut at a top-level block and no version once cut),
   `teamTools.ts` (`list_teams` and `read_team`, the team page as the caller may see it with the chat's latest messages
   for a member), `teamResults.ts` (what they return: each list limited, the room's newest messages in what is left of
   the result limit, and everything people wrote fenced), `teamWriteTools.ts` (`request_to_join_team`, `send_invite`,
   `respond_to_invite`, and `post_to_team_room` through the team, invite, and chat room modules the web's routes call),
-  `profileTool.ts` (`read_profile`, a person's profile page as the caller may see it with its week's news),
-  `profileResults.ts` (what it returns: each section limited and every name fenced), `activityTool.ts`
-  (`read_activity`, the caller's topics and the topic and team invites with the ids `respond_to_invite` takes),
-  `accountTool.ts` (`read_account`, the plan, the spend meter, the day's scans, and the regenerations left, with links
-  to the plans and account pages), `reportTools.ts` (`report_content` and `block_user`, through `flagContent` and
-  the user block functions the site's routes call),
-  `socialTools.ts` (`save_reaction`, `read_hot_takes`, `post_hot_take`, and
-  `delete_hot_take`, over the same writes and limits as the site's routes, with a thread's bodies fenced), `toolShapes.ts`
-  (the topic id argument, the registration options, and the result shapes every tool shares), `topicEdits.ts` (the
-  `edit_topic` flow: the topic read as its page reads it, the preview, and the save through the chat's save path),
-  `topicEditConfirmations.ts` (the keyed confirmation that making a topic public or removing a source needs),
-  `searchResults.ts` (what the `search` tool returns, under the search rate limit), `scanTools.ts` (`start_scan`,
-  `read_scan_status`, and `stop_scan`), `scanResults.ts` (a Scan's status as those tools return it), `dashboardTool.ts`
-  (`read_dashboard`, a person's Topic or Podcast Dashboard or a team's Team Dashboard under the page's access rules,
-  defaulting to the caller or the caller's first team, with the summary, Carl's fenced paragraph, the day, and the page
-  url, and the read for the dashboard MCP view), `updatesTool.ts` (`read_updates`, the one reader of the updates list;
-  `topic/updatesRoute.ts` is `GET /api/updates/recap`, the day's recap alone for the signed-in home, which marks no
-  Finding read, and `GET /api/profiles/:userId/recap`, the recap a person's home shows, for an admin), `topicContextTool.ts` (`read_topic_context`), `topicContextResults.ts` (the Findings and excerpts it
-  returns), `uiResources.ts` (the MCP Apps view resources, each html written from the bundle `build:ui` makes in
-  `apps/web/dist/mcp-views`, with the dashboard MCP view's own script and the script every other MCP view shares, every
-  stored bundle's version read back from object storage, and the `_meta` a tool names its MCP view with),
-  `mcpViewData.ts` (what a tool result gives its MCP view in `_meta`: the caller, the podcast episodes with play tokens
-  and, while `MCP_VIEW_FILM_PLAYBACK` is on, their films' video and captions urls, the findings MCP view's topic and
-  findings, the updates list's Topics, the Scan status, the Dashboard read, the podcast episodes of a profile's and a
-  team's cards, and the caller's private annotations), `noteMcpViewData.ts` (the note MCP view's page of notes and its
-  opened note), `topicsMcpViewData.ts` (the topics MCP view's section cards or similar topics), `toolCaller.ts` (the tool caller: the visitor or user an access token resolves to,
-  verified in-process against the auth server's signing keys), `oauthClientNames.ts` (the registered name of each MCP
-  client, which the tool caller, the consent page's route, and the app connection report read. That route,
-  `GET /api/mcp/clients/:clientId` in `server.ts`, also returns the host of the authorize request's redirect address
-  if `toUnknownRedirectHost` in `@carlnotes/contracts/aiAgentIdentity` does not know it, which the consent page
-  shows as its one warning line), `results.ts` (what the
-  finding tools return for a visitor or a user, paged under a client's result limit, and the paging helpers), and
-  `topicResults.ts` (what `list_topics` returns). `mcp.smoke.ts` runs the sections in `mcpSmokeSections.ts` and the
-  oauth flow in `mcpOAuthSmokeSections.ts` over the fixtures in `mcpSmokeFixtures.ts` (with both routes' paths and a connected client each section shares), and stops the first scan of the
-  topic it creates through `topic/firstScanSmoke.ts`. `mcpContractTestFixtures.ts` holds the tool title,
-  annotation, and phrase matrix shared by unit and smoke checks. `mcpDirectorySmokeFixtures.ts` seeds isolated private
-  access, large feed, and search rows. `mcpDirectorySmokeSections.ts` checks both transports' Origin and identity cases,
-  including a former follower losing private Topic access; `mcpResultSmokeSections.ts` checks complete cursor traversal
-  and measures text, structured results, and MCP view metadata separately, and `mcpTopicToolSmokeSections.ts` checks
+  `profileTool.ts` (`read_profile`, a person's profile page as the caller may see it with its week's news, which a
+  visitor reads from the profile page read's visitor copy and a user reads beside their news), `profileResults.ts` (what
+  it returns: each section limited and every name fenced), `activityTool.ts` (`read_activity`, the caller's topics and
+  the topic and team invites with the ids `respond_to_invite` takes), `accountTool.ts` (`read_account`, the plan, the
+  spend meter, the day's scans, and the regenerations left, with links to the plans and account pages), `reportTools.ts`
+  (`report_content` and `block_user`, through `flagContent` and the user block functions the site's routes call),
+  `socialTools.ts` (`save_reaction`, `read_hot_takes`, `post_hot_take`, and `delete_hot_take`, over the same writes and
+  limits as the site's routes, with a thread's bodies fenced), `toolShapes.ts` (the topic id argument, the registration
+  options, and the result shapes every tool shares), `topicEdits.ts` (the `edit_topic` flow: the topic read as its page
+  reads it, the preview, and the save through the chat's save path), `topicEditConfirmations.ts` (the keyed confirmation
+  that making a topic public or removing a source needs), `searchResults.ts` (what the `search` tool returns, under the
+  search rate limit), `scanTools.ts` (`start_scan`, `read_scan_status`, and `stop_scan`), `scanResults.ts` (a Scan's
+  status as those tools return it), `dashboardTool.ts` (`read_dashboard`, a person's Topic or Podcast Dashboard or a
+  team's Team Dashboard under the page's access rules, defaulting to the caller or the caller's first team, with the
+  summary, Carl's fenced paragraph, the day, and the page url, and the read for the dashboard MCP view),
+  `updatesTool.ts` (`read_updates`, the one reader of the updates list; `topic/updatesRoute.ts` is `GET
+  /api/updates/recap`, the day's recap alone for the signed-in home, which marks no Finding read,
+  `topic/updatesRecap.ts` stores the day's recap and, for a read that ends with no recap, a null marker under the
+  recap's own key for 60 seconds that a recap a slower call stores replaces, and `GET /api/profiles/:userId/recap`, the
+  recap a person's home shows, for an admin), `topicContextTool.ts` (`read_topic_context`), `topicContextResults.ts`
+  (the Findings and excerpts it returns), `uiResources.ts` (the MCP Apps view resources, each html written from the
+  bundle `build:ui` makes in `apps/web/dist/mcp-views`, with the dashboard MCP view's own script and the script every
+  other MCP view shares, every stored bundle's version read back from object storage, and the `_meta` a tool names its
+  MCP view with), `mcpViewData.ts` (what a tool result gives its MCP view in `_meta`: the caller, the podcast episodes
+  with play tokens and, while `MCP_VIEW_FILM_PLAYBACK` is on, their films' video and captions urls, the findings MCP
+  view's topic and findings, the updates list's Topics, the Scan status, the Dashboard read, the podcast episodes of a
+  profile's and a team's cards, and the caller's private annotations), `noteMcpViewData.ts` (the note MCP view's page of
+  notes and its opened note), `topicsMcpViewData.ts` (the topics MCP view's section cards or similar topics),
+  `toolCaller.ts` (the tool caller: the visitor or user an access token resolves to, verified in-process against the
+  auth server's signing keys), `oauthClientNames.ts` (the registered name of each MCP client, which the tool caller, the
+  consent page's route, and the app connection report read. That route, `GET /api/mcp/clients/:clientId` in `server.ts`,
+  also returns the host of the authorize request's redirect address if `toUnknownRedirectHost` in
+  `@carlnotes/contracts/aiAgentIdentity` does not know it, which the consent page shows as its one warning line),
+  `results.ts` (what the finding tools return for a visitor or a user, paged under a client's result limit, and the
+  paging helpers), and `topicResults.ts` (what `list_topics` returns). `mcp.smoke.ts` runs the sections in
+  `mcpSmokeSections.ts` and the oauth flow in `mcpOAuthSmokeSections.ts` over the fixtures in `mcpSmokeFixtures.ts`
+  (with both routes' paths and a connected client each section shares), and stops the first scan of the topic it creates
+  through `topic/firstScanSmoke.ts`. `mcpContractTestFixtures.ts` holds the tool title, annotation, and phrase matrix
+  shared by unit and smoke checks. `mcpDirectorySmokeFixtures.ts` seeds isolated private access, large feed, and search
+  rows. `mcpDirectorySmokeSections.ts` checks both transports' Origin and identity cases, including a former follower
+  losing private Topic access; `mcpResultSmokeSections.ts` checks complete cursor traversal and measures text,
+  structured results, and MCP view metadata separately, and `mcpTopicToolSmokeSections.ts` checks
   `send_finding_feedback`, `read_updates`, `read_topic_context`, and the Scan tools on both routes.
   `mcpTopicWriteSmokeSections.ts` checks the owner's `set_topic_image` and `add_topic_attachment` on both routes.
   `mcpNoteSmokeSections.ts` creates, reads, saves, and deletes the owner's note on both routes, with a stale version, a
-  visitor's list, and a long note read cut inside the result bounds. `mcpTeamSmokeSections.ts` seeds the owner's team,
-  a second team, and a friend, and checks the chat post, the team list and page, the ask to join, a username invite,
-  and a missing invite's answer, with the bound route reaching no team.
-  `mcpAccountSmokeSections.ts` seeds a stranger with a public and a private topic and checks the owner's own profile,
-  the stranger's with its public topic alone, the activity, and the account, with the bound route reading no profile.
-  `mcpReportSmokeSections.ts` reports a finding to Resend's test inbox and finds it in the admin console's open
-  reports, blocks and unblocks a person, and posts and deletes a hot take, with the bound route reporting and blocking
-  nothing.
-  `mcpTopicPostSmokeSections.ts` seeds a published Topic Post and a draft and checks `read_news`, `read_topic_posts`,
-  and `read_topic_post` for a visitor and a user on both routes. The OAuth smoke verifies discovery, refresh,
-  revocation, and already-issued JWT behavior. All fixture rows are removed in `finally`. Run `bun run smoke:mcp` before
-  handing off an MCP change. Its deterministic Origin and tool-contract assertions also run in `bun run check`.
-  `toolTestFixtures.ts` holds the registered tools and the callers the tool tests share.
+  visitor's list, and a long note read cut inside the result bounds. `mcpTeamSmokeSections.ts` seeds the owner's team, a
+  second team, and a friend, and checks the chat post, the team list and page, the ask to join, a username invite, and a
+  missing invite's answer, with the bound route reaching no team. `mcpAccountSmokeSections.ts` seeds a stranger with a
+  public and a private topic and checks the owner's own profile, the stranger's with its public topic alone, the
+  activity, and the account, with the bound route reading no profile. `mcpReportSmokeSections.ts` reports a finding to
+  Resend's test inbox and finds it in the admin console's open reports, blocks and unblocks a person, and posts and
+  deletes a hot take, with the bound route reporting and blocking nothing. `mcpTopicPostSmokeSections.ts` seeds a
+  published Topic Post and a draft and checks `read_news`, `read_topic_posts`, and `read_topic_post` for a visitor and a
+  user on both routes. The OAuth smoke verifies discovery, refresh, revocation, and already-issued JWT behavior. All
+  fixture rows are removed in `finally`. Run `bun run smoke:mcp` before handing off an MCP change. Its deterministic
+  Origin and tool-contract assertions also run in `bun run check`. `toolTestFixtures.ts` holds the registered tools and
+  the callers the tool tests share.
 - `home/` — the home page's payload: `homeRoute.ts` (`GET /api/home`, the home topics, films, podcast episodes, and
-  Topic Posts and the first page of a user's topics as cards, and `GET /api/home/your-topics`, each later page of six),
-  `homeCardIds.ts` (the featured topics, films, podcast episodes, and Topic Posts first, then the trending topics, the
-  most listened films and podcast episodes, and the newest Topic Posts, one film, one podcast episode, and one Topic
-  Post per topic, and the films, podcast episodes, and Topic Posts of public shown topics published in the last seven
-  days, newest first and featured or not, in one cached read every replica shares for a minute. The route reads the cards
-  of both Topic Post lists at once), and `topicCards.ts` (the card shapes). An admin block takes its user's topics,
-  their podcast episodes and films, and the Topic Posts on those topics or by that user out of every list.
-  `isHomeFeaturedOnly` in the spend control settings leaves every list its featured rows alone. Both are read with the
-  cached ids, so the home follows them within a minute. A Topic Post's publish on a public topic and
-  a published post's delete call `clearHomeCaches` and purge the author's profile. `topic/serveImageFile.ts` streams one
-  image file with the visibility gate and the cache headers, and `topic/topicImagesRoute.ts` serves a topic image's
-  files (public ones immutable at the edge under `topic-image:<topicId>`, private ones behind `topic:view`), the
-  editor's Regenerate within `imageRegenerationLimit`, the render an editor polls, and the upload. `topic/imageEdits.ts`
-  holds what the image routes share: the upload's body limit and checks over an image's bytes, the image prompt's
-  moderation, and the editor's regeneration quota. `topic/topicImageEdits.ts` holds a topic image's edits that the
-  route and `set_topic_image` share: the editor check, the regenerate, the replacement from an image's bytes, and
-  `setTopicImageFromUrl`, which fetches a public image url through `fetchLinkPreviewImage` and the upload's checks.
-  An upload whose image moderation could not run goes through `publishOrSaveUncheckedImage` in
+  Topic Posts and the first page of a user's topics as cards, `GET /api/home/your-topics`, each later page of six, and
+  the later pages of the week's new films, podcast episodes, and Topic Posts), `homeCardIds.ts` (the featured topics,
+  films, podcast episodes, and Topic Posts first, then the trending topics, the most listened films and podcast
+  episodes, and the newest Topic Posts, one film, one podcast episode, and one Topic Post per topic, and the films,
+  podcast episodes, and Topic Posts of public shown topics published in the last seven days, newest first and featured
+  or not, in one cached read every replica shares for a minute. The route reads the cards of both Topic Post lists at
+  once), and `topicCards.ts` (the card shapes, and `loadHomeCards`, which reads every card the home shows with one read
+  of each kind's rows, one reactions read, one owners read, and one chapter count and films read). An admin block takes
+  its user's topics, their podcast episodes and films, and the Topic Posts on those topics or by that user out of every
+  list. `isHomeFeaturedOnly` in the spend control settings leaves every list its featured rows alone. Both are read with
+  the cached ids, so the home follows them within a minute. A Topic Post's publish on a public topic and a published
+  post's delete call `clearHomeCaches` and purge the author's profile. `topic/serveImageFile.ts` streams one image file
+  with the visibility gate and the cache headers, and `topic/topicImagesRoute.ts` serves a topic image's files (public
+  ones immutable at the edge under `topic-image:<topicId>`, private ones behind `topic:view`), the editor's Regenerate
+  within `imageRegenerationLimit`, the render an editor polls, and the upload. `topic/imageEdits.ts` holds what the
+  image routes share: the upload's body limit and checks over an image's bytes, the image prompt's moderation, and the
+  editor's regeneration quota. `topic/topicImageEdits.ts` holds a topic image's edits that the route and
+  `set_topic_image` share: the editor check, the regenerate, the replacement from an image's bytes, and
+  `setTopicImageFromUrl`, which fetches a public image url through `fetchLinkPreviewImage` and the upload's checks. An
+  upload whose image moderation could not run goes through `publishOrSaveUncheckedImage` in
   `@carlnotes/pipeline/uncheckedImages`, in the topic, podcast episode, film, and Topic Post upload routes alike: shown
-  to its uploader alone on an invite or public Topic, published at once on a private one. The upload still responds as
-  a success in its released shape, with `isImageUnchecked` if it is shown to its uploader alone. Each file route serves
+  to its uploader alone on an invite or public Topic, published at once on a private one. The upload still responds as a
+  success in its released shape, with `isImageUnchecked` if it is shown to its uploader alone. Each file route serves
   its subject's current image, or an unchecked image's hash to its uploader alone, through
   `serveCurrentOrUncheckedImageFile` in `topic/serveImageFile.ts`, with the headers of a file that never reaches the
-  edge, and a Regenerate drops the unchecked image.
-  `podcast/podcastEpisodeImagesRoute.ts` serves a podcast episode's own image files, gated by its topic's visibility,
-  and its editor's Regenerate and upload. `podcast/topicVideoImagesRoute.ts`
-  does the same for a film's own image: the poster at
+  edge, and a Regenerate drops the unchecked image. `podcast/podcastEpisodeImagesRoute.ts` serves a podcast episode's
+  own image files, gated by its topic's visibility, and its editor's Regenerate and upload.
+  `podcast/topicVideoImagesRoute.ts` does the same for a film's own image: the poster at
   `/api/topic-podcast-episode-video-images/:podcastEpisodeId/:hash/poster.jpg`, a chapter's generated image at
   `/api/topic-podcast-episode-video-images/:podcastEpisodeId/chapters/:position/image.jpg`, behind the same gate and not
   found for a chapter with none or a podcast episode with no ready film, and `POST
@@ -359,13 +449,13 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   `PATCH /api/podcast-episodes/:id/home-order` with the topic rules, the featured podcast episodes a podcast episode
   page's rank dialog lists, and the purge of the home on every change. `topicPost/topicPostHomeOrder.ts` is `PATCH
   /api/topic-posts/:id/home-order` for a published Topic Post of a public shown topic, and `GET /api/home/topic-posts`,
-  the featured Topic Posts and the newest ones an admin may feature, which the home page's rank dialog lists, both admin only.
-  `podcast/topicVideoHomeOrder.ts` is `PATCH /api/podcast-episodes/:id/video/home-order`, the same as the
-  podcast episode's for a ready film, with the `episode_video_home_order_change` event. Every home-order route writes
-  through `@carlnotes/db/homeOrder`, and `topic/homeOrder.ts` owns `toHomeOrderAdmin`, the admin gate every home-order
-  route runs, `clearHomeCaches`, the home card ids cache delete and home purge they share, and `releaseHomeOrder`, which
-  takes a topic's podcast episodes, their films, and its Topic Posts off the home with it. A topic's write for the
-  position it already holds changes nothing, so the Rank dialog's Save of an unchanged order keeps the featured items of each
+  the featured Topic Posts and the newest ones an admin may feature, which the home page's rank dialog lists, both admin
+  only. `podcast/topicVideoHomeOrder.ts` is `PATCH /api/podcast-episodes/:id/video/home-order`, the same as the podcast
+  episode's for a ready film, with the `episode_video_home_order_change` event. Every home-order route writes through
+  `@carlnotes/db/homeOrder`, and `topic/homeOrder.ts` owns `toHomeOrderAdmin`, the admin gate every home-order route
+  runs, `clearHomeCaches`, the home card ids cache delete and home purge they share, and `releaseHomeOrder`, which takes
+  a topic's podcast episodes, their films, and its Topic Posts off the home with it. A topic's write for the position it
+  already holds changes nothing, so the Rank dialog's Save of an unchanged order keeps the featured items of each
   topic's podcast episodes and films. `report/removeReportedSubject.ts` draws a reported topic image again through an
   `admin` render instead of deleting it.
 - `podcast/` — a Topic's podcast episodes: `podcastEpisodes.ts` (the routes for a season's episodes, an episode page,
@@ -373,38 +463,38 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   the podcast switch, and removing an episode), `podcastEpisodeListens.ts` (saving a listener's progress, with a
   playback start counted among the listeners, and finding their next unplayed podcast episode), `podcastEpisodeRows.ts`
   (the episode row reads, the episode view rules in SQL, and the subscription activation gate that limit each read to
-  what the user may listen to), `helpers.ts` (the page reads over them: the topic page's podcast, a season's episodes,
-  and a podcast episode page), `podcastEpisodeShapes.ts` (an episode as the player shows it, with its chapters, and as a
-  table row shows it, with its chapter count, and each topic's latest of either: the home feed reads full episodes, and
-  every table row and its play button read summaries. `loadTopicVideos` reads the ready and the
-  rendering film rows of a list of podcast episodes in one query, so a podcast episode has its `video` for a ready
-  film and `isVideoRendering` while its film renders, and a failed film has neither),
-  `podcastSeo.ts` (the public episodes that the sitemap and
-  llms.txt list, and the PodcastSeries and PodcastEpisode structured data that `seo.ts` and `share/pageHead.ts` read),
-  `podcastEpisodeFiles.ts` (the audio, film, captions, chapters, and transcript responses, and the play request that
-  the audio and film routes share), `podcastFeedTokens.ts` (a listener's feed token, and building, caching, and
-  responding with a podcast feed or film feed, or a 304 for a current copy), `podcastFeeds.ts` (a listener's feed urls
-  and their reset, an episode's audio and film files at paths after a feed token, and the covers),
-  `topicVideos.ts` (a ready film's files), `topicVideoRoutes.ts` (the film and captions
-  urls, and the rebuild that starts for a film drawn from an image that it no longer shows),
+  what the user may listen to), `helpers.ts` (the page reads over them: the topic page's podcast and a season's
+  episodes), `podcastEpisodePage.ts` (a podcast episode page), `podcastEpisodeShapes.ts` (an episode as the player shows
+  it, with its chapters, and as a table row shows it, with its chapter count. `loadTopicVideos` reads the ready and the
+  rendering film rows of a list of podcast episodes in one query, so a podcast episode has its `video` for a ready film
+  and `isVideoRendering` while its film renders, and a failed film has neither), `latestPodcastEpisodes.ts` (each
+  topic's latest of either: the home feed reads full episodes, and every table row and its play button read summaries),
+  `podcastSeo.ts` (the public episodes that the sitemap and llms.txt list, and the PodcastSeries and PodcastEpisode
+  structured data that `seo.ts` and `share/pageHead.ts` read), `podcastEpisodeFiles.ts` (the audio, film, captions,
+  chapters, and transcript responses, and the play request that the audio and film routes share), `podcastFeedTokens.ts`
+  (a listener's feed token, and building, caching, and responding with a podcast feed or film feed, or a 304 for a
+  current copy), `podcastFeeds.ts` (a listener's feed urls and their reset, an episode's audio and film files at paths
+  after a feed token, and the covers), `topicVideos.ts` (a ready film's files), `topicVideoRoutes.ts` (the film and
+  captions urls, and the rebuild that starts for a film drawn from an image that it no longer shows),
   `relatedPodcastEpisodes.ts` (the rows of an episode page's Other episodes and Similar podcasts tables: the topic's
   other published episodes that the user may listen to, and the most related published episodes of other topics. The
   public shown topics' episodes rank through the index of the episode vectors saved as public and shown, cached in
   Redis. A user's own, the episodes they may listen to through their account, are scored for them without an index on
   every load. Both merge by score, and every read checks each episode again), `podcastEpisodeSearch.ts` (the site
   search's episode reader: title and description matches through trigram indexes, then for a query of three characters
-  or more the nearest by meaning over the episode vectors, under the episode view rules. The query's vector is cached
-  in Redis by its lowercased words and billed to the user's key or the public key, a visitor's embeddings are rate
-  limited per address, and a search that may not embed returns its text matches), and `playTokens.ts` (the play token
-  an MCP view's audio url includes, which the audio route reads in place of a session).
-  `share/podcastFeed.ts` builds the feed. The cover route serves a stored cover, and draws one that is not stored yet
-  through `toCachedPodcastCoverJpeg` in `@carlnotes/pipeline/podcastCover`, where the cover modules live, and
-  `share/podcastEpisodeImage.ts` draws a podcast episode page's link-preview card: the podcast episode's image, or its
-  topic's, across the top with the title and details under it, the way `share/topicImage.ts` draws a topic's.
-  Every card and cover draws through `@carlnotes/pipeline/cardElementPng`, which holds the fonts.
-  `documents.ts` serves a public Topic's feed at `/topics/:id/podcast.xml` and a listener's own at
-  `/podcast-feeds/:token.xml`, and the film feeds beside them at `/topics/:id/podcast-video.xml` and
-  `/podcast-video-feeds/:token.xml`, which share the listener's one feed token.
+  or more the nearest by meaning over the episode vectors, under the episode view rules. The query's vector is kept in
+  Redis for an hour by its lowercased words, as base64 of 32-bit floats, and billed to the user's key or the public key.
+  A caller's embeddings, a signed-in user's included, are limited to 20 a minute by the user or the address, and a page
+  render's own search is not counted. The embedding has a two-second limit and no retry, and a search that may not embed
+  or runs out of time returns its text matches), and `playTokens.ts` (the play token an MCP view's audio url includes,
+  which the audio route reads in place of a session). `share/podcastFeed.ts` builds the feed. The cover route serves a
+  stored cover, and draws one that is not stored yet through `toCachedPodcastCoverJpeg` in
+  `@carlnotes/pipeline/podcastCover`, where the cover modules live, and `share/podcastEpisodeImage.ts` draws a podcast
+  episode page's link-preview card: the podcast episode's image, or its topic's, across the top with the title and
+  details under it, the way `share/topicImage.ts` draws a topic's. Every card and cover draws through
+  `@carlnotes/pipeline/cardElementPng`, which holds the fonts. `documents.ts` serves a public Topic's feed at
+  `/topics/:id/podcast.xml` and a listener's own at `/podcast-feeds/:token.xml`, and the film feeds beside them at
+  `/topics/:id/podcast-video.xml` and `/podcast-video-feeds/:token.xml`, which share the listener's one feed token.
 - `tool/` — the Topic Tools, each with its own gate check: `topicTools.ts` (the prompt and field updates),
   `topicEditSaves.ts` (a topic edit's saves in order through the Topic Tools, which the chat applies an agreed proposal
   with and `edit_topic` its edit),
@@ -431,8 +521,11 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   covers, and `/api/unsubscribe` on any method, and on a read a Topic's podcast feed, a podcast episode's files, a Topic
   Post Discussion's audio, and the `preview.png` share cards); the topic feed, link preview, and Dashboard read limits,
   120 each, under it; these four set no rate limit header, and their 429 sends `Retry-After` and `Cache-Control:
-  private, no-cache`; the tool caller limit, shared by the chat turn routes, the transcription route, the source
-  suggestions, and the mcp routes, keyed by the user or by the client address; the page render limit on a visitor's page
+  private, no-cache`; the tool caller limit, shared by the chat turn routes, the transcription route, and the source
+  suggestions, keyed by the user or by the client address; the mcp limits, which `index.ts` mounts after the body
+  limit, keyed the same way: 30 a minute for a request that holds a `tools/call` message, in a bucket apart from the
+  chat turns, and 600 a minute for the protocol messages (`initialize`, the notifications, `tools/list`,
+  `resources/list`, and `resources/read`); the page render limit on a visitor's page
   renders, which `index.ts` mounts ahead of the blog, release, and ui page renders, keyed by address and skipped for a
   session cookie or an untrusted address; the search limit on the search bar's three routes; the speech limit on the
   spoken parts of a reply, in its own rate limit window; the spoken events limit, in its own rate limit window; the
@@ -440,13 +533,19 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   topics, keyed by the user or by the client address; and the note body save, app signup challenge and gate, push
   device, and store billing limits. The limits over the reads a page render calls, which are the general, topic feed,
   link preview, Dashboard read, search, and social read limits, skip a request with no user and no external address,
-  such as a page render's loopback call. Every other limit keyed by the user or the address counts such a request in one
-  shared bucket. `trustedProxies.ts` reads that address exactly as Better Auth does: the rightmost `x-forwarded-for`
-  entry outside the Cloudflare ranges that `TRUSTED_PROXIES` lists, and logs the warning once if the setting is unset or
-  misses a hop. `requestPlace.ts` reads a view's or a play's place from Cloudflare's location headers only if a
+  such as a page render's own call to the api over loopback or the private network, which forwards no client header.
+  Every other limit keyed by the user or the address counts such a request in one shared bucket. `trustedProxies.ts`
+  resolves the client address: `cf-connecting-ip` if a Cloudflare hop reported it, which is also how a request from a
+  Cloudflare Worker reads as the Worker's address, and otherwise the rightmost `x-forwarded-for` entry outside the
+  Cloudflare ranges that `TRUSTED_PROXIES` lists. It logs the warning once if the setting is unset or misses a hop.
+  `toAuthRequest` writes that address into `x-carlnotes-client-address`, dropping any copy the client sent, before
+  `api.ts` and `index.ts` call Better Auth, and Better Auth reads that header alone, so its own limiter and the api's
+  name the same client. `requestPlace.ts` reads a view's or a play's place from Cloudflare's location headers only if a
   Cloudflare hop reported the client, and no address is stored. Each rate limit window is counted in Redis through
   `@carlnotes/db/redisRateLimits`, so every replica shares the count. While Redis is unreachable the counter counts in
-  this replica's memory, so a caller stays bounded per replica.
+  this replica's memory, so a caller stays bounded per replica. `rateLimit.test.ts` tests the limiter keys, the store,
+  and the limiters, `mcpRateLimit.test.ts` the mcp limits, and `trustedProxies.test.ts` the client address behind
+  Cloudflare, sharing `rateLimitTestFixtures.ts`.
 - `avatars.ts` — the user and team avatar uploads, the published avatar, `toTeamIdentity` for a topic's team as a
   reader may see it, and `avatarsRoute.ts` their routes, with
   `POST /api/avatars/decode-failures`, which reports a chosen avatar file that could not be decoded, by its content
@@ -473,13 +572,19 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
 - `edgeCache.ts` — what the edge may cache: a signed-out page, a permanent redirect from a page path, the blog and
   release pages, and the signed-out feed for a minute under the `rendered` tag, a versioned avatar or card for a year in
   the browser and a day at the edge, a public topic's counts for 30 seconds at the edge through `setCountsCacheHeaders`,
+  a visitor's topic page poll and a public status read for three seconds through `setPollCacheHeaders` once
+  `PAGE_READS_EDGE_CACHED` is on,
   and a public Dashboard's snapshot for a day under `dashboard:<kind>:<subjectId>` through `setDashboardCacheHeaders`,
   which a team update, a team delete, an account close, and the snapshot build purge. `setStaticFileCacheControl` caches
   a file of the docs site or the component browser for a year if its name holds a content hash, and has the browser
   revalidate every other file. A user avatar response is tagged `user-avatar:<userId>`, a team avatar response
   `team-avatar:<teamId>`, and a topic's image files `topic-image:<topicId>`. The purge by tag is
-  `packages/server/edgePurge.ts`, which the worker sends too. `edgeCache.purge.ts` (`bun run edge:purge`) is the deploy
-  job that clears the `rendered` tag right after the app deploys.
+  `packages/server/edgePurge.ts`, which the worker sends too. A purge that Cloudflare rejects with a 429 waits its
+  `Retry-After`, at most a minute, and is sent once more, and a failed purge is reported under the one message
+  `EDGE_PURGE_FAILED_MESSAGE` with its tags and its reason in the extra, so repeated failures count as one report.
+  `edgeCache.purge.ts` (`bun run edge:purge`) is the deploy job that clears the `rendered` tag right after the app
+  deploys. `bun run check:edge` (`scripts/check-edge-cache.ts`, its rules in `scripts/edgeCacheCheck.ts`) reads after
+  a release whether each shared path is stored at the edge.
 - `admin.ts` — the admin writes (a user's role and budget override, a platform's minimum app version, and the spend
   control settings through `POST /admin/spend-control-settings`) and the admin console routes, over `adminConsole.ts`
   (the users and teams tables, the platform totals, and the expandable rows, a topic's subscribers among them),
@@ -671,21 +776,21 @@ until explicit deletion. Released read contracts retain nullable expiry fields a
 survive the MCP picker outside matching and open from the shared AI sender label; missing references remain plain
 labels.
 
-Topic Posts beyond `topicPost/topicPostsRoute.ts`: `topicPost/topicPosts.ts` builds a post's response, which holds its
-Topic's image and its newest discussion's time for the post's info popup. `topicPost/topicPostViewerCounts.ts` counts a
-view of a Topic Post's page, into its viewer count and the day's daily counts, for a sender who may read the Topic Post,
-and reads its viewer count for the page. `news/newsEventRows.ts` reads a person's own published Topic Posts into the own
-group of their news, on any Topic the reader may open, and `news/readNews.ts` gives a published Topic Post's row the
-post's id and the post's own image. `topicPost/topicPostImagesRoute.ts` serves one file of a Topic Post's image at the
-post's current hash to whoever may see its topic, and takes an editor's regenerate and upload, for the post's author and
-whoever holds `topicPost:editImage` on its topic. A regenerate counts against the same monthly quota as a topic image's.
-`topicPost/topicPostPageHead.ts` builds a published post's page head, with the post's preview card and `BlogPosting`
-structured data on a public topic, and `share/pageHead.ts` serves it at `GET /api/topic-posts/:id/head`.
-`share/topicPostImage.ts` draws that card, served at `GET /api/topic-posts/:id/preview.png` from
-`topicPost/topicPostsRoute.ts`: a public topic's post shows its own image, or its topic's until it is drawn, its title,
-its author, and its topic's name, and a private or invite topic's post shows its topic's image and owner with the post's
-title. `share/preview.ts` loads and caches it, and an invite that names a published post shows the post's card and title
-on the join page. A publish starts `publishTopicPostWorkflow` and an edit of a published post starts
+Topic Posts beyond `topicPost/topicPostsRoute.ts`: `topicPost/topicPostResponse.ts` builds a post's response, which
+holds its Topic's image and its newest discussion's time for the post's info popup. `topicPost/topicPostViewerCounts.ts`
+counts a view of a Topic Post's page, into its viewer count and the day's daily counts, for a sender who may read the
+Topic Post, and reads its viewer count for the page. `news/newsEventRows.ts` reads a person's own published Topic Posts
+into the own group of their news, on any Topic the reader may open, and `news/readNews.ts` gives a published Topic
+Post's row the post's id and the post's own image. `topicPost/topicPostImagesRoute.ts` serves one file of a Topic Post's
+image at the post's current hash to whoever may see its topic, and takes an editor's regenerate and upload, for the
+post's author and whoever holds `topicPost:editImage` on its topic. A regenerate counts against the same monthly quota
+as a topic image's. `topicPost/topicPostPageHead.ts` builds a published post's page head, with the post's preview card
+and `BlogPosting` structured data on a public topic, and `share/pageHead.ts` serves it at `GET
+/api/topic-posts/:id/head`. `share/topicPostImage.ts` draws that card, served at `GET /api/topic-posts/:id/preview.png`
+from `topicPost/topicPostsRoute.ts`: a public topic's post shows its own image, or its topic's until it is drawn, its
+title, its author, and its topic's name, and a private or invite topic's post shows its topic's image and owner with the
+post's title. `share/preview.ts` loads and caches it, and an invite that names a published post shows the post's card
+and title on the join page. A publish starts `publishTopicPostWorkflow` and an edit of a published post starts
 `summarizeTopicPostWorkflow`, both best effort. `topic/topics.ts` adds a topic's posts to its page, `profiles.ts` a
 person's published posts to their profile, `seo.ts` a public topic's posts to the sitemap, and `home/topicCards.ts` each
 podcast episode card's reaction count. `mcp/newsTool.ts` registers `read_news`, and `mcp/topicPostTools.ts` registers
@@ -708,9 +813,9 @@ uploads in grace, settles a save's images (the added ones keep their files and t
 deletion), and purges a public post's images from the edge after a save drops one or the post is deleted. A file read
 loads `loadTopicPostBodyImageAccessRow`, which finds the image's path in the body in the database and never reads the
 body. `topicPost/topicPostBodyImageReports.ts` removes a reported body image for an admin: the body without it, written
-only at the version it read, its files queued for deletion, and a public post purged from the edge. The save cleans the body with
-`sanitizeTopicPostHtml` in `noteHtml.ts`, which admits an `img` of the post's own and a code block's `data-language`,
-and rejects a body past the plan's count with a 422 `image-limit-reached`.
+only at the version it read, its files queued for deletion, and a public post purged from the edge. The save cleans the
+body with `sanitizeTopicPostHtml` in `noteHtml.ts`, which admits an `img` of the post's own and a code block's
+`data-language`, and rejects a body past the plan's count with a 422 `image-limit-reached`.
 
 Topic Post Discussions and the Topic Post chat: `topicPost/topicPostDiscussionsRoute.ts` serves the newest recording's
 audio at `GET|HEAD /api/topic-posts/:id/discussion/audio.mp3` to whoever may read the post, through the podcast
@@ -732,8 +837,8 @@ no topic tool, and `chat/chatTurns.ts` stores the turn with the kind `topic_post
 and replays it in the topic's private chat with the post's title and page.
 
 `topic/topicMemoriesRoute.ts` gates Journal reads and rate-limited feedback. `mcp/topicMemoriesTool.ts` registers
-`read_topic_memories` with the same Topic visibility gate. Its read-only `topic-memories` view receives the authorized page's
-text and pagination metadata.
+`read_topic_memories` with the same Topic visibility gate. Its read-only `topic-memories` view receives the authorized
+page's text and pagination metadata.
 
 `rate_finding` saves the optional note in the same write as the rating. The view-only
 `read_finding_rating_note` tool restores the connected rater's saved note through private view metadata.

@@ -1,10 +1,12 @@
 // feed tests for the rate-eligibility rule that the batched feed uses, and for the topic section ids that every
 // replica shares through Redis
-import { afterEach, expect, test } from "bun:test"
+import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import type { Visibility } from "@carlnotes/contracts/enums"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
-import { clearSharedTopicFeedCaches, clearVisitorTopicCaches, toVisitorTopicPageKey } from "./feedCaches"
+import { toVisitorHomePageKey, toVisitorTopicPageKey } from "@carlnotes/db/visitorPageCaches"
+import * as edgePurge from "@carlnotes/server/edgePurge"
+import { clearSharedTopicFeedCaches, clearVisitorTopicCaches, toTopicFeedXmlKey } from "./feedCaches"
 import { canRateInFeed, readPublicSectionTopicIds, readVisitorTopicFeeds } from "./feeds"
 
 // put the pool and the Redis client back after each test
@@ -105,14 +107,15 @@ test("the visitors' feed is built once per view and cleared with the section ord
 	expect(sentQueries.length).toBeGreaterThan(bothViewsQueryCount)
 })
 
-// a change always drops the topic's page copy, and drops the visitors' feeds only if the topic was or is public or the
-// change released its home order
-test("clearVisitorTopicCaches drops the page copy always and the feeds only for a public or home topic", async () => {
-	// one Redis holding a topic's page copy and the feed views
+// a change always drops the topic's page copy and its RSS feed, and drops the visitors' feeds only if the topic was or
+// is public or the change released its home order
+test("clearVisitorTopicCaches drops the page copy and RSS feed always and the feeds only for a public or home topic", async () => {
+	// one Redis holding a topic's page copy, its RSS feed, and the feed views
 	const storedValueByKey = stubRedisClient()
 	stubConnectionPool(() => [])
 	const fillCopies = async (): Promise<void> => {
 		storedValueByKey.set(toVisitorTopicPageKey("t1"), "{}")
+		storedValueByKey.set(toTopicFeedXmlKey("t1"), '"<rss />"')
 		await readVisitorTopicFeeds(false)
 	}
 	const hasFeedCopy = (): boolean => [...storedValueByKey.keys()].some((key) => key.startsWith("visitor-topic-feed"))
@@ -122,7 +125,8 @@ test("clearVisitorTopicCaches drops the page copy always and the feeds only for 
 	const storedKeyCount = storedValueByKey.size
 	await clearVisitorTopicCaches({ topicId: "t1", visibility: "private" })
 	expect(storedValueByKey.has(toVisitorTopicPageKey("t1"))).toBe(false)
-	expect(storedValueByKey.size).toBe(storedKeyCount - 1)
+	expect(storedValueByKey.has(toTopicFeedXmlKey("t1"))).toBe(false)
+	expect(storedValueByKey.size).toBe(storedKeyCount - 2)
 
 	// a change to a public topic, a topic made public, a topic made private, and a released home order each drop the
 	// feed copies too
@@ -137,4 +141,57 @@ test("clearVisitorTopicCaches drops the page copy always and the feeds only for 
 		expect(storedValueByKey.has(toVisitorTopicPageKey("t1"))).toBe(false)
 		expect(hasFeedCopy()).toBe(false)
 	}
+})
+
+test("clearVisitorTopicCaches keeps the home copy for a public topic's plain edit and drops it once the topic leaves", async () => {
+	const storedValueByKey = stubRedisClient()
+	stubConnectionPool(() => [])
+
+	// a public topic's edit leaves the home copy to its own minute
+	storedValueByKey.set(toVisitorHomePageKey(), "{}")
+	await clearVisitorTopicCaches({ topicId: "t1", visibility: "public" })
+	expect(storedValueByKey.has(toVisitorHomePageKey())).toBe(true)
+
+	// a public topic made private drops it
+	await clearVisitorTopicCaches({ topicId: "t1", visibility: "private", previousVisibility: "public" })
+	expect(storedValueByKey.has(toVisitorHomePageKey())).toBe(false)
+})
+
+// a topic made private, or deleted, leaves the edge in one purge: its page tag, its owner's profile, and, for a public
+// topic, its image files and the home
+test("clearVisitorTopicCaches purges a topic made private in one call with its owner's profile and the home", async () => {
+	stubRedisClient()
+	stubConnectionPool(() => [])
+	const purgeSpy = spyOn(edgePurge, "purgeEdgeCacheTagAfterDeletion").mockResolvedValue()
+	await clearVisitorTopicCaches({
+		topicId: "t1",
+		ownerId: "owner-1",
+		visibility: "private",
+		previousVisibility: "public",
+	})
+
+	// one purge names every tag, and a change that keeps the topic as it was purges no page tag
+	expect(purgeSpy).toHaveBeenCalledTimes(1)
+	expect(new Set(purgeSpy.mock.calls[0])).toEqual(new Set(["topic:t1", "profile:owner-1", "topic-image:t1", "home"]))
+	purgeSpy.mockClear()
+	await clearVisitorTopicCaches({ topicId: "t1", ownerId: "owner-1", visibility: "public" })
+	expect(purgeSpy.mock.calls.flat()).not.toContain("topic:t1")
+	mock.restore()
+})
+
+// a deleted topic also leaves its posts' authors' profiles and the pages of the teams that held it at the edge
+test("clearVisitorTopicCaches purges a deleted topic's authors' profiles and teams' pages", async () => {
+	stubRedisClient()
+	const purgeSpy = spyOn(edgePurge, "purgeEdgeCacheTagAfterDeletion").mockResolvedValue()
+	await clearVisitorTopicCaches({
+		topicId: "t1",
+		ownerId: "owner-1",
+		visibility: "invite",
+		isDeleted: true,
+		visitorPagesOfTopic: { pageKeys: [], profileUserIds: ["owner-1", "author-1"], teamIds: ["team-1"] },
+	})
+	expect(new Set(purgeSpy.mock.calls[0])).toEqual(
+		new Set(["topic:t1", "profile:owner-1", "profile:author-1", "team:team-1"]),
+	)
+	mock.restore()
 })

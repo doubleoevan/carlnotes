@@ -17,6 +17,7 @@ import {
 	podcastEpisodeChapterPayload,
 	userInvitePayload,
 } from "./payloads"
+import { type ScanSourceResults, scanNote, scanSourceResults } from "./scanSourceResults"
 import {
 	suggestSourcesPayload,
 	type UpdateTopicPayload,
@@ -27,9 +28,6 @@ import {
 	ATTACHMENT_NO_TEXT_REASON,
 	MAX_ATTACHMENT_CONTEXT_CHARS,
 	MAX_TOPIC_SOURCES,
-	type ScanSourceResults,
-	scanNote,
-	scanSourceResults,
 	toAttachmentFailureMessage,
 } from "./topics"
 

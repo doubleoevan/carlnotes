@@ -1,7 +1,8 @@
-// Topic Post client tests: a missing post reads as null, a rejected write reads as the failure its response means,
-// and a discussion's regenerate returns its recording or throws the api's words
+// Topic Post client tests: a missing post reads as null, a rejected write reads as the failure its response means, a
+// delete reads the user's news again, and a discussion's regenerate returns its recording or throws the api's words
 import { afterEach, expect, test } from "bun:test"
 import { stubFailingFetch, stubFetch } from "./fetchTestFixtures"
+import { addNewsWriteListener } from "./newsClient"
 import {
 	deleteTopicPost,
 	fetchHomeTopicPosts,
@@ -79,4 +80,21 @@ test("the home's Topic Posts read as the featured rows and the rows an admin may
 	// a failed read throws
 	stubFetch(Response.json({ error: "forbidden" }, { status: 403 }))
 	await expect(fetchHomeTopicPosts()).rejects.toThrow("home topic posts load failed: 403")
+})
+
+test("a deleted post reads the user's news again, and a failed delete does not", async () => {
+	// count the news writes while the listener is added
+	let newsWriteCount = 0
+	const removeListener = addNewsWriteListener(() => {
+		newsWriteCount += 1
+	})
+	stubFetch(Response.json({ error: "not found" }, { status: 404 }))
+	await deleteTopicPost("post-1")
+	stubFetch(new Response(null, { status: 204 }))
+	await deleteTopicPost("post-1")
+
+	// a removed listener runs no more
+	removeListener()
+	await deleteTopicPost("post-1")
+	expect(newsWriteCount).toBe(1)
 })

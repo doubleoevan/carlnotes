@@ -6,8 +6,9 @@ import { db } from "@carlnotes/db"
 import { podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { topics } from "@carlnotes/db/schema/topics"
 import { inArray } from "drizzle-orm"
+import { loadLatestPodcastEpisodes } from "../podcast/latestPodcastEpisodes"
 import { podcastEpisodeColumns } from "../podcast/podcastEpisodeRows"
-import { loadLatestPodcastEpisodes, loadPodcastEpisodes } from "../podcast/podcastEpisodeShapes"
+import { loadPodcastEpisodes } from "../podcast/podcastEpisodeShapes"
 import type { NewsEventRow } from "./newsEventRows"
 
 // what the loader reads of a row: its kind, its Topic, and the Podcast Episode it is about

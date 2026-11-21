@@ -148,7 +148,7 @@ test("each MCP view tool returns its structured result and text, with or without
 	const feedPage = { items: [], nextCursor: null }
 	const mcpViewData = { session: null, podcastEpisodes: [] }
 	spyOn(searchResults, "searchForTool").mockResolvedValue(searchPage)
-	spyOn(results, "readTopicFeed").mockResolvedValue(feedPage)
+	spyOn(results, "readTopicFeed").mockResolvedValue({ mcpPage: feedPage, topic: {}, topicFindings: [] } as never)
 	const loadSearchMcpViewDataSpy = spyOn(mcpViewDataModule, "loadSearchMcpViewData").mockResolvedValue(mcpViewData)
 	const loadFindingsMcpViewDataSpy = spyOn(mcpViewDataModule, "loadFindingsMcpViewData").mockResolvedValue(mcpViewData)
 

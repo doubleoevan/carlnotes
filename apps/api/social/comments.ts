@@ -23,7 +23,9 @@ import { trackEvent } from "@carlnotes/server/analytics"
 import { and, eq, gt } from "drizzle-orm"
 import { isAllowed } from "../authorization"
 import type { AnalyticsProperties } from "../currentUser"
+import { clearTopicPostPages } from "../edgeCache"
 import { toObjectionableCategory } from "../moderation"
+import { clearOwnNews } from "../news/newsCaches"
 import { loadMentionedUsers, replaceCommentMentions, saveCommentMentions } from "./commentMentions"
 import { loadComment, loadCommentCounts } from "./commentRows"
 import { toSocialEventProperties } from "./reactions"
@@ -122,8 +124,9 @@ export async function postComment({
 		return { status: "notFound" }
 	}
 
-	// each mentioned user's next read counts the new mention
+	// each mentioned user's next read counts the new mention, and the author's next read of their news shows the comment
 	await clearUnseenCommentMentions(mentions.map((mention) => mention.userId))
+	await clearOwnNews(userId)
 
 	// an editor's comment is shared with the podcast if it is top-level or the post asks, and the Topic has a free shared
 	// comment slot. a comment on a Topic Post is shared only if the post asks
@@ -274,8 +277,10 @@ export async function deleteComment({
 		return { status: "notFound" }
 	}
 
-	// delete it and record the event. a deleted comment frees the shared comment slot it was shared in
+	// delete it, clear the user's own news, and record the event. a deleted comment frees the shared comment slot it was
+	// shared in
 	await deleteCommentThread(commentId)
+	await clearOwnNews(userId)
 	trackEvent(
 		"social_hot_take_delete",
 		userId,
@@ -293,13 +298,20 @@ export async function deleteComment({
 
 /**
  * Deletes a comment's row, which takes its replies and their mentions with it, and clears the cached unseen Comment
- * Mentions of each user the thread mentioned.
+ * Mentions of each user the thread mentioned. A comment on a Topic Post leaves the post page's copies.
  */
 export async function deleteCommentThread(commentId: string): Promise<void> {
 	// read who the thread mentions while its rows exist, then delete and clear
 	const mentionedUserIds = await loadThreadMentionedUserIds(commentId)
-	await db.delete(comments).where(eq(comments.id, commentId))
+	const [deletedComment] = await db
+		.delete(comments)
+		.where(eq(comments.id, commentId))
+		.returning({ topicPostId: comments.postId })
+	// the mentioned users' unseen mentions and the Topic Post's page copies go
 	await clearUnseenCommentMentions(mentionedUserIds)
+	if (deletedComment?.topicPostId) {
+		await clearTopicPostPages(deletedComment.topicPostId)
+	}
 }
 
 // who shares, which comment, whether to share it or take it back, and the request's analytics properties

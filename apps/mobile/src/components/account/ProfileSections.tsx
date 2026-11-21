@@ -1,4 +1,5 @@
 import { authClient } from "@carlnotes/client/authClient"
+import type { NewsResponse } from "@carlnotes/contracts/news"
 import type { ProfileResponse } from "@carlnotes/contracts/profilePage"
 import type { ProfileAudience } from "@carlnotes/contracts/profiles"
 import {
@@ -18,12 +19,15 @@ import { NewTopicEmptyCard } from "@/components/topic/NewTopicEmptyCard"
  */
 export function ProfileSections({
 	profile,
+	firstNewsPage,
 	isOwnProfile,
 	audience,
 	onAudienceChange,
 	onReload,
 }: {
 	profile: ProfileResponse
+	// the first page of the week's news, read with the profile in its page read
+	firstNewsPage?: NewsResponse
 	isOwnProfile: boolean
 	// the page's audience, and for an admin on someone else's profile, the news card's select that changes it
 	audience?: ProfileAudience
@@ -42,6 +46,7 @@ export function ProfileSections({
 		<SharedProfileSections
 			profile={profile}
 			isOwnProfile={isOwnProfile}
+			audience={audience}
 			newsList={
 				<NewsList
 					profileUserId={profile.userId}
@@ -49,6 +54,7 @@ export function ProfileSections({
 					recap={recap}
 					audience={audience}
 					onAudienceChange={onAudienceChange}
+					firstPage={firstNewsPage}
 				/>
 			}
 			renderOwnerTopicsTable={(loadedOwnTopics) => (

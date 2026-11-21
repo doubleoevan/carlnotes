@@ -7,15 +7,23 @@ import type {
 } from "@carlnotes/contracts/home"
 import type { TopicPostCard as TopicPostCardFields } from "@carlnotes/contracts/topicPosts"
 import type { TopicVideoDialogSurface } from "@carlnotes/contracts/visitAnalytics"
+import type { ServerCardPages } from "@carlnotes/core/hooks/useServerPagedCards"
 import { useUpdatesRecap } from "@carlnotes/core/hooks/useUpdatesRecap"
-import { useYourTopicsPages } from "@carlnotes/core/hooks/useYourTopicsPages"
 import type { CardSection } from "@carlnotes/core/lib/cardSections"
-import { EMPTY_HOME, HOME_SECTIONS, HOW_IT_WORKS_STEPS, HOW_IT_WORKS_TITLE } from "@carlnotes/core/lib/homeFaces"
+import {
+	EMPTY_HOME,
+	HOME_SECTIONS,
+	HOW_IT_WORKS_STEPS,
+	HOW_IT_WORKS_TITLE,
+	toHomeNewestCardPages,
+	toHomePageOptions,
+	toYourTopicsCardPages,
+} from "@carlnotes/core/lib/homeFaces"
 import { useQuery } from "@tanstack/react-query"
 import { type ReactNode, useEffect, useState } from "react"
 import { RefreshControl, ScrollView, View } from "react-native"
 import { AccordionSection } from "@/components/common/AccordionSection"
-import { CardsRowSkeleton, CardsSection, PagedCardsSection } from "@/components/common/CardsSection"
+import { CardsRowSkeleton, PagedCardsSection } from "@/components/common/CardsSection"
 import { ClassNameSafeAreaView } from "@/components/common/ClassNameSafeAreaView"
 import { LoadFailedNotice } from "@/components/common/LoadFailedNotice"
 import { SkeletonPulse } from "@/components/common/SkeletonPulse"
@@ -45,7 +53,7 @@ export default function HomeScreen() {
 	const face = isSignedIn ? "user" : "visitor"
 	const homeQuery = useQuery({
 		queryKey: ["home", session?.user.id ?? null],
-		queryFn: fetchHome,
+		queryFn: () => fetchHome(toHomePageOptions()),
 		enabled: !isSessionPending,
 	})
 	const home = homeQuery.data ?? EMPTY_HOME
@@ -138,6 +146,8 @@ function HomeSection({ title, children }: { title: string; children: ReactNode }
 // the home topic cards, the home and new film cards of the week, the home and new podcast episode cards of the week,
 // and the home and new Topic Post cards of the week, each in a section that is hidden while it has none
 function HomeCardSections({ home }: { home: HomeResponse }) {
+	// the pages of the week's new sections, which the server pages
+	const newestCardPages = toHomeNewestCardPages(home)
 	return (
 		<>
 			<PagedCardsSection
@@ -159,6 +169,7 @@ function HomeCardSections({ home }: { home: HomeResponse }) {
 			<HomePodcastEpisodesSection
 				section={HOME_SECTIONS.newestTopicPodcastEpisodeVideos}
 				podcastEpisodes={home.newestTopicPodcastEpisodeVideos ?? []}
+				serverPages={newestCardPages?.films}
 				videoSurface="newest-videos"
 			/>
 			<HomePodcastEpisodesSection
@@ -169,29 +180,37 @@ function HomeCardSections({ home }: { home: HomeResponse }) {
 			<HomePodcastEpisodesSection
 				section={HOME_SECTIONS.newestPodcastEpisodes}
 				podcastEpisodes={home.newestPodcastEpisodes}
+				serverPages={newestCardPages?.podcastEpisodes}
 			/>
 			{/* the home's Topic Posts and then the week's new ones, each hidden while it has none */}
 			<HomeTopicPostsSection section={HOME_SECTIONS.homeTopicPosts} topicPosts={home.homeTopicPosts} />
-			<HomeTopicPostsSection section={HOME_SECTIONS.newestTopicPosts} topicPosts={home.newestTopicPosts ?? []} />
+			<HomeTopicPostsSection
+				section={HOME_SECTIONS.newestTopicPosts}
+				topicPosts={home.newestTopicPosts ?? []}
+				serverPages={newestCardPages?.topicPosts}
+			/>
 		</>
 	)
 }
 
 // the home or new podcast episodes as cards, each reporting its open. with a `videoSurface`, they are film cards whose
-// play button reports it
+// play button reports it. a section the server pages takes its pages, and any other section holds every card
 function HomePodcastEpisodesSection({
 	section,
 	podcastEpisodes,
+	serverPages,
 	videoSurface,
 }: {
 	section: CardSection<PodcastEpisodeCardFields>
 	podcastEpisodes: PodcastEpisodeCardFields[]
+	serverPages?: ServerCardPages<PodcastEpisodeCardFields>
 	videoSurface?: TopicVideoDialogSurface
 }) {
 	return (
 		<PagedCardsSection
 			section={section}
 			rows={podcastEpisodes}
+			serverPages={serverPages}
 			renderCard={(podcastEpisodeCard) => (
 				<PodcastEpisodeCard
 					podcastEpisodeCard={podcastEpisodeCard}
@@ -209,18 +228,22 @@ function HomePodcastEpisodesSection({
 	)
 }
 
-// the home or new Topic Posts as cards, each reporting its open
+// the home or new Topic Posts as cards, each reporting its open. a section the server pages takes its pages, and any
+// other section holds every card
 function HomeTopicPostsSection({
 	section,
 	topicPosts,
+	serverPages,
 }: {
 	section: CardSection<TopicPostCardFields>
 	topicPosts: TopicPostCardFields[]
+	serverPages?: ServerCardPages<TopicPostCardFields>
 }) {
 	return (
 		<PagedCardsSection
 			section={section}
 			rows={topicPosts}
+			serverPages={serverPages}
 			renderCard={(topicPost) => (
 				<TopicPostCard
 					topicPost={topicPost}
@@ -265,9 +288,11 @@ function NewsSection({ userId }: { userId: string | null }) {
 // read finishes
 function YourTopicsSection({ yourTopics }: { yourTopics: YourTopicsPage | null }) {
 	const [isExpanded, setIsExpanded] = useState(true)
-	const { pageTopics, pagination } = useYourTopicsPages(yourTopics)
 	const { title } = HOME_SECTIONS.yourTopics
-	if (yourTopics?.totalCount === 0) {
+	if (!yourTopics) {
+		return null
+	}
+	if (yourTopics.totalCount === 0) {
 		return (
 			<AccordionSection title={title} isExpanded={isExpanded} onToggle={() => setIsExpanded(!isExpanded)}>
 				<View className="mx-4 flex-row pt-2">
@@ -277,12 +302,10 @@ function YourTopicsSection({ yourTopics }: { yourTopics: YourTopicsPage | null }
 		)
 	}
 	return (
-		<CardsSection
+		<PagedCardsSection
 			section={HOME_SECTIONS.yourTopics}
-			rowCount={yourTopics?.totalCount ?? 0}
-			rows={pageTopics}
-			pagination={pagination}
-			isPagedOnServer
+			rows={yourTopics.topics}
+			serverPages={toYourTopicsCardPages(yourTopics)}
 			renderCard={(topic) => <TopicCard topic={topic} />}
 		/>
 	)

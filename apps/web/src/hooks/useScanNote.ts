@@ -1,5 +1,6 @@
 import { fetchScanNote } from "@carlnotes/client/topicClient"
-import { EMPTY_SCAN_NOTE, type ScanNote, type TopicScan } from "@carlnotes/contracts/topics"
+import { EMPTY_SCAN_NOTE, type ScanNote } from "@carlnotes/contracts/scanSourceResults"
+import type { TopicScan } from "@carlnotes/contracts/topics"
 import { useState } from "react"
 
 // a scan's status, which decides whether its note is kept

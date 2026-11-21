@@ -1,6 +1,6 @@
 import { showClientError } from "@carlnotes/client/apiClient"
 import { authClient } from "@carlnotes/client/authClient"
-import { fetchPodcastEpisodePage } from "@carlnotes/client/podcastEpisodeClient"
+import { fetchPodcastEpisodePageRead } from "@carlnotes/client/pageReadClient"
 import { fetchPodcastEpisodeCounts } from "@carlnotes/client/viewerCountsClient"
 import type { PodcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpisodePage"
 import { FILM_ANCHOR_ID, PODCAST_NAME } from "@carlnotes/contracts/podcastEpisodes"
@@ -9,6 +9,7 @@ import { usePolledCounts } from "@carlnotes/core/hooks/usePolledCounts"
 import { useTopicFindingActions } from "@carlnotes/core/hooks/useTopicFindingActions"
 import { useTopicVideoRenderingPoll } from "@carlnotes/core/hooks/useTopicVideoRenderingPoll"
 import { toPodcastEpisodeTitleLabel, toSectionCountLabel } from "@carlnotes/core/lib/labels"
+import { toPodcastEpisodePageResult, toSavedPodcastEpisodeCounts } from "@carlnotes/core/lib/pageReads"
 import {
 	PODCAST_EPISODE_LOAD_FAILED_TEXT,
 	PODCAST_EPISODE_VIDEO_SECTION_TITLE,
@@ -48,6 +49,7 @@ import { EditImageDialog } from "@/components/topic/EditImageDialog"
 import { EditTopicModal } from "@/components/topic/EditTopicModal"
 import { TopicEditorChoiceSheet } from "@/components/topic/TopicEditorChoiceSheet"
 import { TopicGateNotice } from "@/components/topic/TopicGateNotice"
+import { useIsScreenActive } from "@/hooks/useIsScreenActive"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
 import { EditPodcastEpisodeDialog } from "./EditPodcastEpisodeDialog"
 import { PodcastEpisodeChaptersTable } from "./PodcastEpisodeChaptersTable"
@@ -90,8 +92,8 @@ export function PodcastEpisodeScreen() {
 	const { data: session } = authClient().useSession()
 	const query = useQuery({
 		queryKey: ["podcast-episode-page", session?.user.id ?? null, topicId, season, episodeNumber],
-		queryFn: ({ signal }) =>
-			fetchPodcastEpisodePage({ topicId, season, episodeNumber }, { shouldThrowOnError: true, signal }),
+		queryFn: async () =>
+			toPodcastEpisodePageResult(await fetchPodcastEpisodePageRead({ topicId, season, episodeNumber })),
 		gcTime: 0,
 		staleTime: 0,
 		retry: false,
@@ -162,7 +164,8 @@ function EpisodeContent({
 	const feedButtonRef = useRef<ComponentRef<typeof View>>(null)
 	const { podcastEpisode, topic } = page
 	const actions = useTopicFindingActions({ userId, shouldUpdateOptimistically: true, onChangeConfirmed: onReload })
-	// the listener count, every minute while this episode is the active route, kept through a failed read
+	// the listener count, every minute while this episode is the active route, kept through a failed read. the saved
+	// count shows first, and the first read is a minute later
 	const pathname = usePathname()
 	const readPodcastEpisodeCounts = useCallback(
 		(signal: AbortSignal) => fetchPodcastEpisodeCounts(podcastEpisode.id, topic.visibility === "public", signal),
@@ -171,6 +174,7 @@ function EpisodeContent({
 	const counts = usePolledCounts(
 		readPodcastEpisodeCounts,
 		pathname === `/topics/${topic.id}/episodes/${podcastEpisode.season}/${podcastEpisode.episodeNumber}`,
+		toSavedPodcastEpisodeCounts(page.listenerCount),
 	)
 	const chapterTopicFeed = {
 		topic,
@@ -181,10 +185,17 @@ function EpisodeContent({
 	}
 	const options = toPodcastEpisodeActionOptions({ page, isSignedIn, onOpenDialog: setDialog })
 
-	// read the page again while the film renders
+	// read the film's status while the film renders and the screen is active, and the page once it leaves rendering
 	const topicVideoDisplay = toTopicVideoDisplay(podcastEpisode)
 	const isVideoRendering = topicVideoDisplay === "rendering"
-	useTopicVideoRenderingPoll({ isVideoRendering, onPoll: onReload })
+	const isScreenActive = useIsScreenActive()
+	useTopicVideoRenderingPoll({
+		podcastEpisodeId: podcastEpisode.id,
+		isTopicPublic: topic.visibility === "public",
+		isVideoRendering,
+		onPoll: onReload,
+		isEnabled: isScreenActive,
+	})
 	return (
 		<PageScreen
 			title="Episode"

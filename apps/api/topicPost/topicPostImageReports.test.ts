@@ -4,9 +4,9 @@ import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { toTopicPostBodyImagePath } from "@carlnotes/contracts/topicPostBodyImages"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import { toReportedSubject } from "../report/reportSubjects"
+import { toTopicPostResponse } from "./topicPostResponse"
 import type { TopicPostRow } from "./topicPosts"
 import * as topicPosts from "./topicPosts"
-import { toTopicPostResponse } from "./topicPosts"
 
 // put the pool and every spy back after each test
 afterEach(() => {

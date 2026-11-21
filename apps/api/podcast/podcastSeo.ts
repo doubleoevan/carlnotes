@@ -21,10 +21,10 @@ export type PublicPodcastEpisodeRow = Pick<
 // a public podcast episode's page, with its title, its description, and when it published
 export type PublicPodcastEpisodePage = { url: string; title: string; description: string; publishedAt: Date | null }
 
-// the app's url, the public topics, and their published podcast episodes, newest first
+// the app's url, the public topics' ids and names, and their published podcast episodes, newest first
 type ToPublicPodcastEpisodePagesOptions = {
 	appUrl: string
-	publicTopics: PublicTopic[]
+	publicTopics: Pick<PublicTopic, "id" | "name">[]
 	publicPodcastEpisodeRows: PublicPodcastEpisodeRow[]
 }
 
@@ -98,7 +98,10 @@ export function toPublicPodcastEpisodePages({
 /**
  * Returns the PodcastSeries fields of a public Topic's podcast.
  */
-export function toPodcastSeries(topicPreview: TopicPreview, appUrl: string): PodcastSeries {
+export function toPodcastSeries(
+	topicPreview: Pick<TopicPreview, "topicId" | "title" | "imageHash" | "description">,
+	appUrl: string,
+): PodcastSeries {
 	const showCover = {
 		kind: "show" as const,
 		id: topicPreview.topicId,

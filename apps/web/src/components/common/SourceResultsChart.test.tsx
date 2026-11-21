@@ -1,7 +1,7 @@
 // the source footnotes chart's heading, row order, summary line, bars, detail line, and trash button, in server-rendered
 // markup
 import { expect, test } from "bun:test"
-import type { SourceResult } from "@carlnotes/contracts/topics"
+import type { SourceResult } from "@carlnotes/contracts/scanSourceResults"
 import { EARLIER_ROW_ID, toSourceResultRows, toSourceResultsLine } from "@carlnotes/core/lib/sourceResults"
 import type { ComponentProps } from "react"
 import { renderToStaticMarkup } from "react-dom/server"

@@ -34,7 +34,7 @@ import { resolveChatAttachments } from "./chatAttachmentParts"
 import type { ChatPage } from "./chatPages"
 import { answerChatProposal } from "./chatProposals"
 import { type ChatTurnAuthorization, rejectChatTurn } from "./chatTurnAuthorization"
-import { streamChatTurn } from "./chatTurnStream"
+import { type LoadedChatReply, streamChatTurn } from "./chatTurnStream"
 import { saveLinkPreviews } from "./linkPreviews"
 
 // the status a chat turn responds with for a file it could not read: a file too large to read in time takes the 413
@@ -104,7 +104,7 @@ export async function answerChatTurn(
 		return rejectChatTurn(context, { authorization: { status: "budget", userId }, page })
 	}
 
-	// release the reservation if the reply never starts streaming. once it streams, the stream releases it
+	// release the reservation if the key cannot be loaded. once the response streams, the stream releases it
 	const releaseOnFailure = toReleaseOnFailure(reservation)
 
 	// the LiteLLM key that the chat turn bills, created first if the user has none
@@ -117,71 +117,74 @@ export async function answerChatTurn(
 	// whether the user is an editor on this page's topic, which both the proposals and the preview tools follow
 	const isTopicEditor = page.topicId !== undefined && authorization.canEditTopic
 
-	// take the proposal this message answers, and apply it if the message agrees. only the new-topic chat and a topic
-	// the user may edit hold proposals, and a question asked from the podcast player or from a Topic Post's page
-	// answers none
+	// take the proposal this message answers and apply it if the message agrees, then start the reply from the page's own
+	// material. both run once the response's headers are sent, so a slow retrieval shows as a slow first word.
+	// only the new-topic chat and a topic the user may edit hold proposals, and a question asked from the podcast player
+	// or from a Topic Post's page answers none
 	const isToolTurn = !podcastEpisodeChapter && !topicPost
 	const isProposalPage = isToolTurn && (page.newTopic || isTopicEditor)
-	const chatProposalResult = isProposalPage
-		? await answerChatProposal({
-				userId,
-				page,
-				question,
-				history,
-				topicDraft,
-				toolCalls,
-				analyticsProperties,
-				litellmApiKey,
-			}).catch(releaseOnFailure)
-		: undefined
-
-	// stream the reply from the page's own material: one topic, the team's held topics, or the topic draft. a podcast
-	// player question takes no tools and ranks findings against its chapter title and its words, and a question asked
-	// from a Topic Post's page takes no topic tool
-	const chatReply = await streamChatReply({
-		...(!isToolTurn
-			? {}
-			: toChatTurnTools({
+	const loadChatReply = async (): Promise<LoadedChatReply | null> => {
+		const chatProposalResult = isProposalPage
+			? await answerChatProposal({
 					userId,
 					page,
-					isTopicEditor,
+					question,
+					history,
+					topicDraft,
 					toolCalls,
 					analyticsProperties,
-					topicDraft,
-					leaderTeams: authorization.leaderTeams,
-				})),
-		podcastEpisodeChapter,
-		topicPost,
-		retrievalQuestion: podcastEpisodeChapter ? `${podcastEpisodeChapter.chapterTitle}\n${question}` : undefined,
-		topicId: page.topicId,
-		teamId: page.teamId,
-		newTopic: page.newTopic,
-		topicDraft,
-		topicsRemaining: toPromptTopicsRemaining(authorization.topicsRemaining),
-		leaderTeams: authorization.leaderTeams,
-		question,
-		history,
-		chatAttachments: resolvedChatAttachments.chatAttachments,
-		userId,
-		isTopicOwner: authorization.isTopicOwner,
-		isSpoken,
-		litellmApiKey,
-		serverToolCalls: chatProposalResult?.serverToolCalls,
-		proposalOutcome: chatProposalResult?.proposalOutcome,
-	}).catch(releaseOnFailure)
-	if (!chatReply) {
-		await reservation.release()
-		return context.json({ error: "not found" }, 404)
-	}
+					litellmApiKey,
+				})
+			: undefined
 
-	// fetch the question's first link preview card in the background, never delaying the reply
-	if (authorization.isPersisted) {
-		void saveLinkPreviews(question).catch((error) => console.error("chat link preview failed", error))
+		// stream the reply from one topic, the team's held topics, or the topic draft. a podcast player question takes no
+		// tools and ranks findings against its chapter title and its words, and a question asked from a Topic Post's page
+		// takes no topic tool
+		const chatReply = await streamChatReply({
+			...(!isToolTurn
+				? {}
+				: toChatTurnTools({
+						userId,
+						page,
+						isTopicEditor,
+						toolCalls,
+						analyticsProperties,
+						topicDraft,
+						leaderTeams: authorization.leaderTeams,
+					})),
+			podcastEpisodeChapter,
+			topicPost,
+			retrievalQuestion: podcastEpisodeChapter ? `${podcastEpisodeChapter.chapterTitle}\n${question}` : undefined,
+			topicId: page.topicId,
+			teamId: page.teamId,
+			newTopic: page.newTopic,
+			topicDraft,
+			topicsRemaining: toPromptTopicsRemaining(authorization.topicsRemaining),
+			leaderTeams: authorization.leaderTeams,
+			question,
+			history,
+			chatAttachments: resolvedChatAttachments.chatAttachments,
+			userId,
+			isTopicOwner: authorization.isTopicOwner,
+			isSpoken,
+			litellmApiKey,
+			serverToolCalls: chatProposalResult?.serverToolCalls,
+			proposalOutcome: chatProposalResult?.proposalOutcome,
+		})
+		if (!chatReply) {
+			return null
+		}
+
+		// fetch the question's first link preview card in the background, never delaying the reply
+		if (authorization.isPersisted) {
+			void saveLinkPreviews(question).catch((error) => console.error("chat link preview failed", error))
+		}
+		return { chatReply, agreementTokens: chatProposalResult?.agreementTokens ?? 0 }
 	}
 
 	// stream the reply to the user. the stored question names its attachments, and a withheld image is never stored
 	return streamChatTurn(context, {
-		chatReply,
+		loadedChatReply: loadChatReply(),
 		userId,
 		page,
 		question: withAttachmentNote(question, attachments),
@@ -195,7 +198,6 @@ export async function answerChatTurn(
 		analyticsProperties,
 		litellmApiKey,
 		topicDraft,
-		agreementTokens: chatProposalResult?.agreementTokens ?? 0,
 		reservation,
 	})
 }

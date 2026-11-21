@@ -19,7 +19,6 @@ import {
 import { startTopicImageRender } from "@carlnotes/pipeline/topicImages/topicImageRenders"
 import type { UncheckedImageHashSubject } from "@carlnotes/pipeline/uncheckedImages"
 import { trackEvent } from "@carlnotes/server/analytics"
-import { purgeEdgeCacheTagAfterDeletion, toTopicImageCacheTag } from "@carlnotes/server/edgePurge"
 import { reportError } from "@carlnotes/server/monitoring"
 import { toUserViewerElement } from "@carlnotes/server/viewerElements"
 import { and, eq, inArray, isNotNull, isNull, notInArray } from "drizzle-orm"
@@ -406,17 +405,16 @@ export async function updateTopic(
 	// draw again what was drawn from an image that went back to its uploader
 	await redrawUnpublishedImageFiles(topicId, uncheckedImageSubjects)
 
-	// drop the topic's cached visitor copies, and the edge's copies of its image files if it left the public set
+	// drop the topic's cached visitor copies, and purge its pages, and its image files if it left the public set, from
+	// the edge
 	await clearVisitorTopicCaches({
 		topicId,
+		ownerId: topic.ownerId,
 		visibility,
 		previousVisibility: topic.visibility,
 		isHomeOrderReleased,
 		releasedProfileUserIds,
 	})
-	if (topic.visibility === "public" && visibility !== "public") {
-		await purgeEdgeCacheTagAfterDeletion(toTopicImageCacheTag(topicId))
-	}
 
 	// a changed visibility changes who may read the topic's comments and see it on a Dashboard, so clear the cached
 	// mentions of its mentioned users and rebuild its Dashboards

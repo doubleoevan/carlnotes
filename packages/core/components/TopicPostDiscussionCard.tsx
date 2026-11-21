@@ -58,10 +58,12 @@ export type TopicPostDiscussionCardElements = {
 	transcriptTurnElements: PodcastEpisodeTranscriptTurnElements
 }
 
-// the post, the read of it again after a recording starts or ends, and the regenerate request a story replaces
+// the post, the read of it again after a recording starts or ends, the read of its discussion's status that the
+// page's poll needs, and the regenerate request a story replaces
 export type TopicPostDiscussionCardProps = {
 	topicPost: TopicPostResponse
 	onChanged: () => void
+	readDiscussionStatus?: Parameters<typeof useTopicPostDiscussion>[0]["readDiscussionStatus"]
 	sendRegeneration?: Parameters<typeof useTopicPostDiscussion>[0]["sendRegeneration"]
 }
 
@@ -74,10 +76,11 @@ export type TopicPostDiscussionCardProps = {
 export function TopicPostDiscussionCard({
 	topicPost,
 	onChanged,
+	readDiscussionStatus,
 	sendRegeneration,
 	elements: { Card, Row, PlayButton, Details, Action, Form, Transcript, transcriptTurnElements },
 }: TopicPostDiscussionCardProps & { elements: TopicPostDiscussionCardElements }) {
-	const discussion = useTopicPostDiscussion({ topicPost, onChanged, sendRegeneration })
+	const discussion = useTopicPostDiscussion({ topicPost, onChanged, readDiscussionStatus, sendRegeneration })
 	// the transcript starts closed on every visit
 	const [isTranscriptExpanded, setIsTranscriptExpanded] = useState(false)
 	if (!isTopicPostDiscussionShown(topicPost)) {

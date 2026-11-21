@@ -3,13 +3,16 @@
 import { spyOn } from "bun:test"
 import { toTopicPostBodyImagePath } from "@carlnotes/contracts/topicPostBodyImages"
 import { ADMIN_USER_ACCESS_ROW, FREE_USER_ACCESS_ROW, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
+import * as redis from "@carlnotes/db/redis"
 import * as socialLimits from "@carlnotes/db/socialLimits"
 import * as temporalClient from "@carlnotes/pipeline/temporalClient"
 import * as analytics from "@carlnotes/server/analytics"
+import * as edgePurge from "@carlnotes/server/edgePurge"
 import * as edgeCache from "../edgeCache"
 import * as moderation from "../moderation"
 import { toJsonRequest, toSignedInApp } from "../testSession"
 import * as homeOrder from "../topic/homeOrder"
+import * as topicPostResponse from "./topicPostResponse"
 import type { TopicPostRow } from "./topicPosts"
 import * as topicPosts from "./topicPosts"
 import { topicPostsRoute } from "./topicPostsRoute"
@@ -52,7 +55,8 @@ export const DRAFT_ROW: TopicPostRow = {
 		name: "Home espresso",
 		imageHash: null,
 	},
-	author: { userId: "member-1", username: "member-1", avatarSource: "generated", avatarKey: null },
+	author: { userId: "member-1", username: "member-1", avatarSource: "generated", avatarKey: null, image: null },
+	topicCounts: { viewerCount: 0, subscriberCount: 0 },
 }
 
 // the same post published a given count of minutes ago
@@ -67,8 +71,11 @@ export function stubTopicPostRoutes(topicPostRow: TopicPostRow | null): {
 	saveSpy: ReturnType<typeof spyOn>
 	publishSpy: ReturnType<typeof spyOn>
 	deleteSpy: ReturnType<typeof spyOn>
+	// the caches a published post's delete clears
 	clearHomeSpy: ReturnType<typeof spyOn>
 	purgeProfileSpy: ReturnType<typeof spyOn>
+	deleteRedisKeysSpy: ReturnType<typeof spyOn>
+	purgeTagSpy: ReturnType<typeof spyOn>
 	trackEventSpy: ReturnType<typeof spyOn>
 } {
 	// member-1, member-2, and the owner are on the Topic's team, and admin-1 is an admin
@@ -83,7 +90,7 @@ export function stubTopicPostRoutes(topicPostRow: TopicPostRow | null): {
 
 	// the post's read, its page, the day's limit, and a clean classification
 	spyOn(topicPosts, "loadTopicPostRow").mockResolvedValue(topicPostRow)
-	spyOn(topicPosts, "toTopicPostResponse").mockImplementation(
+	spyOn(topicPostResponse, "toTopicPostResponse").mockImplementation(
 		async (_userId, readRow) => ({ id: readRow.topicPost.id }) as never,
 	)
 	spyOn(socialLimits, "countSocialWriteToday").mockResolvedValue(true)
@@ -102,7 +109,9 @@ export function stubTopicPostRoutes(topicPostRow: TopicPostRow | null): {
 		deleteSpy: spyOn(topicPostWrites, "deleteTopicPost").mockResolvedValue(),
 		// the caches a published post's delete clears
 		clearHomeSpy: spyOn(homeOrder, "clearHomeCaches").mockResolvedValue(),
-		purgeProfileSpy: spyOn(edgeCache, "purgeProfileAtEdge").mockResolvedValue(undefined),
+		purgeProfileSpy: spyOn(edgeCache, "clearProfilePage").mockResolvedValue(undefined),
+		deleteRedisKeysSpy: spyOn(redis, "deleteRedisKeys").mockResolvedValue(0),
+		purgeTagSpy: spyOn(edgePurge, "purgeEdgeCacheTagAfterDeletion").mockResolvedValue(),
 		trackEventSpy: spyOn(analytics, "trackEvent").mockImplementation(() => {}),
 	}
 }

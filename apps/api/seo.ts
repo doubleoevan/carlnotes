@@ -6,12 +6,14 @@ import { toMetaDescription, toTopicPath, toTopicPostPath } from "@carlnotes/cont
 import { DAY_MS } from "@carlnotes/contracts/time"
 import type { PublicTopic } from "@carlnotes/contracts/topics"
 import { db, isFindingShown, isPublicAndShown } from "@carlnotes/db"
+import { podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { findings, scans } from "@carlnotes/db/schema/scans"
 import { teams } from "@carlnotes/db/schema/teams"
 import { teamTopics } from "@carlnotes/db/schema/teamTopics"
 import { topicPosts } from "@carlnotes/db/schema/topicPosts"
 import { topics } from "@carlnotes/db/schema/topics"
 import { DOCS_CONTENT_DIRECTORY, listDocsMarkdownPaths } from "@carlnotes/server/docsContent"
+import { isPodcastEpisodeRecordingConfigured } from "@carlnotes/server/podcastEpisodeSettings"
 import { and, desc, eq, exists, inArray, isNotNull, or, type SQL, sql } from "drizzle-orm"
 import {
 	loadPublicPodcastEpisodeRows,
@@ -99,15 +101,17 @@ export async function toSitemapXml(appUrl: string, blogPaths: string[] = []): Pr
 }
 
 /**
- * Every public Topic with enough findings to show, most recently changed first.
+ * Every public Topic with enough findings to show, most recently changed first, or the first ones up to a limit.
  */
-export async function loadPublicTopics(): Promise<PublicTopic[]> {
-	// read the shown public topics, most recently changed first
-	const topicRows = await db
+export async function loadPublicTopics(limit?: number): Promise<PublicTopic[]> {
+	// read the shown public topics, most recently changed first, up to the limit if there is one
+	const topicRowsQuery = db
 		.select(publicTopicColumns)
 		.from(topics)
 		.where(isPublicAndShown)
 		.orderBy(desc(topics.updatedAt))
+		.$dynamic()
+	const topicRows = await (limit === undefined ? topicRowsQuery : topicRowsQuery.limit(limit))
 
 	// shape each row as the PublicTopic contract, with its description written and feedUpdatedAt as an ISO string
 	return topicRows.map((topicRow) => ({
@@ -128,6 +132,10 @@ const newestFindingCreatedAtQuery = sql`(select max(${findings.createdAt}) from 
 const topicFeedUpdatedAt = sql<Date>`coalesce(${newestFindingCreatedAtQuery}, ${topics.createdAt})`.mapWith(
 	topics.createdAt,
 )
+
+// how many shown findings a topic has, as a subquery on a topic row, which a page's head reads with the page's row
+const shownFindingCountQuery = sql`(select count(*) from ${findings} where ${findings.topicId} = ${topics.id} and ${isFindingShown})`
+export const shownFindingCount = sql<number>`${shownFindingCountQuery}`.mapWith(Number)
 
 // the columns of a public topic row. the prompt and the scan summary are what its description is written from
 const publicTopicColumns = {
@@ -190,13 +198,51 @@ function toDocsPage(filePath: string, markdown: string): DiscoveryPage | null {
 	return { path: pagePath, title, description, body: match[2].trim() }
 }
 
+// a published podcast episode of a public topic as llms.txt lists it, with its topic's name for its path
+type LlmsPodcastEpisodeRow = PublicPodcastEpisodeRow & { topicId: string; topicName: string }
+
 // what llms.txt is built from. the public topics' podcast episodes come newest first
 type ToLlmsTxtOptions = {
 	appUrl: string
 	docsPages: DiscoveryPage[]
 	blogPages: { slug: string; title: string; description: string }[]
 	publicTopics: PublicTopic[]
-	publicPodcastEpisodeRows: PublicPodcastEpisodeRow[]
+	publicPodcastEpisodeRows: LlmsPodcastEpisodeRow[]
+}
+
+/**
+ * Reads what llms.txt lists from the database: the most recently changed public topics and the newest published
+ * podcast episodes of public topics, each read up to its own limit of 50.
+ */
+export async function loadLlmsTxtRows(): Promise<Pick<ToLlmsTxtOptions, "publicTopics" | "publicPodcastEpisodeRows">> {
+	const [publicTopics, publicPodcastEpisodeRows] = await Promise.all([
+		loadPublicTopics(LLMS_TOPIC_LIMIT),
+		loadNewestPublicPodcastEpisodeRows(),
+	])
+	return { publicTopics, publicPodcastEpisodeRows }
+}
+
+// the newest published podcast episodes of the shown public topics, up to the llms.txt limit, or none if podcast
+// episode recording is not configured
+async function loadNewestPublicPodcastEpisodeRows(): Promise<LlmsPodcastEpisodeRow[]> {
+	if (!isPodcastEpisodeRecordingConfigured()) {
+		return []
+	}
+	return db
+		.select({
+			topicId: topics.id,
+			topicName: topics.name,
+			season: podcastEpisodes.season,
+			episodeNumber: podcastEpisodes.episodeNumber,
+			publishedAt: podcastEpisodes.publishedAt,
+			title: podcastEpisodes.title,
+			description: podcastEpisodes.description,
+		})
+		.from(podcastEpisodes)
+		.innerJoin(topics, eq(topics.id, podcastEpisodes.topicId))
+		.where(and(isPublicAndShown, eq(podcastEpisodes.status, "published")))
+		.orderBy(desc(podcastEpisodes.publishedAt))
+		.limit(LLMS_PODCAST_EPISODE_LIMIT)
 }
 
 /**
@@ -212,10 +258,11 @@ export function toLlmsTxt({
 	// the first public topics under the limit, most recently changed first
 	const listedPublicTopics = publicTopics.slice(0, LLMS_TOPIC_LIMIT)
 
-	// the newest podcast episodes under the limit, each line linking the title to the podcast episode's page
+	// the newest podcast episodes under the limit, each line linking the title to the podcast episode's page after its
+	// own topic's path, whether or not that topic is among the listed ones
 	const podcastEpisodeLines = toPublicPodcastEpisodePages({
 		appUrl,
-		publicTopics,
+		publicTopics: publicPodcastEpisodeRows.map(({ topicId, topicName }) => ({ id: topicId, name: topicName })),
 		publicPodcastEpisodeRows: publicPodcastEpisodeRows.slice(0, LLMS_PODCAST_EPISODE_LIMIT),
 	}).map(({ url, title, description }) => `- [${title}](${url}): ${description}`)
 

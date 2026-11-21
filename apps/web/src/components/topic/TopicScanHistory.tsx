@@ -1,8 +1,11 @@
 import { type RemoveTopicSourceStatus, removeTopicSource } from "@carlnotes/client/topicClient"
 import type { TopicFinding } from "@carlnotes/contracts/findings"
+import type { ScanNote } from "@carlnotes/contracts/scanSourceResults"
 import { KEEP_ONE_SOURCE_MESSAGE } from "@carlnotes/contracts/sources"
-import type { ScanNote, TopicScan } from "@carlnotes/contracts/topics"
+import type { TopicResponse, TopicScan } from "@carlnotes/contracts/topics"
+import { useServerPagedCards } from "@carlnotes/core/hooks/useServerPagedCards"
 import { toScanTimestamp } from "@carlnotes/core/lib/labels"
+import { TOPIC_SCAN_HISTORY_PAGE_SIZE, toTopicScanPages } from "@carlnotes/core/lib/topicScanPages"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useState } from "react"
 import { toast } from "sonner"
@@ -35,18 +38,17 @@ import { TopicMemoriesDialog } from "./TopicMemoriesDialog"
 import { TopicScanFailure } from "./TopicScanFailure"
 import { type AllowedScanNoteUrls, TopicScanRecap, toNotesMarkdown } from "./TopicScanRecap"
 
-// how many scan rows the history shows on one page
-const SCANS_PER_PAGE = 5
-
 // a Source that a scan's chart offers to remove, named by its full label
 type RemovableTopicSource = { sourceId: string; label: string }
 
 /**
- * The collapsible scan history, newest first, one page of scans at a time. A user who may edit the topic can remove
- * a current Source from a scan's chart.
+ * The collapsible scan history, newest first, one page of scans at a time. A history that holds the newest page of
+ * scans reads each later page from the server. A user who may edit the topic can remove a current Source from a scan's
+ * chart.
  */
 export function TopicScanHistory({
 	scans,
+	scansPage,
 	topicMemoryCount,
 	canRateTopicMemories,
 	allowedUrls,
@@ -57,6 +59,7 @@ export function TopicScanHistory({
 	onReloadTopicPage,
 }: {
 	scans: TopicScan[]
+	scansPage?: TopicResponse["scansPage"]
 	topicMemoryCount?: number
 	canRateTopicMemories?: boolean
 	allowedUrls?: AllowedScanNoteUrls
@@ -68,10 +71,13 @@ export function TopicScanHistory({
 	topicSources: { id: string; sourceKind: string }[]
 	onReloadTopicPage: () => Promise<void>
 }) {
-	// the page that was opened, and the page shown, which stays within the history's pages
-	const [openedPageNumber, setOpenedPageNumber] = useState(1)
-	const pageCount = Math.ceil(scans.length / SCANS_PER_PAGE)
-	const pageNumber = Math.min(openedPageNumber, Math.max(1, pageCount))
+	// the page shown, read from the server if the page read does not hold it, and the page that loads
+	const scanPages = toTopicScanPages({ id: topic.id, scans, scansPage })
+	const { pageRows, pagination, loadingPage } = useServerPagedCards(scanPages)
+
+	// a page inside the scans that the page read holds renders from those scans. a page load without JavaScript shows
+	// their first rows, and a later page renders its own rows
+	const isPageInPageRead = pagination.page * TOPIC_SCAN_HISTORY_PAGE_SIZE < scans.length
 
 	// the Source the confirmation dialog asks about
 	const [removingTopicSource, setRemovingTopicSource] = useState<RemovableTopicSource | null>(null)
@@ -102,7 +108,7 @@ export function TopicScanHistory({
 			titleAside={
 				<TopicMemoriesDialog
 					topicId={topic.id}
-					entryCount={scans.length}
+					entryCount={scanPages.loadedPage.totalCount}
 					topicMemoryCount={topicMemoryCount}
 					canRateTopicMemories={canRateTopicMemories}
 					onTopicMemoryRemoved={onReloadTopicPage}
@@ -112,20 +118,22 @@ export function TopicScanHistory({
 			hasCompactHeader
 		>
 			<TopicScanHistoryCard
-				scans={scans}
-				pageNumber={pageNumber}
+				scans={isPageInPageRead ? scans : pageRows}
+				pageNumber={isPageInPageRead ? pagination.page + 1 : 1}
+				isLoading={loadingPage !== null}
 				allowedUrls={allowedUrls}
 				findings={findings}
 				topic={topic}
 				sourceRemoval={sourceRemoval}
 			/>
-			{/* the page numbers under the card */}
-			{pageCount > 1 && (
+			{/* the page numbers under the card. the current page moves only once the requested page loads, so the clicked
+			number keeps its place while the new rows render */}
+			{pagination.pageCount > 1 && (
 				<Pagination
 					ariaLabel="Brew diary pages"
-					pageNumber={pageNumber}
-					pageCount={pageCount}
-					onOpenPage={setOpenedPageNumber}
+					pageNumber={pagination.page + 1}
+					pageCount={pagination.pageCount}
+					onOpenPage={(pageNumber) => pagination.setPage(pageNumber - 1)}
 				/>
 			)}
 			{/* the confirmation a chart's trash button opens */}
@@ -142,11 +150,13 @@ export function TopicScanHistory({
 }
 
 /**
- * The scan history's card, with a row per scan on the page shown, or the line that an empty history shows.
+ * The scan history's card, with a row per scan on the page shown, the loading line while a page loads, or the line that
+ * an empty history shows.
  */
 export function TopicScanHistoryCard({
 	scans,
 	pageNumber,
+	isLoading = false,
 	allowedUrls,
 	findings,
 	topic,
@@ -154,6 +164,8 @@ export function TopicScanHistoryCard({
 }: {
 	scans: TopicScan[]
 	pageNumber: number
+	// whether the page asked for is still loading
+	isLoading?: boolean
 	allowedUrls?: AllowedScanNoteUrls
 	findings?: TopicFinding[]
 	// names the topic in each diary's copied Markdown
@@ -161,9 +173,18 @@ export function TopicScanHistoryCard({
 	// the Sources each scan's chart offers to remove, and what a tap on a trash button does
 	sourceRemoval?: SourceRemoval
 }) {
+	// a page that loads shows the loading mug in the card
+	if (isLoading) {
+		return (
+			<div className={cn(RESOURCE_LIST_CARD_CLASS, "p-1")}>
+				<CoffeeLoading className="min-h-24 text-base" />
+			</div>
+		)
+	}
+
 	// the scans the card renders: the page shown, and the first NO_SCRIPT_ROW_LIMIT scans for a page load without
 	// JavaScript
-	const renderedScans = toRenderedRows(scans, { pageNumber, pageSize: SCANS_PER_PAGE })
+	const renderedScans = toRenderedRows(scans, { pageNumber, pageSize: TOPIC_SCAN_HISTORY_PAGE_SIZE })
 	return (
 		<div className={cn(RESOURCE_LIST_CARD_CLASS, "p-1")}>
 			{/* one row per rendered scan, each drawing its own dashed separator */}

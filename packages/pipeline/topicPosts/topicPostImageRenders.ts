@@ -7,6 +7,7 @@ import { type DbTransaction, db } from "@carlnotes/db"
 import { topicPosts } from "@carlnotes/db/schema/topicPosts"
 import { topics } from "@carlnotes/db/schema/topics"
 import { recordPendingObjectDeletions } from "@carlnotes/db/store"
+import { clearVisitorPagesOfTopic } from "@carlnotes/db/visitorPageCaches"
 import { topicImageModel } from "@carlnotes/models/topicImageModel"
 import { purgeEdgeCacheTagAfterDeletion, toTopicImageCacheTag, toTopicPostCacheTag } from "@carlnotes/server/edgePurge"
 import { eq } from "drizzle-orm"
@@ -122,16 +123,21 @@ export async function replaceTopicPostImage({
 		return topicPost
 	})
 
-	// a private topic's post has nothing at the edge, and an image that came back under its own hash changes nothing
-	if (!replacedImage || replacedImage.previousHash === hash || replacedImage.visibility !== "public") {
+	// an image that came back under its own hash changes nothing
+	if (!replacedImage || replacedImage.previousHash === hash) {
 		return
 	}
 
-	// the post's page leaves the edge with the image it showed, and so do the replaced files, which are tagged with
-	// the post's topic
-	await purgeEdgeCacheTagAfterDeletion(toTopicPostCacheTag(topicPostId))
-	if (replacedImage.previousHash) {
-		await purgeEdgeCacheTagAfterDeletion(toTopicImageCacheTag(replacedImage.topicId))
+	// the visitor pages that show the post leave the cache. a public topic's post page leaves the edge with the image
+	// it showed, and so do the replaced files, which are tagged with the post's topic
+	try {
+		await clearVisitorPagesOfTopic(replacedImage.topicId)
+	} finally {
+		// the edge purge runs even if the visitor page clear fails
+		if (replacedImage.visibility === "public") {
+			const replacedFileTags = replacedImage.previousHash ? [toTopicImageCacheTag(replacedImage.topicId)] : []
+			await purgeEdgeCacheTagAfterDeletion(toTopicPostCacheTag(topicPostId), ...replacedFileTags)
+		}
 	}
 }
 
@@ -177,10 +183,20 @@ export async function removeTopicPostImageUpload(topicPostId: string): Promise<b
 		return topicPost
 	})
 
-	// a public topic's post page and its removed files leave the edge
-	if (removedUpload?.visibility === "public") {
-		await purgeEdgeCacheTagAfterDeletion(toTopicPostCacheTag(topicPostId))
-		await purgeEdgeCacheTagAfterDeletion(toTopicImageCacheTag(removedUpload.topicId))
+	// the visitor pages that show the post leave the cache, and a public topic's post page and its removed files
+	// leave the edge
+	if (!removedUpload) {
+		return false
 	}
-	return removedUpload !== null
+	try {
+		await clearVisitorPagesOfTopic(removedUpload.topicId)
+	} finally {
+		if (removedUpload.visibility === "public") {
+			await purgeEdgeCacheTagAfterDeletion(
+				toTopicPostCacheTag(topicPostId),
+				toTopicImageCacheTag(removedUpload.topicId),
+			)
+		}
+	}
+	return true
 }

@@ -9,6 +9,7 @@ import {
 	readRedisJson,
 	replaceRedisJson,
 	runWithRedis,
+	saveRedisJsonIfAbsent,
 	subscribeToChannel,
 } from "./redis"
 import {
@@ -132,6 +133,15 @@ test("replaceRedisJson rewrites a stored key and never creates a missing key", a
 	await replaceRedisJson({ key: "missing", value: { name: "new" }, ttlMs: 1000 })
 	expect(fakeRedisServer.storedValueByKey.get("present")).toBe(JSON.stringify({ name: "new" }))
 	expect(fakeRedisServer.storedValueByKey.has("missing")).toBe(false)
+})
+
+// a save if absent writes a missing key and leaves a stored key as it was
+test("saveRedisJsonIfAbsent writes a missing key and never replaces a stored key", async () => {
+	fakeRedisServer.storedValueByKey.set("present", JSON.stringify({ name: "old" }))
+	await saveRedisJsonIfAbsent({ key: "present", value: null, ttlMs: 1000 })
+	await saveRedisJsonIfAbsent({ key: "missing", value: null, ttlMs: 1000 })
+	expect(fakeRedisServer.storedValueByKey.get("present")).toBe(JSON.stringify({ name: "old" }))
+	expect(fakeRedisServer.storedValueByKey.get("missing")).toBe("null")
 })
 
 // a subscriber's handler runs on a publish, a repeat subscribe changes nothing, and a failed publish returns false

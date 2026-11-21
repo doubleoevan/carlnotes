@@ -21,6 +21,8 @@ export type AppEnv = {
 		analyticsTopic?: AnalyticsTopic
 		// the hit count and reset time that the latest rate limiter set
 		rateLimit?: RateLimitInfo
+		// the edge tags a page read adds beside the ones its path names
+		pageCacheTags?: string[]
 	}
 }
 

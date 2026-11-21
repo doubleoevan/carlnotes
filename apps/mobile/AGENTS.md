@@ -59,7 +59,8 @@ and the package boundary check fails anything else, a type-only import of `@carl
   `chatRoomEvents.ts`, and `authClient.ts` open on a 426. The Topic and Podcast Episode counts lines read their counts
   through `core/hooks/usePolledCounts.ts`, gated to the active route.
   The root loads regular and italic Karla faces at each supported weight so rich-text emphasis keeps the web's font.
-  `hooks/useIsScreenActive.ts` shares route focus and app activity for chat and episode recording polls.
+  `hooks/useIsScreenActive.ts` shares route focus and app activity for chat, podcast episode recording, film, and
+  discussion polls.
   `hooks/useFontScaledSize.ts` grows a size with the system text size, up to double, and
   `hooks/useIsReduceMotionEnabled.ts` follows the system's reduce motion setting. The `voice*.ts` modules and
   `spokenAnswerAudio.ts` are listed under Voice. The pure modules have `bun test` coverage beside them. No test renders
@@ -317,9 +318,13 @@ the title, as the account screen's Budget and Settings sections show.
 `components/common/MeterRing.tsx` adapts core's `MeterRing` in two stacked svgs, the account budget cards' rings.
 `components/common/CardsSection.tsx` adapts core's `CardsSection`, the home's, the profile's, and the team screen's
 card sections, Featured Posts right below Featured Podcasts on the profile and the team screen and the profile's
-Featured Films right above them, with this app's accordion section, card column, and page buttons. The Home writes its
-sections in `HOME_SECTIONS`' order, as the web does, with New podcasts this week right below Featured podcasts and New
-posts this week right below Featured posts, each absent with no card. The profile's Featured Posts lists every post
+Featured Films right above them, with this app's accordion section, card column, and page buttons. A section the server
+pages, the home's Your topics and new sections and a topic's, a profile's, and a team's Topic Posts, pages through
+core's `useServerPagedCards` as the web does, with buttons where the web has links, because a screen has no url to link.
+`components/topic/TopicScanHistory.tsx`, the scan history, pages the same way over core's `toTopicScanPages`, with the
+loading mug in its card while a page loads, as the web's does. The Home writes its sections in `HOME_SECTIONS`'
+order, as the web does, with New podcasts this week right below Featured podcasts and New posts this week right below
+Featured posts, each absent with no card. The profile's Featured Posts lists every post
 of its person and is its only Topic Post section. The team screen has the profile's four card sections, Featured
 Films right before Featured Podcasts, and its Featured Posts lists every post of its topics.
 `components/account/ProfileSections.tsx` and `components/team/TeamSections.tsx` adapt core's `ProfileSections` and
@@ -364,7 +369,11 @@ film url in memory only. `components/podcast/TopicVideoDialog.tsx` is the Video 
 home's paged film cards, whose play opens the Video sheet. While a film renders, the topic video section shows the shimmering line "Carl and
 Vienna are filming..." under its title, through `components/podcast/UnpublishedPodcastEpisodeCard.tsx`'s
 `PodcastEpisodeProgressLine`, and the podcast episode screen's film section shows that card with `isVideoRendering` in
-the player's place. Core's `useTopicVideoRenderingPoll` reads the screen again until the film is ready.
+the player's place. Core's `useTopicVideoRenderingPoll` reads the film's status read
+(`GET /api/status/episodes/:id/topic-video`) until the film leaves rendering, then the screen once. The topic screen,
+the podcast episode screen, and the Topic Post screen enable the film and discussion polls only while
+`useIsScreenActive` says the screen is focused and the app is active, and the scan button polls the Topic's scan status
+read (`GET /api/status/topics/:id/scan`) through core's `useTopicScanStatusPoll` with the web's rates.
 `components/topic/TopicNotePopover.tsx` adapts core's
 `TopicNotePopover`, a Topic's note in a sheet under the note icon of a search row and a news row, and
 `components/social/CommentMentionBadge.tsx` core's mention badge, a count whose press opens
@@ -452,7 +461,7 @@ preview, and which returns to each save the code block languages and alt texts t
 input and reader draw an image at its stored size, so the editor opens and the post's body shows once their width is
 measured, with each image no wider than it, and a save keeps each image's stored size, and
 `TopicPostScreen.tsx`, the screen at `app/topics/[topicId]/posts/[topicPostId].tsx`, with the post's body in
-`TopicPostBody.tsx`. `ShareTopic.tsx`, `ShareTeam.tsx`,
+`TopicPostBody.tsx` and its actions menu's options in `topicPostPageActions.ts`. `ShareTopic.tsx`, `ShareTeam.tsx`,
 and a Dashboard screen's
 Share open the operating system's share sheet through `share/shareSheet.ts`, which shows an error if the sheet does
 not open. `TopicPostScreen.tsx` renders the shared `TopicPostPage`: a

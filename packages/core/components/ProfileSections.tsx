@@ -1,8 +1,9 @@
 import type { OwnerTopic } from "@carlnotes/contracts/activity"
 import type { ProfileResponse } from "@carlnotes/contracts/profilePage"
+import type { ProfileAudience } from "@carlnotes/contracts/profiles"
 import type { ComponentType, ReactNode } from "react"
 import { toSectionCountLabel } from "../lib/labels"
-import { PROFILE_SECTIONS } from "../lib/profileSections"
+import { PROFILE_SECTIONS, toProfileTopicPostCardPages } from "../lib/profileSections"
 import type { PageSectionsElements } from "./pageSectionsElements"
 
 export type ProfileSectionsElements = PageSectionsElements & {
@@ -17,6 +18,7 @@ export type ProfileSectionsElements = PageSectionsElements & {
 export function ProfileSections({
 	profile,
 	isOwnProfile,
+	audience,
 	newsList,
 	renderOwnerTopicsTable,
 	topicsTable,
@@ -34,6 +36,8 @@ export function ProfileSections({
 }: {
 	profile: ProfileResponse
 	isOwnProfile: boolean
+	// the audience the page shows to, which a later page of the Topic Posts is read for
+	audience?: ProfileAudience
 	newsList: ReactNode
 	renderOwnerTopicsTable: (ownTopics: OwnerTopic[]) => ReactNode
 	// the topics a visitor may read, which show while the profile has any
@@ -77,6 +81,7 @@ export function ProfileSections({
 				<PagedCardsSection
 					section={PROFILE_SECTIONS.profileTopicPosts}
 					rows={profile.profileTopicPosts}
+					serverPages={toProfileTopicPostCardPages(profile, audience)}
 					renderCard={(topicPost) => <TopicPostCard topicPost={topicPost} />}
 				/>
 

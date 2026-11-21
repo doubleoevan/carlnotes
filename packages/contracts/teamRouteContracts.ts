@@ -2,6 +2,7 @@
 
 import { z } from "zod"
 import type { ApiRouteContract } from "./apiRouteContracts"
+import { cardsPageQuery } from "./cardPages"
 import { inviteCreateResponse } from "./invites"
 import {
 	addTopicPayload,
@@ -19,9 +20,11 @@ import {
 	teamCreateResponse,
 	teamDeleteResponse,
 	teamNameTakenResponse,
+	teamPageQuery,
 	teamPageResponse,
 	teamsPageResponse,
 } from "./teams"
+import { topicPostCardsPage } from "./topicPosts"
 import { userBlocksResponse } from "./userBlocks"
 
 // the entries, in client module order
@@ -37,7 +40,15 @@ export const teamRouteContracts: Record<string, ApiRouteContract> = {
 		method: "GET",
 		path: "/api/teams/:id/page",
 		params: idParam,
+		query: teamPageQuery,
 		response: teamPageResponse,
+	},
+	"teamClient.fetchTeamTopicPostsPage": {
+		method: "GET",
+		path: "/api/teams/:id/topic-posts",
+		params: idParam,
+		query: cardsPageQuery,
+		response: topicPostCardsPage,
 	},
 	"teamClient.fetchTeams": { method: "GET", path: "/api/teams", response: teamsPageResponse },
 	"teamClient.sendAddTopicTeam": {

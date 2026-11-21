@@ -3,14 +3,18 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { toTopicPostImageUrls, toUncheckedTopicImageUrls } from "@carlnotes/contracts/topicImages"
 import type { TopicPostResponse } from "@carlnotes/contracts/topicPosts"
-import { restoreConnectionPool } from "@carlnotes/db/connectionPoolStub"
+import { restoreConnectionPool, stubConnectionPool, toSelectionRow } from "@carlnotes/db/connectionPoolStub"
 import * as topicImages from "@carlnotes/db/topicImages"
+import { namedTopicColumns } from "@carlnotes/db/topicPermissions"
 import * as uncheckedImagesDb from "@carlnotes/db/uncheckedImages"
+import * as visitorPageCaches from "@carlnotes/db/visitorPageCaches"
+import { toVisitorTopicPostPageKey } from "@carlnotes/db/visitorPageCaches"
 import { MODERATION_TEXT_MAX_CHARS } from "@carlnotes/models/moderation"
 import * as temporalClient from "@carlnotes/pipeline/temporalClient"
 import * as edgePurge from "@carlnotes/server/edgePurge"
 import * as moderation from "../moderation"
 import { toJsonRequest } from "../testSession"
+import * as topicPostResponse from "./topicPostResponse"
 import * as topicPosts from "./topicPosts"
 import { topicPostsRoute } from "./topicPostsRoute"
 import {
@@ -65,6 +69,22 @@ test("a save that drops an image of a public post purges the post's images from 
 		topicPost: { id: topicPostId, html: publishedRow.topicPost.html },
 	})
 	expect(purgeSpy).toHaveBeenCalledWith("topic-image:topic-1")
+})
+
+test("a published post's save clears its topic's visitor pages, and a draft's save clears none", async () => {
+	// a published post's save
+	stubTopicPostRoutes(toPublishedRow(10))
+	const clearVisitorPagesSpy = spyOn(visitorPageCaches, "clearVisitorPagesOfTopic").mockResolvedValue()
+	const publishedResponse = await toUserApp("member-1").request("/topic-posts/post-1", toSave(320))
+	expect(publishedResponse.status).toBe(200)
+	expect(clearVisitorPagesSpy.mock.calls).toEqual([["topic-1"]])
+
+	// a draft's save shows on no visitor page
+	mock.restore()
+	stubTopicPostRoutes(DRAFT_ROW)
+	const draftClearSpy = spyOn(visitorPageCaches, "clearVisitorPagesOfTopic").mockResolvedValue()
+	await toUserApp("member-1").request("/topic-posts/post-1", toSave(320))
+	expect(draftClearSpy).not.toHaveBeenCalled()
 })
 
 test("a save from an editor opened before an admin removed an image leaves the image out", async () => {
@@ -236,7 +256,8 @@ test("a draft reads for its author alone, and a published post for whoever may o
 })
 
 test("the author, the Topic's owner, and an admin delete a published post, and another member does not", async () => {
-	const { deleteSpy, clearHomeSpy, purgeProfileSpy, trackEventSpy } = stubTopicPostRoutes(toPublishedRow(60))
+	const { deleteSpy, clearHomeSpy, purgeProfileSpy, deleteRedisKeysSpy, purgeTagSpy, trackEventSpy } =
+		stubTopicPostRoutes(toPublishedRow(60))
 	const toDelete = (userId: string): Response | Promise<Response> =>
 		toUserApp(userId).request("/topic-posts/post-1", { method: "DELETE" })
 
@@ -250,9 +271,19 @@ test("the author, the Topic's owner, and an admin delete a published post, and a
 	}
 	expect(deleteSpy).toHaveBeenCalledTimes(3)
 
-	// each delete clears the home's cards and purges the author's profile page
-	expect(clearHomeSpy).toHaveBeenCalledTimes(3)
-	expect(purgeProfileSpy.mock.calls).toEqual([["member-1"], ["member-1"], ["member-1"]])
+	// each delete clears the post's own page copy by its id, and purges the post's page, the home, and the author's
+	// profile page from the edge in one request
+	const topicPostPageKey = toVisitorTopicPostPageKey("post-1")
+	const pageClears = (deleteRedisKeysSpy.mock.calls as unknown[][]).filter((call) => call.includes(topicPostPageKey))
+	expect(pageClears).toHaveLength(3)
+	// each delete purges the post's page with the home and the author's profile
+	const deletePurges = (purgeTagSpy.mock.calls as unknown[][]).filter((call) => call.includes("topic-post:post-1"))
+	expect(deletePurges).toHaveLength(3)
+	for (const deletePurge of deletePurges) {
+		expect(deletePurge).toEqual(expect.arrayContaining(["topic-post:post-1", "home", "profile:member-1"]))
+	}
+	expect(clearHomeSpy).not.toHaveBeenCalled()
+	expect(purgeProfileSpy).not.toHaveBeenCalled()
 
 	// one delete event for each
 	expect((trackEventSpy.mock.calls as unknown[][]).map((call) => call[0])).toEqual([
@@ -275,7 +306,7 @@ test("an unchecked Topic Post image shows on the post's page to its uploader alo
 	// a published post whose image member-1 and owner-1 may change, and member-1's unchecked upload
 	stubTopicPostRoutes(toPublishedRow(60))
 	const publishedImage = toTopicPostImageUrls("post-1", "published-hash")
-	spyOn(topicPosts, "toTopicPostResponse").mockImplementation(
+	spyOn(topicPostResponse, "toTopicPostResponse").mockImplementation(
 		async (userId) =>
 			({
 				id: "post-1",
@@ -313,4 +344,37 @@ test("an unchecked Topic Post image shows on the post's page to its uploader alo
 
 	// only the two users who may change the image looked for an unchecked image
 	expect(loadUncheckedImageSpy.mock.calls.map(([, userId]) => userId)).toEqual(["member-1", "owner-1"])
+})
+
+test("a Topic's posts read whole if the read names no page, and one page with every post's count if it names one", async () => {
+	// a public Topic, and its posts read whole or a page at a time
+	stubConnectionPool(({ text }) =>
+		text.includes('from "topics"')
+			? [
+					toSelectionRow(namedTopicColumns, {
+						id: "topic-1",
+						ownerId: "owner-1",
+						visibility: "public",
+						name: "Espresso",
+					}),
+				]
+			: [],
+	)
+	const topicPostCards = [{ id: "post-1" }, { id: "post-2" }] as never
+	const loadWholeSpy = spyOn(topicPosts, "loadTopicPostCards").mockResolvedValue(topicPostCards)
+	const loadPageSpy = spyOn(topicPosts, "loadTopicPostCardsPage").mockResolvedValue({
+		topicPosts: topicPostCards,
+		totalCount: 8,
+	})
+
+	// a read that names no page, as a released app and an MCP view read it, holds every post and no count
+	const wholeResponse = await topicPostsRoute.request("/topics/topic-1/topic-posts")
+	expect(await wholeResponse.json()).toEqual({ topicPosts: topicPostCards, canPublish: false })
+	expect(loadPageSpy).not.toHaveBeenCalled()
+
+	// a read that names a page reads that page alone, with the count of every post
+	const pageResponse = await topicPostsRoute.request("/topics/topic-1/topic-posts?page=1")
+	expect(await pageResponse.json()).toEqual({ topicPosts: topicPostCards, totalCount: 8, canPublish: false })
+	expect(loadPageSpy.mock.calls[0]).toEqual([null, "topic-1", 1])
+	expect(loadWholeSpy).toHaveBeenCalledTimes(1)
 })

@@ -1,6 +1,6 @@
 // admin tests for the contribution math that the totals summary reports, the self-demotion check, the route that
 // lists a topic's subscribers, the mobile minimum version write, and the spend control settings read and save
-import { afterEach, beforeEach, expect, test } from "bun:test"
+import { afterEach, beforeEach, expect, spyOn, test } from "bun:test"
 import { db } from "@carlnotes/db"
 import {
 	ADMIN_USER_ACCESS_ROW,
@@ -19,6 +19,7 @@ import { adminRoute, isSelfDemotion } from "./admin"
 import { computeContributionCents } from "./adminConsole"
 import { loadAdminDailySpendCutoffs } from "./spendControlSettings"
 import { toSignedInApp } from "./testSession"
+import * as homeOrder from "./topic/homeOrder"
 
 // each test writes through an in-memory Redis
 beforeEach(() => {
@@ -238,6 +239,22 @@ test("an admin's save writes each pause, the featured-only home, and the image l
 	expect(spendControlInsert?.text).toContain('"generated_chapter_image_limit" = $')
 	expect(spendControlInsert?.text).toContain('"is_home_pinned_only" = $')
 	expect(spendControlInsert?.values.slice(7, 11)).toEqual([true, true, 0, true])
+})
+
+// the home's cached sections and its visitor copy read the featured-only setting
+test("a save that turns the featured-only home on clears the home's caches, and a save that leaves it alone does not", async () => {
+	const clearHomeCachesSpy = spyOn(homeOrder, "clearHomeCaches").mockResolvedValue(undefined)
+
+	// the stored row reads as off, so turning it on is a change
+	stubConnectionPool(toMinimumVersionRouteRows)
+	expect((await saveSpendControlSettings("admin-1", { isHomeFeaturedOnly: true })).status).toBe(200)
+	expect(clearHomeCachesSpy).toHaveBeenCalledTimes(1)
+
+	// a save that names it off over a row that is off, and a save that leaves it out, change nothing on the home
+	expect((await saveSpendControlSettings("admin-1", { isHomeFeaturedOnly: false })).status).toBe(200)
+	expect((await saveSpendControlSettings("admin-1", { isPodcastEpisodeRecordingPaused: true })).status).toBe(200)
+	expect(clearHomeCachesSpy).toHaveBeenCalledTimes(1)
+	clearHomeCachesSpy.mockRestore()
 })
 
 test("a save from a page loaded before the newer settings existed leaves each of them as stored", async () => {

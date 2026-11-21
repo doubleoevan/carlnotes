@@ -1,43 +1,22 @@
 // query budgets for the cached routes: each route is requested twice against the pool and Redis stubs, and the
-// cache hit request's query count stays at or under the route's maximum. the manual scan route's daily spend cutoff
-// reads stay inside theirs, and a topic create returns without waiting for its first scan's cutoff read
+// cache hit request's query count stays at or under the route's maximum. the topic page, its related topics, its scan
+// history pages, and a profile stay inside theirs, and a visitor's topic page and home send no query on a warm copy
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
-import { updateTopicPayload } from "@carlnotes/contracts/topicPayloads"
-import {
-	FREE_USER_ACCESS_ROW,
-	PLUS_USER_ACCESS_ROW,
-	restoreConnectionPool,
-	type SentQuery,
-	stubConnectionPool,
-	toTableRow,
-} from "@carlnotes/db/connectionPoolStub"
-import * as dailySpendCutoffs from "@carlnotes/db/dailySpendCutoffs"
-import * as monthlyBudgetCutoffs from "@carlnotes/db/monthlyBudgetCutoffs"
+import { restoreConnectionPool, type SentQuery } from "@carlnotes/db/connectionPoolStub"
 import * as redis from "@carlnotes/db/redis"
-import { restoreRedisClient } from "@carlnotes/db/redisClientStub"
-import { runWithRequestMemo } from "@carlnotes/db/requestMemo"
-import { scans } from "@carlnotes/db/schema/scans"
 import { TOPIC_MEMORY_EMBEDDING_MODEL } from "@carlnotes/db/schema/topicMemories"
-import { topics } from "@carlnotes/db/schema/topics"
-import * as viewerCounts from "@carlnotes/db/viewerCounts"
-import * as litellm from "@carlnotes/models/litellm"
-import * as scan from "@carlnotes/pipeline/scan"
-import * as screen from "@carlnotes/pipeline/screen"
-import * as topicImageRenders from "@carlnotes/pipeline/topicImages/topicImageRenders"
-import * as analytics from "@carlnotes/server/analytics"
-import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
-import { apiRoute } from "./api"
-import * as authorization from "./authorization"
-import * as inviteEmails from "./invite/emails"
-import * as userInvites from "./invite/userInvites"
+import { toTestPageHead } from "./pageReadTestFixtures"
 import { toPublishedPodcastEpisodeRow } from "./podcast/podcastEpisodeTestFixtures"
-import { signInAs } from "./testSession"
-import * as promptVersions from "./topic/promptVersions"
-import { stubRedisClientWithCentroid } from "./topic/relatednessTestFixtures"
-import * as saveHelpers from "./topic/saveHelpers"
-import { createTopic } from "./topic/saveTopic"
-import * as saveTopicGate from "./topic/saveTopicGate"
-import * as topicIndexing from "./topic/topicIndexing"
+import {
+	endQueryBudgetTest,
+	requestAsUser,
+	startQueryBudgetTest,
+	stubBudgetConnectionPool,
+	stubPageReadFixture,
+	TOPIC_ROW,
+	toBudgetQueryRows,
+} from "./queryBudgetsTestFixtures"
+import * as pageHead from "./share/pageHead"
 
 // the most queries a request may send: a Redis hit serves the mention count, the topic poll, and the feed's topic
 // section ids without their reads
@@ -64,72 +43,24 @@ const MAX_RELATED_TOPICS_QUERIES = 7
 // links, reactions, and latest podcast episodes
 const MAX_PROFILE_QUERIES = 15
 
-// a public topic owned by someone else
-const TOPIC_ROW = toTableRow(topics, {
-	id: "topic-1",
-	ownerId: "owner-1",
-	name: "Agents",
-	prompt: "agents",
-	frequency: "daily",
-	scheduledTime: "09:00:00",
-	scheduledDayOfWeek: "monday",
-	visibility: "public",
-	tags: [],
-	maxTopicFindings: 10,
-	subscriberCount: 3,
-	isPodcastEnabled: true,
-	createdAt: new Date("2026-10-01T00:00:00Z"),
-	updatedAt: new Date("2026-10-01T00:00:00Z"),
-})
-
 // the queries the stubbed pool was sent, from the start of the test
 let sentQueries: SentQuery[] = []
-
-// answer the topic's own read with the topic, a user's access read with a free user, and every other read with no rows
-function toBudgetQueryRows(sentQuery: SentQuery): unknown[] {
-	// the topic's own read
-	if (sentQuery.text.includes('from "topics" where "topics"."id" = $1')) {
-		return [TOPIC_ROW]
-	}
-
-	// the user's access read, and every other read
-	if (sentQuery.text.includes('"budget_override_cents" from "users"')) {
-		return [FREE_USER_ACCESS_ROW]
-	}
-	return []
-}
 
 // the read that only a load with the related topics sends: the related topic ids
 function isRelatedTopicsRead(sentQuery: SentQuery): boolean {
 	return sentQuery.text.includes('from "topic_vectors"')
 }
 
-// the speech model, which turns podcast episodes on, and the secret that signs cover urls, put back after each test
-const restorePodcastSettings = saveEnvSettings(["PODCAST_SPEECH_MODEL", "BETTER_AUTH_SECRET"])
-
 // one Redis with the related reads' centroid stored and one stubbed pool per test, with the console quiet
 beforeEach(() => {
-	stubRedisClientWithCentroid()
-	sentQueries = stubConnectionPool(toBudgetQueryRows)
-	spyOn(console, "error").mockImplementation(() => {})
+	sentQueries = startQueryBudgetTest()
 })
 
 // everything back after each test
 afterEach(() => {
-	restoreConnectionPool()
-	restoreRedisClient()
-	restorePodcastSettings()
+	endQueryBudgetTest()
 	mock.restore()
 })
-
-// request a path through the api tree as the given user, with the request memo open as the server opens it,
-// and return the response with how many queries the request sent
-async function requestAsUser(path: string, userId: string | null): Promise<{ response: Response; queryCount: number }> {
-	signInAs(userId)
-	const queryCountBefore = sentQueries.length
-	const response = await runWithRequestMemo(() => apiRoute.request(path))
-	return { response, queryCount: sentQueries.length - queryCountBefore }
-}
 
 // the mention count is one read on a miss and none on a hit
 test("the mention count's cache hit request stays inside its maximum", async () => {
@@ -167,10 +98,11 @@ test("the topic page counts a Journal of 100 topic memories inside its scans rea
 		{ ...groupRow, id: "memory-2", embeddingModel: TOPIC_MEMORY_EMBEDDING_MODEL, embedding: [0.99, 0.1] },
 	]
 	const startedAt = new Date("2026-11-18T09:00:00Z")
-	const scanRow = ["scan-1", "succeeded", startedAt, startedAt, null, 5, 2, 3, "0.1", null, null]
-	sentQueries = stubConnectionPool((sentQuery) =>
+	const scanRow = ["scan-1", "succeeded", startedAt, startedAt, null, 5, 2, 3, "0.1", null]
+	const headColumnsAndRecaps = [null, null, null, null, "0.1", null]
+	sentQueries = stubBudgetConnectionPool((sentQuery) =>
 		sentQuery.text.includes("'ungroupedCount'")
-			? [[...scanRow, { ungroupedCount: 98, groupRows }]]
+			? [[...scanRow, { ungroupedCount: 98, groupRows }, ...headColumnsAndRecaps]]
 			: toBudgetQueryRows(sentQuery),
 	)
 	const { response, queryCount } = await requestAsUser("/api/topics/topic-1", "user-1")
@@ -226,9 +158,101 @@ test("a page that asks for separate related topics leaves them out inside its ma
 
 // a visitor's page is the one every visitor shares, so it keeps its related topics whatever the query asks
 test("a visitor's page keeps its related topics with the flag", async () => {
+	spyOn(pageHead, "loadTopicPageHead").mockResolvedValue(toTestPageHead("Agents"))
 	const { response } = await requestAsUser("/api/topics/topic-1?related=separate", null)
 	expect(response.status).toBe(200)
 	expect(sentQueries.filter(isRelatedTopicsRead).length).toBeGreaterThanOrEqual(1)
+})
+
+// a read that asks for pages holds one page of the Topic Posts and the newest scans with their count, in no more reads
+// than a whole read, and a read that asks for none holds both lists whole
+test("a paged topic read holds one page of each list inside the whole read's count", async () => {
+	const wholeRequest = await requestAsUser("/api/topics/topic-1", "user-1")
+	const pagedRequest = await requestAsUser("/api/topics/topic-1?paged=1&topicPostsPage=0&scans=newest", "user-1")
+	expect(pagedRequest.response.status).toBe(200)
+	expect(pagedRequest.queryCount).toBeLessThanOrEqual(wholeRequest.queryCount)
+
+	// the paged read says where its pages sit, and the whole read has no page
+	const pagedTopic = (await pagedRequest.response.json()) as Record<string, unknown>
+	expect(pagedTopic.topicPostsPage).toEqual({ page: 0, totalCount: 0 })
+	expect(pagedTopic.scansPage).toEqual({ page: 0, totalCount: 0 })
+	const wholeTopic = (await wholeRequest.response.json()) as Record<string, unknown>
+	expect(wholeTopic.topicPostsPage).toBeUndefined()
+	expect(wholeTopic.scansPage).toBeUndefined()
+})
+
+// a visitor's paged page read is cut from the topic's copy, so the warm read still sends no query, and the copy holds
+// the newest page of scans
+test("a visitor's paged topic page read is cut from the warm copy", async () => {
+	// a cold visitor read stores the copy of a topic with one scan, and a paged read after it sends no query
+	sentQueries = stubPageReadFixture()
+	spyOn(pageHead, "loadTopicPageHead").mockResolvedValue(toTestPageHead("Agents"))
+	await requestAsUser("/api/topics/topic-1/page", null)
+	const warmRequest = await requestAsUser("/api/topics/topic-1/page?paged=1&scans=newest", null)
+	expect(warmRequest.response.status).toBe(200)
+	expect(warmRequest.queryCount).toBe(0)
+
+	// the paged read holds a page of Topic Posts, and the copy's newest page of scans with the history's count
+	const { topic } = (await warmRequest.response.json()) as { topic: Record<string, unknown> }
+	expect(topic.topicPostsPage).toEqual({ page: 0, totalCount: 0 })
+	expect(topic.scansPage).toEqual({ page: 0, totalCount: 1 })
+})
+
+// a visitor's released topic read that does not ask for the newest scans alone holds the whole history, from the copy
+// with no query if the copy holds every scan
+test("a visitor's topic read without the newest-scans flag holds the whole history", async () => {
+	// the copy holds the history's one scan, so the read is served from it whole
+	sentQueries = stubPageReadFixture()
+	spyOn(pageHead, "loadTopicPageHead").mockResolvedValue(toTestPageHead("Agents"))
+	await requestAsUser("/api/topics/topic-1/page", null)
+
+	// the released read with no flag holds the one scan and no page
+	const wholeRequest = await requestAsUser("/api/topics/topic-1", null)
+	expect(wholeRequest.response.status).toBe(200)
+	expect(wholeRequest.queryCount).toBe(0)
+	const wholeTopic = (await wholeRequest.response.json()) as { scans: unknown[]; scansPage?: unknown }
+	expect(wholeTopic.scans).toHaveLength(1)
+	expect(wholeTopic.scansPage).toBeUndefined()
+
+	// a flagged read gets the copy's page and count
+	const newestRequest = await requestAsUser("/api/topics/topic-1?scans=newest", null)
+	expect(((await newestRequest.response.json()) as { scansPage?: unknown }).scansPage).toEqual({
+		page: 0,
+		totalCount: 1,
+	})
+})
+
+// a later page of the scan history reads its own page of scans, and counts the topic's scans if the page is empty
+test("a later page of the scan history returns its scans and the topic's scan count", async () => {
+	const { response } = await requestAsUser("/api/topics/topic-1/scans?page=3", "user-1")
+	expect(response.status).toBe(200)
+	expect(await response.json()).toEqual({ scans: [], totalCount: 0 })
+	expect(sentQueries.some(({ text }) => text.includes("offset"))).toBe(true)
+})
+
+// a visitor's topic page read is built once and then served from its copy, so the warm read sends no query, and a
+// signed-in read is built for the reader each time and fills no copy
+test("a visitor's topic page read sends no query on a warm copy, and a signed-in read is never served from it", async () => {
+	spyOn(pageHead, "loadTopicPageHead").mockResolvedValue(toTestPageHead("Agents"))
+	const signedInRequest = await requestAsUser("/api/topics/topic-1/page", "user-1")
+	const coldRequest = await requestAsUser("/api/topics/topic-1/page", null)
+	const warmRequest = await requestAsUser("/api/topics/topic-1/page", null)
+	expect(signedInRequest.response.status).toBe(200)
+	expect(coldRequest.response.status).toBe(200)
+	expect(warmRequest.response.status).toBe(200)
+
+	// the signed-in read left nothing to serve, so the visitor's first read built the page, and the second sent nothing
+	expect(coldRequest.queryCount).toBeGreaterThan(0)
+	expect(warmRequest.queryCount).toBe(0)
+	expect(await warmRequest.response.json()).toEqual(await coldRequest.response.json())
+})
+
+// a visitor's home is one copy every visitor shares
+test("a visitor's home sends no query on a warm copy", async () => {
+	const coldRequest = await requestAsUser("/api/home", null)
+	const warmRequest = await requestAsUser("/api/home", null)
+	expect(coldRequest.response.status).toBe(200)
+	expect(warmRequest.queryCount).toBe(0)
 })
 
 // the related topics' own read sends the gate's reads and the related reads, and nothing of the page's
@@ -246,11 +270,11 @@ test("the topic page reads its podcast episodes' films once", async () => {
 	Bun.env.PODCAST_SPEECH_MODEL = "test-speech-model"
 	Bun.env.BETTER_AUTH_SECRET = "test-secret"
 	restoreConnectionPool()
-	sentQueries = stubConnectionPool((sentQuery) =>
-		sentQuery.text.includes('from "episodes" where ("episodes"."topic_id" = $1 and "episodes"."status" = $2)')
+	sentQueries = stubBudgetConnectionPool((sentQuery) =>
+		sentQuery.text.includes('"episodes"."id" in (select "id" from "episodes"')
 			? [
-					toPublishedPodcastEpisodeRow({ id: "episode-2", topicId: "topic-1", episodeNumber: 2 }),
-					toPublishedPodcastEpisodeRow({ id: "episode-1", topicId: "topic-1", episodeNumber: 1 }),
+					[...toPublishedPodcastEpisodeRow({ id: "episode-2", topicId: "topic-1", episodeNumber: 2 }), true, true],
+					[...toPublishedPodcastEpisodeRow({ id: "episode-1", topicId: "topic-1", episodeNumber: 1 }), true, false],
 				]
 			: toBudgetQueryRows(sentQuery),
 	)
@@ -261,15 +285,21 @@ test("the topic page reads its podcast episodes' films once", async () => {
 	expect(response.status).toBe(200)
 	expect(filmReads).toHaveLength(1)
 	expect(filmReads[0]?.values).toEqual(["episode-2", "episode-1", "ready", "rendering"])
+
+	// one reactions read for the topic, its findings, and its podcast episodes' film cards, and none of its own for the
+	// cards
+	const reactionReads = sentQueries.filter((sentQuery) => sentQuery.text.includes('from "reactions"'))
+	expect(reactionReads).toHaveLength(1)
+	expect(reactionReads[0]?.values).toEqual(expect.arrayContaining(["topic-1", "episode-2", "episode-1"]))
 })
 
 // a profile reads the person's topics once, for the cards and the topic table, and stays inside its maximum
 test("a profile reads the person's topics once inside its maximum", async () => {
 	// the person, and the one public topic they own or a team they lead holds
 	restoreConnectionPool()
-	sentQueries = stubConnectionPool((sentQuery) => {
-		if (sentQuery.text.includes('"avatar_key" from "users" where "users"."id" = $1')) {
-			return [["owner-1", "Owner", new Date("2026-10-01T00:00:00Z"), null, null]]
+	sentQueries = stubBudgetConnectionPool((sentQuery) => {
+		if (sentQuery.text.includes('"profile_viewer_count" from "users" where "users"."id" = $1')) {
+			return [["owner-1", "Owner", new Date("2026-10-01T00:00:00Z"), null, null, null, 0]]
 		}
 		return sentQuery.text.includes('from "topics" where (("topics"."owner_id" = $1') ? [TOPIC_ROW] : []
 	})
@@ -293,154 +323,4 @@ test("a bypassed cache fails the mention count's maximum", async () => {
 
 	// the second request sent the read again
 	expect(secondRequest.queryCount).toBeGreaterThan(MAX_MENTION_COUNT_CACHE_HIT_QUERIES)
-})
-
-// the most daily spend cutoff reads a manual scan request may send: none for a paid user or on a cache hit, and on a
-// miss the settings row and the eight free-plan spend sums
-const MAX_DAILY_SPEND_CUTOFF_CACHE_MISS_QUERIES = 9
-
-// a topic owned by the signed-in user, so the manual scan gate allows the scan
-const OWNED_TOPIC_ROW = toTableRow(topics, { id: "topic-1", ownerId: "user-1", name: "Agents", visibility: "public" })
-
-// the reads that only the daily spend cutoffs send: the settings row, the free-plan spend sums, and the Topic's waiting
-// first scan
-function isDailySpendCutoffRead(sentQuery: SentQuery): boolean {
-	return (
-		sentQuery.text.includes('"spend_control_settings"') ||
-		sentQuery.text.includes(`"users"."role" <> 'admin'`) ||
-		sentQuery.text.includes('"earlier_scans"')
-	)
-}
-
-// stub the pool with the owned topic and the given access row, a key under its budget, and a scan start that succeeds
-function stubManualScanRequest(accessRow: unknown[]): void {
-	restoreConnectionPool()
-	sentQueries = stubConnectionPool((sentQuery) => {
-		if (sentQuery.text.includes('from "topics" where "topics"."id" = $1')) {
-			return [OWNED_TOPIC_ROW]
-		}
-		return sentQuery.text.includes('"admin_blocked_at" from "users"') ? [accessRow] : []
-	})
-
-	// a key under its budget and a scan start that succeeds
-	spyOn(litellm, "isUserLiteLLMKeyBudgetExhausted").mockResolvedValue(false)
-	spyOn(scan, "startTopicScan").mockResolvedValue({
-		status: "started",
-		scan: { id: "scan-1" } as never,
-		whenFinished: async () => {},
-	})
-}
-
-// request a manual scan of topic-1 as user-1, with the request memo open, and return how many cutoff reads it sent
-async function requestManualScan(): Promise<{ response: Response; dailySpendCutoffQueryCount: number }> {
-	signInAs("user-1")
-	const queryCountBefore = sentQueries.length
-	const response = await runWithRequestMemo(() => apiRoute.request("/api/topics/topic-1/scan", { method: "POST" }))
-	const dailySpendCutoffQueryCount = sentQueries.slice(queryCountBefore).filter(isDailySpendCutoffRead).length
-	return { response, dailySpendCutoffQueryCount }
-}
-
-// a paid user's manual scan reads nothing the daily spend cutoffs add
-test("a paid user's manual scan sends no daily spend cutoff read", async () => {
-	stubManualScanRequest(PLUS_USER_ACCESS_ROW)
-	const { response, dailySpendCutoffQueryCount } = await requestManualScan()
-	expect(response.status).toBe(200)
-	expect(dailySpendCutoffQueryCount).toBe(0)
-})
-
-// a free user's manual scan reads the settings and the spend sums on a miss, and nothing on a hit
-test("a free user's manual scan sends the cutoff reads on a cache miss and none on a hit", async () => {
-	stubManualScanRequest(FREE_USER_ACCESS_ROW)
-	const cacheMissRequest = await requestManualScan()
-	const cacheHitRequest = await requestManualScan()
-
-	// the miss reads within the maximum, and the hit reads nothing
-	expect(cacheMissRequest.response.status).toBe(200)
-	expect(cacheMissRequest.dailySpendCutoffQueryCount).toBeGreaterThan(0)
-	expect(cacheMissRequest.dailySpendCutoffQueryCount).toBeLessThanOrEqual(MAX_DAILY_SPEND_CUTOFF_CACHE_MISS_QUERIES)
-	expect(cacheHitRequest.dailySpendCutoffQueryCount).toBe(0)
-})
-
-// a bypassed cache sends the cutoff reads again on the second request
-test("a bypassed cache fails the manual scan's cache hit maximum", async () => {
-	stubManualScanRequest(FREE_USER_ACCESS_ROW)
-	spyOn(redis, "cacheJson").mockImplementation(({ load }) => load())
-	await requestManualScan()
-	const secondRequest = await requestManualScan()
-	expect(secondRequest.dailySpendCutoffQueryCount).toBeGreaterThan(0)
-})
-
-// the new topic's row and its first scan's row, as the create's inserts return them
-const CREATED_TOPIC_ROW = toTableRow(topics, { id: "topic-2", ownerId: "user-1", name: "Agents", visibility: "public" })
-const FIRST_SCAN_ROW = toTableRow(scans, { id: "scan-2", topicId: "topic-2", ownerId: "user-1", status: "running" })
-
-// stub every step of a topic create around its writes, and the first scan's budget reads, all passing
-function stubTopicCreate(): void {
-	restoreConnectionPool()
-	sentQueries = stubConnectionPool((sentQuery) => {
-		if (sentQuery.text.startsWith('insert into "topics"')) {
-			return [CREATED_TOPIC_ROW]
-		}
-		return sentQuery.text.startsWith('insert into "scans"') ? [FIRST_SCAN_ROW] : []
-	})
-
-	// the gates and checks before the writes
-	spyOn(authorization, "isAllowed").mockResolvedValue(true)
-	spyOn(authorization, "topicsRemaining").mockResolvedValue(5)
-	spyOn(saveHelpers, "authorizeNewDailyTopic").mockResolvedValue(null)
-	spyOn(saveTopicGate, "toTopicSaveRejection").mockResolvedValue(null)
-	spyOn(userInvites, "checkTopicInvitees").mockResolvedValue({
-		status: "ok",
-		invitedUserIdByEmail: new Map(),
-		newInvites: [],
-		reinvitedEmails: [],
-	})
-	spyOn(promptVersions, "savePromptVersion").mockResolvedValue(undefined as never)
-
-	// the work that follows the response
-	spyOn(topicImageRenders, "startTopicImageRender").mockResolvedValue(undefined as never)
-	spyOn(viewerCounts, "addViewer").mockResolvedValue(undefined)
-	spyOn(inviteEmails, "startInviteEmails").mockImplementation(() => {})
-	spyOn(topicIndexing, "notifyIndexNowOfTopicChange").mockImplementation(() => {})
-	spyOn(analytics, "trackEvent").mockImplementation(() => {})
-
-	// the first scan's budget reads, all under their limits, and the source screens
-	spyOn(litellm, "isUserLiteLLMKeyBudgetExhausted").mockResolvedValue(false)
-	spyOn(authorization, "isMonthlySpendExhausted").mockResolvedValue(false)
-	spyOn(monthlyBudgetCutoffs, "isMonthlyBudgetCutoffPassed").mockResolvedValue(false)
-	spyOn(screen, "screenPendingSources").mockResolvedValue(undefined)
-}
-
-// a topic create returns while its first scan's daily spend cutoff read is still open
-test("a topic create returns without waiting for the first scan's daily spend cutoff read", async () => {
-	stubTopicCreate()
-	const firstScanWaitingRead = Promise.withResolvers<boolean>()
-	const isFirstScanWaitingSpy = spyOn(dailySpendCutoffs, "isFirstScanWaiting").mockReturnValue(
-		firstScanWaitingRead.promise,
-	)
-
-	// the create resolves before the cutoff read does
-	const topicDraft = updateTopicPayload.parse({
-		name: "Agents",
-		prompt: "agents",
-		tags: [],
-		frequency: "daily",
-		scheduledTime: "09:00",
-		scheduledDayOfWeek: "monday",
-		visibility: "public",
-		maxTopicFindings: 10,
-		inviteEmails: [],
-		sources: [],
-	})
-	const createTopicResult = await runWithRequestMemo(() => createTopic("user-1", topicDraft, {} as never))
-	expect(createTopicResult.status).toBe("created")
-
-	// the first scan still reads the cutoff after the create returned, and its waiting row starts the screens alone
-	for (let i = 0; i < 50 && isFirstScanWaitingSpy.mock.calls.length === 0; i++) {
-		await Bun.sleep(1)
-	}
-	expect(isFirstScanWaitingSpy).toHaveBeenCalledWith("user-1")
-	firstScanWaitingRead.resolve(true)
-	await Bun.sleep(1)
-	expect(screen.screenPendingSources).toHaveBeenCalledWith("topic-2")
 })

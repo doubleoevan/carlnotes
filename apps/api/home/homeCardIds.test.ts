@@ -10,8 +10,11 @@ import * as dailySpendCutoffs from "@carlnotes/db/dailySpendCutoffs"
 import { DEFAULT_SPEND_CONTROL_SETTINGS } from "@carlnotes/db/dailySpendCutoffTestFixtures"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
 import { topics } from "@carlnotes/db/schema/topics"
+import { toTestPageHead } from "../pageReadTestFixtures"
+import * as pageHead from "../share/pageHead"
 import { clearSharedTopicFeedCaches } from "../topic/feedCaches"
 import { topicsRoute } from "../topic/topicsRoute"
+import { isTopicWithOwnerRead, toTopicWithOwnerRow } from "../topic/topicTestFixtures"
 import { loadHomeCardIds, toFirstIdsPerTopic } from "./homeCardIds"
 
 // read the home through an empty in-memory Redis
@@ -69,7 +72,8 @@ describe("one row per topic", () => {
 })
 
 describe("the home films", () => {
-	// read the home card ids with no rows, and return the two film reads
+	// read the home card ids with no rows, and return the three film reads: the featured films, the ranked films, and
+	// the week's films
 	async function loadFilmQueries(): Promise<{ text: string; values: unknown[] }[]> {
 		const sentQueries = stubConnectionPool(() => [])
 		await loadHomeCardIds()
@@ -78,7 +82,7 @@ describe("the home films", () => {
 
 	test("read only ready films of published podcast episodes of public shown topics", async () => {
 		const filmQueries = await loadFilmQueries()
-		expect(filmQueries).toHaveLength(2)
+		expect(filmQueries).toHaveLength(3)
 		for (const { text, values } of filmQueries) {
 			expect(text).toContain(
 				'inner join "topic_videos" on ("topic_videos"."episode_id" = "episodes"."id" and "topic_videos"."status" = $1)',
@@ -89,15 +93,34 @@ describe("the home films", () => {
 		}
 	})
 
-	test("Featured films reads the featured films first, then the most listened", async () => {
-		const [homeFilmQuery] = await loadFilmQueries()
-		expect(homeFilmQuery?.text).toContain(
-			'order by "topic_videos"."home_order" is null, "topic_videos"."home_order" asc, "episodes"."listener_count" desc, "episodes"."published_at" desc',
+	test("Featured films reads the featured films in their order, and then the most listened in a read of their own", async () => {
+		const [featuredFilmQuery, rankedFilmQuery] = await loadFilmQueries()
+		expect(featuredFilmQuery?.text).toContain(
+			'"topic_videos"."home_order" is not null) order by "topic_videos"."home_order" asc, "episodes"."listener_count" desc, "episodes"."published_at" desc',
+		)
+		expect(rankedFilmQuery?.text).toContain(
+			'"topic_videos"."home_order" is null) order by "episodes"."listener_count" desc, "episodes"."published_at" desc',
 		)
 	})
 
+	test("Featured films keeps the featured films first and one film per topic among the read's candidates", async () => {
+		// a featured film and a ranked film of one topic, and a ranked film of another
+		stubConnectionPool(({ text }) => {
+			if (!text.includes('"topic_videos"') || text.includes('"published_at" >= ')) {
+				return []
+			}
+			return text.includes('"home_order" is not null')
+				? [["featured-film", "topic-1"]]
+				: [
+						["ranked-film-of-topic-1", "topic-1"],
+						["ranked-film", "topic-2"],
+					]
+		})
+		expect((await loadHomeCardIds()).homeFilmPodcastEpisodeIds).toEqual(["featured-film", "ranked-film"])
+	})
+
 	test("New films this week reads the past seven days, newest first", async () => {
-		const newestFilmQuery = (await loadFilmQueries())[1]
+		const newestFilmQuery = (await loadFilmQueries())[2]
 		expect(newestFilmQuery?.text).toContain('"episodes"."published_at" >= ')
 		expect(newestFilmQuery?.text).toContain('order by "episodes"."published_at" desc')
 
@@ -160,12 +183,13 @@ describe("the week's new Topic Posts", () => {
 	})
 })
 
-// whether a read is one of the home's seven id reads, which the settings read is not
+// whether a read is one of the home's id reads, which the settings read is not
 function isHomeIdRead({ text }: SentQuery): boolean {
 	return !text.includes('"spend_control_settings"')
 }
 
-// read the home card ids with no rows, and return the seven id reads in the order the home shows their sections
+// read the home card ids with no rows, and return the id reads in the order the home shows their sections: seven, and
+// two more for the ranked films and podcast episodes unless the featured-only switch is on
 async function loadHomeIdReads(): Promise<SentQuery[]> {
 	const sentQueries = stubConnectionPool(() => [])
 	await loadHomeCardIds()
@@ -183,8 +207,8 @@ const OWNER_ADMIN_BLOCK_FILTER_TEXT = toAdminBlockFilterText('"topics"."owner_id
 describe("an admin block", () => {
 	test("takes the user's topics, their podcast episodes, and their films out of every read", async () => {
 		const homeIdReads = await loadHomeIdReads()
-		expect(homeIdReads).toHaveLength(7)
-		expect(homeIdReads.filter(({ text }) => text.includes(OWNER_ADMIN_BLOCK_FILTER_TEXT))).toHaveLength(7)
+		expect(homeIdReads).toHaveLength(9)
+		expect(homeIdReads.filter(({ text }) => text.includes(OWNER_ADMIN_BLOCK_FILTER_TEXT))).toHaveLength(9)
 	})
 
 	test("takes the Topic Posts the user wrote out of Featured posts and New posts this week", async () => {
@@ -217,14 +241,22 @@ describe("an admin block", () => {
 			createdAt: new Date("2026-10-01T00:00:00Z"),
 			updatedAt: new Date("2026-10-01T00:00:00Z"),
 		})
+
+		// the topic with its blocked owner, the topic row, and the owner's access row
 		stubConnectionPool(({ text }) => {
+			if (isTopicWithOwnerRead(text)) {
+				return [toTopicWithOwnerRow(topicRow, "owner-1", blockedOwnerAccessRow)]
+			}
 			if (text.includes('from "topics" where "topics"."id" = $1')) {
 				return [topicRow]
 			}
+
+			// the owner's access row, and nothing for any other read
 			return text.includes('"admin_blocked_at" from "users"') ? [blockedOwnerAccessRow] : []
 		})
 
 		// a visitor's page load opens the topic
+		spyOn(pageHead, "loadTopicPageHead").mockResolvedValue(toTestPageHead("Agents"))
 		const response = await topicsRoute.request("/topics/topic-1")
 		expect(response.status).toBe(200)
 		expect(await response.json()).toMatchObject({ id: "topic-1", name: "Agents" })
@@ -255,10 +287,12 @@ describe("the featured-only switch", () => {
 		})
 	}
 
-	test("is off with no settings row, and no read is limited to its featured rows", async () => {
+	test("is off with no settings row, and only the featured films and podcast episodes are read apart", async () => {
+		// the featured films and podcast episodes are reads of their own beside the ranked ones, and no other read is
+		// limited to its featured rows
 		const homeIdReads = await loadHomeIdReads()
-		expect(homeIdReads).toHaveLength(7)
-		expect(homeIdReads.filter(isFeaturedOnlyRead)).toHaveLength(0)
+		expect(homeIdReads).toHaveLength(9)
+		expect(homeIdReads.filter(isFeaturedOnlyRead)).toHaveLength(2)
 	})
 
 	test("on, every read takes the rows an admin featured alone, in the same order", async () => {

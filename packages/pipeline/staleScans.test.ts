@@ -1,9 +1,12 @@
-// stale scan tests: the stale filter's two cutoffs, the waiting scans it never matches, and the stale window that clears
-// the longest a Scan may run
-import { expect, test } from "bun:test"
+// stale scan tests: the stale filter's two cutoffs, the waiting scans it never matches, the stale window that clears
+// the longest a Scan may run, and the reap that clears its Topics' scan status copies
+import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { HOUR_MS } from "@carlnotes/contracts/time"
 import { db } from "@carlnotes/db"
+import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import { scans } from "@carlnotes/db/schema/scans"
+import * as statusReadCaches from "@carlnotes/db/statusReadCaches"
+import * as monitoring from "@carlnotes/server/monitoring"
 import {
 	INGEST_ATTEMPTS,
 	INGEST_TIMEOUT_MS,
@@ -12,7 +15,13 @@ import {
 	REVIEW_ATTEMPTS,
 	REVIEW_TIMEOUT_MS,
 } from "./stageTimeouts"
-import { staleScanWindowMs, toStaleScanFilter } from "./staleScans"
+import { reapStaleScans, staleScanWindowMs, toStaleScanFilter } from "./staleScans"
+
+// put the connection pool and every spy back after each test
+afterEach(() => {
+	restoreConnectionPool()
+	mock.restore()
+})
 
 // the stale filter measures a picked-up scan from its pickup and a scan that no worker picked up from its dispatch
 test("the stale filter measures a picked-up scan from its pickup and a queued scan from its dispatch", () => {
@@ -51,4 +60,19 @@ test("a six-hour-old waiting scan is never reaped as stale", () => {
 	const sixHoursFromNow = new Date(Date.now() + 6 * HOUR_MS)
 	const { sql } = db.select({ id: scans.id }).from(scans).where(toStaleScanFilter(sixHoursFromNow)).toSQL()
 	expect(sql).toContain(`where ("scans"."status" = 'running' and "scans"."dispatched_at" is not null and (`)
+})
+
+// a Topic with two reaped Scans loses its scan status copy once
+test("a reap clears the scan status copy of each reaped Scan's Topic once", async () => {
+	// the update reaps two Scans of one Topic and one Scan of another
+	const clearStatusReadsSpy = spyOn(statusReadCaches, "clearStatusReads").mockResolvedValue()
+	spyOn(monitoring, "reportError").mockImplementation(() => {})
+	spyOn(console, "log").mockImplementation(() => {})
+	stubConnectionPool(() => [
+		["scan-1", "topic-1"],
+		["scan-2", "topic-1"],
+		["scan-3", "topic-2"],
+	])
+	expect(await reapStaleScans()).toBe(3)
+	expect(clearStatusReadsSpy).toHaveBeenCalledWith("scan", "topic-1", "topic-2")
 })

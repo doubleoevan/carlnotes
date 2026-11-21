@@ -13,23 +13,29 @@ import type { PageHead } from "@carlnotes/contracts/pageHead"
 import { toPageTitle } from "@carlnotes/contracts/seo"
 import { toCountLabel } from "@carlnotes/contracts/text"
 import { appUrl } from "@carlnotes/server/appUrl"
-import { toProfilePageHead, toTeamPageHead } from "../share/pageHead"
+import { toProfilePageHead, toTeamPageHead } from "../share/pageHeadBuilders"
 import { toProfilePreview, toTeamPreview } from "../share/preview"
-import { loadDashboard } from "./dashboards"
+import { type DashboardSnapshotRead, loadDashboard } from "./dashboards"
 
 /**
  * Returns a Dashboard page's head from its public snapshot, or null for a missing person, or a missing or private team.
+ * A page read at the public read access passes the snapshot it reads, which the head reads instead of its own.
  */
-export async function loadDashboardPageHead(dashboardKind: DashboardKind, subjectId: string): Promise<PageHead | null> {
-	// the person's or team's head and name, or nothing for a missing person or a missing or private team
-	const subjectHead = await loadSubjectHead(dashboardKind, subjectId)
+export async function loadDashboardPageHead(
+	dashboardKind: DashboardKind,
+	subjectId: string,
+	publicDashboard?: Promise<DashboardSnapshotRead>,
+): Promise<PageHead | null> {
+	// the person's or team's head and name, or nothing for a missing person or a missing or private team, beside the
+	// public summary and share image, with the paragraph a team's non-members never see left out of a team's head
+	const readAccess = toDashboardReadAccess(dashboardKind, false)
+	const [subjectHead, dashboard] = await Promise.all([
+		loadSubjectHead(dashboardKind, subjectId),
+		publicDashboard ?? loadDashboard({ dashboardKind, subjectId, selection: "summary", readAccess }),
+	])
 	if (!subjectHead) {
 		return null
 	}
-
-	// the public summary and share image, with the paragraph a team's non-members never see left out of a team's head
-	const readAccess = toDashboardReadAccess(dashboardKind, false)
-	const dashboard = await loadDashboard({ dashboardKind, subjectId, selection: "summary", readAccess })
 	const title = toPageTitle(toDashboardPageTitle(dashboardKind, subjectHead.subjectName))
 	const pageUrl = `${appUrl()}${toDashboardPath({ dashboardKind, subjectId })}`
 	const isIndexed = hasDashboardCounts(dashboard.summary)

@@ -2,14 +2,17 @@
 // first, under the button that starts a draft for a user who may publish
 import { OPEN_MIC_TITLE, type TopicPostCard, type TopicPostsResponse } from "@carlnotes/contracts/topicPosts"
 import type { ComponentType, ReactNode } from "react"
-import { type CardSection, TOPIC_POST_CARD_SECTION } from "../lib/cardSections"
+import type { ServerCardPages } from "../hooks/useServerPagedCards"
+import { type CardSection, TOPIC_POST_CARD_SECTION, TOPIC_POSTS_PAGE_SEARCH_KEY } from "../lib/cardSections"
 import { TOPIC_POST_LABELS } from "../lib/topicPosts"
 import { type CardsSectionElements, PagedCardsSection } from "./CardsSection"
 
-// the section of a Topic's Topic Posts: its accordion value, its title, the noun its count counts, and each card's key
+// the section of a Topic's Topic Posts: its accordion value, its title, the url search key of its page, the noun its
+// count counts, and each card's key
 const TOPIC_POSTS_SECTION: CardSection<TopicPostCard> = {
 	value: "topic-posts",
 	title: OPEN_MIC_TITLE,
+	pageSearchKey: TOPIC_POSTS_PAGE_SEARCH_KEY,
 	...TOPIC_POST_CARD_SECTION,
 }
 
@@ -22,9 +25,13 @@ export type TopicPostsSectionElements = CardsSectionElements & {
 	Empty: ComponentType<{ action: ReactNode; children: string }>
 }
 
-// the Topic's Topic Posts with whether the user may publish, the press on the button, and whether a draft is being
-// created
-export type TopicPostsSectionProps = TopicPostsResponse & { onNewPost: () => void; isCreating: boolean }
+// the Topic's Topic Posts with whether the user may publish, the press on the button, whether a draft is being
+// created, and the server's pages of the posts if the topic page holds one page
+export type TopicPostsSectionProps = TopicPostsResponse & {
+	onNewPost: () => void
+	isCreating: boolean
+	serverPages?: ServerCardPages<TopicPostCard>
+}
 
 /**
  * Shows a Topic's Topic Posts as cards, six to a page, under the button that starts a draft for a user who may
@@ -35,6 +42,7 @@ export function TopicPostsSection({
 	canPublish,
 	onNewPost,
 	isCreating,
+	serverPages,
 	elements,
 }: TopicPostsSectionProps & { elements: TopicPostsSectionElements }) {
 	const { Section, Card, NewPostButton, Empty } = elements
@@ -58,6 +66,7 @@ export function TopicPostsSection({
 			rows={topicPosts}
 			action={newPostButton}
 			renderCard={(topicPost) => <Card topicPost={topicPost} />}
+			serverPages={serverPages}
 			elements={elements}
 		/>
 	)

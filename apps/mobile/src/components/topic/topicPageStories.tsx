@@ -1,7 +1,7 @@
 import type { PodcastEpisode } from "@carlnotes/contracts/podcast"
 import { toTopicPodcastFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
+import type { ScanSourceResults } from "@carlnotes/contracts/scanSourceResults"
 import { toTestTopicFinding, toTestTopicResponse } from "@carlnotes/contracts/topicFeedTestFixtures"
-import type { ScanSourceResults } from "@carlnotes/contracts/topics"
 import { PODCAST_STORY_FILM_EPISODE, PODCAST_STORY_FILM_TOPIC } from "@carlnotes/core/lib/podcastEpisodeStories"
 import { TOPIC_POST_CARD_STORY, TOPIC_POST_DRAFT_CARD_STORY } from "@carlnotes/core/lib/topicPostStories"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"

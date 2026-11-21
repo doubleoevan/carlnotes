@@ -1,43 +1,69 @@
+import type { TopicFinding } from "@carlnotes/contracts/findings"
 import { toTopicImageUrlsOrNull } from "@carlnotes/contracts/topicImages"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
 import { toAttachmentFailureMessage } from "@carlnotes/contracts/topics"
 import { db } from "@carlnotes/db"
-import { scans } from "@carlnotes/db/schema/scans"
 import { attachments, sources, type topics } from "@carlnotes/db/schema/topics"
 import { loadTopicImageForUser } from "@carlnotes/db/topicImages"
-import {
-	toTopicMemoryGroupCount,
-	toVisibleTopicMemoryGroups,
-	type VisibleTopicMemoryGroups,
-} from "@carlnotes/db/topicMemories"
 import { traceRequestStage } from "@carlnotes/server/monitoringTracing"
-import { desc, eq, sql } from "drizzle-orm"
+import { isPodcastEpisodeRecordingConfigured } from "@carlnotes/server/podcastEpisodeSettings"
+import { eq } from "drizzle-orm"
 import { isAllowed, loadUserAccess } from "../authorization"
+import { withAvatarVersion } from "../avatars"
 import { loadTopicChatMentions } from "../chat/mentions"
+import type { ScanFinding } from "../jsonLd"
 import { loadTopicPodcast } from "../podcast/helpers"
+import { loadPublishedAndNewestPodcastEpisodeRows } from "../podcast/podcastEpisodeRows"
 import { loadPageCommentThread } from "../social/pageCommentThread"
 import { loadTopicPostCards } from "../topicPost/topicPosts"
-import { loadTopicAccessAndFindings, loadViewableTopic } from "./accessibleFindings"
+import {
+	loadTopicAccessAndFindings,
+	loadTopicWithOwner,
+	loadViewableTopic,
+	type TopicWithOwner,
+} from "./accessibleFindings"
 import { newTopicFindingCount } from "./findings"
 import {
-	loadTopicOwner,
 	toDailyFrequencyPaused,
 	toHomeTopics,
 	toInviteAndScanFields,
-	toLastTopicScanFields,
 	toScanHistory,
 	toScheduledTimeLabel,
 	toTeamFields,
 } from "./helpers"
 import { loadEditorImageRegenerationQuota } from "./imageEdits"
 import { loadDirectSubscription } from "./permissions"
-import { startOfUtcMonth } from "./quotas"
 import { loadRelatedTopics } from "./relatedTopics"
+import { startTopicScanRowsRead, type TopicScanRowWithGroups, toTopicScanFields } from "./topicScanRows"
 import { toTopicSourceSummary } from "./topicSourceSummary"
 
-// whether the load is a poll reload while a scan runs, which leaves out the related topics, and whether the page's
-// reader loads the related topics in a read of their own, which leaves them out too
-type LoadTopicPageOptions = { isPoll?: boolean; isRelatedTopicsSeparate?: boolean }
+// whether the load is a poll reload while a scan runs, which leaves out the related topics, whether the page's reader
+// loads the related topics in a read of their own, which leaves them out too, whether the page's head is built from
+// the page's rows, which then also read the topic's shown finding count and when its feed last changed, and whether the
+// page holds the newest page of scans alone
+type LoadTopicPageOptions = {
+	isPoll?: boolean
+	isRelatedTopicsSeparate?: boolean
+	isHeadRead?: boolean
+	isNewestScans?: boolean
+}
+
+// what a topic page's head reads, from the rows that the page loads: the topic with its owner, its ready Sources, its
+// shown findings, its last scan summary, its last scan's shown findings, when its feed last changed, and whether it has
+// a published podcast episode
+export type TopicPageHeadRows = {
+	topicWithOwner: TopicWithOwner
+	sourceCount: number
+	keptCount: number
+	// what the description and the structured data read
+	scanSummary: string | null
+	lastScanFindings: ScanFinding[]
+	feedUpdatedAt: Date
+	hasPublishedPodcastEpisode: boolean
+}
+
+// a topic's page, and the rows its head is built from if the load reads them
+type TopicPageWithHeadRows = { topicPage: TopicResponse; topicHeadRows: TopicPageHeadRows | null }
 
 /**
  * Loads one topic's page or null if the topic is missing or not visible to this user.
@@ -46,13 +72,40 @@ type LoadTopicPageOptions = { isPoll?: boolean; isRelatedTopicsSeparate?: boolea
 export async function loadTopicPage(
 	userId: string | null,
 	topicId: string,
-	{ isPoll = false, isRelatedTopicsSeparate = false }: LoadTopicPageOptions = {},
+	loadTopicPageOptions: LoadTopicPageOptions = {},
 ): Promise<TopicResponse | null> {
+	return (await loadTopicPageWithHeadRows(userId, topicId, loadTopicPageOptions))?.topicPage ?? null
+}
+
+/**
+ * Loads one topic's page as loadTopicPage does, with the rows its head is built from if the options ask for them.
+ */
+export async function loadTopicPageWithHeadRows(
+	userId: string | null,
+	topicId: string,
+	{
+		isPoll = false,
+		isRelatedTopicsSeparate = false,
+		isHeadRead = false,
+		isNewestScans = false,
+	}: LoadTopicPageOptions = {},
+): Promise<TopicPageWithHeadRows | null> {
 	// load the topic behind the visibility gate. a hidden topic looks identical to a missing one
 	const topic = await traceRequestStage("topic_page.gate", () => loadViewableTopic(userId, topicId))
 	if (!topic) {
 		return null
 	}
+
+	// the scans newest first, the whole history or its newest page, and the page's scan ids for its podcast episodes
+	const { scanRowsRead, pageScanIds } = startTopicScanRowsRead({ topic, userId, isHeadRead, isNewestScans })
+
+	// the user's access with the findings and the page's reactions, and the podcast, which shares the reactions read
+	const { topicAccessAndFindings, topicPodcast } = startTopicFindingsAndPodcastReads({
+		topic,
+		userId,
+		isPoll,
+		pageScanIds,
+	})
 
 	// the page's independent reads run together
 	const isTopicOwner = topic.ownerId === userId
@@ -65,7 +118,7 @@ export async function loadTopicPage(
 		// the user's subscription, the owner-only extras, the owner, and the team
 		directSubscription,
 		inviteAndScanFields,
-		owner,
+		topicWithOwner,
 		teamFields,
 		// whether a daily frequency is paused, what the user may do and see on the topic, the podcast, and the related
 		// topics
@@ -86,23 +139,19 @@ export async function loadTopicPage(
 	] = await traceRequestStage("topic_page.reads", () =>
 		Promise.all([
 			// the user's access and the findings it gates
-			loadTopicAccessAndFindings({
-				topic,
-				userId,
-				pageSocialTarget: isPoll ? undefined : { kind: "topic", id: topic.id },
-			}),
+			topicAccessAndFindings,
 			// every Source row, and the attachment rows and their context, each narrowed once the reads finish
 			db.select().from(sources).where(eq(sources.topicId, topic.id)),
 			loadTopicAttachmentRows(topic.id),
-			// every scan newest first, with the reader's Journal groups on the first row
-			loadTopicScanRows(topic, userId),
+			// the scans newest first, with the reader's Journal groups, the last recap, and the month's cost on the first row
+			scanRowsRead,
 			// this user's own subscription state. a signed-out visitor subscribes to nothing
 			userId ? loadDirectSubscription(userId, topic.id) : null,
 			// the owner-only extras: the invite list, the manual scan quota, and whether their spend is past the manual
 			// scans cutoff or used up
 			toInviteAndScanFields(userId, topic, isTopicOwner),
-			// the topic owner's username, avatar and profile page id
-			loadTopicOwner(topic.ownerId),
+			// the topic with its owner's username, avatar and profile page id, from the gate's read
+			loadTopicWithOwner(topic.id),
 			// the team fields, read once: the badge, the user's membership, and the byline credit all follow from them
 			toTeamFields(topic.id, topic.teamId, userId),
 			// whether the owner's daily topics outgrew their plan, and what this user may do here
@@ -111,8 +160,8 @@ export async function loadTopicPage(
 			isAllowed(userId, "topicMemory:rate", topic),
 			isAllowed(userId, "topic:edit", topic),
 			isAllowed(userId, "topic:viewOwnerDetails", topic),
-			// the topic's podcast, and each scan's podcast episode for the scan history
-			loadTopicPodcast(topic, userId),
+			// the topic's podcast, and each listed scan's podcast episode for the scan history
+			topicPodcast,
 			// the most related topics that the user may open, none for a poll reload or a reader who loads them separately
 			isPoll || isRelatedTopicsSeparate ? [] : loadRelatedTopics(topic, userId),
 			// the first page of the topic's comment thread, none for a poll reload
@@ -148,19 +197,26 @@ export async function loadTopicPage(
 	const { inviteRows, manualScansRemaining, manualScanLimit, isManualScanPaused, isSpendExhausted } =
 		inviteAndScanFields
 
-	// the latest succeeded scan feeds the schedule section, with its recap and duration beside it
-	const { lastSucceededTopicScan, scanSummary, lastScanDurationMs } = toLastTopicScanFields(scanHistory, scanRows)
+	// the schedule section's scan fields, the month's cost, the page of scans, and the Journal's count
+	const { lastSucceededTopicScan, scanSummary, lastScanDurationMs, monthCostDollars, scansPage, topicMemoryCount } =
+		toTopicScanFields({ scanRows, scanHistory, isNewestScans, canViewOwnerDetails })
 
 	// a Source that has not passed its screen is only seen by someone who may edit the list.
 	// an editor's save deletes every source it does not list, so hiding a row from them would delete it
 	const visibleTopicSourceRows = topicSourceRows.filter(
 		(topicSource) => topicSource.status === "ready" || isAdmin || canEdit,
 	)
-	return {
+
+	// the owner's identity, from the topic's read with its owner, which the gate's read already found
+	if (!topicWithOwner) {
+		return null
+	}
+	const { userId: ownerUserId, username, avatarSource, avatarKey } = topicWithOwner.owner
+	const topicPage: TopicResponse = {
 		// the topic identity and its editable fields
 		id: topic.id,
 		name: topic.name,
-		owner,
+		owner: withAvatarVersion({ userId: ownerUserId, username, avatarSource, avatarKey }),
 		prompt: topic.prompt,
 		tags: topic.tags,
 		frequency: topic.frequency,
@@ -179,17 +235,19 @@ export async function loadTopicPage(
 			canEdit || Boolean(userId && topicSourceRows.some((source) => source.personalSourcesUserId === userId)),
 		newCount: newTopicFindingCount(topicFindings),
 		subscriberCount: topic.subscriberCount,
+		viewerCount: topic.viewerCount,
 		// the schedule details
 		createdAt: topic.createdAt.toISOString(),
 		lastScanAt: lastSucceededTopicScan?.startedAt ?? null,
 		lastScanDurationMs,
-		monthCostDollars: canViewOwnerDetails ? toMonthCostDollars(scanRows) : null,
+		monthCostDollars,
 		scanSummary,
 		// everything connected to the topic
 		attachments: attachmentRows,
 		sources: visibleTopicSourceRows.flatMap(toTopicSourceSummary),
 		scans: scanHistory,
-		topicMemoryCount: toTopicMemoryGroupCount(scanRows[0]?.topicMemoryGroups),
+		scansPage,
+		topicMemoryCount,
 		canRateTopicMemories,
 		podcast,
 		topicPodcastEpisodeVideoCards,
@@ -213,6 +271,102 @@ export async function loadTopicPage(
 		commentThread,
 		// whoever may edit the topic may publish a Topic Post on it
 		topicPosts: topicPostCards && { topicPosts: topicPostCards, canPublish: canEdit },
+	}
+
+	// the head's rows, if the load reads them
+	const topicHeadRows = isHeadRead
+		? toTopicPageHeadRows({
+				topicWithOwner,
+				topicSourceRows,
+				scanRows,
+				topicFindings,
+				hasPublishedPodcastEpisode: Boolean(podcast?.publicFeedUrl),
+			})
+		: null
+	return { topicPage, topicHeadRows }
+}
+
+// the topic, the user, whether the read is a poll reload, which reads no page reactions of its own, and the ids of the
+// scans a page of the scan history lists, if the page holds one page
+type StartTopicFindingsAndPodcastReadsOptions = {
+	topic: typeof topics.$inferSelect
+	userId: string | null
+	isPoll: boolean
+	pageScanIds?: Promise<ReadonlySet<string>>
+}
+
+// the topic page's findings read with its reactions, and its podcast, started together. the published podcast episodes
+// are read once for the podcast and for the reaction read, which includes them for the film cards
+function startTopicFindingsAndPodcastReads({
+	topic,
+	userId,
+	isPoll,
+	pageScanIds,
+}: StartTopicFindingsAndPodcastReadsOptions): {
+	topicAccessAndFindings: ReturnType<typeof loadTopicAccessAndFindings>
+	topicPodcast: ReturnType<typeof loadTopicPodcast>
+} {
+	// a failed podcast episode read fails the podcast, so the reaction read goes on without those targets.
+	// ponytail: every published podcast episode is a target, not just the ones with a ready film, because the films are
+	// read later. narrow the targets if a topic's podcast episodes reach the hundreds
+	const publishedAndNewestPodcastEpisodeRows = isPodcastEpisodeRecordingConfigured()
+		? loadPublishedAndNewestPodcastEpisodeRows(topic, userId)
+		: undefined
+	const podcastEpisodeReactionTargets = publishedAndNewestPodcastEpisodeRows?.then(
+		({ publishedPodcastEpisodeRows }) =>
+			publishedPodcastEpisodeRows.map(({ id }) => ({ kind: "podcastEpisode" as const, id })),
+		() => [],
+	)
+
+	// the findings with the page's reactions, which the podcast's film cards read from
+	const topicAccessAndFindings = loadTopicAccessAndFindings({
+		topic,
+		userId,
+		pageSocialTarget: isPoll ? undefined : { kind: "topic", id: topic.id },
+		extraReactionTargets: podcastEpisodeReactionTargets,
+	})
+	const topicPodcast = loadTopicPodcast(topic, userId, {
+		publishedAndNewestPodcastEpisodeRows,
+		pageReactionRead: topicAccessAndFindings,
+		pageScanIds,
+	})
+	return { topicAccessAndFindings, topicPodcast }
+}
+
+// the rows that a topic page loaded, which its head is built from
+type ToTopicPageHeadRowsOptions = {
+	topicWithOwner: TopicWithOwner
+	topicSourceRows: Pick<typeof sources.$inferSelect, "status">[]
+	scanRows: TopicScanRowWithGroups[]
+	topicFindings: TopicFinding[]
+	hasPublishedPodcastEpisode: boolean
+}
+
+// a topic page's head rows, read as toTopicPreview, lastScan, scanFindings, and loadTopicFeedUpdatedAt read them
+function toTopicPageHeadRows({
+	topicWithOwner,
+	topicSourceRows,
+	scanRows,
+	topicFindings,
+	hasPublishedPodcastEpisode,
+}: ToTopicPageHeadRowsOptions): TopicPageHeadRows {
+	// the newest succeeded scan
+	const lastScanId = scanRows.find((scanRow) => scanRow.status === "succeeded")?.id
+
+	// the newest scan's row holds the topic's shown finding count, its newest shown finding's time, and the summary of
+	// the newest succeeded scan that kept findings
+	const [newestScanRow] = scanRows
+	return {
+		topicWithOwner,
+		sourceCount: topicSourceRows.filter((topicSource) => topicSource.status === "ready").length,
+		keptCount: newestScanRow?.shownFindingCount ?? 0,
+		scanSummary: newestScanRow?.headScanSummary ?? null,
+		// the last scan's shown findings, most relevant first
+		lastScanFindings: topicFindings
+			.filter((topicFinding) => topicFinding.scanId === lastScanId && topicFinding.rating !== "down")
+			.map(({ title, url, relevanceExplanation }) => ({ title, url, relevanceExplanation })),
+		feedUpdatedAt: newestScanRow?.newestShownFindingAt ?? topicWithOwner.topic.createdAt,
+		hasPublishedPodcastEpisode,
 	}
 }
 
@@ -250,57 +404,4 @@ async function loadTopicAttachmentRows(
 		})
 		.from(attachments)
 		.where(eq(attachments.topicId, topicId))
-}
-
-// the scan columns that a topic page shows
-type TopicScanRow = Pick<
-	typeof scans.$inferSelect,
-	// when the scan ran and how it ended
-	| "id"
-	| "status"
-	| "startedAt"
-	| "finishedAt"
-	| "stoppedAt"
-	| "error"
-	// what it found and kept, what it cost, and its recap
-	| "foundCount"
-	| "keptCount"
-	| "filteredCount"
-	| "cost"
-	| "scanSummary"
->
-
-// read the brew history in display order
-async function loadTopicScanRows(
-	{ id: topicId, visibility }: Pick<typeof topics.$inferSelect, "id" | "visibility">,
-	userId: string | null,
-): Promise<(TopicScanRow & { topicMemoryGroups: VisibleTopicMemoryGroups | null })[]> {
-	// read the visible group inputs once with the newest scan
-	const topicMemoryGroups = sql<VisibleTopicMemoryGroups | null>`case when
-		row_number() over (order by ${scans.startedAt} desc, ${scans.id}) = 1
-		then ${toVisibleTopicMemoryGroups({ topicId, userId, visibility })} end`
-	return db
-		.select({
-			id: scans.id,
-			status: scans.status,
-			startedAt: scans.startedAt,
-			finishedAt: scans.finishedAt,
-			stoppedAt: scans.stoppedAt,
-			foundCount: scans.foundCount,
-			keptCount: scans.keptCount,
-			filteredCount: scans.filteredCount,
-			cost: scans.cost,
-			error: scans.error,
-			scanSummary: scans.scanSummary,
-			topicMemoryGroups,
-		})
-		.from(scans)
-		.where(eq(scans.topicId, topicId))
-		.orderBy(desc(scans.startedAt), scans.id)
-}
-
-// this month's total scan spend, summed from the raw scans since the first of the utc month
-function toMonthCostDollars(scanRows: Pick<TopicScanRow, "startedAt" | "cost">[]): number {
-	const monthStart = startOfUtcMonth(new Date())
-	return scanRows.filter((scan) => scan.startedAt >= monthStart).reduce((sum, scan) => sum + Number(scan.cost), 0)
 }

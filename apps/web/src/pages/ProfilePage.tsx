@@ -1,10 +1,13 @@
 import { authClient } from "@carlnotes/client/authClient"
-import { fetchProfile, fetchProfileTeamStatuses } from "@carlnotes/client/profileClient"
+import { fetchProfilePageRead } from "@carlnotes/client/pageReadClient"
+import { fetchProfileTeamStatuses } from "@carlnotes/client/profileClient"
 import { fetchAddableTopics } from "@carlnotes/client/topicClient"
 import { type ProfileResponse, toProfilePageTitle } from "@carlnotes/contracts/profilePage"
 import type { ProfileAudience, ProfileTeamStatus } from "@carlnotes/contracts/profiles"
 import { useProfileAudience } from "@carlnotes/core/hooks/useProfileAudience"
+import { toTopicPostsPageOptions } from "@carlnotes/core/lib/cardSections"
 import { toProfileChatContext } from "@carlnotes/core/lib/chatConversations"
+import { toProfileWithUserState } from "@carlnotes/core/lib/pageUserStates"
 import { sendProfileViewOnce } from "@carlnotes/core/lib/pageViews"
 import {
 	sendProfileOrderMoves,
@@ -96,9 +99,14 @@ export function ProfilePage() {
 	const { data: session } = authClient().useSession()
 	// the profile the route loads on the server, or null after a browser navigation
 	const loadedProfile = profileRoute.useLoaderData({ select: (loaderData) => loaderData?.profile ?? null })
-	// the first page of the week's news, for the profile the server loaded alone
+	// the first page of the week's news, for the profile the server loaded or the browser read last
 	const loadedNewsPage = profileRoute.useLoaderData({ select: (loaderData) => loaderData?.newsPage ?? undefined })
+	// the page from 1 of the person's Topic Posts that the url names
+	const topicPostsPageNumber = profileRoute.useSearch({ select: (search) => search.posts })
 	const [profile, setProfile] = useState<ProfileResponse | null>(loadedProfile)
+	const [firstNewsPage, setFirstNewsPage] = useState(
+		loadedNewsPage ? { profileUserId: loadedProfile?.userId, newsPage: loadedNewsPage } : undefined,
+	)
 	const [isProfileMissing, setIsProfileMissing] = useState(false)
 	const { openNewTopicDialog, newTopicDialog } = useNewTopicDialog()
 	const [isEditingProfile, setIsEditingProfile] = useState(false)
@@ -111,16 +119,27 @@ export function ProfilePage() {
 	// a user on their own profile manages their topics in the owner topics table
 	const isOwnProfile = Boolean(session) && session?.user.id === profile?.userId
 
-	// read the profile for an audience. a read that a later read replaced returns undefined, so it never shows
+	// read the profile's page read for an audience, with the user state merged into the shared copy and the page of the
+	// Topic Posts that the url names. a read that a later read replaced returns undefined, so it never shows
 	const profileReadRef = useRef(0)
 	const readLatestProfile = useCallback(
-		async (audience: ProfileAudience): Promise<ProfileResponse | null | undefined> => {
+		async (audience?: ProfileAudience): Promise<ProfileResponse | null | undefined> => {
 			profileReadRef.current += 1
 			const profileRead = profileReadRef.current
-			const fetchedProfile = await fetchProfile(userId, audience)
-			return profileRead === profileReadRef.current ? fetchedProfile : undefined
+			const profilePageRead = await fetchProfilePageRead(
+				userId,
+				audience,
+				toTopicPostsPageOptions(topicPostsPageNumber),
+			)
+			if (profileRead !== profileReadRef.current) {
+				return undefined
+			}
+			if (profilePageRead?.news) {
+				setFirstNewsPage({ profileUserId: userId, newsPage: profilePageRead.news })
+			}
+			return toProfileWithUserState(profilePageRead)
 		},
-		[userId],
+		[userId, topicPostsPageNumber],
 	)
 
 	// the audience the page shows to, which an admin on someone else's profile switches to the visitor audience. the
@@ -216,14 +235,26 @@ export function ProfilePage() {
 	const reloadProfilePage = useCallback((): void => {
 		// a new load clears the last profile's missing state, and a failed profile load shows the missing page
 		setIsProfileMissing(false)
-		fetchProfile(userId)
-			.then((fetchedProfile) => (fetchedProfile ? setProfile(fetchedProfile) : setIsProfileMissing(true)))
+		readLatestProfile()
+			.then((fetchedProfile) => {
+				// a read that a later read replaced changes nothing
+				if (fetchedProfile) {
+					setProfile(fetchedProfile)
+				} else if (fetchedProfile === null) {
+					setIsProfileMissing(true)
+				}
+			})
 			.catch((error) => {
 				console.error("profile load failed", error)
 				setIsProfileMissing(true)
 			})
-	}, [userId])
-	useLoadInBrowser({ pageId: userId, isLoadedOnServer: loadedProfile !== null, loadPage: reloadProfilePage })
+	}, [readLatestProfile])
+	// load on mount, on a move to another profile, and on a move to another page of its Topic Posts
+	useLoadInBrowser({
+		pageId: `${userId}:${topicPostsPageNumber}`,
+		isLoadedOnServer: loadedProfile !== null,
+		loadPage: reloadProfilePage,
+	})
 
 	// send the profile page's view once per tab, once the profile has loaded
 	const loadedProfileUserId = profile?.userId
@@ -288,7 +319,7 @@ export function ProfilePage() {
 				audience={profileAudience.audience}
 				onAudienceChange={profileAudience.changeAudience}
 				onReloadProfile={handleReloadProfile}
-				firstNewsPage={loadedProfile?.userId === profile.userId ? loadedNewsPage : undefined}
+				firstNewsPage={firstNewsPage?.profileUserId === profile.userId ? firstNewsPage.newsPage : undefined}
 			/>
 			{/* the owner's list of featured topics, films, podcast episodes, or Topic Posts, with the ones they may still
 			    feature */}
@@ -301,7 +332,10 @@ export function ProfilePage() {
 				/>
 			)}
 			{/* the profile page's visitors, as its last line */}
-			<ViewerCountLine viewerCountPage={{ kind: "profile", id: profile.userId }} />
+			<ViewerCountLine
+				viewerCountPage={{ kind: "profile", id: profile.userId }}
+				savedViewerCount={profile.viewerCount}
+			/>
 			{/* the dialog that the New Topic button opens */}
 			{newTopicDialog}
 		</main>

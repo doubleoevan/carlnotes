@@ -8,12 +8,14 @@ import { db } from "@carlnotes/db"
 import { isMonthlyBudgetCutoffPassed } from "@carlnotes/db/monthlyBudgetCutoffs"
 import { deletePodcastFeedCache } from "@carlnotes/db/podcastFeedCache"
 import { topicVideos } from "@carlnotes/db/schema/podcast"
+import { clearStatusReads } from "@carlnotes/db/statusReadCaches"
 import { clearPendingObjectDeletion, downloadPodcastEpisodeFile } from "@carlnotes/db/store"
 import {
 	toTopicVideoChaptersKey,
 	toTopicVideoImagePartKey,
 	toTopicVideoRenderAttemptUploadKey,
 } from "@carlnotes/db/topicVideoKeys"
+import { clearVisitorPagesOfTopic } from "@carlnotes/db/visitorPageCaches"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { and, eq, sql } from "drizzle-orm"
 import { recordReplacedImageDeletions } from "../topicImages/topicImageRenders"
@@ -106,8 +108,14 @@ async function rebuildFilm(podcastEpisodeId: string, signal: AbortSignal): Promi
 			return { outcome: "skipped", reason: "superseded" }
 		}
 
-		// the film feeds list the rebuilt film's size on their next fetch
-		await deletePodcastFeedCache(topicVideoPodcastEpisode.topicId)
+		// the film's status copy goes, so a poll reads it ready
+		await clearStatusReads("topicVideo", podcastEpisodeId)
+
+		// the film feeds and the visitor pages list the rebuilt film on their next fetch
+		await Promise.all([
+			deletePodcastFeedCache(topicVideoPodcastEpisode.topicId),
+			clearVisitorPagesOfTopic(topicVideoPodcastEpisode.topicId),
+		])
 	} finally {
 		await rm(workDirectory, { recursive: true, force: true })
 	}
@@ -200,6 +208,7 @@ async function saveCurrentFilmReady(
 				),
 			)
 	})
+	await clearStatusReads("topicVideo", topicVideoPodcastEpisode.podcastEpisodeId)
 }
 
 // the film row's keys and image hash, if the film is ready, or marked rendering with its files, with a chapters part

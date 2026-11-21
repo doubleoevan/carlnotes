@@ -1,14 +1,19 @@
 // publish tests: a recording publishes only while its row still reads recording. a row that failed before the publish
 // read it, or between that read and the save, publishes nothing and keeps no audio. a row that an overlapping attempt
-// published keeps its audio
+// published keeps its audio. a publish and a failure clear the Topic's scan status copy, and a publish clears its
+// visitor pages
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool, toTableRow } from "@carlnotes/db/connectionPoolStub"
 import * as podcastFeedCache from "@carlnotes/db/podcastFeedCache"
 import { podcastEpisodes } from "@carlnotes/db/schema/podcast"
 import { topics } from "@carlnotes/db/schema/topics"
+import * as sharedComments from "@carlnotes/db/sharedComments"
+import * as statusReadCaches from "@carlnotes/db/statusReadCaches"
 import * as store from "@carlnotes/db/store"
+import * as visitorPageCaches from "@carlnotes/db/visitorPageCaches"
 import * as telemetry from "@carlnotes/models/telemetry"
-import { publishPodcastEpisode } from "./publishPodcastEpisode"
+import * as monitoring from "@carlnotes/server/monitoring"
+import { failPodcastEpisode, publishPodcastEpisode } from "./publishPodcastEpisode"
 
 // put back the connection pool and the module mocks after each test
 afterEach(() => {
@@ -87,8 +92,13 @@ function stubPublish(
 const RECORDED_AUDIO_KEYS = ["episodes/episode-1/audio.mp3", store.toPodcastEpisodeChapterKey("episode-1", 0)]
 
 test("a recording row publishes through an update that names the recording status", async () => {
+	// the publish clears the Topic's scan status copy and its visitor pages
+	const clearStatusReadsSpy = spyOn(statusReadCaches, "clearStatusReads").mockResolvedValue()
+	const clearVisitorPagesSpy = spyOn(visitorPageCaches, "clearVisitorPagesOfTopic").mockResolvedValue()
 	const { sentQueries, deletedKeys } = stubPublish("recording", true)
 	await publishPodcastEpisode(PUBLISH_OPTIONS)
+	expect(clearStatusReadsSpy).toHaveBeenCalledWith("scan", "topic-1")
+	expect(clearVisitorPagesSpy.mock.calls).toEqual([["topic-1"]])
 
 	// the update publishes only a row that still reads recording, and its chapters are written after it
 	const queryTexts = sentQueries.map((sentQuery) => sentQuery.text)
@@ -136,4 +146,18 @@ test("a publish that an overlapping attempt saved first keeps the published audi
 	await publishPodcastEpisode(PUBLISH_OPTIONS)
 	expect(sentQueries.some((sentQuery) => sentQuery.text.startsWith('insert into "episode_chapters"'))).toBe(false)
 	expect(deletedKeys).toEqual([])
+})
+
+test("a failed podcast episode clears its Topic's scan status copy", async () => {
+	// the failing update returns the recording row's id, Topic, Scan, and script
+	const clearStatusReadsSpy = spyOn(statusReadCaches, "clearStatusReads").mockResolvedValue()
+	spyOn(store, "deleteStoredObjects").mockResolvedValue(undefined)
+	spyOn(sharedComments, "releasePodcastEpisodeSharedComments").mockResolvedValue(undefined)
+	spyOn(monitoring, "reportError").mockImplementation(() => {})
+	spyOn(console, "error").mockImplementation(() => {})
+	stubConnectionPool(({ text }) =>
+		text.startsWith('update "episodes"') ? [["episode-1", "topic-1", "scan-1", SCRIPT]] : [],
+	)
+	await failPodcastEpisode({ podcastEpisodeId: "episode-1", reason: "the speech call failed" })
+	expect(clearStatusReadsSpy).toHaveBeenCalledWith("scan", "topic-1")
 })

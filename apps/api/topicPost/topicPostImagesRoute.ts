@@ -46,6 +46,7 @@ import {
 	canEditTopicPostImage,
 	canReadTopicPost,
 	loadAuthoredTopicPost,
+	loadTopicPostAccessRow,
 	loadTopicPostBodyImageAccessRow,
 	loadTopicPostRow,
 	type TopicPostBodyImageAccessRow,
@@ -236,18 +237,18 @@ export const topicPostImagesRoute = new Hono<AppEnv>()
 	)
 	// one derived file, at the post's current hash alone, to anyone who may see its topic
 	.get("/topic-post-images/:topicPostId/:hash/:file", async (context) => {
-		// the file the url names, and the published post at its current hash alone
+		// the file the url names, and the published post at its current hash alone, read without its body
 		const { topicPostId, hash, file } = context.req.param()
-		const topicPostRow = fromTopicImageFileName(file) ? await loadTopicPostRow(topicPostId) : null
+		const topicPostAccessRow = fromTopicImageFileName(file) ? await loadTopicPostAccessRow(topicPostId) : null
 
 		// an unknown file, an unknown post, or a draft is not found
-		if (!topicPostRow?.topicPost.publishedAt) {
+		if (!topicPostAccessRow?.topicPost.publishedAt) {
 			return context.json({ error: "not found" }, 404)
 		}
 
 		// the post's current image goes to anyone who may see its topic, and an unchecked upload of the signed-in user goes
 		// to them alone. any other hash is not found
-		const { topic, topicPost } = topicPostRow
+		const { topic, topicPost } = topicPostAccessRow
 		return serveCurrentOrUncheckedImageFile(context, {
 			imageFile: { topic, objectKey: toTopicPostImageFileKey(topicPostId, hash, file) },
 			hash,

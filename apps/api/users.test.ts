@@ -8,10 +8,13 @@ import {
 	type SentQuery,
 	stubConnectionPool,
 } from "@carlnotes/db/connectionPoolStub"
+import * as redis from "@carlnotes/db/redis"
 import { restoreRedisClient, stubRedisClient, stubUnreachableRedisClient } from "@carlnotes/db/redisClientStub"
 import * as sessions from "@carlnotes/db/sessions"
 import * as store from "@carlnotes/db/store"
+import * as visitorPageCaches from "@carlnotes/db/visitorPageCaches"
 import * as litellmProxy from "@carlnotes/models/litellmProxy"
+import { EDGE_PURGE_FAILED_MESSAGE } from "@carlnotes/server/edgePurge"
 import * as monitoring from "@carlnotes/server/monitoring"
 import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
@@ -199,28 +202,43 @@ function stubCloseWithEdgePurge(purgeStatus = 200): EdgePurgeFetchSpy {
 	return stubEdgePurge(purgeStatus)
 }
 
-// once the row is gone, one purge each names the account's avatar tag and its Topic and Podcast Dashboards' tags
-test("a close purges the account's avatar and its Topic and Podcast Dashboards from the edge once each", async () => {
+// once the row is gone, one purge names the account's avatar, profile, and Topic and Podcast Dashboards' tags
+test("a close purges the account's avatar, profile, and Topic and Podcast Dashboards from the edge", async () => {
 	const fetchSpy = stubCloseWithEdgePurge()
 	expect(await deleteUser("user-1", "user-1", TEST_ANALYTICS_PROPERTIES)).toBe("deleted")
+	expect(fetchSpy).toHaveBeenCalledTimes(1)
 	expect(toPurgedTags(fetchSpy)).toEqual([
 		"dashboard:podcastDashboard:user-1",
 		"dashboard:topicDashboard:user-1",
+		"profile:user-1",
 		"user-avatar:user-1",
 	])
 })
 
-// each purge Cloudflare rejects is reported, and the close still finishes
+// the profile's and the personal Dashboards' Redis copies go with the edge's
+test("a close clears the profile's and the Topic and Podcast Dashboards' copies", async () => {
+	stubCloseWithEdgePurge()
+	const deleteRedisKeysSpy = spyOn(redis, "deleteRedisKeys").mockResolvedValue(0)
+	expect(await deleteUser("user-1", "user-1", TEST_ANALYTICS_PROPERTIES)).toBe("deleted")
+	expect(deleteRedisKeysSpy).toHaveBeenCalledWith(
+		visitorPageCaches.toVisitorProfilePageKey("user-1"),
+		visitorPageCaches.toVisitorDashboardPageKey({ dashboardKind: "topicDashboard", subjectId: "user-1" }),
+		visitorPageCaches.toVisitorDashboardPageKey({ dashboardKind: "podcastDashboard", subjectId: "user-1" }),
+	)
+})
+
+// a purge Cloudflare rejects is reported, and the close still finishes
 test("a failed purge is reported and the close goes on", async () => {
 	stubCloseWithEdgePurge(403)
 	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
 	expect(await deleteUser("user-1", "user-1", TEST_ANALYTICS_PROPERTIES)).toBe("deleted")
-	const reportedErrors = reportErrorSpy.mock.calls.map(([error]) => String(error)).sort()
-	expect(reportedErrors).toEqual([
-		expect.stringContaining("the edge purge of dashboard:podcastDashboard:user-1 failed: 403"),
-		expect.stringContaining("the edge purge of dashboard:topicDashboard:user-1 failed: 403"),
-		expect.stringContaining("the edge purge of user-avatar:user-1 failed: 403"),
-	])
+
+	// the failure is reported under the one fixed message, with its tags and its reason beside it
+	expect(reportErrorSpy.mock.calls.map(([error]) => String(error))).toEqual([`Error: ${EDGE_PURGE_FAILED_MESSAGE}`])
+	expect(reportErrorSpy.mock.calls[0]?.[2]).toEqual({
+		tags: "user-avatar:user-1, profile:user-1, dashboard:topicDashboard:user-1, dashboard:podcastDashboard:user-1",
+		reason: expect.stringMatching(/^403 /),
+	})
 })
 
 // the inserts that record object keys as pending among the sent queries

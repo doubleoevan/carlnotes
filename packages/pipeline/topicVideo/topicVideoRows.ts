@@ -7,6 +7,7 @@ import { type DbHandle, db } from "@carlnotes/db"
 import { podcastEpisodes, topicVideos } from "@carlnotes/db/schema/podcast"
 import type { SpendKind } from "@carlnotes/db/schema/spends"
 import { recordSpend } from "@carlnotes/db/spends"
+import { clearStatusReads } from "@carlnotes/db/statusReadCaches"
 import {
 	clearPendingObjectDeletion,
 	recordPendingObjectDeletionBeforeUpload,
@@ -42,7 +43,7 @@ export type FilmObjectKeys = {
 
 /**
  * Writes a film row as failed for a podcast episode missing its audio, transcript, or chapters, so no later listing
- * finds the podcast episode again.
+ * finds the podcast episode again, and clears the film's status copy.
  */
 export async function saveTopicVideoSkipped(podcastEpisodeId: string): Promise<void> {
 	const failedRow = { status: "failed" as const, error: "missing-inputs" }
@@ -54,6 +55,7 @@ export async function saveTopicVideoSkipped(podcastEpisodeId: string): Promise<v
 			set: failedRow,
 			setWhere: ne(topicVideos.status, "ready"),
 		})
+	await clearStatusReads("topicVideo", podcastEpisodeId)
 }
 
 // a film row as a render reads it before it starts: its status, and the render version its stored film was rendered at
@@ -71,7 +73,8 @@ export async function loadTopicVideoRenderState(podcastEpisodeId: string): Promi
 }
 
 /**
- * Writes a podcast episode's film row as rendering, clearing a failed attempt's error.
+ * Writes a podcast episode's film row as rendering, clearing a failed attempt's error, and clears the film's status
+ * copy.
  */
 export async function saveTopicVideoRendering(podcastEpisodeId: string): Promise<void> {
 	await db
@@ -82,6 +85,7 @@ export async function saveTopicVideoRendering(podcastEpisodeId: string): Promise
 			set: { status: "rendering", error: null },
 			setWhere: ne(topicVideos.status, "ready"),
 		})
+	await clearStatusReads("topicVideo", podcastEpisodeId)
 }
 
 /**
@@ -144,7 +148,11 @@ export async function saveImageTopicVideosRendering(
 		.set({ status: "rendering" })
 		.where(and(isImagePodcastEpisode, eq(topicVideos.status, "ready"), eq(topicVideos.renderedImageHash, imageHash)))
 		.returning({ podcastEpisodeId: topicVideos.podcastEpisodeId })
-	return renderingRows.map((renderingRow) => renderingRow.podcastEpisodeId)
+
+	// the films' status copies go, so a poll reads them rendering
+	const renderingPodcastEpisodeIds = renderingRows.map((renderingRow) => renderingRow.podcastEpisodeId)
+	await clearStatusReads("topicVideo", ...renderingPodcastEpisodeIds)
+	return renderingPodcastEpisodeIds
 }
 
 // the podcast episode, the film's stored keys, its size and length, the image its intro and sign-off were drawn from,
@@ -165,8 +173,8 @@ type SaveTopicVideoReadyOptions = {
 
 /**
  * Marks a film row ready at the current render version with its keys, size, and length, adds the render's cost to the
- * image's, and clears the uploads' pending deletions with it. A film removed meanwhile keeps its files pending
- * deletion.
+ * image's, and clears the uploads' pending deletions with it, then clears the film's status copy. A film removed
+ * meanwhile keeps its files pending deletion.
  */
 export async function saveTopicVideoReady({
 	podcastEpisodeId,
@@ -198,6 +206,7 @@ export async function saveTopicVideoReady({
 		}
 		renderedFilm.signal?.throwIfAborted()
 	})
+	await clearStatusReads("topicVideo", podcastEpisodeId)
 }
 
 /**

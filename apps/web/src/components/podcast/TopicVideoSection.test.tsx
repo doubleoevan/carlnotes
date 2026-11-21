@@ -1,175 +1,115 @@
-// the topic page's film section: open, headed "Coffee Break Cinema" with the theme song's credits and the film count.
-// it holds every ready film as a card, six to a page, with every card in the html. the filming line sits before the
-// count while the latest film renders, and alone if no film is ready. the page is read again until the film is ready,
-// and a topic with no film has no section
-import { expect, mock, test } from "bun:test"
-import type { PodcastEpisodeCard } from "@carlnotes/contracts/home"
-import { toPodcastEpisodeFixture } from "@carlnotes/contracts/podcastEpisodeTestFixtures"
-import { toTestTopicResponse } from "@carlnotes/contracts/topicFeedTestFixtures"
+// the topic video section's film poll in a live render: a topic that shows an older film beside the filming line reads
+// the newer film's status, and the line clears once the poll's page read shows the film ready, without a reload of the
+// page. a covered screen stops the poll
+import { afterEach, expect, jest, mock, spyOn, test } from "bun:test"
+import * as statusReadClient from "@carlnotes/client/statusReadClient"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
-import {
-	TopicVideoSection as SharedTopicVideoSection,
-	type TopicVideoSectionElements,
-} from "@carlnotes/core/components/TopicVideoSection"
+import { TopicVideoSection, type TopicVideoSectionElements } from "@carlnotes/core/components/TopicVideoSection"
+import { TOPIC_VIDEO_RENDERING_POLL_MS } from "@carlnotes/core/hooks/useTopicVideoRenderingPoll"
+import { TOPIC_VIDEO_RENDERING_LINE } from "@carlnotes/core/lib/podcastEpisodeCopy"
+import { PODCAST_STORY_NEWER_VIDEO_RENDERING_TOPIC } from "@carlnotes/core/lib/podcastEpisodeStories"
+import { advancePolls } from "@carlnotes/core/lib/pollTestFixtures"
 import { focusManager } from "@tanstack/react-query"
-import { act } from "react"
-import { renderWithRouter } from "@/components/chat/renderWithRouter"
+import { act, useState } from "react"
 import { renderTestHook } from "@/lib/hookTestHarness"
-import { TopicVideoSection } from "./TopicVideoSection"
 
-// the shared section with plain elements, for the reads while a film renders
-const testElements: TopicVideoSectionElements = {
+// plain elements that show the section's action and its film cards' ids
+const PLAIN_ELEMENTS: TopicVideoSectionElements = {
 	Section: ({ action, children }) => (
 		<section>
 			{action}
 			{children}
 		</section>
 	),
-	Grid: ({ children }) => <ol>{children}</ol>,
-	Cell: ({ children }) => <li>{children}</li>,
+	Grid: ({ children }) => <div>{children}</div>,
+	Cell: ({ children }) => <div>{children}</div>,
 	Pagination: () => null,
-	FilmCard: ({ podcastEpisodeCard }) => <h4>{podcastEpisodeCard.podcastEpisode.title}</h4>,
-	RenderingLine: () => <p>Rendering</p>,
+	FilmCard: ({ podcastEpisodeCard }) => <p>{podcastEpisodeCard.podcastEpisode.id}</p>,
+	RenderingLine: ({ text }) => <p>{text}</p>,
 }
 
-// a topic's film cards, newest first, each named for its episode number
-function toFilmCards(filmCount: number): PodcastEpisodeCard[] {
-	return Array.from({ length: filmCount }, (_, index) => ({
-		podcastEpisode: toPodcastEpisodeFixture({
-			id: `episode-${filmCount - index}`,
-			episodeNumber: filmCount - index,
-			title: `Film ${filmCount - index}`,
-			hasVideo: true,
-			videoPosterUrl: `/api/topic-podcast-episode-video-images/episode-${filmCount - index}/hash/poster.jpg`,
-		}),
-		topic: { id: "topic-1", name: "Coffee", path: "/topics/topic-1/coffee", image: null },
-		reactionCount: 0,
-	}))
-}
+// a topic that shows an older film while its newer film renders, and the same topic once the newer film is ready
+const RENDERING_TOPIC = PODCAST_STORY_NEWER_VIDEO_RENDERING_TOPIC as TopicResponse
+const READY_TOPIC = {
+	...RENDERING_TOPIC,
+	latestPodcastEpisode: { ...RENDERING_TOPIC.latestPodcastEpisode, isVideoRendering: false },
+} as TopicResponse
 
-// a topic with its film cards, and its latest podcast episode
-function toFilmTopic({
-	filmCount,
-	latestPodcastEpisode = null,
-}: {
-	filmCount: number
-	latestPodcastEpisode?: TopicResponse["latestPodcastEpisode"]
-}): TopicResponse {
-	return toTestTopicResponse({
-		id: "topic-1",
-		topicPodcastEpisodeVideoCards: toFilmCards(filmCount),
-		latestPodcastEpisode,
+// let the awaited reads and the renders settle
+async function advancePoll(): Promise<void> {
+	await act(async () => {
+		await advancePolls({ pollMs: TOPIC_VIDEO_RENDERING_POLL_MS, pollCount: 1 })
 	})
 }
 
-// the film section's html for a topic
-function renderFilmSection(topic: TopicResponse): Promise<string> {
-	return renderWithRouter(<TopicVideoSection topic={topic} onVideoRenderingPoll={() => {}} />)
-}
-
-test("a topic's films render as cards in the open section, under a heading without the word video", async () => {
-	// the open section at the film anchor, with its count
-	const html = await renderFilmSection(toFilmTopic({ filmCount: 8 }))
-	expect(html).toContain("Coffee Break Cinema")
-	expect(html).toContain('id="film"')
-	expect(html).toContain('data-state="open"')
-	expect(html).toContain("8 films")
-	expect(html).not.toMatch(/<h\d[^>]*>[^<]*video/i)
-
-	// every film's card with its poster and play button, newest first, kept in the html for a reader without script
-	expect(html.match(/aria-label="Play film"/g)).toHaveLength(8)
-	expect(html.indexOf("Film 8")).toBeLessThan(html.indexOf("Film 1"))
-	expect(html).toContain('src="/api/topic-podcast-episode-video-images/episode-8/hash/poster.jpg"')
-
-	// the page buttons, and no film player
-	expect(html).toContain('aria-label="Coffee Break Cinema pages"')
-	expect(html).not.toContain('aria-label="Skip back 15 seconds"')
+// put the real clock, the app's own focus, and the status read back after each test
+afterEach(() => {
+	jest.useRealTimers()
+	focusManager.setFocused(undefined)
+	mock.restore()
 })
 
-test("the theme song's credits sit right after the title, outside the section's toggle", async () => {
-	// the toggle's button ends at the title, and the credits' button follows the toggle's heading
-	const html = await renderFilmSection(toFilmTopic({ filmCount: 2 }))
-	expect(html).toMatch(/Coffee Break Cinema<\/span><\/button><\/h3><button[^>]*aria-label="Theme song credits"/)
-	expect(html.match(/aria-label="Theme song credits"/g)).toHaveLength(1)
-})
-
-test("a topic with no film renders no film section", async () => {
-	expect(await renderFilmSection(toFilmTopic({ filmCount: 0 }))).toBe("")
-})
-
-test("a topic whose only film is rendering renders the open section with the filming line and no cards", async () => {
-	// no ready film, and the latest podcast episode's film is rendering
-	const latestPodcastEpisode = toPodcastEpisodeFixture({ title: "Better beans", isVideoRendering: true })
-	const html = await renderFilmSection(toFilmTopic({ filmCount: 0, latestPodcastEpisode }))
-
-	// the section's title and the filming line, whose emoji a screen reader skips, with no filming card
-	expect(html).toContain("Coffee Break Cinema")
-	expect(html).toContain('data-state="open"')
-	expect(html).toMatch(
-		/<span aria-hidden="true"[^>]*>🎬<\/span><span class="shimmer-text">Carl and Vienna are filming...<\/span>/,
-	)
-	expect(html).not.toContain("Better beans")
-	expect(html).not.toContain('aria-label="Play film"')
-})
-
-test("a failed film on a topic with no ready film renders no film section", async () => {
-	const latestPodcastEpisode = toPodcastEpisodeFixture({ title: "Better beans", isVideoRendering: false })
-	expect(await renderFilmSection(toFilmTopic({ filmCount: 0, latestPodcastEpisode }))).toBe("")
-})
-
-test("the filming line sits once in the title row, after the credits and before the count, and wraps on a phone", async () => {
-	const latestPodcastEpisode = toPodcastEpisodeFixture({ id: "episode-3", title: "New beans", isVideoRendering: true })
-	const html = await renderFilmSection(toFilmTopic({ filmCount: 2, latestPodcastEpisode }))
-
-	// one line in the wrapping title row, before the count and the cards, and no filming card
-	expect(html.match(/Carl and Vienna are filming/g)).toHaveLength(1)
-	expect(html).toContain("max-sm:flex-wrap")
-	const lineIndex = html.indexOf("Carl and Vienna are filming")
-	expect(lineIndex).toBeLessThan(html.indexOf("2 films"))
-	expect(lineIndex).toBeLessThan(html.indexOf('aria-label="Play film"'))
-	expect(html).not.toContain("New beans")
-	expect(html.match(/aria-label="Play film"/g)).toHaveLength(2)
-})
-
-test("two films put the count right after the title on a desktop, and eight keep it at the far right", async () => {
-	// the filler after the credits stops growing from the desktop width with two cards, and always grows with eight
-	expect(await renderFilmSection(toFilmTopic({ filmCount: 2 }))).toContain("lg:group-data-[state=open]/section:grow-0")
-	expect(await renderFilmSection(toFilmTopic({ filmCount: 8 }))).not.toContain("group-data-[state=open]/section:grow-0")
-})
-
-test("the page is read again while a film renders, and the new film joins the cards once it is ready", async () => {
-	// two ready films, and a newer podcast episode whose film is rendering
-	const renderingPodcastEpisode = toPodcastEpisodeFixture({ id: "episode-3", isVideoRendering: true })
-	let topic = toFilmTopic({ filmCount: 2, latestPodcastEpisode: renderingPodcastEpisode })
-	const reload = mock(() => {})
-	const harness = await renderTestHook(
-		() => topic,
-		(shownTopic) => (
-			<SharedTopicVideoSection topic={shownTopic} onVideoRenderingPoll={reload} elements={testElements} />
+// render the section over a topic whose poll's page read shows the film ready, with a flag that covers the screen
+async function renderTopicVideoSection() {
+	return renderTestHook(
+		() => ({ topicState: useState(RENDERING_TOPIC), screenState: useState(true) }),
+		({ topicState: [topic, setTopic], screenState: [isScreenActive] }) => (
+			<TopicVideoSection
+				topic={topic}
+				onVideoRenderingPoll={() => setTopic(READY_TOPIC)}
+				isVideoRenderingPollEnabled={isScreenActive}
+				elements={PLAIN_ELEMENTS}
+			/>
 		),
 	)
-	try {
-		// a return to the page reads it again
-		await act(async () => {
-			focusManager.setFocused(false)
-			focusManager.setFocused(true)
-		})
-		expect(reload).toHaveBeenCalledTimes(1)
-		expect(harness.container.textContent).toContain("Rendering")
+}
 
-		// the ready film's read drops the filming line, adds the film's card first, and stops the reads
-		topic = toFilmTopic({ filmCount: 3, latestPodcastEpisode: { ...renderingPodcastEpisode, isVideoRendering: false } })
-		await harness.render()
-		await act(async () => {
-			focusManager.setFocused(false)
-			focusManager.setFocused(true)
+test("an older film's filming line reads the newer film's status and clears without a reload once it is ready", async () => {
+	jest.useFakeTimers()
+	focusManager.setFocused(true)
+	const fetchStatus = spyOn(statusReadClient, "fetchTopicVideoStatus").mockResolvedValue({ status: "ready" })
+	const hook = await renderTopicVideoSection()
+	try {
+		// the older film's card shows beside the filming line
+		expect(hook.container.textContent).toContain(TOPIC_VIDEO_RENDERING_LINE.text)
+		expect(RENDERING_TOPIC.topicPodcastEpisodeVideoCards?.length).toBeGreaterThan(0)
+
+		// the poll reads the newer film's status, and its page read clears the line
+		await advancePoll()
+		expect(fetchStatus).toHaveBeenCalledWith({
+			id: RENDERING_TOPIC.latestPodcastEpisode?.id,
+			isPublic: RENDERING_TOPIC.visibility === "public",
 		})
-		expect(reload).toHaveBeenCalledTimes(1)
-		expect(harness.container.textContent).not.toContain("Rendering")
-		expect(harness.container.querySelector("h4")?.textContent).toBe("Film 3")
+		expect(hook.container.textContent).not.toContain(TOPIC_VIDEO_RENDERING_LINE.text)
+
+		// the poll stops with the line
+		await advancePoll()
+		expect(fetchStatus).toHaveBeenCalledTimes(1)
 	} finally {
-		// release the page before restoring focus
-		await harness.close()
-		focusManager.setFocused(undefined)
+		jest.useRealTimers()
+		await hook.close()
+	}
+})
+
+test("a covered screen stops the poll", async () => {
+	jest.useFakeTimers()
+	focusManager.setFocused(true)
+	const fetchStatus = spyOn(statusReadClient, "fetchTopicVideoStatus").mockResolvedValue({ status: "rendering" })
+	const hook = await renderTopicVideoSection()
+	try {
+		// the poll reads the status while the screen is active
+		await advancePoll()
+		expect(fetchStatus).toHaveBeenCalledTimes(1)
+
+		// a covered screen reads no more, and the filming line stays
+		const [, setIsScreenActive] = hook.read().screenState
+		await act(async () => setIsScreenActive(false))
+		await advancePoll()
+		await advancePoll()
+		expect(fetchStatus).toHaveBeenCalledTimes(1)
+		expect(hook.container.textContent).toContain(TOPIC_VIDEO_RENDERING_LINE.text)
+	} finally {
+		jest.useRealTimers()
+		await hook.close()
 	}
 })

@@ -10,6 +10,7 @@ import {
 import type { ProfilePodcastEpisodeCard, ProfileResponse } from "@carlnotes/contracts/profilePage"
 import { UNTRUSTED_DATA_TAG } from "@carlnotes/models/prompts/write"
 import * as readNews from "../news/readNews"
+import * as profilePageRead from "../profilePageRead"
 import * as profiles from "../profiles"
 import * as mcpViewData from "./mcpViewData"
 import { BOUND_SERVER_TEXT } from "./results"
@@ -82,15 +83,28 @@ test("the MCP view reads the unfenced page, its first page of news, and whose pr
 	expect(((ownToolResult._meta?.[MCP_VIEW_META_KEY] ?? {}) as McpViewData).profile?.isOwnProfile).toBe(true)
 })
 
-test("a visitor reads a named profile as a visitor, and must name one", async () => {
+test("a visitor reads a named profile from the profile page read's copy, and must name one", async () => {
+	// the visitors' copy of the profile, which the tool reads in place of the profile's loader
 	const loadProfileSpy = stubProfile()
-	await toToolHandler("read_profile", VISITOR)({ user_id: "user-2" })
-	expect(loadProfileSpy).toHaveBeenCalledWith("user-2", null)
+	const readProfilePageReadSpy = spyOn(profilePageRead, "readProfilePageRead").mockResolvedValue({
+		head: null,
+		profile: PUBLIC_PROFILE,
+		news: null,
+		userState: null,
+	} as never)
+	const toolResult = await toToolHandler("read_profile", VISITOR)({ user_id: "user-2" })
+	expect((toolResult.structuredContent as ReadProfileResult).username).toContain("vienna")
+	expect(readProfilePageReadSpy).toHaveBeenCalledWith({
+		profileUserId: "user-2",
+		sessionUserId: null,
+		audienceUserId: null,
+	})
+	expect(loadProfileSpy).not.toHaveBeenCalled()
 
 	// with no id there is no profile of their own to read
-	const toolResult = await toToolHandler("read_profile", VISITOR)({})
-	expect(toolResult.isError).toBe(true)
-	expect(loadProfileSpy).toHaveBeenCalledTimes(1)
+	const namelessToolResult = await toToolHandler("read_profile", VISITOR)({})
+	expect(namelessToolResult.isError).toBe(true)
+	expect(readProfilePageReadSpy).toHaveBeenCalledTimes(1)
 })
 
 test("a topic-bound server reads no profile", async () => {

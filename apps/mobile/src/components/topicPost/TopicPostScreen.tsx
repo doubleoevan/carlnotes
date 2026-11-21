@@ -1,17 +1,19 @@
 import { showClientError } from "@carlnotes/client/apiClient"
 import { authClient } from "@carlnotes/client/authClient"
-import { deleteTopicPost, fetchTopicPost } from "@carlnotes/client/topicPostClient"
+import { fetchTopicPostPageRead } from "@carlnotes/client/pageReadClient"
+import { deleteTopicPost } from "@carlnotes/client/topicPostClient"
 import type { TopicPostResponse } from "@carlnotes/contracts/topicPosts"
 import {
 	TopicPostPage as SharedTopicPostPage,
 	type TopicPostPageElements,
 } from "@carlnotes/core/components/TopicPostPage"
 import { useTopicPostView } from "@carlnotes/core/hooks/useTopicPostView"
-import { PROFILE_RANK_OPTION_LABELS, toTopicPostRankedItem } from "@carlnotes/core/lib/rankDialog"
+import { toTopicPostWithUserState } from "@carlnotes/core/lib/pageUserStates"
+import { toTopicPostRankedItem } from "@carlnotes/core/lib/rankDialog"
 import { EDIT_IMAGE_DIALOG_TITLES } from "@carlnotes/core/lib/topicImageEditor"
+import { toTopicPostDiscussionStatusRead } from "@carlnotes/core/lib/topicPostDiscussions"
 import {
 	isTopicPostEditorShown,
-	isTopicPostFeaturable,
 	TOPIC_POST_DELETE,
 	TOPIC_POST_LABELS,
 	type TopicPostBodyImageReport,
@@ -24,7 +26,7 @@ import {
 import { registerChatTopicPost, useRegisterChatTopicPost } from "@carlnotes/core/stores/topicPostChatStore"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { router, useFocusEffect, useLocalSearchParams, usePathname } from "expo-router"
-import { Flag, NotebookPen, Pencil, Share as ShareIcon, Trash2, X } from "lucide-react-native"
+import { X } from "lucide-react-native"
 import { type ReactNode, useCallback, useState } from "react"
 import { View } from "react-native"
 import { AnchorLink } from "@/components/common/AnchorLink"
@@ -40,7 +42,6 @@ import { NoteEditorScreen } from "@/components/note/NoteEditorScreen"
 import { Button } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text } from "@/components/primitives/text"
-import type { PageActionOption } from "@/components/search/PageActionMenu"
 import { ShareTopicSheet } from "@/components/share/ShareTopic"
 import { CommentMentionBadge } from "@/components/social/CommentMentionBadge"
 import { ReactionRow } from "@/components/social/ReactionRow"
@@ -48,10 +49,12 @@ import { SocialSection } from "@/components/social/SocialSection"
 import { EditImageDialog } from "@/components/topic/EditImageDialog"
 import { TopicByline } from "@/components/topic/TopicByline"
 import { TopicHeaderImage } from "@/components/topic/TopicImageButton"
+import { useIsScreenActive } from "@/hooks/useIsScreenActive"
 import { TopicPostBody } from "./TopicPostBody"
 import { TOPIC_POST_DISCUSSION_CARD_ELEMENTS } from "./TopicPostDiscussionCard"
 import { TopicPostEditor } from "./TopicPostEditor"
 import { TopicPostInfo } from "./TopicPostInfo"
+import { toTopicPostPageActionOptions } from "./topicPostPageActions"
 
 // the app's elements: the image beside the title and the byline, as on the podcast episode screen, the note's
 // typography on a card, and the app's editor
@@ -117,7 +120,11 @@ export function TopicPostScreen() {
 	const queryKey = ["topic-post", session?.user.id ?? null, topicPostId]
 	const query = useQuery({
 		queryKey,
-		queryFn: () => fetchTopicPost(topicPostId),
+		queryFn: async () => {
+			// the page read with the user state merged into the shared copy
+			const topicPostPageRead = await fetchTopicPostPageRead(topicPostId)
+			return toTopicPostWithUserState(topicPostPageRead)
+		},
 		gcTime: 0,
 		staleTime: 0,
 		retry: false,
@@ -132,6 +139,9 @@ export function TopicPostScreen() {
 
 	// the count that the comment thread reports as it stands, for the details line
 	const [commentCount, setCommentCount] = useState<number | null>(null)
+
+	// the discussion's poll runs only while the screen is focused and the app is active
+	const isScreenActive = useIsScreenActive()
 
 	// read the Topic Post again as the screen takes focus, except over an open editor, whose draft a read would
 	// replace
@@ -202,6 +212,7 @@ export function TopicPostScreen() {
 				void refetch()
 			}}
 			onChanged={() => void refetch()}
+			readDiscussionStatus={toTopicPostDiscussionStatusRead(topicPost, isScreenActive)}
 			onEditImage={topicPost.canEditImage ? () => setIsImageDialogOpen(true) : undefined}
 			elements={TOPIC_POST_PAGE_ELEMENTS}
 		>
@@ -224,7 +235,7 @@ export function TopicPostScreen() {
 
 	// the actions menu, whose options open the share sheet, the editor, the rank sheet, the delete confirmation, and
 	// each body image's report
-	const options = toTopicPostPageOptions({
+	const options = toTopicPostPageActionOptions({
 		topicPost,
 		bodyImageReports: toTopicPostBodyImageReports(topicPost, Boolean(session)),
 		onShare: () => setIsShareOpen(true),
@@ -294,59 +305,6 @@ export function TopicPostScreen() {
 	)
 }
 
-// the published Topic Post, what a report of each body image names, and the calls that open its share sheet, its
-// editor, its author's rank sheet, its delete confirmation, and a body image's report
-type ToTopicPostPageOptionsOptions = {
-	topicPost: TopicPostResponse
-	bodyImageReports: TopicPostBodyImageReport[]
-	onShare: () => void
-	onEdit: () => void
-	onRankProfile: () => void
-	onDelete: () => void
-	onReportBodyImage: (report: TopicPostBodyImageReport) => void
-}
-
-// the actions menu: Share, which opens the Topic Post's share sheet as the info popup's Share does, Edit post for its
-// author, Featured posts for the author of a published Topic Post of a public topic, Delete post for whoever may delete
-// it, and a report of each body image. Report image follows them
-function toTopicPostPageOptions({
-	topicPost,
-	bodyImageReports,
-	onShare,
-	onEdit,
-	onRankProfile,
-	onDelete,
-	onReportBodyImage,
-}: ToTopicPostPageOptionsOptions): PageActionOption[] {
-	return [
-		{ label: TOPIC_POST_LABELS.share, icon: ShareIcon, onSelect: onShare },
-		...(topicPost.isAuthor
-			? [
-					{
-						label: TOPIC_POST_LABELS.edit,
-						icon: Pencil,
-						onSelect: onEdit,
-					},
-				]
-			: []),
-		...toProfileRankOptions(topicPost, onRankProfile),
-		...(topicPost.canDelete ? [{ label: TOPIC_POST_LABELS.delete, icon: Trash2, onSelect: onDelete }] : []),
-		...bodyImageReports.map((report) => ({
-			label: report.optionLabel,
-			icon: Flag,
-			onSelect: () => onReportBodyImage(report),
-		})),
-	]
-}
-
-// the author of a published Topic Post of a public topic arranges their own profile's featured Topic Posts from
-// inside the Topic Post, as on the web
-function toProfileRankOptions(topicPost: TopicPostResponse, onSelect: () => void): PageActionOption[] {
-	return topicPost.isAuthor && isTopicPostFeaturable(topicPost)
-		? [{ label: PROFILE_RANK_OPTION_LABELS.posts, icon: NotebookPen, onSelect }]
-		: []
-}
-
 // the editor's screen, as the note's, with the close control over the editor
 function TopicPostEditorScreen({ closePath, children }: { closePath: string; children: ReactNode }) {
 	return (
@@ -394,6 +352,7 @@ function TopicPostVisitorsLine({ topicPost }: { topicPost: TopicPostResponse }) 
 	return (
 		<ViewerCountLine
 			viewerCountPage={{ kind: "topicPost", id: topicPost.id, isPublic: topicPost.isTopicPublic }}
+			savedViewerCount={topicPost.viewerCount}
 			isActiveRoute={pathname === `/topics/${topicPost.topicId}/posts/${topicPost.id}`}
 		/>
 	)

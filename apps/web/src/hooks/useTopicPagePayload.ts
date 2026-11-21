@@ -1,13 +1,17 @@
+import { fetchTopicPageRead } from "@carlnotes/client/pageReadClient"
 import {
 	type FetchTopicPageOptions,
 	fetchRelatedTopics,
 	fetchTopicPage,
 	type TopicGate,
+	type TopicPageResult,
 } from "@carlnotes/client/topicClient"
 import { isTopicSlugStale, toTopicPath } from "@carlnotes/contracts/seo"
 import type { TopicResponse } from "@carlnotes/contracts/topics"
+import { toTopicPageResult } from "@carlnotes/core/lib/pageReads"
 import { toPolledTopicPage } from "@carlnotes/core/lib/scanPoll"
 import { applyTopicFindingChanges, type TopicFindingChange } from "@carlnotes/core/lib/topicFindingChanges"
+import { replaceEqualDeep } from "@tanstack/react-query"
 import { useMatch, useNavigate } from "@tanstack/react-router"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useTopicChangeCount } from "@/stores/chatPanelStore"
@@ -17,6 +21,10 @@ import { useIsSignedInBeforeSession } from "./useIsSignedInBeforeSession"
 // the topic id from the url, and the slug if the url has one
 type UseTopicPagePayloadOptions = { topicId: string; topicSlug: string | undefined }
 
+// a reload's fetch options, and whether it is the browser's navigation to the topic, which reads the page read the
+// server's load reads
+type ReloadTopicPageOptions = FetchTopicPageOptions & { isPageRead?: boolean }
+
 /**
  * Returns the topic page payload and how the topic is gated, seeded by the server's read and reloaded on a new topic id
  * or a chat change. A signed-in reader's page loads without its related topics, which arrive from a read of their own.
@@ -24,7 +32,7 @@ type UseTopicPagePayloadOptions = { topicId: string; topicSlug: string | undefin
 export function useTopicPagePayload({ topicId, topicSlug }: UseTopicPagePayloadOptions): {
 	topic: TopicResponse | null | undefined
 	topicGate: TopicGate | null
-	reloadTopicPage: (fetchTopicPageOptions?: FetchTopicPageOptions) => Promise<void>
+	reloadTopicPage: (reloadTopicPageOptions?: ReloadTopicPageOptions) => Promise<void>
 	changeTopicFinding: (change: TopicFindingChange) => void
 } {
 	const navigate = useNavigate()
@@ -64,24 +72,24 @@ export function useTopicPagePayload({ topicId, topicSlug }: UseTopicPagePayloadO
 
 	// fetch the topic page payload, which says whether the topic is visible, gated to this user, or missing
 	const reloadTopicPage = useCallback(
-		async (fetchTopicPageOptions: FetchTopicPageOptions = {}) => {
+		async ({ isPoll = false, isPageRead = false }: ReloadTopicPageOptions = {}) => {
 			// A slow read must not restore an episode removed by a later request.
 			reloadCountRef.current += 1
 			const reloadCount = reloadCountRef.current
 			const isCurrentReload = (): boolean =>
 				shownTopicIdRef.current === topicId && reloadCountRef.current === reloadCount
 			try {
-				// a signed-in reader's full load reads the related topics apart from the page, started beside it
-				const isRelatedTopicsSeparate = isSignedInRef.current && !fetchTopicPageOptions.isPoll
+				// a signed-in reader's full reload reads the related topics apart from the page, started beside it. a
+				// navigation's page read holds them
+				const isRelatedTopicsSeparate = isSignedInRef.current && !isPoll && !isPageRead
 				const relatedTopicsRead = isRelatedTopicsSeparate ? fetchRelatedTopicsOrNull(topicId) : null
 
 				// a poll reload leaves out the related topics, the reactions, and the comment thread, so the page keeps its own
-				const topicPage = await fetchTopicPage(topicId, { ...fetchTopicPageOptions, isRelatedTopicsSeparate })
+				const topicPage = await fetchReloadedTopicPage(topicId, { isPoll, isPageRead, isRelatedTopicsSeparate })
 				if (!isCurrentReload()) {
 					return
 				}
 				const fetchedTopic = topicPage.status === "visible" ? topicPage.topic : null
-				const { isPoll = false } = fetchTopicPageOptions
 				setTopic((previousTopic) => toReloadedTopic({ previousTopic, fetchedTopic, isPoll, isRelatedTopicsSeparate }))
 				setTopicGate(topicPage.status === "gated" ? topicPage.topicGate : null)
 
@@ -96,7 +104,7 @@ export function useTopicPagePayload({ topicId, topicSlug }: UseTopicPagePayloadO
 				console.error("topic page load failed", error)
 				// a failed reload for a topic the page left changes nothing on the page that replaced it, and a failed poll
 				// keeps the page it reads again
-				if (isCurrentReload() && !fetchTopicPageOptions.isPoll) {
+				if (isCurrentReload() && !isPoll) {
 					setTopic(null)
 				}
 			}
@@ -108,13 +116,13 @@ export function useTopicPagePayload({ topicId, topicSlug }: UseTopicPagePayloadO
 		setTopic((previousTopic) => previousTopic && applyTopicFindingChanges(previousTopic, [change]))
 	}, [])
 
-	// keep the topic if its id matches the url, otherwise show the skeleton, then reload the page payload. the first
-	// load skips while hydrating the public topic the server loaded, unless a scan was running, whose findings may have
-	// changed since
+	// keep the topic if its id matches the url, otherwise show the skeleton, then read the topic's page read as the
+	// server's load does. the first load skips while hydrating the public topic the server loaded, unless a scan was
+	// running, whose findings may have changed since
 	const resetAndReloadTopicPage = useCallback((): void => {
 		setTopic((previousTopic) => (previousTopic?.id === topicId ? previousTopic : undefined))
 		setTopicGate(null)
-		void reloadTopicPage()
+		void reloadTopicPage({ isPageRead: true })
 	}, [reloadTopicPage, topicId])
 	const isLoadedOnServer =
 		loadedTopic?.id === topicId && !loadedTopic.scans.some((topicScan) => topicScan.status === "running")
@@ -137,6 +145,17 @@ export function useTopicPagePayload({ topicId, topicSlug }: UseTopicPagePayloadO
 	return { topic, topicGate, reloadTopicPage, changeTopicFinding }
 }
 
+// the page a reload reads: a navigation's page read, which the server's load reads too, or the topic route's read. each
+// holds the newest page of scans, whose later pages the scan history reads
+function fetchReloadedTopicPage(
+	topicId: string,
+	{ isPageRead, ...fetchTopicPageOptions }: ReloadTopicPageOptions,
+): Promise<TopicPageResult> {
+	return isPageRead
+		? fetchTopicPageRead(topicId).then(toTopicPageResult)
+		: fetchTopicPage(topicId, { ...fetchTopicPageOptions, isNewestScans: true })
+}
+
 // a topic's related topics from their own read, or null if the read fails
 async function fetchRelatedTopicsOrNull(topicId: string): Promise<TopicResponse["relatedTopics"] | null> {
 	try {
@@ -156,17 +175,20 @@ type ToReloadedTopicOptions = {
 	isRelatedTopicsSeparate: boolean
 }
 
-// the topic a reload shows. a poll keeps what the page it replaces shows of everything a poll leaves out, and a load
-// without its related topics keeps the ones that page shows until their own read arrives. a topic the page did not
-// show keeps the reload's own
-function toReloadedTopic({
+/**
+ * Returns the topic a reload shows. A poll keeps what the page it replaces shows of everything a poll leaves out, and
+ * returns the shown topic itself if nothing changed, so an unchanged poll renders nothing. A load without its related
+ * topics keeps the ones that page shows until their own read arrives. A topic the page did not show keeps the reload's
+ * own.
+ */
+export function toReloadedTopic({
 	previousTopic,
 	fetchedTopic,
 	isPoll,
 	isRelatedTopicsSeparate,
 }: ToReloadedTopicOptions): TopicResponse | null {
 	if (isPoll) {
-		return toPolledTopicPage(previousTopic, fetchedTopic)
+		return replaceEqualDeep(previousTopic, toPolledTopicPage(previousTopic, fetchedTopic))
 	}
 
 	// a load with its own related topics, a hidden or missing topic, and a topic the page did not show stay as fetched

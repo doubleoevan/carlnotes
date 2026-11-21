@@ -1,12 +1,14 @@
 // the podcast episode reader: titles match first under the view rules, the nearest by meaning fill the rest from a
 // cached or a new query vector, and a search that may not embed returns its text matches
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
+import { HOUR_MS } from "@carlnotes/contracts/time"
 import {
 	FREE_USER_ACCESS_ROW,
 	restoreConnectionPool,
 	type SentQuery,
 	stubConnectionPool,
 } from "@carlnotes/db/connectionPoolStub"
+import * as redis from "@carlnotes/db/redis"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
 import * as redisRateLimits from "@carlnotes/db/redisRateLimits"
 import * as litellm from "@carlnotes/models/litellm"
@@ -16,18 +18,23 @@ import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import { searchRoute } from "../search/search"
 import {
 	loadQueryVector,
+	PAGE_RENDER_QUERY_EMBEDDING_LIMIT,
+	QUERY_EMBEDDING_LIMIT,
 	type SearchPodcastEpisodesOptions,
 	searchPodcastEpisodes,
 	toQueryVectorKey,
-	VISITOR_EMBEDDING_LIMIT,
+	toStoredQueryVector,
 } from "./podcastEpisodeSearch"
 
 // a query vector, and the proxy's spent-budget rejection
-const QUERY_VECTOR = [0.6, 0.8]
+const QUERY_VECTOR = [0.5, 0.75]
 const BUDGET_REJECTION = {
 	statusCode: 429,
 	responseBody: '{"error":{"message":"Budget has been exceeded!","type":"budget_exceeded","code":"429"}}',
 }
+
+// what every embedding is given: no retry, and a signal that ends it after two seconds
+const EMBED_TIME_LIMIT = { maxRetries: 0, abortSignal: expect.any(AbortSignal) }
 
 // the public key, put back after each test
 const restorePublicKeySetting = saveEnvSettings(["LITELLM_PUBLIC_KEY"])
@@ -174,7 +181,7 @@ test("a full list of text matches embeds nothing and reads no meaning match", as
 
 test("the nearest by meaning fill the rest from a cached vector, leaving out the text matches and far episodes", async () => {
 	// two text matches, a cached query vector, and two meaning matches, one near and one too far
-	storedValueByKey.set(toQueryVectorKey("agents"), JSON.stringify(QUERY_VECTOR))
+	storedValueByKey.set(toQueryVectorKey("agents"), JSON.stringify(toStoredQueryVector(QUERY_VECTOR)))
 	const sentQueries = stubMatches(
 		[toMatchRow("e1"), toMatchRow("e2")],
 		[toMatchRow("near", 0.3), toMatchRow("far", 0.7)],
@@ -212,19 +219,25 @@ test("a query's vector is cached once under its lowercased words", async () => {
 		QUERY_VECTOR,
 	)
 	expect(embedRetrievalQuerySpy).toHaveBeenCalledTimes(1)
-	expect(embedRetrievalQuerySpy).toHaveBeenCalledWith("Poetry lovers", "user-key")
-	expect(storedValueByKey.get(toQueryVectorKey("poetry lovers"))).toBe(JSON.stringify(QUERY_VECTOR))
+	expect(embedRetrievalQuerySpy).toHaveBeenCalledWith("Poetry lovers", "user-key", EMBED_TIME_LIMIT)
+	expect(storedValueByKey.get(toQueryVectorKey("poetry lovers"))).toBe(
+		JSON.stringify(toStoredQueryVector(QUERY_VECTOR)),
+	)
 })
 
 test("a visitor embeds on the public key within the address's rate limit, and over it gets text matches", async () => {
 	Bun.env.LITELLM_PUBLIC_KEY = "public-key"
 
 	// the visitor's embeddings up to the limit run on the public key
-	for (let i = 0; i < VISITOR_EMBEDDING_LIMIT; i++) {
+	for (let i = 0; i < QUERY_EMBEDDING_LIMIT; i++) {
 		await loadQueryVector({ userId: null, query: `query ${i}`, clientAddress: "203.0.113.9" })
 	}
-	expect(embedRetrievalQuerySpy).toHaveBeenCalledTimes(VISITOR_EMBEDDING_LIMIT)
-	expect(embedRetrievalQuerySpy).toHaveBeenLastCalledWith(`query ${VISITOR_EMBEDDING_LIMIT - 1}`, "public-key")
+	expect(embedRetrievalQuerySpy).toHaveBeenCalledTimes(QUERY_EMBEDDING_LIMIT)
+	expect(embedRetrievalQuerySpy).toHaveBeenLastCalledWith(
+		`query ${QUERY_EMBEDDING_LIMIT - 1}`,
+		"public-key",
+		EMBED_TIME_LIMIT,
+	)
 
 	// the next uncached search is over the limit: the route returns the text match with a 200 and embeds nothing
 	stubMatches([toMatchRow("e1")])
@@ -236,7 +249,7 @@ test("a visitor embeds on the public key within the address's rate limit, and ov
 	expect(((await routeResponse.json()) as { rows: { id: string }[] }).rows).toEqual([
 		expect.objectContaining({ id: "e1" }),
 	])
-	expect(embedRetrievalQuerySpy).toHaveBeenCalledTimes(VISITOR_EMBEDDING_LIMIT)
+	expect(embedRetrievalQuerySpy).toHaveBeenCalledTimes(QUERY_EMBEDDING_LIMIT)
 })
 
 test("a visitor with no public key embeds nothing and counts no rate limit hit", async () => {
@@ -274,4 +287,86 @@ test("a full rate limit window counts in Redis under the visitor's address", asy
 	// a cached query counts nothing
 	await loadQueryVector({ userId: null, query: "agents", clientAddress: "203.0.113.9" })
 	expect(incrementRateLimitWindowSpy).toHaveBeenCalledTimes(1)
+})
+
+test("a server render's searches spend no address's count, and share the renders' own wider limit", async () => {
+	Bun.env.LITELLM_PUBLIC_KEY = "public-key"
+	const incrementRateLimitWindowSpy = spyOn(redisRateLimits, "incrementRateLimitWindow")
+
+	// more new queries than a visitor's limit, from a render with no forwarded address and from one on the private network
+	for (let i = 0; i < QUERY_EMBEDDING_LIMIT + 5; i++) {
+		await loadQueryVector({ userId: null, query: `render query ${i}`, clientAddress: null })
+		await loadQueryVector({ userId: null, query: `private network query ${i}`, clientAddress: "10.0.0.5" })
+	}
+
+	// every one embedded, each counted in the renders' bucket alone
+	expect(embedRetrievalQuerySpy).toHaveBeenCalledTimes(2 * (QUERY_EMBEDDING_LIMIT + 5))
+	const countedKeys = new Set(incrementRateLimitWindowSpy.mock.calls.map(([key]) => key))
+	expect([...countedKeys]).toEqual(["rate-limit:podcast-episode-search:page-renders"])
+	expect(PAGE_RENDER_QUERY_EMBEDDING_LIMIT).toBeGreaterThan(QUERY_EMBEDDING_LIMIT)
+})
+
+test("a signed-in user's embeddings count under the user, within the same limit", async () => {
+	// the user's embeddings up to the limit run on their own key, counted under the user
+	spyOn(litellm, "loadOrProvisionUserLiteLLMKey").mockResolvedValue("user-key")
+	const incrementRateLimitWindowSpy = spyOn(redisRateLimits, "incrementRateLimitWindow")
+	for (let i = 0; i < QUERY_EMBEDDING_LIMIT; i++) {
+		expect(await loadQueryVector({ userId: "user-1", query: `query ${i}`, clientAddress: "203.0.113.9" })).toEqual(
+			QUERY_VECTOR,
+		)
+	}
+	expect(incrementRateLimitWindowSpy).toHaveBeenCalledWith("rate-limit:podcast-episode-search:user:user-1", 60_000)
+
+	// the next new query is over the limit, and embeds nothing
+	expect(await loadQueryVector({ userId: "user-1", query: "one more", clientAddress: "203.0.113.9" })).toBeNull()
+	expect(embedRetrievalQuerySpy).toHaveBeenCalledTimes(QUERY_EMBEDDING_LIMIT)
+})
+
+test("a query's vector is kept for an hour as base64 of its 32-bit floats", async () => {
+	// a full width vector, read through the cache
+	Bun.env.LITELLM_PUBLIC_KEY = "public-key"
+	const fullWidthVector = Array.from({ length: 1024 }, (_, i) => i / 1024)
+	embedRetrievalQuerySpy.mockResolvedValue(fullWidthVector)
+	const cacheJsonSpy = spyOn(redis, "cacheJson")
+	expect(await loadQueryVector({ userId: null, query: "agents", clientAddress: "203.0.113.9" })).toEqual(
+		fullWidthVector,
+	)
+
+	// kept for an hour, as 4 bytes a dimension written in base64, a quarter of the size of the vector's json
+	expect(cacheJsonSpy).toHaveBeenCalledWith(expect.objectContaining({ ttlMs: HOUR_MS }))
+	const storedQueryVector = storedValueByKey.get(toQueryVectorKey("agents")) ?? ""
+	expect(JSON.parse(storedQueryVector)).toBe(toStoredQueryVector(fullWidthVector))
+	expect(storedQueryVector.length).toBe(JSON.stringify(Buffer.alloc(1024 * 4).toString("base64")).length)
+	expect(storedQueryVector.length).toBeLessThan(JSON.stringify(fullWidthVector).length / 2)
+})
+
+test("a slow embedding returns the text matches inside three seconds, tried once and never reported", async () => {
+	// an embedding that returns only once its signal ends it, as a fetch does
+	Bun.env.LITELLM_PUBLIC_KEY = "public-key"
+	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
+	embedRetrievalQuerySpy.mockImplementation(
+		(_query, _litellmApiKey, embedRetryOptions) =>
+			new Promise((_resolve, reject) => {
+				embedRetryOptions?.abortSignal?.addEventListener("abort", () => reject(embedRetryOptions.abortSignal?.reason))
+			}),
+	)
+
+	// a visitor's search finds one text match, and the embedding never returns a vector
+	stubMatches([toMatchRow("e1")])
+	const startedAt = performance.now()
+	const routeResponse = await searchRoute.request(
+		new Request("http://localhost/search?q=slow%20query&kinds=podcastEpisodes", {
+			headers: { "x-forwarded-for": "203.0.113.12" },
+		}),
+	)
+
+	// the text match returns inside three seconds, with one embedding tried and nothing reported
+	expect(performance.now() - startedAt).toBeLessThan(3000)
+	expect(routeResponse.status).toBe(200)
+	expect(((await routeResponse.json()) as { rows: { id: string }[] }).rows).toEqual([
+		expect.objectContaining({ id: "e1" }),
+	])
+	expect(embedRetrievalQuerySpy).toHaveBeenCalledTimes(1)
+	expect(embedRetrievalQuerySpy).toHaveBeenCalledWith("slow query", "public-key", EMBED_TIME_LIMIT)
+	expect(reportErrorSpy).not.toHaveBeenCalled()
 })

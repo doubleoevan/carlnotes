@@ -7,28 +7,36 @@ import {
 	inviteCreateResponse,
 } from "@carlnotes/contracts/invites"
 import { MANUAL_SCAN_PAUSED_LABEL } from "@carlnotes/contracts/scanFailure"
+import { EMPTY_SCAN_NOTE, type ScanNote, scanNote } from "@carlnotes/contracts/scanSourceResults"
 import type { SuggestSourcesPayload, UpdateTopicPayload } from "@carlnotes/contracts/topicPayloads"
 import {
 	type AddableTopicsResponse,
 	addableTopicsResponse,
-	EMPTY_SCAN_NOTE,
 	manualScanResponse,
 	type RelatedTopicsResponse,
 	relatedTopicsResponse,
-	type ScanNote,
 	type SuggestSourcesResponse,
-	scanNote,
 	suggestSourcesResponse,
 	type TopicFeedResponse,
 	type TopicResponse,
+	type TopicScansPage,
 	topicCreateResponse,
 	topicFeedResponse,
 	topicGateResponse,
 	topicResponse,
+	topicScansPage,
 } from "@carlnotes/contracts/topics"
-import { type ApiResponse, apiClient, fetchApi, readApiErrorMessage, readApiResponse } from "./apiClient"
+import {
+	type ApiResponse,
+	apiClient,
+	fetchApi,
+	readApiErrorMessage,
+	readApiResponse,
+	readPageResponse,
+} from "./apiClient"
 
 import { showFailedWrite } from "./clientWrite"
+import { notifyNewsWrite } from "./newsClient"
 
 // create an invite link for a topic, or for a Topic Post of it, which the link opens once it is accepted. "limited" is
 // the daily invite limit
@@ -69,11 +77,11 @@ export async function sendAcceptInvite(token: string): Promise<InviteAcceptRespo
 
 // fetch the topic feed, rejecting a failed read. includeConsumed adds already consumed topic findings
 export async function fetchTopicFeed(includeConsumed: boolean): Promise<TopicFeedResponse> {
-	const response = await apiClient().api["topic-feed"].$get({ query: includeConsumed ? { all: "true" } : {} })
-	if (!response.ok) {
-		throw new Error(`topic feed load failed: ${response.status}`)
-	}
-	return readApiResponse(topicFeedResponse, response)
+	return readPageResponse(
+		topicFeedResponse,
+		apiClient().api["topic-feed"].$get({ query: includeConsumed ? { all: "true" } : {} }),
+		"topic feed",
+	)
 }
 
 // the topics a team modal may offer to add
@@ -96,20 +104,25 @@ export type TopicPageResult =
 	| { status: "gated"; topicGate: TopicGate }
 	| { status: "missing" }
 
-// whether a fetch is the poll that repeats while a scan runs, and whether the page comes without its related topics
-// for a signed-in reader who loads them with fetchRelatedTopics
-export type FetchTopicPageOptions = { isPoll?: boolean; isRelatedTopicsSeparate?: boolean }
+// whether a fetch is the poll that repeats while a scan runs, whether the page comes without its related topics for a
+// signed-in reader who loads them with fetchRelatedTopics, and whether it holds the newest page of scans alone, whose
+// later pages fetchTopicScansPage reads
+export type FetchTopicPageOptions = { isPoll?: boolean; isRelatedTopicsSeparate?: boolean; isNewestScans?: boolean }
 
 /**
  * Reads a topic page or its access result, rejecting failed reads.
  */
 export async function fetchTopicPage(
 	topicId: string,
-	{ isPoll = false, isRelatedTopicsSeparate = false }: FetchTopicPageOptions = {},
+	{ isPoll = false, isRelatedTopicsSeparate = false, isNewestScans = false }: FetchTopicPageOptions = {},
 ): Promise<TopicPageResult> {
 	const response = await apiClient().api.topics[":id"].$get({
 		param: { id: topicId },
-		query: { poll: isPoll ? "1" : undefined, related: isRelatedTopicsSeparate ? "separate" : undefined },
+		query: {
+			poll: isPoll ? "1" : undefined,
+			related: isRelatedTopicsSeparate ? "separate" : undefined,
+			scans: isNewestScans ? "newest" : undefined,
+		},
 	})
 	if (response.ok) {
 		return { status: "visible", topic: await readApiResponse(topicResponse, response) }
@@ -122,6 +135,20 @@ export async function fetchTopicPage(
 	// distinguish an invitation gate from a missing or private topic
 	const topicGate = await readTopicGate(response)
 	return topicGate ? { status: "gated", topicGate } : { status: "missing" }
+}
+
+/**
+ * Reads one zero-based page of a topic's scan history and how many scans the history lists, rejecting a failed read.
+ */
+export async function fetchTopicScansPage(topicId: string, page: number): Promise<TopicScansPage> {
+	return readPageResponse(
+		topicScansPage,
+		apiClient().api.topics[":id"].scans.$get({
+			param: { id: topicId },
+			query: { page: String(page) },
+		}),
+		"topic scans",
+	)
 }
 
 /**
@@ -256,20 +283,27 @@ export async function sendDeleteTopic(topicId: string): Promise<void> {
 	}
 }
 
-// activate, reactivate or deactivate the current user's subscription on a topic. deactivating keeps the row
+// activate, reactivate or deactivate the current user's subscription on a topic, and read the user's news again.
+// deactivating keeps the row
 export async function sendTopicSubscription(topicId: string, isSubscribed: boolean): Promise<void> {
-	await showFailedWrite({
+	const isSaved = await showFailedWrite({
 		request: apiClient().api.topics[":id"].subscription.$post({ param: { id: topicId }, json: { isSubscribed } }),
 		action: "update topic subscription",
 	})
+	if (isSaved) {
+		notifyNewsWrite()
+	}
 }
 
-// permanently remove the current user's subscription row on a topic, distinct from deactivating it
+// permanently remove the current user's subscription row on a topic and read the user's news again
 export async function sendDeleteSubscription(topicId: string): Promise<void> {
-	await showFailedWrite({
+	const isSaved = await showFailedWrite({
 		request: apiClient().api.topics[":id"].subscription.$delete({ param: { id: topicId } }),
 		action: "delete topic subscription",
 	})
+	if (isSaved) {
+		notifyNewsWrite()
+	}
 }
 
 // turn the current user's email preference for a topic subscription on or off

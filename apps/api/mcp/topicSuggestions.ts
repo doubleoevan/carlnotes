@@ -11,7 +11,7 @@ import { findings } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
 import { matchPersonalSourcesTopics } from "@carlnotes/pipeline/personalSources/matchTopics"
 import { and, count, gte, inArray, sql } from "drizzle-orm"
-import { loadLatestPodcastEpisodeSummaries } from "../podcast/podcastEpisodeShapes"
+import { loadLatestPodcastEpisodeSummaries } from "../podcast/latestPodcastEpisodes"
 import { fromCursor, packPageFromWindow, toCursor } from "./results"
 import { suggestTopicNames } from "./topicSuggestionsAutocomplete"
 

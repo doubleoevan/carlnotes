@@ -1,37 +1,25 @@
-// a Topic's Topic Posts as they read: the rows a card and a page read, and who may read and write one
+// a Topic's Topic Posts as they read: the rows a card and a page read, the cards, and who may read and write one
 
+import { CARDS_PAGE_SIZE } from "@carlnotes/contracts/cardPages"
 import { toReactionCount } from "@carlnotes/contracts/home"
 import { toTopicPostPath } from "@carlnotes/contracts/seo"
-import { type SocialTarget, toSocialTargetKey } from "@carlnotes/contracts/social"
-import {
-	type ImageRegenerationQuota,
-	toTopicImageUrlsOrNull,
-	toTopicPostImageUrls,
-} from "@carlnotes/contracts/topicImages"
+import { type ReactionSummary, type SocialTarget, toSocialTargetKey } from "@carlnotes/contracts/social"
+import { toTopicPostImageUrls } from "@carlnotes/contracts/topicImages"
 import { TOPIC_POST_BODY_IMAGES_PATH } from "@carlnotes/contracts/topicPostBodyImages"
-import type { TopicPostCard, TopicPostResponse } from "@carlnotes/contracts/topicPosts"
+import type { TopicPostCard, TopicPostCardsPage } from "@carlnotes/contracts/topicPosts"
 // the tables, the gate, and the readers the rows join
 import { db } from "@carlnotes/db"
-import { loadDiscussionRegenerationQuota } from "@carlnotes/db/quotas"
+import { memoizeRowsById } from "@carlnotes/db/requestMemo"
 import { topicPosts } from "@carlnotes/db/schema/topicPosts"
 import { topics } from "@carlnotes/db/schema/topics"
 import { users } from "@carlnotes/db/schema/users"
 import { isImageReportedByUser } from "@carlnotes/db/topicImages"
 import { namedTopicColumns } from "@carlnotes/db/topicPermissions"
-import { and, asc, desc, eq, inArray, isNotNull, isNull, type SQL, sql } from "drizzle-orm"
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, type SQL, sql } from "drizzle-orm"
 // the gate, the author's identity, and the reactions
 import { isAllowed } from "../authorization"
 import { toProfileIdentity } from "../avatars"
-import { loadTopicCounts } from "../counts/viewerCounts"
-import { loadPageCommentThread } from "../social/pageCommentThread"
-import { loadReactionSummaries, loadReactionSummary } from "../social/reactionRows"
-import { loadEditorImageRegenerationQuota } from "../topic/imageEdits"
-import {
-	isTopicPostPublic,
-	loadTopicPostHtmlWithoutReportedImages,
-	toTopicPostHtmlForReader,
-} from "./topicPostBodyImages"
-import { loadTopicPostDiscussion } from "./topicPostDiscussions"
+import { loadReactionSummaries } from "../social/reactionRows"
 
 // what a Topic Post's read joins: the post, its Topic's gate columns, name, and image, and its author's identity
 const topicPostRowColumns = {
@@ -40,7 +28,15 @@ const topicPostRowColumns = {
 	author: { userId: users.id, username: users.username, avatarSource: users.avatarSource, avatarKey: users.avatarKey },
 }
 
-// a Topic Post with its Topic and its author
+// what one Topic Post's read joins beyond a card's: its author's provider photo, which the post's card and head draw,
+// and its Topic's saved counts, which the post's page shows
+const topicPostPageRowColumns = {
+	...topicPostRowColumns,
+	author: { ...topicPostRowColumns.author, image: users.image },
+	topicCounts: { viewerCount: topics.viewerCount, subscriberCount: topics.subscriberCount },
+}
+
+// a Topic Post with its Topic, its author, and its Topic's saved counts
 export type TopicPostRow = Awaited<ReturnType<typeof loadTopicPostRow>> & {}
 
 // the Topic Post columns a card and a list read, without the body and the image prompt
@@ -58,8 +54,10 @@ const topicPostCardColumns = {
 const topicPostCardRowColumns = { ...topicPostRowColumns, topicPost: topicPostCardColumns }
 
 // a Topic Post as a list reads it, with its Topic and its author
-export type TopicPostCardRow = Omit<TopicPostRow, "topicPost"> & {
+export type TopicPostCardRow = {
 	topicPost: Pick<TopicPostRow["topicPost"], keyof typeof topicPostCardColumns>
+	topic: TopicPostRow["topic"]
+	author: Omit<TopicPostRow["author"], "image">
 }
 
 // a read of Topic Post card rows with each post's Topic and author, which a caller filters and orders
@@ -77,20 +75,51 @@ function toTopicPostCardRowQuery() {
  */
 // biome-ignore lint/nursery/useExplicitReturnType: the row's type is the join's generated type, which TopicPostRow names
 export async function loadTopicPostRow(topicPostId: string) {
-	// the post, its Topic, and its author in one read
-	const [topicPostRow] = await db
-		.select(topicPostRowColumns)
-		.from(topicPosts)
-		.innerJoin(topics, eq(topics.id, topicPosts.topicId))
-		.innerJoin(users, eq(users.id, topicPosts.authorUserId))
-		.where(eq(topicPosts.id, topicPostId))
-	return topicPostRow ?? null
+	// the post, its Topic with its saved counts, and its author in one read, once in a request that only reads
+	const topicPostRowById = await memoizeRowsById("topic-post-rows", [topicPostId], async () => {
+		// the post's row by its id
+		const topicPostRows = await db
+			.select(topicPostPageRowColumns)
+			.from(topicPosts)
+			.innerJoin(topics, eq(topics.id, topicPosts.topicId))
+			.innerJoin(users, eq(users.id, topicPosts.authorUserId))
+			.where(eq(topicPosts.id, topicPostId))
+		return new Map(topicPostRows.map((topicPostRow) => [topicPostRow.topicPost.id, topicPostRow]))
+	})
+
+	// the post's row, or null for none
+	return topicPostRowById.get(topicPostId) ?? null
 }
 
 // what a read check needs of a Topic Post: whether it is published, its author, and its Topic
 export type TopicPostAccessRow = {
 	topicPost: Pick<TopicPostRow["topicPost"], "publishedAt" | "authorUserId">
 	topic: TopicPostRow["topic"]
+}
+
+/**
+ * Loads what a counts read, a view count check, and an image file read of a Topic Post check, without its body:
+ * whether it is published, its author, its saved viewer count, its image's hash, and its Topic. Returns null for no
+ * such post.
+ */
+// biome-ignore lint/nursery/useExplicitReturnType: the row's type is the join's generated type
+export async function loadTopicPostAccessRow(topicPostId: string) {
+	// the post's access columns and its Topic in one read, with no body
+	const accessRowColumns = {
+		topicPost: {
+			publishedAt: topicPosts.publishedAt,
+			authorUserId: topicPosts.authorUserId,
+			viewerCount: topicPosts.viewerCount,
+			imageHash: topicPosts.imageHash,
+		},
+		topic: topicPostRowColumns.topic,
+	}
+	const [accessRow] = await db
+		.select(accessRowColumns)
+		.from(topicPosts)
+		.innerJoin(topics, eq(topics.id, topicPosts.topicId))
+		.where(eq(topicPosts.id, topicPostId))
+	return accessRow ?? null
 }
 
 // what a read of one body image checks, without the post's body
@@ -132,15 +161,49 @@ export async function canReadTopicPost(userId: string | null, topicPostRow: Topi
  * newest first.
  */
 export async function loadTopicPostCards(userId: string | null, topicId: string): Promise<TopicPostCard[]> {
-	// a draft is listed for its author alone
-	const isOwnDraft = userId ? and(isNull(topicPosts.publishedAt), eq(topicPosts.authorUserId, userId)) : sql`false`
-
 	// the drafts sort first. a draft has no published time
 	const topicPostRows = await toTopicPostCardRowQuery()
-		.where(and(eq(topicPosts.topicId, topicId), sql`(${isNotNull(topicPosts.publishedAt)} or ${isOwnDraft})`))
-		.orderBy(sql`${topicPosts.publishedAt} desc nulls first`, desc(topicPosts.updatedAt))
+		.where(toTopicPostListFilter(userId, topicId))
+		.orderBy(...TOPIC_POST_LIST_ORDER)
 	// each post as its card
 	return toTopicPostCards(topicPostRows)
+}
+
+/**
+ * Loads one zero-based page of a Topic's Topic Posts as cards, in the order of `loadTopicPostCards`, with how many the
+ * whole list holds.
+ */
+export async function loadTopicPostCardsPage(
+	userId: string | null,
+	topicId: string,
+	page: number,
+): Promise<TopicPostCardsPage> {
+	// the page's rows and the count of every row together
+	const topicPostListFilter = toTopicPostListFilter(userId, topicId)
+	const [topicPostRows, [countRow]] = await Promise.all([
+		toTopicPostCardRowQuery()
+			.where(topicPostListFilter)
+			.orderBy(...TOPIC_POST_LIST_ORDER)
+			.limit(CARDS_PAGE_SIZE)
+			.offset(page * CARDS_PAGE_SIZE),
+		db.select({ totalCount: count() }).from(topicPosts).where(topicPostListFilter),
+	])
+	return { topicPosts: await toTopicPostCards(topicPostRows), totalCount: countRow?.totalCount ?? 0 }
+}
+
+// the order of a Topic's Topic Posts: the drafts first, newest saved first, then the published ones newest first, with
+// the id breaking ties so a page never repeats a post
+const TOPIC_POST_LIST_ORDER = [
+	sql`${topicPosts.publishedAt} desc nulls first`,
+	desc(topicPosts.updatedAt),
+	desc(topicPosts.id),
+]
+
+// the Topic Posts of a Topic that a list holds: the published ones, and the user's own drafts
+function toTopicPostListFilter(userId: string | null, topicId: string): SQL | undefined {
+	// a draft is listed for its author alone
+	const isOwnDraft = userId ? and(isNull(topicPosts.publishedAt), eq(topicPosts.authorUserId, userId)) : sql`false`
+	return and(eq(topicPosts.topicId, topicId), sql`(${isNotNull(topicPosts.publishedAt)} or ${isOwnDraft})`)
 }
 
 /**
@@ -155,19 +218,18 @@ export function loadProfileOrderTopicPostRows(topicPostFilter: SQL | undefined):
 }
 
 /**
- * Loads the Topic Posts' cards in the ids' order.
+ * Loads the Topic Posts' card rows with their Topics and authors, in the ids' order. A post deleted since its id was
+ * read has none.
  */
-export async function loadTopicPostCardsById(topicPostIds: string[]): Promise<TopicPostCard[]> {
+export async function loadTopicPostCardRowsById(topicPostIds: string[]): Promise<TopicPostCardRow[]> {
 	if (topicPostIds.length === 0) {
 		return []
 	}
 
-	// the posts with their Topics and authors
+	// the posts with their Topics and authors, each by its id, so the rows follow the ids
 	const topicPostRows = await toTopicPostCardRowQuery().where(inArray(topicPosts.id, topicPostIds))
-
-	// each row by its id, so the cards follow the ids
 	const topicPostRowById = new Map(topicPostRows.map((topicPostRow) => [topicPostRow.topicPost.id, topicPostRow]))
-	return toTopicPostCards(topicPostIds.flatMap((topicPostId) => topicPostRowById.get(topicPostId) ?? []))
+	return topicPostIds.flatMap((topicPostId) => topicPostRowById.get(topicPostId) ?? [])
 }
 
 /**
@@ -175,25 +237,35 @@ export async function loadTopicPostCardsById(topicPostIds: string[]): Promise<To
  */
 export async function toTopicPostCards(topicPostRows: TopicPostCardRow[]): Promise<TopicPostCard[]> {
 	// the reactions on the posts, in one read. a draft has none
-	const reactionSummaries = await loadReactionSummaries({
+	const reactionSummaryByTarget = await loadReactionSummaries({
 		userId: null,
 		targets: topicPostRows.map(({ topicPost }) => toTopicPostTarget(topicPost.id)),
 	})
+	return toTopicPostCardList(topicPostRows, reactionSummaryByTarget)
+}
 
-	// each row as its card
+/**
+ * Returns the rows as cards in the rows' order, each with its reaction count from reactions already read.
+ */
+export function toTopicPostCardList(
+	topicPostRows: TopicPostCardRow[],
+	reactionSummaryByTarget: Map<string, ReactionSummary>,
+): TopicPostCard[] {
 	return topicPostRows.map((topicPostRow) => {
-		const reactionSummary = reactionSummaries.get(toSocialTargetKey(toTopicPostTarget(topicPostRow.topicPost.id)))
+		const reactionSummary = reactionSummaryByTarget.get(toSocialTargetKey(toTopicPostTarget(topicPostRow.topicPost.id)))
 		return toTopicPostCard(topicPostRow, reactionSummary ? toReactionCount(reactionSummary) : 0)
 	})
 }
 
-// a Topic Post as the social target its reactions and Comments hang on
-function toTopicPostTarget(topicPostId: string): SocialTarget {
+/**
+ * Returns a Topic Post as the social target its reactions and Comments hang on.
+ */
+export function toTopicPostTarget(topicPostId: string): SocialTarget {
 	return { kind: "post", id: topicPostId }
 }
 
 // a Topic Post as its card shows it, with how many reactions it has
-function toTopicPostCard({ topicPost, topic, author }: TopicPostCardRow, reactionCount: number): TopicPostCard {
+export function toTopicPostCard({ topicPost, topic, author }: TopicPostCardRow, reactionCount: number): TopicPostCard {
 	// the inner join always finds the author
 	const authorIdentity = toProfileIdentity(author)
 	if (!authorIdentity) {
@@ -241,97 +313,11 @@ export async function canEditTopicPostImage(userId: string | null, topicPostRow:
 	return topicPostRow.topicPost.authorUserId === userId || isAllowed(userId, "topicPost:editImage", topicPostRow.topic)
 }
 
-// what a Topic Post's page adds: the first page of its comment thread, and the site's origin before each body image's
-// path, for a reader that loads the images from another origin
-type TopicPostResponseOptions = { isCommentThreadIncluded?: boolean; siteUrl?: string }
-
 /**
- * Returns a Topic Post's page for one reader: its card, its body, its reactions, and what the reader may do with it.
- * A read of a published post adds the first page of its comment thread.
+ * Returns whether the reader reported the post's image since it last changed. A reader who did no longer sees it until
+ * it changes.
  */
-export async function toTopicPostResponse(
-	userId: string | null,
-	topicPostRow: TopicPostRow,
-	{ isCommentThreadIncluded = false, siteUrl }: TopicPostResponseOptions = {},
-): Promise<TopicPostResponse> {
-	// the caller's part in the post: its author, its Topic's owner, an admin, or an editor of its Topic
-	const { topicPost, topic } = topicPostRow
-	const isAuthor = userId !== null && topicPost.authorUserId === userId
-	const isTopicOwner = userId !== null && topic.ownerId === userId
-	const [
-		isAdmin,
-		canPublish,
-		canEditImage,
-		isImageReported,
-		discussion,
-		reactions,
-		commentThread,
-		topicCountsResult,
-		readerHtml,
-	] = await Promise.all([
-		isAllowed(userId, "admin:console"),
-		isAllowed(userId, "topicPost:publish", topic),
-		canEditTopicPostImage(userId, topicPostRow),
-		isTopicPostImageReported(userId, topicPost),
-		topicPost.publishedAt ? loadTopicPostDiscussion(topicPost.id) : null,
-		loadReactionSummary(userId, toTopicPostTarget(topicPost.id)),
-		// a draft has no thread
-		isCommentThreadIncluded && topicPost.publishedAt
-			? loadPageCommentThread({ userId, topic, target: { kind: "post", id: topicPost.id } })
-			: undefined,
-		// the Topic's viewers and subscribers, as its own page reads them
-		loadTopicCounts(userId, topic.id),
-		// the body without the images the reader reported
-		loadTopicPostHtmlWithoutReportedImages(userId, topicPostRow),
-	])
-
-	// whoever may change the image reads their regenerations this month, where it came from, and its image prompt
-	const imageRegenerationQuota = canEditImage && userId ? await loadEditorImageRegenerationQuota(userId) : null
-
-	// whoever may publish on the Topic reads their discussion regenerations this month
-	const discussionRegenerationQuota = canPublish ? await loadShownDiscussionRegenerationQuota(userId) : null
-
-	// the card, the body at its version, and what the caller may do
-	const topicPostCard = toTopicPostCard(topicPostRow, toReactionCount(reactions))
-	return {
-		...topicPostCard,
-		image: isImageReported ? null : topicPostCard.image,
-		html: toTopicPostHtmlForReader(readerHtml, { isSigned: !isTopicPostPublic(topicPostRow), siteUrl }),
-		version: topicPost.version,
-		editedAt: topicPost.editedAt?.toISOString() ?? null,
-		isTopicPublic: topic.visibility === "public",
-		topicVisibility: topic.visibility,
-		topicImage: toTopicImageUrlsOrNull(topic.id, topic.imageHash),
-		topicCounts: topicCountsResult?.counts,
-		reactions,
-		commentThread,
-		// what the caller may do
-		isTopicOwner,
-		isAuthor,
-		isEditable: isAuthor,
-		canDelete: isAuthor || isAdmin || isTopicOwner,
-		discussion,
-		discussionRegenerationQuota,
-		canEditImage,
-		imageRegenerationQuota,
-		imageOrigin: canEditImage ? topicPost.imageOrigin : null,
-		imagePrompt: canEditImage ? topicPost.imagePrompt : null,
-		canPublish,
-	}
-}
-
-// the discussion regenerations a user has used this month and their limit, the two counts a regenerate control reads
-async function loadShownDiscussionRegenerationQuota(userId: string | null): Promise<ImageRegenerationQuota | null> {
-	if (!userId) {
-		return null
-	}
-	const { used, limit } = await loadDiscussionRegenerationQuota(userId)
-	return { used, limit }
-}
-
-// whether the reader reported the post's image since it last changed. a reader who did no longer sees it until it
-// changes
-async function isTopicPostImageReported(
+export async function isTopicPostImageReported(
 	userId: string | null,
 	topicPost: Pick<TopicPostRow["topicPost"], "id" | "imageHash" | "imageUpdatedAt">,
 ): Promise<boolean> {

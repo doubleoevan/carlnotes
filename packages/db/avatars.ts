@@ -17,6 +17,7 @@ import {
 	type UncheckedImageRow,
 	type UncheckedImageSubject,
 } from "./uncheckedImages"
+import { clearVisitorProfilePages, clearVisitorTeamPages } from "./visitorPageCaches"
 
 // the file extension of each image type a stored avatar may have. svg is rejected: it is a document that can include
 // a script
@@ -230,8 +231,9 @@ async function writeUserAvatar({
 		return false
 	}
 
-	// write the avatar to the user's sessions, then delete the replaced objects, which nothing points at now
-	await refreshSessionUser(userId)
+	// write the avatar to the user's sessions and their visitor profile copy, then delete the replaced objects, which
+	// nothing points at now
+	await Promise.all([refreshSessionUser(userId), clearVisitorProfilePages(userId)])
 	await deleteStoredObjects(replacedAvatarKeys)
 	return true
 }
@@ -292,7 +294,8 @@ async function writeTeamAvatar({
 		return false
 	}
 
-	// delete the replaced objects, which nothing points at now
+	// delete the team's visitor page copy and the replaced objects, which nothing points at now
+	await clearVisitorTeamPages(teamId)
 	await deleteStoredObjects(replacedAvatarKeys)
 	return true
 }

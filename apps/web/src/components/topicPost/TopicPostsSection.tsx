@@ -2,11 +2,12 @@
 // section, in a card like the comment thread's with the button that starts a draft above the Topic Posts, and the page
 // buttons under the card as in the scan history
 import { createTopicPostDraft } from "@carlnotes/client/topicPostClient"
-import type { TopicPostsResponse } from "@carlnotes/contracts/topicPosts"
+import type { TopicPostCard as TopicPostCardFields, TopicPostsResponse } from "@carlnotes/contracts/topicPosts"
 import {
 	TopicPostsSection as SharedTopicPostsSection,
 	type TopicPostsSectionElements,
 } from "@carlnotes/core/components/TopicPostsSection"
+import type { ServerCardPages } from "@carlnotes/core/hooks/useServerPagedCards"
 import { TOPIC_POST_LABELS, toTopicPostFailureMessage } from "@carlnotes/core/lib/topicPosts"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { useNavigate } from "@tanstack/react-router"
@@ -52,7 +53,12 @@ export const TOPIC_POSTS_SECTION_ELEMENTS: TopicPostsSectionElements = {
 /**
  * A Topic's Open Mic section on the topic page. The button creates a draft and opens its editor.
  */
-export function TopicPostsSection({ topicId, topicPosts, canPublish }: TopicPostsResponse & { topicId: string }) {
+export function TopicPostsSection({
+	topicId,
+	topicPosts,
+	canPublish,
+	serverPages,
+}: TopicPostsResponse & { topicId: string; serverPages?: ServerCardPages<TopicPostCardFields> }) {
 	const navigate = useNavigate()
 	const [isCreating, setIsCreating] = useState(false)
 
@@ -73,6 +79,7 @@ export function TopicPostsSection({ topicId, topicPosts, canPublish }: TopicPost
 			canPublish={canPublish}
 			isCreating={isCreating}
 			onNewPost={() => void handleNewPost()}
+			serverPages={serverPages}
 			elements={TOPIC_POSTS_SECTION_ELEMENTS}
 		/>
 	)

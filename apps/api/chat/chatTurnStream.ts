@@ -23,9 +23,13 @@ import { saveChatTurn } from "./chatTurns"
 import { saveLinkPreviews } from "./linkPreviews"
 import { writeReplyStream } from "./replyStream"
 
+// a chat turn's reply once its retrieval returned, and the tokens the agreement check spent before it
+export type LoadedChatReply = { chatReply: ChatReplyStream; agreementTokens: number }
+
 // one chat turn whose reply is streaming
 export type StreamedChatTurn = {
-	chatReply: ChatReplyStream
+	// the reply, which loads after the response's headers are sent, or null if the page has nothing to chat about
+	loadedChatReply: Promise<LoadedChatReply | null>
 	// who asked on which page, and what they sent
 	userId: string
 	page: ChatPage
@@ -43,43 +47,60 @@ export type StreamedChatTurn = {
 	// the properties that the analytics event is sent with, and the LiteLLM key for the attachment summaries
 	analyticsProperties: AnalyticsProperties
 	litellmApiKey: string
-	// the new-topic chat's draft as the turn started, and the tokens the agreement check spent before the reply
+	// the new-topic chat's draft as the turn started
 	topicDraft?: TopicDraft
-	agreementTokens: number
 	// the turn's reservation against the user's budget, released once the turn's spend row is saved
 	reservation: SpendReservation
 }
 
-/** Streams a chat reply to the user, then saves the chat turn whether the stream finished or broke. */
+// the blank line a reply stream opens with, so its headers reach the client before the retrieval returns
+export const OPENING_LINE = "\n"
+
+/**
+ * Sends the response's headers, waits for the reply's retrieval, streams the reply to the user, then saves the chat
+ * turn whether the stream finished or broke. A reply that never starts releases the reservation and saves nothing.
+ */
 export function streamChatTurn(context: Context, chatTurn: StreamedChatTurn): Response {
+	// a reply that fails before the stream reads it is read below, never left unhandled
+	chatTurn.loadedChatReply.catch(() => {})
 	return stream(context, async (writeStream) => {
+		// send the headers now with a blank line, which a reader skips. Bun sends no header before the first chunk
+		await writeStream.write(OPENING_LINE)
+
+		// wait for the reply. one that never starts, or whose page has nothing to chat about, releases the reservation
+		// and closes with a failed line
+		let loadedChatReply: LoadedChatReply | null = null
+		try {
+			loadedChatReply = await chatTurn.loadedChatReply
+			// a page with nothing to chat about closes with the failed line
+			if (!loadedChatReply) {
+				await writeClosingLine(writeStream, toChatReplyLineText({ type: "failed" }))
+			}
+		} catch (error) {
+			console.error(`chat reply failed to start for ${toChatPageId(chatTurn.page)}`, error)
+			await writeClosingLine(writeStream, toClosingLine(chatTurn, error))
+		}
+
+		// a reply that never started, or failed to start, saves nothing
+		if (!loadedChatReply) {
+			await chatTurn.reservation.release()
+			return
+		}
+
 		// forward the reply, with the tool calls as each tool returns. only a reply that finished leaves a proposal
 		let isReplyFinished = false
 		try {
-			await writeReplyStream(writeStream, chatTurn.chatReply, chatTurn.toolCalls)
+			await writeReplyStream(writeStream, loadedChatReply.chatReply, chatTurn.toolCalls)
 			isReplyFinished = true
 		} catch (error) {
 			// log the broken stream. it still spent tokens, so the save below still runs
 			console.error(`chat stream failed for ${toChatPageId(chatTurn.page)}`, error)
-			// close with the spent budget's text. the stream is the only place left to show it.
-			// report any other failure and close with the failed line
-			let closingLine = toChatReplyLineText({ type: "text", text: `\n\n${SPENT_BUDGET_REJECTION}` })
-			if (!isBudgetRejection(error)) {
-				reportError(error, "chat", { topicId: toChatPageId(chatTurn.page) })
-				closingLine = toChatReplyLineText({ type: "failed" })
-			}
-
-			// write the closing line. a user who already left cannot be written to, and that must not skip the save below
-			try {
-				await writeStream.write(closingLine)
-			} catch (closingError) {
-				console.error("chat stream close failed", closingError)
-			}
+			await writeClosingLine(writeStream, toClosingLine(chatTurn, error))
 		}
 
 		// save the spend whether the stream finished or broke, then release the reservation. a partial chat turn is never
 		// free, and the saved row now counts what the reservation held
-		const chatTurnId = await saveFinishedChatTurn(chatTurn, isReplyFinished)
+		const chatTurnId = await saveFinishedChatTurn({ chatTurn, loadedChatReply, isReplyFinished })
 		await chatTurn.reservation.release()
 
 		// store the topic draft that the chat turn wrote. a chat turn that created the topic already deleted it
@@ -108,6 +129,27 @@ export function streamChatTurn(context: Context, chatTurn: StreamedChatTurn): Re
 	})
 }
 
+// the closing line of a reply that failed. a spent budget closes with its text. any other failure is reported and closes with the failed line
+function toClosingLine(chatTurn: StreamedChatTurn, error: unknown): string {
+	if (isBudgetRejection(error)) {
+		return toChatReplyLineText({ type: "text", text: `\n\n${SPENT_BUDGET_REJECTION}` })
+	}
+	reportError(error, "chat", { topicId: toChatPageId(chatTurn.page) })
+	return toChatReplyLineText({ type: "failed" })
+}
+
+// write the closing line. a user who already left cannot be written to, and that must not skip the save after it
+async function writeClosingLine(
+	writeStream: { write: (text: string) => Promise<unknown> },
+	closingLine: string,
+): Promise<void> {
+	try {
+		await writeStream.write(closingLine)
+	} catch (closingError) {
+		console.error("chat stream close failed", closingError)
+	}
+}
+
 // the question as it is stored. a question asked from the podcast player ends with the note naming its podcast episode,
 // its chapter, and the speaker who answered, host if the chat turn stopped before a speaker was chosen
 function toStoredQuestion(chatTurn: StreamedChatTurn, speaker: PodcastEpisodeSpeaker | undefined): string {
@@ -117,18 +159,29 @@ function toStoredQuestion(chatTurn: StreamedChatTurn, speaker: PodcastEpisodeSpe
 		: chatTurn.question
 }
 
+// the streamed chat turn, its loaded reply, and whether the reply finished
+type SaveFinishedChatTurnOptions = {
+	chatTurn: StreamedChatTurn
+	loadedChatReply: LoadedChatReply
+	isReplyFinished: boolean
+}
+
 // save the finished chat turn's spend and text, record the proposal a finished reply leaves standing, and fetch the
 // answer's link preview in the background. return null if the chat turn stored no text or the save failed
-async function saveFinishedChatTurn(chatTurn: StreamedChatTurn, isReplyFinished: boolean): Promise<string | null> {
+async function saveFinishedChatTurn({
+	chatTurn,
+	loadedChatReply,
+	isReplyFinished,
+}: SaveFinishedChatTurnOptions): Promise<string | null> {
 	try {
 		// save the chat turn, the agreement check's tokens included. a topic save keeps the chat turn's text even if the
 		// gate rejects persistence
-		const { text, totalTokens, searchCount, toolCalls, speaker } = await chatTurn.chatReply.completion
+		const { text, totalTokens, searchCount, toolCalls, speaker } = await loadedChatReply.chatReply.completion
 		const isChatTurnPersisted = chatTurn.isPersisted || chatTurn.toolCalls.count > 0
 		const savedChatTurnId = await saveChatTurn({
 			userId: chatTurn.userId,
 			page: chatTurn.page,
-			totalTokens: totalTokens + chatTurn.agreementTokens,
+			totalTokens: totalTokens + loadedChatReply.agreementTokens,
 			searchCount,
 			isPersisted: isChatTurnPersisted,
 			question: toStoredQuestion(chatTurn, speaker),

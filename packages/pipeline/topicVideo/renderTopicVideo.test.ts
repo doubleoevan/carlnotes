@@ -1,6 +1,7 @@
 // the film render's skips and its render version, with the connection pool stubbed: a render never asks about the
 // owner's spend, a podcast episode missing its inputs gets a failed row once, a film at the current render version is
-// skipped, and a ready film below it is rendered again and swapped while it stays ready
+// skipped, and a ready film below it is rendered again and swapped while it stays ready. a save and a swap each clear
+// the topic's visitor pages
 
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { existsSync } from "node:fs"
@@ -14,6 +15,7 @@ import {
 import * as monthlyBudgetCutoffs from "@carlnotes/db/monthlyBudgetCutoffs"
 import * as podcastFeedCache from "@carlnotes/db/podcastFeedCache"
 import * as storage from "@carlnotes/db/store"
+import * as visitorPageCaches from "@carlnotes/db/visitorPageCaches"
 import * as ffmpeg from "@carlnotes/models/ffmpeg"
 import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import { renderTopicVideo } from "./renderTopicVideo"
@@ -217,8 +219,12 @@ test("a ready film at the current render version is skipped", async () => {
 test("a new film is stored at the current render version", async () => {
 	const sentQueries = stubRenderReads(null)
 	stubRenderSteps()
+	const clearVisitorPagesSpy = spyOn(visitorPageCaches, "clearVisitorPagesOfTopic").mockResolvedValue()
 	const renderResult = await renderTopicVideo({ podcastEpisodeId: "episode-1" })
 	expect(renderResult).toMatchObject({ outcome: "rendered", generatedChapterImageCount: 5 })
+
+	// the ready film leaves its topic's visitor pages, which list it on their next read
+	expect(clearVisitorPagesSpy.mock.calls).toEqual([["topic-1"]])
 
 	// the row is written rendering first, then ready at the current render version with its keys
 	expect(toFilmRowWrite(sentQueries)?.values).toContain("rendering")
@@ -256,8 +262,10 @@ test("a ready film below the current render version is rendered again and swappe
 	const sentQueries = stubRenderReads(toFilmStateRow("ready", 1))
 	const { deleteObjects } = stubRenderSteps()
 	const drawOwnImage = spyOn(topicVideoImage, "generateTopicVideoImage")
+	const clearVisitorPagesSpy = spyOn(visitorPageCaches, "clearVisitorPagesOfTopic").mockResolvedValue()
 	const renderResult = await renderTopicVideo({ podcastEpisodeId: "episode-1", isPlatformBilled: true })
 	expect(renderResult).toMatchObject({ outcome: "rendered" })
+	expect(clearVisitorPagesSpy.mock.calls).toEqual([["topic-1"]])
 
 	// the film keeps the image it shows, and of its stored files only the chapter images in the first style are deleted.
 	// the second delete is of the shots the render kept, of which the bucket lists none

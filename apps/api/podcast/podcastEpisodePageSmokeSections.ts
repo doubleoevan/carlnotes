@@ -89,9 +89,14 @@ export async function checkGatedPodcastEpisodePages(): Promise<void> {
  * Checks a private topic's episode card, and a public topic's episode page with its chapter and finding.
  */
 export async function checkPublicPodcastEpisodePage(): Promise<void> {
-	// a private topic's podcast episode has its link-preview card, served without a session
-	const privatePreviewResponse = await request({
+	// a private topic's podcast episode has its link-preview card, served without a session at the versioned url that
+	// the unversioned url redirects to
+	const privatePreviewRedirect = await request({
 		path: `/episodes/${privatePodcastEpisodeId}/preview.png`,
+		userId: null,
+	})
+	const privatePreviewResponse = await request({
+		path: privatePreviewRedirect.headers.get("Location") ?? "",
 		userId: null,
 	})
 	check(

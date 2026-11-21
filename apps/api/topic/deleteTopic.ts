@@ -9,6 +9,7 @@ import { topicImages } from "@carlnotes/db/schema/topicImages"
 import { attachments, topics } from "@carlnotes/db/schema/topics"
 import { deleteStoredObjects, recordPendingObjectDeletions, toStoredObjectKeys } from "@carlnotes/db/store"
 import { clearUnseenCommentMentions, loadTopicMentionedUserIds } from "@carlnotes/db/unseenCommentMentions"
+import { loadVisitorPagesOfTopic } from "@carlnotes/db/visitorPageCaches"
 import { rebuildTopicDashboards } from "@carlnotes/pipeline/dashboardRebuild"
 import { notifyIndexNow } from "@carlnotes/pipeline/indexNow"
 import { loadTopicPodcastEpisodeObjectKeys } from "@carlnotes/pipeline/podcast/removePodcastEpisode"
@@ -18,7 +19,6 @@ import {
 } from "@carlnotes/pipeline/topicImages/topicImageFiles"
 import { trackEvent } from "@carlnotes/server/analytics"
 import { appUrl } from "@carlnotes/server/appUrl"
-import { purgeEdgeCacheTagAfterDeletion, toTopicImageCacheTag } from "@carlnotes/server/edgePurge"
 import { and, eq, isNotNull } from "drizzle-orm"
 import { isAllowed } from "../authorization"
 import { loadChatAttachmentObjectKeys } from "../chat/chatAttachmentReads"
@@ -41,8 +41,10 @@ export async function deleteTopic(
 		return false
 	}
 
-	// the users that the topic's comments mention, read while the comments exist
+	// the users that the topic's comments mention, and the copies of every page that shows the topic, read while the
+	// rows exist
 	const mentionedUserIds = await loadTopicMentionedUserIds(topicId)
+	const visitorPagesOfTopic = await loadVisitorPagesOfTopic(topicId)
 
 	// record every stored object's key and delete the topic in one transaction, so the keys survive the cascade to the
 	// sources, findings, invites, subscriptions, and attachment rows. a scan and a podcast episode keep their rows
@@ -58,22 +60,25 @@ export async function deleteTopic(
 		return topicObjectKeys
 	})
 
-	// clear the topic's cached visitor copies and the cached unseen Comment Mentions that its comments held once the
-	// rows are gone, then delete the objects and rebuild the topic's Dashboards
+	// clear the topic's cached visitor copies, which purges its pages and image files from the edge, and the cached
+	// unseen Comment Mentions that its comments held once the rows are gone, then delete the objects and rebuild the
+	// topic's Dashboards
 	await clearVisitorTopicCaches({
 		topicId,
+		ownerId: topic.ownerId,
 		visibility: topic.visibility,
+		isDeleted: true,
 		isHomeOrderReleased,
 		releasedProfileUserIds,
+		visitorPagesOfTopic,
 	})
 	await clearUnseenCommentMentions(mentionedUserIds)
 	await deleteStoredObjects(objectKeys)
 	await rebuildTopicDashboards(topic)
 
-	// a deleted public topic's url is gone, so notify IndexNow to drop it, and its image files leave the edge
+	// a deleted public topic's url is gone, so notify IndexNow to drop it
 	if (topic.visibility === "public") {
 		void notifyIndexNow([`${appUrl()}${toTopicPath(topic)}`])
-		await purgeEdgeCacheTagAfterDeletion(toTopicImageCacheTag(topicId))
 	}
 
 	// record who deleted the topic. the row is gone, so this event is the only account of who deleted it

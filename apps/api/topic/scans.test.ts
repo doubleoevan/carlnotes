@@ -5,7 +5,7 @@
 // which stored results never leave the api
 import { afterEach, expect, type Mock, spyOn, test } from "bun:test"
 import { MANUAL_SCAN_PAUSED_LABEL, SCAN_SPENT_BUDGET_LABEL } from "@carlnotes/contracts/scanFailure"
-import type { StoredScanSourceResults, StoredSourceResult } from "@carlnotes/contracts/topics"
+import type { StoredScanSourceResults, StoredSourceResult } from "@carlnotes/contracts/scanSourceResults"
 import {
 	ADMIN_USER_ACCESS_ROW,
 	FREE_USER_ACCESS_ROW,
@@ -15,6 +15,7 @@ import {
 import * as dailySpendCutoffs from "@carlnotes/db/dailySpendCutoffs"
 import * as monthlyBudgetCutoffs from "@carlnotes/db/monthlyBudgetCutoffs"
 import { topics } from "@carlnotes/db/schema/topics"
+import * as statusReadCaches from "@carlnotes/db/statusReadCaches"
 import * as litellm from "@carlnotes/models/litellm"
 import { restoreLiteLLMTest, stubUnreachableProxy } from "@carlnotes/models/litellmTestFixtures"
 import * as scan from "@carlnotes/pipeline/scan"
@@ -243,6 +244,7 @@ test("past the scheduled scans cutoff a free user's manual Scan opens a manual r
 	const { startTopicScanSpy, isManualScanWaitingSpy } = spyOnManualScan(false)
 	isManualScanWaitingSpy.mockResolvedValue(true)
 	spyOn(litellm, "isUserLiteLLMKeyBudgetExhausted").mockResolvedValue(false)
+	const clearStatusReadsSpy = spyOn(statusReadCaches, "clearStatusReads").mockResolvedValue()
 
 	// the request starts, with the remaining scans, and opens one manual row of the Topic with no workflow
 	const scanResult = await runManualScan("owner-1", "topic-1", {} as AnalyticsProperties)
@@ -251,6 +253,7 @@ test("past the scheduled scans cutoff a free user's manual Scan opens a manual r
 	const scanInserts = sentQueries.filter((sentQuery) => sentQuery.text.startsWith('insert into "scans"'))
 	expect(scanInserts).toHaveLength(1)
 	expect(scanInserts[0]?.values).toEqual(expect.arrayContaining(["topic-1", "owner-1", true]))
+	expect(clearStatusReadsSpy).toHaveBeenCalledWith("scan", "topic-1")
 })
 
 // past the cutoff a Topic that already has a running scan returns running and opens no second row

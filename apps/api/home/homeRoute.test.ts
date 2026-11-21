@@ -1,19 +1,25 @@
 // home route tests: the home's and the week's Topic Posts come from one read of their cards, each list in its ids'
 // order, the four film and podcast episode lists come from one read of theirs, ids cached before the week's posts
 // were read give an empty list, and a user's own topics stay under the featured-only switch and an admin block
-import { afterEach, expect, mock, spyOn, test } from "bun:test"
+import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import type { HomeResponse, PodcastEpisodeCard } from "@carlnotes/contracts/home"
+import type { NewsResponse } from "@carlnotes/contracts/news"
 import type { TopicPostCard } from "@carlnotes/contracts/topicPosts"
 import { restoreConnectionPool, stubConnectionPool, toTableRow } from "@carlnotes/db/connectionPoolStub"
 import * as dailySpendCutoffs from "@carlnotes/db/dailySpendCutoffs"
 import { DEFAULT_SPEND_CONTROL_SETTINGS } from "@carlnotes/db/dailySpendCutoffTestFixtures"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
 import { topics } from "@carlnotes/db/schema/topics"
+import * as newsCaches from "../news/newsCaches"
 import { toSignedInApp } from "../testSession"
-import * as topicPosts from "../topicPost/topicPosts"
 import * as homeCardIds from "./homeCardIds"
 import { homeRoute } from "./homeRoute"
 import * as topicCards from "./topicCards"
+
+// each test reads the home through a Redis of its own, so no test reads another's copy of the visitors' home
+beforeEach(() => {
+	stubRedisClient()
+})
 
 // put the spies, the connection pool, and the Redis client back after each test
 afterEach(() => {
@@ -34,11 +40,14 @@ function stubHomeReads(homeTopicPostIds: string[], newestTopicPostIds?: string[]
 	})
 
 	// the card reads. a deleted post has no card
-	spyOn(topicCards, "loadTopicCards").mockResolvedValue([])
-	spyOn(topicCards, "loadPodcastEpisodeCards").mockResolvedValue([])
-	return spyOn(topicPosts, "loadTopicPostCardsById").mockImplementation(async (topicPostIds) =>
-		topicPostIds.filter((topicPostId) => topicPostId !== "post-deleted").map((id) => ({ id }) as TopicPostCard),
-	)
+	return spyOn(topicCards, "loadHomeCards").mockImplementation(async ({ topicPostIds }) => ({
+		homeTopics: [],
+		yourTopicCards: [],
+		podcastEpisodeCards: [],
+		topicPostCards: topicPostIds
+			.filter((topicPostId) => topicPostId !== "post-deleted")
+			.map((id) => ({ id }) as TopicPostCard),
+	}))
 }
 
 // a visitor's home payload
@@ -61,7 +70,12 @@ test("a featured post that is new this week shows in both lists, from one read o
 
 	// one read, each id once
 	expect(loadTopicPostCardsSpy).toHaveBeenCalledTimes(1)
-	expect(loadTopicPostCardsSpy.mock.calls[0]?.[0]).toEqual(["post-featured", "post-a", "post-new", "post-deleted"])
+	expect(loadTopicPostCardsSpy.mock.calls[0]?.[0].topicPostIds).toEqual([
+		"post-featured",
+		"post-a",
+		"post-new",
+		"post-deleted",
+	])
 })
 
 test("the four film and podcast episode lists come from one read of their cards, each in its ids' order", async () => {
@@ -76,11 +90,15 @@ test("the four film and podcast episode lists come from one read of their cards,
 		homeTopicPostIds: [],
 		newestTopicPostIds: [],
 	})
-	const loadPodcastEpisodeCardsSpy = spyOn(topicCards, "loadPodcastEpisodeCards").mockImplementation(
-		async (podcastEpisodeIds) =>
-			podcastEpisodeIds
+	const loadPodcastEpisodeCardsSpy = spyOn(topicCards, "loadHomeCards").mockImplementation(
+		async ({ podcastEpisodeIds }) => ({
+			homeTopics: [],
+			yourTopicCards: [],
+			podcastEpisodeCards: podcastEpisodeIds
 				.filter((podcastEpisodeId) => podcastEpisodeId !== "episode-gone")
 				.map((id) => ({ podcastEpisode: { id } }) as PodcastEpisodeCard),
+			topicPostCards: [],
+		}),
 	)
 	const response = await homeRoute.request("/home")
 	const home = (await response.json()) as Record<string, { podcastEpisode: { id: string } }[]>
@@ -95,7 +113,12 @@ test("the four film and podcast episode lists come from one read of their cards,
 
 	// one read, each id once
 	expect(loadPodcastEpisodeCardsSpy).toHaveBeenCalledTimes(1)
-	expect(loadPodcastEpisodeCardsSpy.mock.calls[0]?.[0]).toEqual(["episode-b", "episode-a", "episode-gone", "episode-c"])
+	expect(loadPodcastEpisodeCardsSpy.mock.calls[0]?.[0].podcastEpisodeIds).toEqual([
+		"episode-b",
+		"episode-a",
+		"episode-gone",
+		"episode-c",
+	])
 })
 
 test("a week with no new post, and ids cached before the week's posts were read, give an empty list", async () => {
@@ -147,4 +170,29 @@ test("a user's Your topics stays as it is with the featured-only switch on and t
 	// the user's own unfeatured topic is listed
 	expect(home.yourTopics?.totalCount).toBe(1)
 	expect(home.yourTopics?.topics.map(({ id }) => id)).toEqual(["topic-own"])
+})
+
+// a signed-in home asks for its first news page in the same read, and leaves it out if it names no window
+test("a signed-in home holds the user's first news page of the window it names, and none if it names none", async () => {
+	stubRedisClient()
+	stubConnectionPool()
+	const news = { newsEvents: [], podcastEpisodes: [], total: 0, cursor: null } as unknown as NewsResponse
+	const readCachedNewsSpy = spyOn(newsCaches, "readCachedNews").mockResolvedValue(news)
+
+	// the window the home names, read as the user's own news
+	const homeWithNews = (await (
+		await toSignedInApp(homeRoute, "user-1").request("/home?newsWindow=day")
+	).json()) as HomeResponse
+	expect(homeWithNews.news).toEqual(news)
+	expect(readCachedNewsSpy.mock.calls[0]?.[0]).toEqual({
+		profileUserId: "user-1",
+		userId: "user-1",
+		window: "day",
+		page: 1,
+	})
+
+	// no window, no news read
+	const homeWithoutNews = (await (await toSignedInApp(homeRoute, "user-1").request("/home")).json()) as HomeResponse
+	expect(homeWithoutNews.news).toBeUndefined()
+	expect(readCachedNewsSpy).toHaveBeenCalledTimes(1)
 })

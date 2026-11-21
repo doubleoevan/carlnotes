@@ -214,8 +214,8 @@ const FINDING_PARAMS = { id: FINDING_ID }
  * count or a sum not given. A table not given returns no rows, and a write without returning returns one row.
  */
 function toColumnRows(sentQuery: SentQuery, columnValuesByTable: Record<string, ColumnValues>): unknown[][] {
-	// the table a select reads, or the table a write names
-	const selectMatch = /^select (?:distinct on \([^)]*\) )?(.*?) from "(\w+)"/s.exec(sentQuery.text)
+	// the table a select reads outside its subqueries, or the table a write names
+	const selectMatch = toTopLevelSelect(sentQuery.text)
 	const writeMatch = /^(?:insert into|update|delete from) "(\w+)"/.exec(sentQuery.text)
 	const columnValues = columnValuesByTable[selectMatch?.[2] ?? writeMatch?.[1] ?? ""]
 	if (!columnValues) {
@@ -227,12 +227,62 @@ function toColumnRows(sentQuery: SentQuery, columnValuesByTable: Record<string, 
 	if (selectList === undefined) {
 		return [[1]]
 	}
+	const tableByLateralAlias = toTableByLateralAlias(sentQuery.text)
 	return [
 		splitSelectList(selectList).map((column) => {
+			// a joined table's own column reads that table's value if the fixture has one, and a lateral subquery's column
+			// reads the value of the table the subquery selects from
 			const columnName = toColumnName(column)
-			return columnValues[columnName] ?? (/\b(?:count|sum)\(/.test(column) ? "0" : null)
+			const joinedName = /^"(\w+)"\."\w+"$/.exec(column)?.[1]
+			const joinedTable = joinedName ? (tableByLateralAlias.get(joinedName) ?? joinedName) : undefined
+			const joinedValue = joinedTable ? columnValuesByTable[joinedTable]?.[columnName] : undefined
+			return joinedValue ?? columnValues[columnName] ?? (/\b(?:count|sum)\(/.test(column) ? "0" : null)
 		}),
 	]
+}
+
+// a select's column list and the table its own from clause names, skipping a from inside a subquery of the list, or
+// null for a query that is no select
+function toTopLevelSelect(queryText: string): [string, string, string] | null {
+	const selectStart = /^select (?:distinct on \([^)]*\) )?/.exec(queryText)
+	if (!selectStart) {
+		return null
+	}
+
+	// walk the list until a from clause outside parentheses
+	let depth = 0
+	for (let i = selectStart[0].length; i < queryText.length; i++) {
+		depth += queryText[i] === "(" ? 1 : queryText[i] === ")" ? -1 : 0
+
+		// a from clause at the list's own depth ends the list
+		const fromMatch = depth === 0 ? /^ from "(\w+)"/.exec(queryText.slice(i)) : null
+		if (fromMatch) {
+			return [queryText.slice(0, i), queryText.slice(selectStart[0].length, i), fromMatch[1] ?? ""]
+		}
+	}
+	return null
+}
+
+// the table that each lateral subquery of a query selects from, by the subquery's alias
+function toTableByLateralAlias(queryText: string): Map<string, string> {
+	const tableByLateralAlias = new Map<string, string>()
+	for (const lateralMatch of queryText.matchAll(/ join lateral \(/g)) {
+		// walk to the parenthesis that closes the subquery
+		const subqueryStart = lateralMatch.index + lateralMatch[0].length
+		let depth = 1
+		let i = subqueryStart
+		for (; i < queryText.length && depth > 0; i++) {
+			depth += queryText[i] === "(" ? 1 : queryText[i] === ")" ? -1 : 0
+		}
+
+		// the subquery's own table, under the alias that follows it
+		const subqueryTable = toTopLevelSelect(queryText.slice(subqueryStart, i - 1))?.[2]
+		const alias = /^ "(\w+)"/.exec(queryText.slice(i))?.[1]
+		if (subqueryTable && alias) {
+			tableByLateralAlias.set(alias, subqueryTable)
+		}
+	}
+	return tableByLateralAlias
 }
 
 // the columns of a select list, split on the commas outside parentheses

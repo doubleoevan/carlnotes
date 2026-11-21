@@ -1,6 +1,6 @@
+import type { SourceResult } from "@carlnotes/contracts/scanSourceResults"
 import { toFallbackModeLabel } from "@carlnotes/contracts/sources"
 import { toCountLabel } from "@carlnotes/contracts/text"
-import type { SourceResult } from "@carlnotes/contracts/topics"
 import { toExactDollarLabel, toExactDurationLabel } from "./labels"
 
 // the shared identity and explanation for findings read again from earlier scans

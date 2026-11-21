@@ -6,7 +6,7 @@ import { db } from "@carlnotes/db"
 import { topics } from "@carlnotes/db/schema/topics"
 import { and, like, type SQL, sql } from "drizzle-orm"
 import { toContainsLikePattern } from "../likePattern"
-import { loadLatestPodcastEpisodeSummaries } from "../podcast/podcastEpisodeShapes"
+import { loadLatestPodcastEpisodeSummaries } from "../podcast/latestPodcastEpisodes"
 import { loadSubscribedTopicIds, toTopicViewFilter } from "./permissions"
 
 // who is searching, whether they are an admin, the trimmed query, the most rows to read, and the filter a topic's tags

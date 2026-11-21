@@ -8,17 +8,25 @@ import type {
 } from "@carlnotes/contracts/home"
 import type { TopicPostCard as TopicPostCardFields } from "@carlnotes/contracts/topicPosts"
 import type { TopicVideoDialogSurface } from "@carlnotes/contracts/visitAnalytics"
+import type { ServerCardPages } from "@carlnotes/core/hooks/useServerPagedCards"
 import { useUpdatesRecap } from "@carlnotes/core/hooks/useUpdatesRecap"
-import { useYourTopicsPages } from "@carlnotes/core/hooks/useYourTopicsPages"
 import type { CardSection } from "@carlnotes/core/lib/cardSections"
-import { EMPTY_HOME, HOME_SECTIONS, HOW_IT_WORKS_STEPS, HOW_IT_WORKS_TITLE } from "@carlnotes/core/lib/homeFaces"
+import {
+	EMPTY_HOME,
+	HOME_SECTIONS,
+	HOW_IT_WORKS_STEPS,
+	HOW_IT_WORKS_TITLE,
+	toHomeNewestCardPages,
+	toHomePageOptions,
+	toYourTopicsCardPages,
+} from "@carlnotes/core/lib/homeFaces"
 import { HOME_RANK_OPTION_LABELS } from "@carlnotes/core/lib/rankDialog"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { getRouteApi } from "@tanstack/react-router"
 import { NotebookPen } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { AccordionSection } from "@/components/common/AccordionSection"
-import { CardsRowSkeleton, CardsSection, PagedCardsSection } from "@/components/common/CardsSection"
+import { CardsRowSkeleton, PagedCardsSection } from "@/components/common/CardsSection"
 import { HomeHeadline } from "@/components/layout/HomeHeadline"
 import { PodcastEpisodeCard } from "@/components/podcast/PodcastEpisodeCard"
 import { Accordion } from "@/components/primitives/accordion"
@@ -57,10 +65,13 @@ export function HomePage() {
 	const isSignedIn = Boolean(session)
 	const face = isSignedIn ? "user" : "visitor"
 
-	// a visitor's payload from the server, and a user's read in the browser once their session is known
+	// a visitor's payload from the server, and a user's read in the browser once their session is known. every read
+	// pages the week's new sections at the pages the url named when the page opened
 	const serverHome = homeRoute.useLoaderData()
 	const [home, setHome] = useState<HomeResponse | null>(serverHome)
 	const hasServerHome = serverHome !== null
+	const homeSearch = homeRoute.useSearch()
+	const [homePageOptions] = useState(() => toHomePageOptions(homeSearch))
 	const { reheatKey } = useTopicFeed()
 	useEffect(() => {
 		// a visitor keeps the server's payload until the home logo's reheat
@@ -68,20 +79,20 @@ export function HomePage() {
 			return
 		}
 		let isCurrent = true
-		fetchHome()
+		fetchHome(homePageOptions)
 			.then((loadedHome) => isCurrent && setHome(loadedHome))
 			.catch(() => isCurrent && setHome((currentHome) => currentHome ?? EMPTY_HOME))
 		return () => {
 			isCurrent = false
 		}
-	}, [isSessionPending, isSignedIn, hasServerHome, reheatKey])
+	}, [isSessionPending, isSignedIn, hasServerHome, reheatKey, homePageOptions])
 
 	// read the home again after an admin's change to its featured posts. a failed read keeps the cards shown
 	const handleReloadHome = useCallback((): void => {
-		fetchHome()
+		fetchHome(homePageOptions)
 			.then(setHome)
 			.catch((error) => console.error("home reload failed", error))
-	}, [])
+	}, [homePageOptions])
 
 	// the home view, reported once the face is known
 	useEffect(() => {
@@ -100,8 +111,10 @@ export function HomePage() {
 		hasNewTopicButton: isSignedIn,
 	})
 
-	// the New Topic button beside the headline, which sends a visitor to sign up first
+	// the New Topic button beside the headline, which sends a visitor to sign up first, and the pages of the week's new
+	// sections
 	const { openNewTopicDialog, newTopicDialog } = useNewTopicDialog()
+	const newestCardPages = home ? toHomeNewestCardPages(home) : null
 	return (
 		<main className={PAGE_CLASS}>
 			{/* both faces open with the headline, the page's h1, beside the New Topic button. a visitor reads how it works
@@ -135,6 +148,7 @@ export function HomePage() {
 					<HomePodcastEpisodesSection
 						section={HOME_SECTIONS.newestTopicPodcastEpisodeVideos}
 						podcastEpisodes={home.newestTopicPodcastEpisodeVideos ?? []}
+						serverPages={newestCardPages?.films}
 						videoSurface="newest-videos"
 					/>
 					<HomePodcastEpisodesSection
@@ -145,10 +159,15 @@ export function HomePage() {
 					<HomePodcastEpisodesSection
 						section={HOME_SECTIONS.newestPodcastEpisodes}
 						podcastEpisodes={home.newestPodcastEpisodes}
+						serverPages={newestCardPages?.podcastEpisodes}
 					/>
 					{/* the home's Topic Posts and then the week's new ones, each hidden while it has none */}
 					<HomeTopicPostsSection section={HOME_SECTIONS.homeTopicPosts} topicPosts={home.homeTopicPosts} />
-					<HomeTopicPostsSection section={HOME_SECTIONS.newestTopicPosts} topicPosts={home.newestTopicPosts ?? []} />
+					<HomeTopicPostsSection
+						section={HOME_SECTIONS.newestTopicPosts}
+						topicPosts={home.newestTopicPosts ?? []}
+						serverPages={newestCardPages?.topicPosts}
+					/>
 					{isSignedIn && <YourTopicsSection yourTopics={home.yourTopics ?? null} />}
 				</Accordion>
 			) : (
@@ -179,20 +198,23 @@ function HomeSkeleton() {
 }
 
 // the home or new podcast episodes as cards, each reporting its open. with a `videoSurface`, they are film cards whose
-// play button reports it
+// play button reports it. a section the server pages takes its pages, and any other section holds every card
 function HomePodcastEpisodesSection({
 	section,
 	podcastEpisodes,
+	serverPages,
 	videoSurface,
 }: {
 	section: CardSection<PodcastEpisodeCardFields>
 	podcastEpisodes: PodcastEpisodeCardFields[]
+	serverPages?: ServerCardPages<PodcastEpisodeCardFields>
 	videoSurface?: TopicVideoDialogSurface
 }) {
 	return (
 		<PagedCardsSection
 			section={section}
 			rows={podcastEpisodes}
+			serverPages={serverPages}
 			renderCard={(podcastEpisodeCard) => (
 				<PodcastEpisodeCard
 					podcastEpisodeCard={podcastEpisodeCard}
@@ -210,18 +232,22 @@ function HomePodcastEpisodesSection({
 	)
 }
 
-// the home or new Topic Posts as cards, each reporting its open
+// the home or new Topic Posts as cards, each reporting its open. a section the server pages takes its pages, and any
+// other section holds every card
 function HomeTopicPostsSection({
 	section,
 	topicPosts,
+	serverPages,
 }: {
 	section: CardSection<TopicPostCardFields>
 	topicPosts: TopicPostCardFields[]
+	serverPages?: ServerCardPages<TopicPostCardFields>
 }) {
 	return (
 		<PagedCardsSection
 			section={section}
 			rows={topicPosts}
+			serverPages={serverPages}
 			renderCard={(topicPost) => (
 				<TopicPostCard
 					topicPost={topicPost}
@@ -267,9 +293,11 @@ function NewsSection({ userId }: { userId: string | null }) {
 // a user's own topics as cards five to a page, or the New Topic button with no count for a user with none once the
 // read lands
 function YourTopicsSection({ yourTopics }: { yourTopics: YourTopicsPage | null }) {
-	const { pageTopics, pagination } = useYourTopicsPages(yourTopics)
 	const { value, title } = HOME_SECTIONS.yourTopics
-	if (yourTopics?.totalCount === 0) {
+	if (!yourTopics) {
+		return null
+	}
+	if (yourTopics.totalCount === 0) {
 		return (
 			<AccordionSection value={value} title={title}>
 				<NewTopicButton onNewTopic={openNewTopicChat} />
@@ -277,12 +305,10 @@ function YourTopicsSection({ yourTopics }: { yourTopics: YourTopicsPage | null }
 		)
 	}
 	return (
-		<CardsSection
+		<PagedCardsSection
 			section={HOME_SECTIONS.yourTopics}
-			rowCount={yourTopics?.totalCount ?? 0}
-			rows={pageTopics}
-			pagination={pagination}
-			isPagedOnServer
+			rows={yourTopics.topics}
+			serverPages={toYourTopicsCardPages(yourTopics)}
 			renderCard={(topic) => <TopicCard topic={topic} />}
 		/>
 	)

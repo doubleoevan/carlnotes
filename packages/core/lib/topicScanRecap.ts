@@ -1,7 +1,8 @@
 import type { TopicFinding } from "@carlnotes/contracts/findings"
 import { isBudgetError } from "@carlnotes/contracts/scanFailure"
+import type { ScanSourceResults } from "@carlnotes/contracts/scanSourceResults"
 import { toTopicPath } from "@carlnotes/contracts/seo"
-import type { ScanSourceResults, TopicScan } from "@carlnotes/contracts/topics"
+import type { TopicScan } from "@carlnotes/contracts/topics"
 
 // the fields a scan recap popover reads, shared by the topic page's scan history and the Activity subtable
 export type ScanRecapFields = {

@@ -1,5 +1,5 @@
-// what the api and the web service add to their minute line: Redis, the page renders the replica started and shed,
-// and how many podcast cover draws wait in the process
+// what the api and the web service add to their minute line: Redis, the page renders the replica started, waited, and
+// shed, and how many podcast cover draws wait in the process
 import { readRedisExtraGauges } from "@carlnotes/db/redisGauges"
 import { readPodcastCoverChainLength } from "@carlnotes/pipeline/podcastCover"
 import type { ThresholdCrossing } from "@carlnotes/server/monitoring"

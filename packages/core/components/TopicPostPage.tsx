@@ -19,13 +19,18 @@ import {
 } from "../lib/topicPosts"
 import { usePageCommentMentions } from "../stores/commentMentionStore"
 import type { DetailsLineProps } from "./DetailsLine"
-import { TopicPostDiscussionCard, type TopicPostDiscussionCardElements } from "./TopicPostDiscussionCard"
+import {
+	TopicPostDiscussionCard,
+	type TopicPostDiscussionCardElements,
+	type TopicPostDiscussionCardProps,
+} from "./TopicPostDiscussionCard"
 import type { TopicPostEditorProps } from "./TopicPostEditor"
 import type { TopicPostInfoProps } from "./TopicPostInfo"
 
 // the Topic Post, whether its reader is signed in, whether its author asked to edit it, the count its comment thread
 // reports as it stands, what a publish and the end of an edit do, the read of the Topic Post again that its
-// discussion asks for, the press on an editor's image, and what follows the body
+// discussion asks for, the read of its discussion's status that the discussion's poll needs, the press on an
+// editor's image, and what follows the body
 export type TopicPostPageProps = PropsWithChildren<{
 	topicPost: TopicPostResponse
 	isSignedIn: boolean
@@ -35,6 +40,7 @@ export type TopicPostPageProps = PropsWithChildren<{
 	onPublished: (topicPost: TopicPostResponse) => void
 	onEditDone: () => void
 	onChanged: () => void
+	readDiscussionStatus?: TopicPostDiscussionCardProps["readDiscussionStatus"]
 	onEditImage?: () => void
 }>
 
@@ -76,6 +82,7 @@ export function TopicPostPage({
 	onPublished,
 	onEditDone,
 	onChanged,
+	readDiscussionStatus,
 	onEditImage,
 	children,
 	elements,
@@ -126,7 +133,12 @@ export function TopicPostPage({
 				    edited, on their own line */}
 				<DetailsLine details={toTopicPostDetails(topicPost, commentCount ?? topicPost.commentThread?.commentCount)} />
 			</Header>
-			<TopicPostDiscussionCard topicPost={topicPost} onChanged={onChanged} elements={elements.discussionElements} />
+			<TopicPostDiscussionCard
+				topicPost={topicPost}
+				onChanged={onChanged}
+				readDiscussionStatus={readDiscussionStatus}
+				elements={elements.discussionElements}
+			/>
 			<Body
 				html={toTopicPostReaderHtml(topicPost)}
 				bodyImageReports={bodyImageReports}

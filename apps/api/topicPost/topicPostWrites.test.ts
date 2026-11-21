@@ -81,7 +81,7 @@ test("a deleted post leaves the home's featured items and its author's featured 
 		'update "topic_posts" set "home_order" = "topic_posts"."home_order" - 1',
 		'update "topic_posts" set "profile_order" = $1',
 		'update "topic_posts" set "profile_order" = "topic_posts"."profile_order" - 1',
-		'delete from "topic_posts" where "topic_posts"."id" = $1',
+		'delete from "topic_posts" where "topic_posts"."id" = $1 returning "author_user_id"',
 	])
 })
 

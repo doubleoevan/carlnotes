@@ -7,14 +7,17 @@ import type {
 import type { TopicPostCard as TopicPostCardFields } from "@carlnotes/contracts/topicPosts"
 import type { TopicVideoDialogSurface } from "@carlnotes/contracts/visitAnalytics"
 import type { ComponentType, ReactNode } from "react"
+import type { ServerCardPages } from "../hooks/useServerPagedCards"
 import type { CardSection } from "../lib/cardSections"
 
 export type PageSectionsElements = {
 	// the card sections and the table sections together
 	SectionsGroup: ComponentType<{ children: ReactNode }>
+	// a card section, which takes its pages if the server pages it and holds every card otherwise
 	PagedCardsSection: <Row>(props: {
 		section: CardSection<Row>
 		rows: Row[]
+		serverPages?: ServerCardPages<Row>
 		renderCard: (row: Row) => ReactNode
 	}) => ReactNode
 	TopicCard: ComponentType<{ topic: TopicCardFields }>

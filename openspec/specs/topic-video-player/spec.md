@@ -557,8 +557,9 @@ While a published Podcast Episode's film renders, the recording card's frame SHA
 after a 🎬 hidden from a screen reader in the film player's place on the podcast episode page. While the Topic's latest
 Podcast Episode's film renders, the topic video section SHALL show the same words, after the same 🎬 and with the same
 shimmer, as a line at the right of its title row right before the film count, which wraps to its own line at the left if
-the row runs out of room, and SHALL show no filming card. A page showing the card or the line SHALL read again until the
-film is ready, for at most four hours. A failed film SHALL show nothing.
+the row runs out of room, and SHALL show no filming card. A page showing the card or the line SHALL poll the film's
+status every 30 seconds, as the status-reads capability states, for at most four hours, and SHALL read its page once
+that status leaves rendering. A failed film SHALL show nothing, and a failed status SHALL stop the poll.
 
 #### Scenario: The filming card shows while the film renders
 
@@ -590,15 +591,15 @@ film is ready, for at most four hours. A failed film SHALL show nothing.
 #### Scenario: The new film joins the cards without a reload
 
 - **GIVEN** a topic page showing the filming line
-- **WHEN** the film becomes ready
-- **THEN** the page's next read drops the line and shows the new film as the first card, and a film playing in the
+- **WHEN** a poll of the film's status returns ready
+- **THEN** the page reads once, drops the line, and shows the new film as the first card, and a film playing in the
   Video dialog plays on
 
 #### Scenario: The reads pause in the background and stop after four hours
 
 - **GIVEN** a page showing the filming card or the filming line
 - **WHEN** the app goes to the background or offline, or four hours pass
-- **THEN** the page stops reading again, and a return to the foreground within the four hours reads at once
+- **THEN** the page stops polling the film's status, and a return to the foreground within the four hours polls at once
 
 #### Scenario: A failed film shows nothing
 
@@ -615,6 +616,16 @@ film is ready, for at most four hours. A failed film SHALL show nothing.
 
 - **WHEN** a film is rendering
 - **THEN** no home, profile, team, or topic page card shows it
+
+#### Scenario: A poll reads the status and no page
+
+- **WHEN** a page shows the filming card or the filming line for ten minutes
+- **THEN** it sends the film's status read every 30 seconds, and no read of the page
+
+#### Scenario: A reaped film ends the card
+
+- **WHEN** the sweep fails a film that was stuck rendering, and the next status poll returns failed
+- **THEN** the page reads once, shows no filming card or filming line, and sends no further status read
 
 ### Requirement: A card holds the film and its controls on the podcast episode page
 

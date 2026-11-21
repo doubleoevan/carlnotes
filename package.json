@@ -38,6 +38,7 @@
 		"check:components": "bun scripts/check-component-conventions.ts --check",
 		"check:built-dependencies": "bun scripts/check-built-dependencies.ts",
 		"check:advisories": "bun scripts/check-dependency-advisories.ts",
+		"check:edge": "bun scripts/check-edge-cache.ts",
 		"check": "bash scripts/preflight.sh",
 		"test": "bun test",
 		"test:coverage": "bun test --coverage",

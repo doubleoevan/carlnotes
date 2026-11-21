@@ -1,6 +1,8 @@
 // the home page's payload: the home topics, films, podcast episodes, and Topic Posts and a user's own topics as
 // cards, and the card shapes both apps draw
 import { z } from "zod"
+import { cardsPagePosition, optionalCardsPageNumber, pagedQuery } from "./cardPages"
+import { newsResponse, newsWindows } from "./news"
 import { podcastEpisodeSummary } from "./podcast"
 import { profileIdentity } from "./profiles"
 import type { ReactionSummary } from "./social"
@@ -41,18 +43,30 @@ export const podcastEpisodeCard = z.object({
 
 export type PodcastEpisodeCard = z.infer<typeof podcastEpisodeCard>
 
-// how many cards one page of a card section holds, on the home and on a profile, and the last page of Your topics a
-// request may ask for
-export const CARDS_PAGE_SIZE = 6
-const YOUR_TOPICS_PAGE_MAX = 10_000
-
 // one page of a user's own and followed topics as cards, and how many topics all the pages hold
 export const yourTopicsPage = z.object({ topics: z.array(topicCard), totalCount: z.number().int().nonnegative() })
 
 export type YourTopicsPage = z.infer<typeof yourTopicsPage>
 
-// the query that asks for one page of a user's topics, zero-based
-export const yourTopicsQuery = z.object({ page: z.coerce.number().int().min(0).max(YOUR_TOPICS_PAGE_MAX) })
+// one page of the week's new films or new podcast episodes as cards, and how many the whole week holds
+export const podcastEpisodeCardsPage = z.object({
+	podcastEpisodes: z.array(podcastEpisodeCard),
+	totalCount: z.number().int().nonnegative(),
+})
+
+export type PodcastEpisodeCardsPage = z.infer<typeof podcastEpisodeCardsPage>
+
+// the home read's query: the window of the first news page a signed-in home asks for in the same read, and whether
+// the read pages the week's new sections, with the zero-based page of each it holds
+export const homeQuery = z.object({
+	newsWindow: z.enum(newsWindows).optional(),
+	...pagedQuery.shape,
+	newestFilmsPage: optionalCardsPageNumber,
+	newestPodcastEpisodesPage: optionalCardsPageNumber,
+	newestTopicPostsPage: optionalCardsPageNumber,
+})
+
+export type HomeQuery = z.infer<typeof homeQuery>
 
 // the home payload. a visitor's holds the home topics, the home and newest films, the home and newest podcast
 // episodes, and the home and newest Topic Posts, and a user's adds the first page of their own and followed topics.
@@ -67,6 +81,12 @@ export const homeResponse = z.object({
 	homeTopicPosts: z.array(topicPostCard),
 	newestTopicPosts: z.array(topicPostCard).optional(),
 	yourTopics: yourTopicsPage.nullable(),
+	// the first page of a user's news, if the request asked for it, and null if its read failed. absent otherwise
+	news: newsResponse.nullable().optional(),
+	// which page each of the week's new lists holds, if the request asked for pages. absent otherwise
+	newestPages: z
+		.object({ films: cardsPagePosition, podcastEpisodes: cardsPagePosition, topicPosts: cardsPagePosition })
+		.optional(),
 })
 
 export type HomeResponse = z.infer<typeof homeResponse>

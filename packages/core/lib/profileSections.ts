@@ -5,6 +5,7 @@ import {
 	sendPodcastEpisodeProfileOrder,
 	sendTopicPodcastEpisodeVideoProfileOrder,
 } from "@carlnotes/client/podcastEpisodeClient"
+import { fetchProfileTopicPostsPage } from "@carlnotes/client/profileClient"
 import { sendTopicProfileOrder } from "@carlnotes/client/topicClient"
 import { sendTopicPostProfileOrder } from "@carlnotes/client/topicPostClient"
 import { toHomePodcastEpisodeLabel } from "@carlnotes/contracts/podcast"
@@ -17,6 +18,9 @@ import {
 	type ProfileTopicCard,
 	type ProfileTopicPostCard,
 } from "@carlnotes/contracts/profilePage"
+import type { ProfileAudience } from "@carlnotes/contracts/profiles"
+import type { TopicPostCard } from "@carlnotes/contracts/topicPosts"
+import type { ServerCardPages } from "../hooks/useServerPagedCards"
 import {
 	type CardSection,
 	FEATURED_FILMS_TITLE,
@@ -26,7 +30,9 @@ import {
 	PODCAST_EPISODE_CARD_SECTION,
 	TOPIC_CARD_SECTION,
 	TOPIC_POST_CARD_SECTION,
+	TOPIC_POSTS_PAGE_SEARCH_KEY,
 	TOPIC_VIDEO_CARD_SECTION,
+	toCardsPageRows,
 } from "./cardSections"
 import { type FeaturedOrderMove, type RankedItem, type RankedNoun, toTopicPostRankedItem } from "./rankDialog"
 
@@ -44,7 +50,12 @@ export const PROFILE_SECTIONS = {
 		title: FEATURED_PODCASTS_TITLE,
 		...PODCAST_EPISODE_CARD_SECTION,
 	},
-	profileTopicPosts: { value: "profile-order-topic-posts", title: FEATURED_POSTS_TITLE, ...TOPIC_POST_CARD_SECTION },
+	profileTopicPosts: {
+		value: "profile-order-topic-posts",
+		title: FEATURED_POSTS_TITLE,
+		pageSearchKey: TOPIC_POSTS_PAGE_SEARCH_KEY,
+		...TOPIC_POST_CARD_SECTION,
+	},
 } satisfies {
 	profileTopics: CardSection<ProfileTopicCard>
 	profileTopicPodcastEpisodeVideos: CardSection<ProfilePodcastEpisodeCard>
@@ -128,6 +139,25 @@ export function toProfileTopicPostRankItems({
 	return {
 		featuredItems: profileTopicPosts.slice(0, pinnedTopicPostCount).map(toTopicPostRankedItem),
 		candidateItems: profileTopicPosts.filter((topicPost) => topicPost.isTopicPublic).map(toTopicPostRankedItem),
+	}
+}
+
+/**
+ * Returns the pages of a profile's Topic Post cards if its read asked for pages, or undefined for a read that holds
+ * them whole. A later page is read for the audience the page shows to.
+ */
+export function toProfileTopicPostCardPages(
+	profile: Pick<ProfileResponse, "userId" | "profileTopicPosts" | "profileTopicPostsPage">,
+	audience: ProfileAudience | undefined,
+): ServerCardPages<TopicPostCard> | undefined {
+	const { userId, profileTopicPosts, profileTopicPostsPage } = profile
+	if (!profileTopicPostsPage) {
+		return undefined
+	}
+	return {
+		queryKey: ["profile-topic-posts", userId, audience ?? null],
+		loadedPage: { rows: profileTopicPosts, ...profileTopicPostsPage },
+		fetchPage: (page) => fetchProfileTopicPostsPage(userId, page, audience).then(toCardsPageRows("topicPosts")),
 	}
 }
 

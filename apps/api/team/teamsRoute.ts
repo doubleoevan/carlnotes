@@ -1,5 +1,6 @@
 // the team routes: the pages, create, update, delete, the topic attach and detach, the members, and the join requests
 
+import { cardsPageQuery, toCardsPage } from "@carlnotes/contracts/cardPages"
 import {
 	addTopicPayload,
 	createTeamPayload,
@@ -7,6 +8,7 @@ import {
 	memberVisibilityPayload,
 	updateTeamPayload,
 } from "@carlnotes/contracts/payloads"
+import { type TeamPageResponse, teamPageQuery } from "@carlnotes/contracts/teams"
 import { db } from "@carlnotes/db"
 import { invites } from "@carlnotes/db/schema/invites"
 import { teamMembers, teams } from "@carlnotes/db/schema/teams"
@@ -15,11 +17,12 @@ import { zValidator } from "@hono/zod-validator"
 import { and, eq, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { isLeaderRole } from "../authorization"
+import { toTopicPostCardsPage } from "../cardPages"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
+import { clearTeamMemberPages, renderedPageReadCacheHeaders } from "../edgeCache"
 import { toObjectionableCategory, toObjectionableContentResponse } from "../moderation"
 import { toolCallerRateLimiter } from "../rateLimit"
 import { toTermsOutdatedResponse } from "../termsAcceptance"
-import { overlayUncheckedTeamAvatar } from "../uncheckedImageOverlays"
 import { deleteTeam } from "./deleteTeam"
 import {
 	approveJoinTeamRequest,
@@ -29,13 +32,19 @@ import {
 	setTeamMemberRole,
 	toTeamRole,
 } from "./members"
-import { loadTeamPage } from "./teamPage"
+import { readTeamPageRead, readTeamTopicPostCards } from "./teamPageRead"
 import { addTopicToTeam, createTeam, removeTopicFromTeam, updateTeam } from "./teams"
 import { loadTeamsPage } from "./teamsPage"
 
 // the text other people read on a team: its name and its description, if any
 function toTeamText(teamPayload: { name?: string; description?: string | null }): string {
 	return [teamPayload.name, teamPayload.description].filter(Boolean).join("\n")
+}
+
+// the team page with one zero-based page of its Topic Posts and where the page sits
+function toPagedTeamPage(teamPage: TeamPageResponse, topicPostsPage: number): TeamPageResponse {
+	const { rows, position } = toCardsPage(teamPage.topicPostCards, topicPostsPage)
+	return { ...teamPage, topicPostCards: rows, topicPostCardsPage: position }
 }
 
 // the team routes. reads return a 404 for anything the user may not know exists
@@ -96,13 +105,18 @@ export const teamsRoute = new Hono<AppEnv>()
 		}
 		return context.json({ error: "team limit reached" }, 429)
 	})
-	.get("/teams/:id/page", async (context) => {
-		// the team page, or the gate a private team shows a non-member with the team's name and the user's join request
-		const userId = currentUser(context)
-		const teamPageResult = await loadTeamPage(userId, context.req.param("id"))
+	.get("/teams/:id/page", renderedPageReadCacheHeaders, zValidator("query", teamPageQuery), async (context) => {
+		// the team page with its head, or the gate a private team shows a non-member with the team's name and the user's
+		// join request. a read that asks for it takes the visitors' copy with the user's own part beside it, and a read
+		// that asks for pages takes one page of the team's Topic Posts
+		const { userState, paged, topicPostsPage = 0 } = context.req.valid("query")
+		const teamPageResult = await readTeamPageRead({
+			userId: currentUser(context),
+			teamId: context.req.param("id"),
+			isUserStateAsked: userState === "1",
+		})
 		if (teamPageResult.status === "visible") {
-			// a leader's page names their unchecked avatar beside the published one
-			return context.json(await overlayUncheckedTeamAvatar(teamPageResult.team, userId))
+			return context.json(paged ? toPagedTeamPage(teamPageResult.team, topicPostsPage) : teamPageResult.team)
 		}
 		if (teamPageResult.status === "gated") {
 			const { teamName, hasRequestedToJoin } = teamPageResult
@@ -110,6 +124,13 @@ export const teamsRoute = new Hono<AppEnv>()
 		}
 		// no team has the id
 		return context.json({ error: "not found" }, 404)
+	})
+	.get("/teams/:id/topic-posts", zValidator("query", cardsPageQuery), async (context) => {
+		// one later page of the team's Topic Posts, as the reader may see them, and a 404 for a team they may not open
+		const topicPostCards = await readTeamTopicPostCards(currentUser(context), context.req.param("id"))
+		return topicPostCards
+			? context.json(toTopicPostCardsPage(topicPostCards, context.req.valid("query").page))
+			: context.json({ error: "not found" }, 404)
 	})
 	.post("/teams/:id/join-requests", async (context) => {
 		// reject a signed-out visitor
@@ -285,11 +306,15 @@ export const teamsRoute = new Hono<AppEnv>()
 			if (actingUserId !== targetUserId || (await toTeamRole(actingUserId, context.req.param("id"))) === null) {
 				return context.json({ error: "not found" }, 404)
 			}
+
+			// the opt-out, which the team's page and the member's profile show
 			await db
 				.update(teamMembers)
 				.set({ isMemberVisible: context.req.valid("json").isMemberVisible })
 				.where(and(eq(teamMembers.teamId, context.req.param("id")), eq(teamMembers.userId, targetUserId)))
-			// the write is the whole answer
+			await clearTeamMemberPages({ teamId: context.req.param("id"), userId: targetUserId })
+
+			// the write is the whole response
 			return context.json({ ok: true })
 		},
 	)

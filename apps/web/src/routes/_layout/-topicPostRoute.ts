@@ -1,9 +1,9 @@
-import { fetchTopicPostPageHead } from "@carlnotes/client/pageHeadClient"
-import { fetchTopicPost } from "@carlnotes/client/topicPostClient"
+import { fetchTopicPostPageRead } from "@carlnotes/client/pageReadClient"
 import type { PageHead } from "@carlnotes/contracts/pageHead"
 import type { TopicPostResponse } from "@carlnotes/contracts/topicPosts"
+import { toTopicPostWithUserState } from "@carlnotes/core/lib/pageUserStates"
 import { notFound, redirect } from "@tanstack/react-router"
-import { loadPageOnServer } from "@/lib/loadOnServer"
+import { loadPageReadOnServer } from "@/lib/loadOnServer"
 
 // the data that a Topic Post route loads: the page head, and the post if a visitor may read it
 export type TopicPostRouteData = { head: PageHead | undefined; topicPost: TopicPostResponse | null }
@@ -12,7 +12,7 @@ export type TopicPostRouteData = { head: PageHead | undefined; topicPost: TopicP
 type LoadTopicPostRouteOptions = { topicId: string; topicSlug: string; topicPostId: string; postSlug?: string }
 
 /**
- * Loads a published Topic Post's head and page on the server, and redirects a url without the current slugs. A draft
+ * Loads a published Topic Post's page read on the server, and redirects a url without the current slugs. A draft
  * has no head, so a visitor's request for one responds 404. In the browser loadTopicPostRoute returns no head and no
  * post.
  */
@@ -22,13 +22,11 @@ export async function loadTopicPostRoute({
 	topicPostId,
 	postSlug,
 }: LoadTopicPostRouteOptions): Promise<TopicPostRouteData> {
-	// read the head and the post on the server
-	const [topicPostHead, topicPost] = await loadPageOnServer({
-		fetchPageHead: () => fetchTopicPostPageHead(topicPostId),
-		fetchPage: () => fetchTopicPost(topicPostId),
-	})
+	// read the post's page read, which holds its head, on the server
+	const topicPostPageRead = await loadPageReadOnServer(() => fetchTopicPostPageRead(topicPostId))
 
 	// respond 404 for a post that the api does not know, and for a draft
+	const topicPostHead = topicPostPageRead === undefined ? undefined : (topicPostPageRead?.head ?? null)
 	if (topicPostHead === null) {
 		throw notFound()
 	}
@@ -39,5 +37,8 @@ export async function loadTopicPostRoute({
 	if (currentTopicPostPath && currentTopicPostPath !== requestedTopicPostPath) {
 		throw redirect({ href: currentTopicPostPath, statusCode: 301 })
 	}
-	return { head: topicPostHead, topicPost }
+	return {
+		head: topicPostHead,
+		topicPost: toTopicPostWithUserState(topicPostPageRead),
+	}
 }

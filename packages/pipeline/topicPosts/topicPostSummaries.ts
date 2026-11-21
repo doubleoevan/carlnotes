@@ -1,6 +1,7 @@
 // a published Topic Post's stored summary: the read of what it is written from, and the write that keeps it
 import { db } from "@carlnotes/db"
 import { topicPosts } from "@carlnotes/db/schema/topicPosts"
+import { clearVisitorPagesOfTopic } from "@carlnotes/db/visitorPageCaches"
 import { loadOrProvisionUserLiteLLMKey } from "@carlnotes/models/litellm"
 import { eq, sql } from "drizzle-orm"
 import { summarizeTopicPost } from "./summarizeTopicPost"
@@ -35,11 +36,17 @@ export async function writeStoredTopicPostSummary(topicPostId: string): Promise<
 	// keep the summary only if an edit saved during the call left the words alone, so an older summary never replaces a
 	// newer one. the call's cost adds to what every summary of the post cost together either way
 	const isSameText = sql`${topicPosts.title} = ${title} and ${topicPosts.html} = ${html}`
-	await db
+	const [summarizedRow] = await db
 		.update(topicPosts)
 		.set({
 			summary: sql`case when ${isSameText} then ${summary} else ${topicPosts.summary} end`,
 			cost: sql`${topicPosts.cost} + ${costDollars}`,
 		})
 		.where(eq(topicPosts.id, topicPostId))
+		.returning({ topicId: topicPosts.topicId })
+
+	// the visitor pages that show the post's summary leave the cache
+	if (summarizedRow) {
+		await clearVisitorPagesOfTopic(summarizedRow.topicId)
+	}
 }

@@ -1,6 +1,5 @@
 // a podcast episode in the shape the player shows, with its chapters, its film, and the user's progress, and in the
-// shape a table row shows, with its chapter count, and each topic's latest of either, limited to what the user may
-// listen to
+// shape a table row shows, with its chapter count, limited to what the user may listen to
 
 import type { PodcastEpisode, PodcastEpisodeSummary, TopicVideo } from "@carlnotes/contracts/podcast"
 import { isPublishedPodcastEpisode } from "@carlnotes/contracts/podcast"
@@ -12,24 +11,17 @@ import {
 import { toPodcastEpisodePath } from "@carlnotes/contracts/seo"
 import { toPodcastEpisodeImageUrls, toTopicVideoPosterUrl } from "@carlnotes/contracts/topicImages"
 import { db } from "@carlnotes/db"
-import { podcastEpisodeChapters, podcastEpisodes, topicVideos } from "@carlnotes/db/schema/podcast"
-import { isAfterSubscriberActivation } from "@carlnotes/db/topicPermissions"
+import { memoizeRowsById } from "@carlnotes/db/requestMemo"
+import { podcastEpisodeChapters, topicVideos } from "@carlnotes/db/schema/podcast"
 import { toPodcastCoverPath } from "@carlnotes/server/podcastCoverPaths"
-import { isPodcastEpisodeRecordingConfigured } from "@carlnotes/server/podcastEpisodeSettings"
 import { isVoiceChatConfigured } from "@carlnotes/server/voiceChat"
-import { and, count, desc, eq, inArray } from "drizzle-orm"
-import { topicSubscriptionStartDates } from "../topic/subscriptionStartDates"
+import { and, count, inArray } from "drizzle-orm"
 import {
 	loadPodcastEpisodeListenRows,
 	type PodcastEpisodeListenRow,
 	type PodcastEpisodeRow,
 	type PodcastEpisodeTopic,
-	podcastEpisodeColumns,
-	type TopicRow,
 } from "./podcastEpisodeRows"
-
-// the topic fields that the latest podcast episode loaders read: the podcast episode's topic and its access check
-type LatestPodcastEpisodeTopic = Pick<TopicRow, "id" | "name" | "ownerId" | "visibility" | "imageHash">
 
 // a podcast episode's row and the topic that its page path is built from
 export type PodcastEpisodeRowTopic = { podcastEpisodeRow: PodcastEpisodeRow; topic: PodcastEpisodeTopic }
@@ -61,49 +53,14 @@ type ToPodcastEpisodeSummaryOptions = PodcastEpisodeRowTopic & {
 }
 
 // the podcast episode row, its topic, and the user, null for a visitor
-type LoadPodcastEpisodeOptions = PodcastEpisodeRowTopic & { userId: string | null }
+type LoadPodcastEpisodeOptions = PodcastEpisodeRowTopic & Omit<LoadPodcastEpisodesOptions, "podcastEpisodeRowTopics">
 
 // the podcast episode rows with their topics, the user, null for a visitor, and the films if a caller loaded them
 type LoadPodcastEpisodesOptions = {
 	podcastEpisodeRowTopics: PodcastEpisodeRowTopic[]
 	userId: string | null
-	topicVideos?: TopicVideos
-}
-
-/**
- * Loads each topic's latest published podcast episode that the user may listen to, with its chapters, by topic id.
- */
-export async function loadLatestPodcastEpisodes(
-	topicRows: LatestPodcastEpisodeTopic[],
-	userId: string | null,
-): Promise<Map<string, PodcastEpisode>> {
-	// load the chapters and the user's progress of each newest podcast episode the user may listen to, then key the
-	// episodes by topic id
-	const latestPodcastEpisodeRowTopics = await loadLatestPodcastEpisodeRowTopics(topicRows, userId)
-	const latestPodcastEpisodes = await loadPodcastEpisodes({
-		podcastEpisodeRowTopics: latestPodcastEpisodeRowTopics,
-		userId,
-	})
-	return new Map(latestPodcastEpisodes.map((podcastEpisode) => [podcastEpisode.topicId, podcastEpisode]))
-}
-
-/**
- * Loads each topic's latest published podcast episode that the user may listen to, as a table row shows it with its
- * chapter count, by topic id.
- */
-export async function loadLatestPodcastEpisodeSummaries(
-	topicRows: LatestPodcastEpisodeTopic[],
-	userId: string | null,
-): Promise<Map<string, PodcastEpisodeSummary>> {
-	// count the chapters of each newest podcast episode the user may listen to, then key the summaries by topic id
-	const latestPodcastEpisodeRowTopics = await loadLatestPodcastEpisodeRowTopics(topicRows, userId)
-	const latestPodcastEpisodeSummaries = await loadPodcastEpisodeSummaries(latestPodcastEpisodeRowTopics)
-	return new Map(
-		latestPodcastEpisodeRowTopics.map(({ topic }, i) => [
-			topic.id,
-			latestPodcastEpisodeSummaries[i] as PodcastEpisodeSummary,
-		]),
-	)
+	// the films if the caller reads them, read already or in flight beside these reads
+	topicVideos?: TopicVideos | Promise<TopicVideos>
 }
 
 /**
@@ -113,11 +70,13 @@ export async function loadPodcastEpisode({
 	podcastEpisodeRow,
 	topic,
 	userId,
+	topicVideos,
 }: LoadPodcastEpisodeOptions): Promise<PodcastEpisode> {
 	// a list with a single podcast episode returns that podcast episode
 	const [podcastEpisode] = await loadPodcastEpisodes({
 		podcastEpisodeRowTopics: [{ podcastEpisodeRow, topic }],
 		userId,
+		topicVideos,
 	})
 	return podcastEpisode as PodcastEpisode
 }
@@ -137,22 +96,14 @@ export async function loadPodcastEpisodes({
 	}
 
 	// every podcast episode's chapters in their order, the user's progress through each episode, and its film
-	const [podcastEpisodeChapterRows, podcastEpisodeListenRows, topicVideos] = await Promise.all([
-		db
-			.select()
-			.from(podcastEpisodeChapters)
-			.where(inArray(podcastEpisodeChapters.podcastEpisodeId, podcastEpisodeIds))
-			.orderBy(podcastEpisodeChapters.position),
+	const [chapterRowsByPodcastEpisodeId, podcastEpisodeListenRows, topicVideos] = await Promise.all([
+		loadChapterRows(podcastEpisodeIds),
 		loadPodcastEpisodeListenRows(userId, podcastEpisodeIds),
 		loadedTopicVideos ?? loadTopicVideos(podcastEpisodeIds),
 	])
 
 	// build each podcast episode from its own chapters, listen row, and film
 	const { readyTopicVideos, videoRenderingPodcastEpisodeIds } = topicVideos
-	const chapterRowsByPodcastEpisodeId = Map.groupBy(
-		podcastEpisodeChapterRows,
-		(chapterRow) => chapterRow.podcastEpisodeId,
-	)
 	const listenRowByPodcastEpisodeId = new Map(
 		podcastEpisodeListenRows.map((listenRow) => [listenRow.podcastEpisodeId, listenRow]),
 	)
@@ -174,7 +125,7 @@ export async function loadPodcastEpisodes({
  */
 export async function loadPodcastEpisodeSummaries(
 	podcastEpisodeRowTopics: PodcastEpisodeRowTopic[],
-	loadedTopicVideos?: TopicVideos,
+	loadedTopicVideos?: TopicVideos | Promise<TopicVideos>,
 ): Promise<PodcastEpisodeSummary[]> {
 	const podcastEpisodeIds = podcastEpisodeRowTopics.map(({ podcastEpisodeRow }) => podcastEpisodeRow.id)
 	if (podcastEpisodeIds.length === 0) {
@@ -182,17 +133,10 @@ export async function loadPodcastEpisodeSummaries(
 	}
 
 	// every podcast episode's chapter count and its film, then each summary with its own count
-	const [chapterCountRows, { readyTopicVideos }] = await Promise.all([
-		db
-			.select({ podcastEpisodeId: podcastEpisodeChapters.podcastEpisodeId, chapterCount: count() })
-			.from(podcastEpisodeChapters)
-			.where(inArray(podcastEpisodeChapters.podcastEpisodeId, podcastEpisodeIds))
-			.groupBy(podcastEpisodeChapters.podcastEpisodeId),
+	const [chapterCountByPodcastEpisodeId, { readyTopicVideos }] = await Promise.all([
+		loadChapterCounts(podcastEpisodeIds),
 		loadedTopicVideos ?? loadTopicVideos(podcastEpisodeIds),
 	])
-	const chapterCountByPodcastEpisodeId = new Map(
-		chapterCountRows.map((chapterCountRow) => [chapterCountRow.podcastEpisodeId, chapterCountRow.chapterCount]),
-	)
 	return podcastEpisodeRowTopics.map(({ podcastEpisodeRow, topic }) =>
 		toPodcastEpisodeSummary({
 			podcastEpisodeRow,
@@ -302,21 +246,22 @@ export async function loadTopicVideos(podcastEpisodeIds: string[]): Promise<Topi
 		return { readyTopicVideos: new Map(), videoRenderingPodcastEpisodeIds: new Set() }
 	}
 
-	// the ready and the rendering film rows of these podcast episodes
-	const filmRows = await db
-		.select({
-			podcastEpisodeId: topicVideos.podcastEpisodeId,
-			status: topicVideos.status,
-			byteSize: topicVideos.byteSize,
-			imageHash: topicVideos.imageHash,
-		})
-		.from(topicVideos)
-		.where(
-			and(
-				inArray(topicVideos.podcastEpisodeId, podcastEpisodeIds),
-				inArray(topicVideos.status, ["ready", "rendering"]),
-			),
-		)
+	// the ready and the rendering film rows of these podcast episodes, each read once in a request
+	const filmRowsByPodcastEpisodeId = await memoizeRowsById("topic-videos", podcastEpisodeIds, async (missingIds) => {
+		const missingFilmRows = await db
+			.select({
+				podcastEpisodeId: topicVideos.podcastEpisodeId,
+				status: topicVideos.status,
+				byteSize: topicVideos.byteSize,
+				imageHash: topicVideos.imageHash,
+			})
+			.from(topicVideos)
+			.where(
+				and(inArray(topicVideos.podcastEpisodeId, missingIds), inArray(topicVideos.status, ["ready", "rendering"])),
+			)
+		return Map.groupBy(missingFilmRows, (filmRow) => filmRow.podcastEpisodeId)
+	})
+	const filmRows = [...filmRowsByPodcastEpisodeId.values()].flat()
 
 	// each ready film by its podcast episode's id, and the podcast episodes whose film is rendering
 	const readyFilmRows = filmRows.filter((filmRow) => filmRow.status === "ready")
@@ -330,6 +275,36 @@ export async function loadTopicVideos(podcastEpisodeIds: string[]): Promise<Topi
 		),
 		videoRenderingPodcastEpisodeIds: new Set(renderingFilmRows.map((filmRow) => filmRow.podcastEpisodeId)),
 	}
+}
+
+// each podcast episode's chapters in their order by its id, each read once in a request. a podcast episode with no
+// chapter has no entry
+function loadChapterRows(
+	podcastEpisodeIds: string[],
+): Promise<Map<string, (typeof podcastEpisodeChapters.$inferSelect)[]>> {
+	return memoizeRowsById("chapter-rows", podcastEpisodeIds, async (missingIds) => {
+		// the chapters of the podcast episodes that no earlier read in the request read, grouped by their podcast episode
+		const chapterRows = await db
+			.select()
+			.from(podcastEpisodeChapters)
+			.where(inArray(podcastEpisodeChapters.podcastEpisodeId, missingIds))
+			.orderBy(podcastEpisodeChapters.position)
+		return Map.groupBy(chapterRows, (chapterRow) => chapterRow.podcastEpisodeId)
+	})
+}
+
+// each podcast episode's chapter count by its id, each read once in a request. a podcast episode with no chapter has
+// no entry
+function loadChapterCounts(podcastEpisodeIds: string[]): Promise<Map<string, number>> {
+	return memoizeRowsById("chapter-counts", podcastEpisodeIds, async (missingIds) => {
+		// the chapter counts of the podcast episodes that no earlier read in the request read
+		const chapterCountRows = await db
+			.select({ podcastEpisodeId: podcastEpisodeChapters.podcastEpisodeId, chapterCount: count() })
+			.from(podcastEpisodeChapters)
+			.where(inArray(podcastEpisodeChapters.podcastEpisodeId, missingIds))
+			.groupBy(podcastEpisodeChapters.podcastEpisodeId)
+		return new Map(chapterCountRows.map(({ podcastEpisodeId, chapterCount }) => [podcastEpisodeId, chapterCount]))
+	})
 }
 
 /**
@@ -351,37 +326,4 @@ export function toTopicVideo(
 		captionsUrl: `/api/episodes/${podcastEpisodeId}/captions.vtt`,
 		posterUrl: imageHash ? toTopicVideoPosterUrl(podcastEpisodeId, imageHash) : null,
 	}
-}
-
-// each topic's newest published podcast episode that the user may listen to, with its topic. an older episode never
-// passes a gate that the newest episode fails, and a topic with no gate has no activation time
-async function loadLatestPodcastEpisodeRowTopics(
-	topicRows: LatestPodcastEpisodeTopic[],
-	userId: string | null,
-): Promise<PodcastEpisodeRowTopic[]> {
-	if (!isPodcastEpisodeRecordingConfigured() || topicRows.length === 0) {
-		return []
-	}
-
-	// each topic's newest published podcast episode, and when the user's subscription to each gated topic activated
-	const topicIds = topicRows.map((topicRow) => topicRow.id)
-	const [latestPodcastEpisodeRows, subscriberActivatedAtByTopicId] = await Promise.all([
-		db
-			.selectDistinctOn([podcastEpisodes.topicId], podcastEpisodeColumns)
-			.from(podcastEpisodes)
-			.where(and(inArray(podcastEpisodes.topicId, topicIds), eq(podcastEpisodes.status, "published")))
-			.orderBy(podcastEpisodes.topicId, desc(podcastEpisodes.publishedAt)),
-		topicSubscriptionStartDates(topicRows, userId),
-	])
-
-	// keep each newest podcast episode that the user may listen to, with its topic
-	const topicById = new Map(topicRows.map((topicRow) => [topicRow.id, topicRow]))
-	return latestPodcastEpisodeRows.flatMap((podcastEpisodeRow) => {
-		// the episode's topic and the user's activation on it, which the episode's publish time has to pass
-		const topic = podcastEpisodeRow.topicId ? topicById.get(podcastEpisodeRow.topicId) : undefined
-		const subscriberActivatedAt = topic ? subscriberActivatedAtByTopicId.get(topic.id) : null
-		return topic && isAfterSubscriberActivation(podcastEpisodeRow.publishedAt, subscriberActivatedAt)
-			? [{ podcastEpisodeRow, topic }]
-			: []
-	})
 }

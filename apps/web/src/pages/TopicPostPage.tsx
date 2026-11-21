@@ -1,5 +1,6 @@
 import { authClient } from "@carlnotes/client/authClient"
-import { deleteTopicPost, fetchTopicPost } from "@carlnotes/client/topicPostClient"
+import { fetchTopicPostPageRead } from "@carlnotes/client/pageReadClient"
+import { deleteTopicPost } from "@carlnotes/client/topicPostClient"
 import { isAdminRole } from "@carlnotes/contracts/enums"
 import { toTopicPath } from "@carlnotes/contracts/seo"
 import { type TopicPostResponse, toBodyParagraphs } from "@carlnotes/contracts/topicPosts"
@@ -9,12 +10,14 @@ import {
 	type TopicPostPageElements,
 } from "@carlnotes/core/components/TopicPostPage"
 import { useTopicPostView } from "@carlnotes/core/hooks/useTopicPostView"
+import { toTopicPostWithUserState } from "@carlnotes/core/lib/pageUserStates"
 import {
 	HOME_RANK_OPTION_LABELS,
 	PROFILE_RANK_OPTION_LABELS,
 	toTopicPostRankedItem,
 } from "@carlnotes/core/lib/rankDialog"
 import { EDIT_IMAGE_DIALOG_TITLES } from "@carlnotes/core/lib/topicImageEditor"
+import { toTopicPostDiscussionStatusRead } from "@carlnotes/core/lib/topicPostDiscussions"
 import {
 	isTopicPostFeaturable,
 	isTopicPostUrlStale,
@@ -146,10 +149,11 @@ export function TopicPostPage() {
 	// the rank dialog that the actions menu opened: the home's, or the author's own profile's
 	const [openRankDialog, setOpenRankDialog] = useState<TopicPostRankDialog | null>(null)
 
-	// load in the browser unless the server already loaded this Topic Post
+	// load the page read in the browser unless the server already loaded this Topic Post, with the user state merged into
+	// the shared copy
 	const loadTopicPost = useCallback((): void => {
-		fetchTopicPost(topicPostId)
-			.then(setTopicPost)
+		fetchTopicPostPageRead(topicPostId)
+			.then((topicPostPageRead) => setTopicPost(toTopicPostWithUserState(topicPostPageRead)))
 			.catch(() => setTopicPost(null))
 	}, [topicPostId])
 	useLoadInBrowser({ pageId: topicPostId, isLoadedOnServer: Boolean(loadedTopicPost), loadPage: loadTopicPost })
@@ -220,6 +224,7 @@ export function TopicPostPage() {
 					loadTopicPost()
 				}}
 				onChanged={loadTopicPost}
+				readDiscussionStatus={toTopicPostDiscussionStatusRead(topicPost)}
 				onEditImage={topicPost.canEditImage ? () => setIsImageDialogOpen(true) : undefined}
 				elements={TOPIC_POST_PAGE_ELEMENTS}
 			>
@@ -236,6 +241,7 @@ export function TopicPostPage() {
 				{topicPost.publishedAt && (
 					<ViewerCountLine
 						viewerCountPage={{ kind: "topicPost", id: topicPost.id, isPublic: topicPost.isTopicPublic }}
+						savedViewerCount={topicPost.viewerCount}
 					/>
 				)}
 			</SharedTopicPostPage>

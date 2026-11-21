@@ -14,6 +14,7 @@ import {
 	saveUncheckedAvatar,
 	saveUncheckedTeamAvatar,
 } from "@carlnotes/db/avatars"
+import { memoizeRowsById } from "@carlnotes/db/requestMemo"
 import { users } from "@carlnotes/db/schema/users"
 import { recordPendingObjectDeletionBeforeUpload, uploadAttachment } from "@carlnotes/db/store"
 import { type StoredAvatar, toStoredAvatar } from "@carlnotes/pipeline/avatarImages"
@@ -189,6 +190,34 @@ export const publishedAvatarColumns = {
 export async function toPublishedAvatar(userId: string): Promise<PublishedAvatar> {
 	const [user] = await db.select(publishedAvatarColumns).from(users).where(eq(users.id, userId))
 	return toPublishedAvatarFromUser(user)
+}
+
+// a user's row as a profile and a published avatar read it
+type UserAvatarRow = Pick<
+	typeof users.$inferSelect,
+	"id" | "username" | "createdAt" | "avatarSource" | "avatarKey" | "image" | "profileViewerCount"
+>
+
+/**
+ * Loads a user's id, name, join time, avatar columns, and saved profile viewer count, read once in a request that only
+ * reads, or undefined for no such user.
+ */
+export async function loadUserAvatarRow(userId: string): Promise<UserAvatarRow | undefined> {
+	const userRowById = await memoizeRowsById("user-avatar-rows", [userId], async () => {
+		// the user's row by its id
+		const userRows = await db
+			.select({
+				id: users.id,
+				username: users.username,
+				createdAt: users.createdAt,
+				...publishedAvatarColumns,
+				profileViewerCount: users.profileViewerCount,
+			})
+			.from(users)
+			.where(eq(users.id, userId))
+		return new Map(userRows.map((userRow) => [userRow.id, userRow]))
+	})
+	return userRowById.get(userId)
 }
 
 /**

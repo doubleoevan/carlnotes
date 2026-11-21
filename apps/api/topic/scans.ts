@@ -1,18 +1,19 @@
 // starting a Scan by hand, the routes that start and stop one, and one Scan's recap and source results
 
 import { MANUAL_SCAN_PAUSED_LABEL, SCAN_SPENT_BUDGET_LABEL } from "@carlnotes/contracts/scanFailure"
-import { toSourceResultLabel, toUrlHost } from "@carlnotes/contracts/sources"
 import {
 	type ScanNote,
 	type ScanSourceResults,
 	type SourceResult,
 	type StoredSourceResult,
 	storedScanSourceResults,
-} from "@carlnotes/contracts/topics"
+} from "@carlnotes/contracts/scanSourceResults"
+import { toSourceResultLabel, toUrlHost } from "@carlnotes/contracts/sources"
 import { db } from "@carlnotes/db"
 import { isManualScanWaiting, isTopicFirstScanWaiting } from "@carlnotes/db/dailySpendCutoffs"
 import { scans } from "@carlnotes/db/schema/scans"
 import { topics } from "@carlnotes/db/schema/topics"
+import { clearStatusReads } from "@carlnotes/db/statusReadCaches"
 import { isUserLiteLLMKeyBudgetExhausted } from "@carlnotes/models/litellm"
 import { loadScan, startTopicScan } from "@carlnotes/pipeline/scan"
 import { reapStaleScans } from "@carlnotes/pipeline/staleScans"
@@ -172,7 +173,13 @@ async function saveWaitingManualScan({
 		await transaction.insert(scans).values({ topicId: topic.id, ownerId: userId, isManual: true })
 		return true
 	})
-	return isManualRowSaved ? { status: "started", remainingScans } : { status: "running" }
+
+	// the Topic's scan status copy goes, so a poll reads the saved row
+	if (!isManualRowSaved) {
+		return { status: "running" }
+	}
+	await clearStatusReads("scan", topic.id)
+	return { status: "started", remainingScans }
 }
 
 /**

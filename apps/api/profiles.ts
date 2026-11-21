@@ -14,7 +14,7 @@ import { zValidator } from "@hono/zod-validator"
 import { and, countDistinct, eq, isNotNull, like, ne, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { loadTopics } from "./activityTopics"
-import { withAvatarVersion } from "./avatars"
+import { loadUserAvatarRow, withAvatarVersion } from "./avatars"
 import { type AppEnv, currentProfileAudienceUser, currentUser } from "./currentUser"
 import {
 	loadProfileCards,
@@ -98,17 +98,8 @@ export async function loadProfile(
 ): Promise<ProfileResponse | null> {
 	// the person, who reads the profile, and whether the signed-in reader has blocked the person
 	const isOwnProfile = userId === profileUserId
-	const [[user], profileReader, isUserBlocked] = await Promise.all([
-		db
-			.select({
-				id: users.id,
-				username: users.username,
-				createdAt: users.createdAt,
-				avatarSource: users.avatarSource,
-				avatarKey: users.avatarKey,
-			})
-			.from(users)
-			.where(eq(users.id, profileUserId)),
+	const [user, profileReader, isUserBlocked] = await Promise.all([
+		loadUserAvatarRow(profileUserId),
 		loadProfileReader(profileUserId, userId),
 		userId !== null && !isOwnProfile && hasUserBlock(userId, profileUserId),
 	])
@@ -150,6 +141,7 @@ export async function loadProfile(
 		avatarVersion: toAvatarVersion(user),
 		joinedAt: user.createdAt.toISOString(),
 		subscriberCount,
+		viewerCount: user.profileViewerCount,
 		includesNonPublicTopics: profileReader !== "visitor",
 		isBlocked: isUserBlocked,
 		topics: profileTopics,
@@ -196,7 +188,7 @@ export async function countDistinctSubscribers(userId: string, handle: DbHandle 
 	return subscribers?.subscriberCount ?? 0
 }
 
-// the public profile routes: the profile page and the profile's team statuses
+// the public profile routes: the profile page, its page read, and the profile's team statuses
 export const profilesRoute = new Hono<AppEnv>()
 	// a profile does not require a session. but a session is required to show non-public topics to the owner or an
 	// admin, and the visitor audience reads the profile with none

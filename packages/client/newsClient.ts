@@ -6,6 +6,29 @@ import { apiClient, readApiResponse } from "./apiClient"
 // the window and the page to read, and the cursor an earlier page of the window returned
 type NewsPageQuery = { window: NewsWindow; page: number; cursor?: string }
 
+// what runs after each of the signed-in user's own writes that their news shows
+const newsWriteListeners = new Set<() => void>()
+
+/**
+ * Adds what runs after each of the user's own writes that their news shows: a Comment, a reaction, a Topic Post's
+ * publish or delete, and a follow or unfollow. Returns the function that removes it.
+ */
+export function addNewsWriteListener(listener: () => void): () => void {
+	newsWriteListeners.add(listener)
+	return () => {
+		newsWriteListeners.delete(listener)
+	}
+}
+
+/**
+ * Runs every news write listener, after one of the user's own writes that their news shows.
+ */
+export function notifyNewsWrite(): void {
+	for (const listener of newsWriteListeners) {
+		listener()
+	}
+}
+
 /**
  * Fetches one page of the signed-in user's own news. A failed read throws an error.
  */

@@ -10,6 +10,7 @@ export const Route = createFileRoute("/_layout/topics/$topicId_/$topicSlug")({
 		loadTopicRoute({
 			...params,
 			season: toLinkedSeason(location.search, PODCAST_EPISODE_SEASON_KEY),
+			searchParams: location.search,
 			search: location.searchStr,
 		}),
 	head: ({ loaderData }) => toHeadTags(loaderData?.head),

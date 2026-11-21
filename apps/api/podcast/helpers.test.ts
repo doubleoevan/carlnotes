@@ -70,11 +70,15 @@ test("a topic page's podcast lists the cards of its ready films, newest first", 
 	// rendering. the card loader returns one card for each id it gets
 	Bun.env.BETTER_AUTH_SECRET = "test-secret"
 	spyOn(podcastEpisodeSettings, "isPodcastEpisodeRecordingConfigured").mockReturnValue(true)
-	spyOn(episodeRows, "loadPublishedPodcastEpisodeRows").mockResolvedValue([
-		toPodcastEpisodeRow("episode-3", 3),
-		toPodcastEpisodeRow("episode-2", 2),
-		toPodcastEpisodeRow("episode-1", 1),
-	])
+	const newestPodcastEpisodeRow = toPodcastEpisodeRow("episode-3", 3)
+	spyOn(episodeRows, "loadPublishedAndNewestPodcastEpisodeRows").mockResolvedValue({
+		publishedPodcastEpisodeRows: [
+			newestPodcastEpisodeRow,
+			toPodcastEpisodeRow("episode-2", 2),
+			toPodcastEpisodeRow("episode-1", 1),
+		],
+		newestPodcastEpisodeRow,
+	})
 	stubConnectionPool((sentQuery) =>
 		sentQuery.text.includes('from "topic_videos"')
 			? [
@@ -84,18 +88,22 @@ test("a topic page's podcast lists the cards of its ready films, newest first", 
 				]
 			: [],
 	)
-	const loadPodcastEpisodeCards = spyOn(topicCards, "loadPodcastEpisodeCards").mockImplementation(
-		async (podcastEpisodeIds) =>
-			podcastEpisodeIds.map((podcastEpisodeId) => ({
-				podcastEpisode: { id: podcastEpisodeId },
+	const loadPodcastEpisodeCardsFromRows = spyOn(topicCards, "loadPodcastEpisodeCardsFromRows").mockImplementation(
+		async (podcastEpisodeCardRows) =>
+			podcastEpisodeCardRows.map(({ podcastEpisodeRow }) => ({
+				podcastEpisode: { id: podcastEpisodeRow.id },
 				topic: { id: "topic-1", name: "Coffee", path: "/topics/topic-1", image: null },
 				reactionCount: 0,
-			})) as Awaited<ReturnType<typeof topicCards.loadPodcastEpisodeCards>>,
+			})) as Awaited<ReturnType<typeof topicCards.loadPodcastEpisodeCardsFromRows>>,
 	)
 
-	// the cards are the two ready films, newer first, and the rendering film has none
+	// the cards are the two ready films, newer first, from the rows already read, and the rendering film has none
 	const { topicPodcastEpisodeVideoCards } = await loadTopicPodcast(topic, null)
-	expect(loadPodcastEpisodeCards).toHaveBeenCalledWith(["episode-3", "episode-1"])
+	const [[podcastEpisodeCardRows] = []] = loadPodcastEpisodeCardsFromRows.mock.calls
+	expect(podcastEpisodeCardRows?.map(({ podcastEpisodeRow }) => podcastEpisodeRow.id)).toEqual([
+		"episode-3",
+		"episode-1",
+	])
 	expect(topicPodcastEpisodeVideoCards.map((podcastEpisodeCard) => podcastEpisodeCard.podcastEpisode.id)).toEqual([
 		"episode-3",
 		"episode-1",

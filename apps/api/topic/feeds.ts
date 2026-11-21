@@ -3,7 +3,7 @@
 import type { TopicFinding } from "@carlnotes/contracts/findings"
 import { EMPTY_REACTION_SUMMARY, toSocialTargetKey } from "@carlnotes/contracts/social"
 import { toTopicImageUrlsOrNull } from "@carlnotes/contracts/topicImages"
-import type { TopicFeed, TopicFeedResponse, TopicResponse, TopicSectionKey } from "@carlnotes/contracts/topics"
+import type { TopicFeed, TopicFeedResponse, TopicSectionKey } from "@carlnotes/contracts/topics"
 import { db, isPublicAndShown } from "@carlnotes/db"
 import { cacheJson } from "@carlnotes/db/redis"
 import { subscriptions, topics } from "@carlnotes/db/schema/topics"
@@ -12,7 +12,7 @@ import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, type SQL } from "dr
 import { toProfileIdentity } from "../avatars"
 import { attachTopicFindingFaviconPaths } from "../favicons"
 import { loadReactionSummaries } from "../social/reactionRows"
-import { TOPIC_SECTION_IDS_KEY, toVisitorTopicFeedKey, toVisitorTopicPageKey } from "./feedCaches"
+import { TOPIC_SECTION_IDS_KEY, toVisitorTopicFeedKey } from "./feedCaches"
 import { loadTopicFeedData } from "./feedData"
 import { filteredTopicFindings, newTopicFindingCount, toTopicFinding } from "./findings"
 import { toScanDurationMs, toScheduledTimeLabel } from "./helpers"
@@ -21,7 +21,7 @@ import { toTopicSourceSummary } from "./topicSourceSummary"
 // how long the home and popular topic id lists are kept
 const TOPIC_SECTION_IDS_TTL_MS = 60_000
 
-// how long a visitor's cached feed or topic page is kept
+// how long a visitor's cached feed is kept
 const VISITOR_CACHE_TTL_MS = 30_000
 
 // how many popular topic ids the homepage keeps, ten pages of its five
@@ -38,16 +38,6 @@ export function activeSubscriptionTopicIdQuery(userId: string) {
 		.select({ topicId: subscriptions.topicId })
 		.from(subscriptions)
 		.where(and(eq(subscriptions.isActive, true), eq(subscriptions.subscriberUserId, userId)))
-}
-
-/**
- * Returns the topic page every signed-out visitor sees, loaded once per half minute across every replica.
- */
-export function readVisitorTopicPage(
-	topicId: string,
-	loadTopicPage: () => Promise<TopicResponse | null>,
-): Promise<TopicResponse | null> {
-	return cacheJson({ key: toVisitorTopicPageKey(topicId), ttlMs: VISITOR_CACHE_TTL_MS, load: loadTopicPage })
 }
 
 /**

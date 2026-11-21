@@ -8,6 +8,7 @@ import { topics } from "@carlnotes/db/schema/topics"
 import { getTableColumns } from "drizzle-orm"
 import * as topicCards from "./home/topicCards"
 import {
+	compareTeamTopicProfileOrder,
 	loadProfileCards,
 	loadProfilePodcastEpisodeIds,
 	loadProfileTableTopicRows,
@@ -77,11 +78,6 @@ test("the person's own table takes every topic of every team they are an active 
 	expect(sentQueries[0]?.text).toContain('"topic_personal_source_contexts"')
 })
 
-// the profile order: the featured ones by their position and the newest first at one position, then the unfeatured ones most
-// viewed, most followed, and newest
-const PROFILE_ORDER_SQL =
-	'order by "topics"."profile_order" is null, "topics"."profile_order" asc, case when "topics"."profile_order" is null then "topics"."viewer_count" end desc, case when "topics"."profile_order" is null then "topics"."subscriber_count" end desc, "topics"."created_at" desc'
-
 test("topics read the person's own featured items first in their order, then most viewed, most followed, and newest", async () => {
 	const sentQueries = stubConnectionPool(() => [])
 	await loadProfileTopicRows({ profileUserId: "user-1", profileReader: "visitor" })
@@ -92,16 +88,55 @@ test("topics read the person's own featured items first in their order, then mos
 	expect(sentQueries[0]?.values.slice(13, 17)).toEqual(["user-1", "user-1", "user-1", "user-1"])
 })
 
-test("a team's cards read its topics in the same order, and a team with none reads nothing", async () => {
-	const sentQueries = stubConnectionPool(() => [])
-	expect(await loadTeamCards([], "user-1")).toEqual({ topicCards: [], podcastEpisodeCards: [], topicPostCards: [] })
-	expect(sentQueries).toHaveLength(0)
+// a team topic row named by its id, with its featured position, its views, its followers, and the day of November it was created. the
+// test reads only these fields
+function toTeamTopicRow(
+	id: string,
+	{ profileOrder = null, viewerCount = 0, subscriberCount = 0, day = 1 }: Partial<Record<string, number | null>> = {},
+): typeof topics.$inferSelect {
+	return {
+		id,
+		name: id,
+		profileOrder,
+		viewerCount,
+		subscriberCount,
+		createdAt: new Date(Date.UTC(2026, 10, day ?? 1)),
+	} as typeof topics.$inferSelect
+}
 
-	// the topics the reader may open, in the profile order
-	await loadTeamCards(["topic-a", "topic-b"], "user-1")
-	const topicRead = sentQueries.find(({ text }) => text.includes('from "topics"'))
-	expect(topicRead?.text).toContain('"topics"."id" in ($1, $2)')
-	expect(topicRead?.text).toContain(PROFILE_ORDER_SQL)
+// two topics the reader may open
+const TEAM_TOPIC_ROWS = [toTeamTopicRow("topic-a"), toTeamTopicRow("topic-b")]
+
+test("a team with no topic reads nothing for its cards", async () => {
+	const sentQueries = stubConnectionPool(() => [])
+	expect(await loadTeamCards([], "user-1")).toEqual({
+		topicCards: [],
+		podcastEpisodeCards: [],
+		topicVideoCards: [],
+		topicPostCards: [],
+	})
+	expect(sentQueries).toHaveLength(0)
+})
+
+test("a team's topics sort as the profile order's sql does: featured by position and newest, then views, followers, newest", () => {
+	const topicRows = [
+		toTeamTopicRow("unfeatured-old", { day: 1 }),
+		toTeamTopicRow("unfeatured-followed", { subscriberCount: 3 }),
+		toTeamTopicRow("featured-2", { profileOrder: 2 }),
+		toTeamTopicRow("unfeatured-viewed", { viewerCount: 9 }),
+		toTeamTopicRow("featured-1-old", { profileOrder: 1, day: 1 }),
+		toTeamTopicRow("featured-1-new", { profileOrder: 1, day: 5 }),
+		toTeamTopicRow("unfeatured-new", { day: 7 }),
+	]
+	expect(topicRows.toSorted(compareTeamTopicProfileOrder).map((topicRow) => topicRow.id)).toEqual([
+		"featured-1-new",
+		"featured-1-old",
+		"featured-2",
+		"unfeatured-viewed",
+		"unfeatured-followed",
+		"unfeatured-new",
+		"unfeatured-old",
+	])
 })
 
 test("with nothing featured, each topic shows its first podcast episode read", () => {
@@ -269,7 +304,7 @@ test("a visitor reads a person's published Topic Posts of public topics alone, a
 
 test("a team's Topic Post cards read the published posts of its topics once, in the profile order, with no limit", async () => {
 	const sentQueries = stubConnectionPool(() => [])
-	await loadTeamCards(["topic-a", "topic-b"], "user-1")
+	await loadTeamCards(TEAM_TOPIC_ROWS, "user-1")
 
 	// one read of the posts among the queries sent
 	const topicPostReads = sentQueries.filter(({ text }) => text.includes('from "topic_posts"'))
@@ -350,7 +385,7 @@ test("a team's Topic Post cards are every post read, in the order read, from one
 	)
 
 	// all four posts in the order read
-	const { topicPostCards } = await loadTeamCards(["topic-a", "topic-b"], "user-1")
+	const { topicPostCards } = await loadTeamCards(TEAM_TOPIC_ROWS, "user-1")
 	expect(topicPostCards.map((topicPostCard) => topicPostCard.id)).toEqual([
 		"post-a-featured",
 		"post-a-new",

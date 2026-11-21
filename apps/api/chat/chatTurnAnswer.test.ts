@@ -1,14 +1,16 @@
 // a private chat turn's reservation: a turn is rejected before any model call once the spend and open reservations
 // reach the budget, a reply that never starts releases its reservation, and a streamed reply takes the reservation
-// along. a turn with a file that was not read responds with why before anything is reserved. a new-topic draft keeps
-// a team only if the user leads it, under the team's saved name
+// along. the headers are sent before the retrieval. a turn with a file that was not read responds with why before
+// anything is reserved. a new-topic draft keeps a team only if the user leads it, under the team's saved name
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
+import { toChatReplyLineText } from "@carlnotes/contracts/chatTurns"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
 import * as litellm from "@carlnotes/models/litellm"
 import * as spendReservations from "@carlnotes/models/spendReservations"
 import { stubReservedUserSpend } from "@carlnotes/models/spendReservationTestFixtures"
 import { AttachmentValidationError } from "@carlnotes/pipeline/attachContentType"
 import * as attachExtraction from "@carlnotes/pipeline/attachExtraction"
+import type { ChatReplyStream } from "@carlnotes/pipeline/chat/index"
 import * as chat from "@carlnotes/pipeline/chat/index"
 import * as analytics from "@carlnotes/server/analytics"
 import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
@@ -16,6 +18,7 @@ import { toJsonRequest, toSignedInApp } from "../testSession"
 import { toLeaderTeam } from "./chatTurnAnswer"
 import * as chatTurnAuthorization from "./chatTurnAuthorization"
 import * as chatTurnStream from "./chatTurnStream"
+import * as chatTurns from "./chatTurns"
 import { privateChatRoute } from "./privateChat"
 
 // user-1 may chat on topic-1 as a persisted chat turn that may not edit the topic, over a fake Redis
@@ -79,10 +82,13 @@ test("a reply that never starts releases its reservation, and a streamed reply t
 	const { reservation } = stubReservedUserSpend()
 	spyOn(litellm, "loadOrProvisionUserLiteLLMKey").mockResolvedValue("sk-user")
 	spyOn(console, "error").mockImplementation(() => {})
+	quietErrorReports()
 
-	// a reply whose context read fails releases the reservation before the error reaches the route
+	// a reply whose context read fails closes its stream with the failed line and releases the reservation
 	const streamChatReplySpy = spyOn(chat, "streamChatReply").mockRejectedValue(new Error("retrieval failed"))
-	expect((await postTopicChatTurn("what changed this week?")).status).toBe(500)
+	const failedResponse = await postTopicChatTurn("what changed this week?")
+	expect(failedResponse.status).toBe(200)
+	expect(await failedResponse.text()).toBe(`${chatTurnStream.OPENING_LINE}${toChatReplyLineText({ type: "failed" })}`)
 	expect(reservation.release).toHaveBeenCalledTimes(1)
 
 	// a reply that streams hands its reservation to the stream instead of releasing it here
@@ -91,6 +97,36 @@ test("a reply that never starts releases its reservation, and a streamed reply t
 	expect((await postTopicChatTurn("and last week?")).status).toBe(200)
 	expect(reservation.release).toHaveBeenCalledTimes(1)
 	expect(streamChatTurnSpy.mock.calls[0]?.[1].reservation).toBe(reservation)
+})
+
+// a chat turn's headers reach the client before its retrieval returns, so a slow embedding is a slow first word
+test("a chat turn sends its headers before retrieval, and streams the reply once retrieval ends", async () => {
+	// every turn reserves, and the retrieval waits until the test lets it return
+	stubReservedUserSpend()
+	spyOn(litellm, "loadOrProvisionUserLiteLLMKey").mockResolvedValue("sk-user")
+	spyOn(chatTurns, "saveChatTurn").mockResolvedValue(null)
+	let finishRetrieval: (chatReply: ChatReplyStream) => void = () => {}
+	spyOn(chat, "streamChatReply").mockReturnValue(
+		new Promise<ChatReplyStream>((resolve) => {
+			finishRetrieval = resolve
+		}),
+	)
+
+	// the response arrives while the retrieval is still running
+	const response = await postTopicChatTurn("what changed this week?")
+	expect(response.status).toBe(200)
+
+	// the reply streams once the retrieval returns
+	async function* replyParts(): AsyncGenerator<{ type: "text"; text: string }> {
+		yield { type: "text", text: "Two new papers." }
+	}
+	finishRetrieval({
+		replyParts: replyParts(),
+		completion: Promise.resolve({ text: "Two new papers.", totalTokens: 5, searchCount: 0, toolCalls: [] }),
+	})
+	expect(await response.text()).toBe(
+		`${chatTurnStream.OPENING_LINE}${toChatReplyLineText({ type: "text", text: "Two new papers." })}`,
+	)
 })
 
 // a PDF as a chat turn sends it. the read of its text is stubbed, so its bytes are never parsed

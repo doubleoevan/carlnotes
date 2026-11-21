@@ -23,16 +23,14 @@ import {
 	toDashboardSummaryRowFilter,
 } from "@carlnotes/db/dashboardSnapshotRows"
 import { dashboardSnapshots } from "@carlnotes/db/schema/dashboards"
-import { users } from "@carlnotes/db/schema/users"
-import { eq } from "drizzle-orm"
-import { toProfileIdentity } from "../avatars"
+import { loadUserAvatarRow, toProfileIdentity } from "../avatars"
 import { loadTeamPageAccess } from "../team/teamPageAccess"
 
 // how much a user or visitor may read of a Dashboard, and whose Dashboard it is
-type DashboardAccess = { readAccess: DashboardReadAccess; subject: DashboardSubjectIdentity }
+export type DashboardAccess = { readAccess: DashboardReadAccess; subject: DashboardSubjectIdentity }
 
 // a Dashboard's read without its subject
-type DashboardSnapshotRead = Omit<DashboardResponse, "subject">
+export type DashboardSnapshotRead = Omit<DashboardResponse, "subject">
 
 // the Dashboard, the selection its charts asked for, and how much the user or visitor may read
 type LoadDashboardOptions = {
@@ -55,18 +53,10 @@ export async function loadDashboardAccess({
 	subjectId,
 }: LoadDashboardAccessOptions): Promise<DashboardAccess | null> {
 	if (dashboardKind !== "teamDashboard") {
-		const [userRow] = await db
-			.select({
-				userId: users.id,
-				username: users.username,
-				avatarSource: users.avatarSource,
-				avatarKey: users.avatarKey,
-			})
-			.from(users)
-			.where(eq(users.id, subjectId))
+		const userRow = await loadUserAvatarRow(subjectId)
 
 		// the person reads all of their own Dashboards, and everyone else the public part
-		const user = toProfileIdentity(userRow ?? null)
+		const user = toProfileIdentity(userRow ? { ...userRow, userId: userRow.id } : null)
 		if (!user) {
 			return null
 		}

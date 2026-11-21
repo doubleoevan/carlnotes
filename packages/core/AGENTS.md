@@ -88,7 +88,11 @@ the in-place section fixtures. Personal sources stay outside the fetched Source 
   news list's window, page, and open state, which a change of the profile's audience resets, `useUpdatesRecap.ts`,
   the day's recap above the user's own news, and the person's recap for an admin on their profile, and
   `useProfileAudience.ts`, the audience an admin shows someone else's profile to, the user or a visitor;
-  `useYourTopicsPages.ts`, the home's Your topics five to a page, the first from the home payload;
+  `useServerPagedCards.ts`, a card section the server pages six cards at a time: the page read's page, every page a
+  visible page button opens read ahead, and the page shown kept until the page asked for loads, which the home's Your
+  topics and new sections and a topic's, a profile's, and a team's Topic Posts share. A section with shorter pages
+  than the server's names both sizes and slices each page from the server page that holds it, as the scan history's
+  five-scan pages do over `lib/topicScanPages.ts`, and `loadingPage` names a page while it loads;
   `useUserBlocks.ts`, the user's user block list and the unblock that shortens the list once the server
   accepts; `useNow.ts`, the current time re-read on a tick for relative labels, one clock per list; `useAvatar.ts`, the
   avatar setting read from the session and updated through it; `useUsernameChange.ts`, changing the signed-in user's
@@ -103,47 +107,51 @@ the in-place section fixtures. Personal sources stay outside the fetched Source 
   invitations while the app is focused and online, which reloads the chat rooms into the store when the count changes
   and drops a response from a replaced account; and `usePolledCounts.ts`, a page's viewer, follower, or listener counts
   read once the page shows and then every minute while the app is focused and online.
-- `lib/` — pure rules and formatting: `dashboardCharts.ts` (the Dashboard charts' contract: the five charts, their
-  controls, the renderer props, and a point's detail lines), `dashboardMapPins.ts` (the map's box, center, and zoom
-  padding, and its pins: nearby places grouped at a zoom, each pin's size, label, and point, and the box a click zooms
-  to), `groupBy.ts` (values grouped by a key in a loop. Hermes has no `Map.groupBy`), `dashboardCounts.ts` (a chart's
-  views or plays, split into podcast and film plays, and their sums), `wordCloud.ts` (the word cloud's words and spiral
-  layout, which both apps draw, and the title words the snapshots count), `dashboardStories.ts` (the Dashboard story
-  fixtures), `reportCopy.ts` (the report dialog's words on both apps), `confirmElement.ts` (the props of a confirmation
-  dialog), `confirmationCopy.ts` (the words of each one), `labels.ts` (values as the text a user sees: dates, durations,
-  money, sizes, and counts), `pageHead.ts` (a `PageHead`, or a fixed title and path, as the tags a route's `head()`
-  returns), `paginationSlots.ts` (the slots a row of page links shows), `worstCaseMonthlySpend.ts` (the admin console's
-  worst case free-plan spend for the UTC month at a daily signup rate, the rates its table compares, and the daily
-  signup average of the past days), `planCards.ts` (which plan card matches the user's plan and billing interval, and
-  which badge shows), `streamReconnect.ts` (how long a silent SSE stream runs before it counts as dropped and the wait
-  before reopening it, for the chat room stream), `topicFindingFilters.ts` and `topicFindingSorts.ts` (which findings a
-  feed view shows and in what order), `topicSorts.ts` (the Topics page's topic order under Trending: viewers, then
-  followers, then the newest finding, with Home topics kept in its own order), `topicPromptUrls.ts` (the urls written
-  inside a topic prompt), `emailProviders.ts` (the webmail compose urls an invite is given), `chromeIntentUrl.ts` (the
-  page as an Android intent url that opens it in Chrome, out of an embedded webview), `pushCopy.ts` (the push permission
-  sheet's and the Notifications section's words), `sessionCopy.ts` (the lines the sign-in, sign-out, sign-up, and
-  close-account controls say, shared by the web and the mobile app), `signupPrompts.ts` (the prompt each account action
-  shows a visitor on the sign-up page, and the lookup by cta tag), `inviteRejections.ts` (what an invite page says while
-  it checks a token, if the check fails, and for each way a token is rejected), `updateCounts.ts` (one badge's count
-  summing chat mentions, note changes, and topic invitations, its accessible labels, and the groups a tooltip or a
-  long-press sheet lists), `updateBadgePoll.ts` (the poll behind `useUpdateBadges`, on `activePoll.ts`), `countsPoll.ts`
-  (the poll behind `usePolledCounts`, on `activePoll.ts`), `focusAndOnline.ts` (whether the app is focused and online
-  through Query's adapters, and how a poll subscribes to a change), `limitedPoll.ts` (a poll on `activePoll.ts` that
-  reads on an interval while the app is focused and online and stops at a time limit, behind the Topic Post discussion
+- `lib/` — pure rules and formatting: `pageReads.ts` (a topic's and a podcast episode's page read as the page's
+  result, and the counts a page was read with, which its counts poll shows first), `pageUserStates.ts` (merges the user
+  state into a shared profile, team page, or Topic Post read, which web and mobile both call), `dashboardCharts.ts` (the
+  Dashboard charts' contract: the five charts, their controls, the renderer props, and a point's detail lines),
+  `dashboardMapPins.ts` (the map's box, center, and zoom padding, and its pins: nearby places grouped at a zoom, each
+  pin's size, label, and point, and the box a click zooms to), `groupBy.ts` (values grouped by a key in a loop. Hermes
+  has no `Map.groupBy`), `dashboardCounts.ts` (a chart's views or plays, split into podcast and film plays, and their
+  sums), `wordCloud.ts` (the word cloud's words and spiral layout, which both apps draw, and the title words the
+  snapshots count), `dashboardStories.ts` (the Dashboard story fixtures), `reportCopy.ts` (the report dialog's words on
+  both apps), `confirmElement.ts` (the props of a confirmation dialog), `confirmationCopy.ts` (the words of each one),
+  `labels.ts` (values as the text a user sees: dates, durations, money, sizes, and counts), `pageHead.ts` (a `PageHead`,
+  or a fixed title and path, as the tags a route's `head()` returns), `paginationSlots.ts` (the slots a row of page
+  links shows), `worstCaseMonthlySpend.ts` (the admin console's worst case free-plan spend for the UTC month at a daily
+  signup rate, the rates its table compares, and the daily signup average of the past days), `planCards.ts` (which plan
+  card matches the user's plan and billing interval, and which badge shows), `streamReconnect.ts` (how long a silent SSE
+  stream runs before it counts as dropped and the wait before reopening it, for the chat room stream),
+  `topicFindingFilters.ts` and `topicFindingSorts.ts` (which findings a feed view shows and in what order),
+  `topicSorts.ts` (the Topics page's topic order under Trending: viewers, then followers, then the newest finding, with
+  Home topics kept in its own order), `topicPromptUrls.ts` (the urls written inside a topic prompt), `emailProviders.ts`
+  (the webmail compose urls an invite is given), `chromeIntentUrl.ts` (the page as an Android intent url that opens it
+  in Chrome, out of an embedded webview), `pushCopy.ts` (the push permission sheet's and the Notifications section's
+  words), `sessionCopy.ts` (the lines the sign-in, sign-out, sign-up, and close-account controls say, shared by the web
+  and the mobile app), `signupPrompts.ts` (the prompt each account action shows a visitor on the sign-up page, and the
+  lookup by cta tag), `inviteRejections.ts` (what an invite page says while it checks a token, if the check fails, and
+  for each way a token is rejected), `updateCounts.ts` (one badge's count summing chat mentions, note changes, and topic
+  invitations, its accessible labels, and the groups a tooltip or a long-press sheet lists), `updateBadgePoll.ts` (the
+  poll behind `useUpdateBadges`, on `activePoll.ts`), `countsPoll.ts` (the poll behind `usePolledCounts`, on
+  `activePoll.ts`), `focusAndOnline.ts` (whether the app is focused and online through Query's adapters, and how a poll
+  subscribes to a change), `limitedPoll.ts` (a poll on `activePoll.ts` that reads on an interval while the app is
+  focused and online and stops at a time limit, with what follows the limit, behind the linked recording poll and the
+  image render poll), `statusPoll.ts` (a poll on `limitedPoll.ts` that reads a status read in place of its page and
+  reads the page once the status leaves in progress, stopped by a failed status read, behind the Topic Post discussion
   poll and the film rendering poll), `topicGateCopy.ts` (the invite-only gate's words), `podcastEpisodeCopy.ts` (the
   words shown if a podcast episode fails to load or play, the lines shown while it records and while its film renders,
-  and the film section's title on the topic page and the podcast episode page), `topicVideoDisplay.ts`
-  (what a film section shows for a podcast episode: the film player for a ready film, the rendering card while its film
-  renders, or nothing), and
-  `voiceRecordingDecisions.ts` (what the voice recorder decides from each frame, with the `SilenceThresholdSettings`
-  type and the browser's default settings), `voiceRecordingRules.ts` (the mic's visibility, the recording timer, the
-  reopened recording's rejection, and the meter's callback), `voiceRecorder.ts` (the recorder adapter each app supplies:
-  the session a tap opens, the start, the recording's delete, the rejected microphone's action, and the background
-  listener), `spokenAnswerPlayer.ts` (the spoken answer player adapter each app supplies), and
-  `spokenQuestionsPaused.ts` (the mic's action past the spoken questions cutoff, and the plans page's upgrade lines),
-  and `storefrontPurchaseRules.ts` (whether a user may buy a plan and where a paid plan is managed, from the platform,
-  the store's offering, and the user's plan and billing provider, with each place's label). `sessionCopy.ts` also holds
-  the closing copy for a store subscriber, whose plan keeps billing through the store.
+  and the film section's title on the topic page and the podcast episode page), `topicVideoDisplay.ts` (what a film
+  section shows for a podcast episode: the film player for a ready film, the rendering card while its film renders, or
+  nothing), and `voiceRecordingDecisions.ts` (what the voice recorder decides from each frame, with the
+  `SilenceThresholdSettings` type and the browser's default settings), `voiceRecordingRules.ts` (the mic's visibility,
+  the recording timer, the reopened recording's rejection, and the meter's callback), `voiceRecorder.ts` (the recorder
+  adapter each app supplies: the session a tap opens, the start, the recording's delete, the rejected microphone's
+  action, and the background listener), `spokenAnswerPlayer.ts` (the spoken answer player adapter each app supplies),
+  and `spokenQuestionsPaused.ts` (the mic's action past the spoken questions cutoff, and the plans page's upgrade
+  lines), and `storefrontPurchaseRules.ts` (whether a user may buy a plan and where a paid plan is managed, from the
+  platform, the store's offering, and the user's plan and billing provider, with each place's label). `sessionCopy.ts`
+  also holds the closing copy for a store subscriber, whose plan keeps billing through the store.
 - Imports: `@carlnotes/contracts`, `@carlnotes/client`, `@carlnotes/nightshift`, `react`, and `@tanstack/react-query`.
   Never a server package or an app. Universal: the root rule. A module that needs a DOM type is a web module and lives
   in `apps/web/src`.
@@ -177,7 +185,8 @@ spoken answer, and `useChatRoomSpokenAnswer`, which `useChatRoom` calls, speaks 
 room message, once. `useSpokenAnswerButton` is the play button's state and its tap, and
 `usePodcastEpisodeQuestionButton` the podcast player mic's state and its tap. The `useVoiceRecording` and
 `useListenMode` tests run in `apps/web/src/components/chat/sharedVoiceHooks.test.tsx` on the web's hook harness, with
-the notices they collect and the wait for the spoken answer queue in `stores/voiceTestFixtures.ts`.
+the notices they collect and the wait for the spoken answer queue in `stores/voiceTestFixtures.ts`. The poll tests in
+core and on the web share the read settle and the fake clock's advance by poll intervals in `lib/pollTestFixtures.ts`.
 `useChatRoomSpokenAnswer.test.ts` sits beside its hook, and the button hooks are tested through each app's
 `SpokenAnswerButton` and `PodcastEpisodeQuestionControls` tests.
 `useEditableTopicDraft` reads authoritative settings and overlays proposed changes.
@@ -255,15 +264,24 @@ order and metadata while applying the same Finding edits across loaded pages. `l
 section, sort, view, tag, and empty-state labels, plus the Finding-view menu options and Team bookmark scopes.
 `lib/topicTutorialVideo.ts` owns tutorial openers, event properties, and first-play recording. `lib/activePoll.ts`
 serializes requests while an app-supplied activity predicate is true. `lib/scanPoll.ts` supplies the scan backoff shared
-by both clients and `toPolledTopicPage`, which keeps the related Topics, reactions, and comment thread that a poll
-response leaves out. `lib/topicSchedule.ts` owns schedule options, daily-slot permission, and allowance copy shared by
+by both clients, the watched rates of a user who may not scan (10 seconds, then 30 after two minutes),
+`isPodcastEpisodePending`, `createTopicScanStatusReload`, which reads the Topic's scan status each tick and the topic
+page only if the status or its counts changed, at most twice for one status, and `toPolledTopicPage`, which keeps the
+related Topics, reactions, and comment thread that a poll response leaves out. `hooks/useTopicScanStatusPoll.ts` gives
+both apps' scan buttons that reload and the rates for their user.
+`lib/topicSchedule.ts` owns schedule options, daily-slot permission, and allowance copy shared by
 both Topic forms. `lib/pageViews.ts` sends one view per Topic, profile, or team per web tab or native app runtime,
 shared by both apps' Topic, profile, and team screens. `components/ViewerCountLine` reads a profile's or a team's viewer
 count on the counts poll and shows it as Visitors through each app's line and count elements. `lib/cardSections.ts`
 names the card and the key of a Topic, Podcast Episode, film, or Topic Post card section, the three Featured titles a
 profile and a team share, and a team page's four card sections, Featured Films right before Featured Podcasts, and
 `components/CardsSection` renders one section of cards, paged or whole, through each app's section, grid, and page
-buttons. `lib/profileSections.ts` holds a profile's four Featured sections, Featured Films right before Featured
+buttons. A section given `serverPages` pages through `hooks/useServerPagedCards`, and one whose `CardSection` names a
+`pageSearchKey` passes it to the page buttons, which the web renders as links to each page's url.
+`toTeamTopicPostCardPages`, `toTopicTopicPostCardPages`, and `toTopicPostsPageOptions` in `lib/cardSections.ts` and
+`toProfileTopicPostCardPages` in `lib/profileSections.ts` build a team's, a topic's, and a profile's Topic Post pages,
+and `components/TopicPostsSection` takes a topic's. `lib/profileSections.ts` holds a profile's
+four Featured sections, Featured Films right before Featured
 Podcasts and Featured Posts last with every post of the person, the rows of its rank dialogs for topics, films,
 podcasts, and posts, whose featured items have no limit, the send of their moves, and which of them the action menu offers.
 `lib/rankDialog.ts` holds a rank dialog's rows, a Topic Post as a row, the moves, and the words for the home's featured items and
@@ -405,16 +423,17 @@ show before the film is loaded, and their presses go through `skipTopicVideoBy` 
 start a film that is not loaded. `stores/podcastEpisodePlayerState` keeps snapshots and subscriptions separate from
 playback commands. Progress ticks notify position readers; chapter changes also notify controls. The player store
 re-exports them. `hooks/useShownPodcastEpisode` selects the Topic's shown episode and polls a linked recording without
-autoplay. Its lifecycle tests use the web's DOM hook harness; its selection rules and player state tests run in core.
+autoplay, every 5 seconds on `limitedPoll.ts`, paused in the background, for at most an hour.
+Its lifecycle tests use the web's DOM hook harness; its selection rules and player state tests run in core.
 `components/UnpublishedPodcastEpisodeCard` draws three states in one frame: a recording podcast episode, a failed one
 with the permitted scan control, and, with `isVideoRendering`, a published podcast episode whose film is rendering. Each
 app's `ProgressLine` element draws the shimmering line after its emoji, with the words from `lib/podcastEpisodeCopy.ts`.
 `components/TopicVideoSection` shows the topic's films, `topicPodcastEpisodeVideoCards` from the topic read, through
 `PagedCardsSection` and its `FilmCard` element. While the topic's latest film renders, its `RenderingLine` element draws
 the filming line as the section's action, which each app puts in the title row, or alone for a topic with no ready
-film. `hooks/useTopicVideoRenderingPoll` reads the page
-again every 30 seconds while the app is focused and online, for at most four hours, and the new film's card joins the
-others once it is ready.
+film. `hooks/useTopicVideoRenderingPoll` reads the film's status every 30 seconds while the app is focused and online
+and the poll is enabled, for at most four hours, also for the newer film while the section shows an older one. It reads
+the page once the status leaves rendering, through the page's own reload, and the new film's card joins the others.
 
 
 Podcast presentation is shared as actual React composition under `components/`: `PodcastEpisodePlayerCard`,
@@ -531,11 +550,14 @@ the editor's image block for a topic or a podcast episode (Regenerate with an im
 image), each app supplying its elements and its file picker. It shows `UNCHECKED_IMAGE_TEXT` through its `Line` element
 while its image is unchecked, from the page read's flag and after an unchecked upload, cleared if a regenerate starts.
 `lib/uncheckedImageCopy.ts` has that line and the unchecked avatar's. `hooks/useTopicImageRender` polls a render until
-it finishes. `lib/topicImageEditor` holds the block's labels, the image dialogs' titles, the count line, and the upload
+it finishes, on `limitedPoll.ts`, paused in the background, and settles it as failed at twenty minutes.
+`lib/topicImageEditor` holds the block's labels, the image dialogs' titles, the count line, and the upload
 check. `hooks/usePodcastEpisodeFields` is the Edit podcast form's title, description, and save, and
 `lib/podcastEpisodeEditor` its labels and the podcast episode's image as the block edits it. `lib/homeFaces` holds the
 home's sections in the order both homes show them, each week's new cards right after their Featured cards, the three
-steps, and the empty payload. `lib/sectionOrder.test.ts` fails if a film section leaves its place right before the
+steps, the empty payload, the url keys of the new sections' pages, the options of a home read that pages them, and the
+server pages of the new sections and of Your topics. `lib/sectionOrder.test.ts` fails if a film section leaves its place
+right before the
 podcast section it pairs with, on the home or either app's profile, team, or topic page, if `HOME_SECTIONS` or either
 app's home leaves the home's order, if a profile page writes a second Topic Post section, or if a team page's card
 sections leave a profile's titles and order. It reads the profile's and the team's sections in
@@ -584,8 +606,10 @@ page, with the shared podcast play button, the line from `lib/topicPostDiscussio
 for whoever may record it. The card's name opens and closes the recording's transcript, which starts closed:
 `toTopicPostDiscussionTranscript` returns the turns of a recording that plays, and
 `components/PodcastEpisodeTranscriptTurns` lists them, each after its speaker's name, as it lists a podcast episode
-transcript's. `hooks/useTopicPostDiscussion.ts` holds the form, starts a recording, and reads the post
-again while one records. A discussion plays in the shared podcast player as a `PodcastEpisode` built by
+transcript's. `hooks/useTopicPostDiscussion.ts` holds the form, starts a recording, and while one records reads the
+discussion's status through the read the page passes, `toTopicPostDiscussionStatusRead` in
+`lib/topicPostDiscussions.ts`, and the post once the status leaves recording. A card without the read, such as an MCP
+view's, does not poll. A discussion plays in the shared podcast player as a `PodcastEpisode` built by
 `toTopicPostDiscussionPodcastEpisode` in contracts: `stores/podcastEpisodeListenStore.ts` saves no progress for it,
 and `stores/podcastEpisodePlayerStore.ts` plays nothing after it. `TopicPostPage` places the card between the header
 and the body, and passes its title the app's `MentionBadge` element while the reader has an unseen Comment Mention

@@ -1,4 +1,3 @@
-import type { PageHead } from "@carlnotes/contracts/pageHead"
 import { DEGRADED_RENDER_HEADER } from "@carlnotes/contracts/seo"
 import { createIsomorphicFn } from "@tanstack/react-start"
 
@@ -9,24 +8,12 @@ export function loadOnServer<T>(readServerValue: () => Promise<T>, browserValue:
 	return typeof window === "undefined" ? readServerValue() : Promise.resolve(browserValue)
 }
 
-// the two reads of one page, its head and its page data
-type LoadPageOnServerOptions<TPage> = {
-	fetchPageHead: () => Promise<PageHead | null>
-	fetchPage: () => Promise<TPage>
-}
-
 /**
- * Reads a page's head and page data on the server. The head is null for a page the api does not have, and undefined if its read fails.
- * The page is null if its read fails. In the browser loadPageOnServer returns an undefined head and a null page at once.
+ * Runs a page read on the server only, and returns undefined in the browser or for a read that fails, which marks the
+ * render degraded.
  */
-export function loadPageOnServer<TPage>({
-	fetchPageHead,
-	fetchPage,
-}: LoadPageOnServerOptions<TPage>): Promise<[PageHead | null | undefined, TPage | null]> {
-	return loadOnServer<[PageHead | null | undefined, TPage | null]>(
-		() => Promise.all([readWithDegradedFallback(fetchPageHead, undefined), readWithDegradedFallback(fetchPage, null)]),
-		[undefined, null],
-	)
+export function loadPageReadOnServer<T>(read: () => Promise<T>): Promise<T | undefined> {
+	return loadOnServer(() => readWithDegradedFallback(read, undefined), undefined)
 }
 
 /**
