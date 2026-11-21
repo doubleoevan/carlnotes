@@ -1,7 +1,7 @@
-// the mobile app's uniwind.css, written from the source. it holds the radius steps, the raised shadow, and every mapped
-// color name with each mode's resolved value
+// the mobile app's uniwind.css, written from the source. it holds the radius steps, the raised shadow, the card glow,
+// and every mapped color name with each mode's resolved value
 import { type ColorMode, type ColorName, colors, toColorChannels } from "./colors"
-import { toRaisedShadowUtilityCss } from "./elevation"
+import { toCardGlowPropertyLine, toCardGlowUtilityCss, toRaisedShadowUtilityCss } from "./elevation"
 import { type RadiusStep, radiusSteps, toRadiusPixels } from "./radius"
 import { extraThemeColorNames, shadcnThemeColorNames, toKebabName } from "./theme"
 import { fontFamilies } from "./typography"
@@ -11,11 +11,18 @@ const FILE_HEADER = `/* the mobile design tokens, written by scripts/write-night
    token in the source and run bun run nightshift:write, never this file */`
 
 /**
- * Returns uniwind.css as the token writer writes it: the radius steps in a @theme block, the raised shadow's utility,
- * and each mode's resolved color values in its own @variant block.
+ * Returns uniwind.css as the token writer writes it: the radius steps in a @theme block, the raised shadow's and the
+ * card glow's utilities, and each mode's resolved color values and card glow in its own @variant block.
  */
 export function toUniwindCss(): string {
-	return `${[FILE_HEADER, toRadiusThemeBlock(), toRaisedShadowUtilityCss(), toColorModesBlock()].join("\n\n")}\n`
+	const blocks = [
+		FILE_HEADER,
+		toRadiusThemeBlock(),
+		toRaisedShadowUtilityCss(),
+		toCardGlowUtilityCss(),
+		toColorModesBlock(),
+	]
+	return `${blocks.join("\n\n")}\n`
 }
 
 // the @theme block: each radius step resolved to pixels. a native app has no root font size for the web's calc form
@@ -38,12 +45,18 @@ function toColorModesBlock(): string {
 	return ["@layer theme {", "\t:root {", variantBlocks.join("\n\n"), "\t}", "}"].join("\n")
 }
 
-// one mode's @variant block: the shadcn semantic names, then the CarlNotes extras. every value is resolved
+// one mode's @variant block: the shadcn semantic names, the CarlNotes extras, and the card glow. every value is
+// resolved
 function toVariantBlock(mode: ColorMode): string {
 	const colorLines = [...shadcnThemeColorNames, ...extraThemeColorNames].map((colorName) =>
 		toColorLine({ colorName, mode }),
 	)
-	return [`\t\t@variant ${mode} {`, ...colorLines, "\t\t}"].join("\n")
+	return [
+		`\t\t@variant ${mode} {`,
+		...colorLines,
+		`\t\t\t${toCardGlowPropertyLine({ mode, isResolved: true })}`,
+		"\t\t}",
+	].join("\n")
 }
 
 // one color variable's options: the mapped name, and the mode whose value it writes

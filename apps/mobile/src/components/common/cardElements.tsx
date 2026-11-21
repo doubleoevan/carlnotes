@@ -1,5 +1,6 @@
 // the native elements a topic card, a podcast episode card, and a Topic Post card share: one pressable link around
-// the card, the topic image at the page size, a text row, the reaction count, and the heading over the card's text
+// the card that glows while pressed, the topic image at the page size, a text row, the reaction count, and the heading
+// over the card's text
 import type { CardElements } from "@carlnotes/core/components/cardElements"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Heart } from "lucide-react-native"
@@ -15,7 +16,12 @@ import { toTypeRoleStyle } from "@/typeRoleStyles"
 // the heading is a function component, which a card's name or title element type takes with the link props it ignores
 export const CARD_ELEMENTS: CardElements & { Heading: FunctionComponent<{ children: string }> } = {
 	Card: ({ path, label, className, onOpen, children }) => (
-		<AnchorLink href={path} accessibilityLabel={label} onPress={onOpen} className={cn(className, "active:opacity-75")}>
+		<AnchorLink
+			href={path}
+			accessibilityLabel={label}
+			onPress={onOpen}
+			className={cn(className, "active:shadow-card-glow")}
+		>
 			{children}
 		</AnchorLink>
 	),

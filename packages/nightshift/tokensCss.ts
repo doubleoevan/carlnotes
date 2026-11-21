@@ -1,7 +1,7 @@
 // the web app's tokens.css, written from the source: the Tailwind theme, the raised shadow, Latte on :root, and Dark
-// roast under .dark
+// roast under .dark, each with its card glow
 import { type ColorMode, type ColorName, colors } from "./colors"
-import { toRaisedShadowUtilityCss } from "./elevation"
+import { toCardGlowPropertyLine, toRaisedShadowUtilityCss } from "./elevation"
 import { BASE_RADIUS_REM, type RadiusStep, radiusSteps, toRadiusCssValue } from "./radius"
 import { extraThemeColorNames, shadcnThemeColorNames, toKebabName } from "./theme"
 import { fontFamilies } from "./typography"
@@ -52,7 +52,7 @@ function toRadiusLine(radiusStep: RadiusStep): string {
 }
 
 // one mode's custom properties: Latte on :root with each token's description and the base radius, and Dark roast
-// under .dark
+// under .dark, each with its card glow
 function toPaletteBlock(mode: ColorMode): string {
 	// light mode describes each token once, beside its value
 	const isLight = mode === "light"
@@ -64,5 +64,7 @@ function toPaletteBlock(mode: ColorMode): string {
 	// the block, under its mode's selector
 	const header = isLight ? "/* Latte, light mode */\n:root {" : "/* Dark roast, dark mode */\n.dark {"
 	const radiusLines = isLight ? [`\t--radius: ${BASE_RADIUS_REM}rem;`] : []
-	return [header, ...radiusLines, ...colorLines, "}"].join("\n")
+	return [header, ...radiusLines, ...colorLines, `\t${toCardGlowPropertyLine({ mode, isResolved: false })}`, "}"].join(
+		"\n",
+	)
 }

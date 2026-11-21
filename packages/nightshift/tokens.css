@@ -132,6 +132,7 @@
 	--syntax-number: #7a3f86;
 	/* a function, a type, or a built-in name in a Topic Post's code block */
 	--syntax-function: #1d5a73;
+	--card-glow-shadow: 0px 0px 0px 1px color-mix(in oklab, var(--primary) 35%, transparent), 0px 0px 36px 6px color-mix(in oklab, var(--primary) 88%, black);
 }
 
 /* Dark roast, dark mode */
@@ -173,4 +174,5 @@
 	--syntax-comment: #d0c3a6;
 	--syntax-number: #e8c2f5;
 	--syntax-function: #a3dcef;
+	--card-glow-shadow: 0px 0px 0px 1px color-mix(in oklab, var(--primary) 55%, transparent), 0px 0px 28px -4px color-mix(in oklab, var(--primary) 65%, transparent);
 }

@@ -20,9 +20,13 @@ read, and the component contracts both apps' implementations build on. `tokens.c
   such as "0.625rem, 10px". `breakpoints.ts` — `MD_BREAKPOINT_REM`, Tailwind's `md` breakpoint, for code that reads
   a screen width outside a class.
 - `elevation.ts` — the raised shadow, the one elevation, as its two shadows, and `toRaisedShadowUtilityCss`, the
-  `shadow-raised` utility both stylesheets hold. `classNames.ts` — `cn`, the class merge both apps build classes with:
-  clsx inside a tailwind-merge taught that `shadow-raised` is a shadow. The package exports it by name as well as
-  through the wildcard. The shadcn CLI resolves a `components.json` alias only through an exact export.
+  `shadow-raised` utility both stylesheets hold. Beside it, a card link's glow in each mode, the primary ring and halo
+  that `--card-glow-shadow` holds in both stylesheets: `tokens.css` mixes the live primary color and `uniwind.css` holds
+  the mixes resolved to hex. The web card shows it under the pointer, a focus, or a finger, and the mobile card shows it
+  through `shadow-card-glow` while pressed. `classNames.ts` — `cn`, the class merge both
+  apps build classes with: clsx inside a tailwind-merge taught that `shadow-raised` and `shadow-card-glow` are shadows.
+  The package exports it by name as well as through the wildcard. The shadcn CLI resolves a `components.json` alias only
+  through an exact export.
 - `chartTheme.ts` — the Nightshift chart theme: `toChartTheme`, the ECharts theme the Dashboard charts draw with,
   `CHART_AXIS_LABEL_SIZE`, the axis label size both apps' charts share, and `toChartSeriesColors`, the series colors.
   The theme is a plain object built from the color tokens and the body font in each mode, and the series colors come
@@ -74,10 +78,10 @@ read, and the component contracts both apps' implementations build on. `tokens.c
 - `mcpViewTokensCss.ts` — a pure function that returns the text of `mcpViewTokens.css`, the tokens an MCP view reads
   from the host's css variables, each with a Nightshift fallback.
 - `tokensCss.ts`, `uniwindCss.ts`, and `figmaTokens.ts` — pure functions that return the text of `tokens.css`, the text
-  of `uniwind.css` (the mobile theme: each mode's resolved values in a `@variant` block, the radius steps in pixels, and
-  the raised shadow's utility), and the Design Tokens Community Group 1.0 JSON for Figma, one file per mode, the raised
-  shadow as a `shadow` token. `writtenFiles.ts` returns each written file's text by its path, for the writer and
-  `tokens.test.ts`.
+  of `uniwind.css` (the mobile theme: each mode's resolved values and card glow in a `@variant` block, the radius steps
+  in pixels, and the raised shadow's and card glow's utilities), and the Design Tokens Community Group 1.0 JSON for
+  Figma, one file per mode, the raised shadow as a `shadow` token. `writtenFiles.ts` returns each written file's text by
+  its path, for the writer and `tokens.test.ts`.
 - Written files: `tokens.css`, which `apps/web/src/globals.css` imports, `mcpViewTokens.css`, which the MCP view entry
   imports, `uniwind.css`, which `apps/mobile/global.css` imports, and `figma/light.tokens.json` and
   `figma/dark.tokens.json`. Change the source, then run `bun run nightshift:write`
@@ -93,10 +97,10 @@ read, and the component contracts both apps' implementations build on. `tokens.c
 - Tests: `tokens.test.ts` fails if a written file differs from the source or a type role differs from the Tailwind
   values its classes give. `contrast.test.ts` fails if a text token reads under the WCAG AA 4.5:1 ratio on any surface
   the web app sets it on, in either mode. `colors.test.ts` checks that `toColorChannels` reads a hex or an rgba value
-  and throws an error for any other. `elevation.test.ts` checks the raised shadow's utility, `classNames.test.ts`
-  the class merge, `noteHtmlStyle.test.ts` that the note's headings take the type roles' sizes in bold, its colors
-  follow the palette, and its code block takes the medium radius, and `components/button.test.ts` that each Button
-  size's box classes draw its height.
+  and throws an error for any other. `elevation.test.ts` checks the raised shadow's utility and the light card glow in
+  both forms, `classNames.test.ts` the class merge, `noteHtmlStyle.test.ts` that the note's headings take the type
+  roles' sizes in bold, its colors follow the palette, and its code block takes the medium radius, and
+  `components/button.test.ts` that each Button size's box classes draw its height.
 - Dependencies: `class-variance-authority`, `clsx`, and `tailwind-merge`, all pure, so the package stays universal.
 
 `uniwindCss.ts` writes `--font-sans` and `--font-display` from `fontFamilies` alongside native theme tokens.
