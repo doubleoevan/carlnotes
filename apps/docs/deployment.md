@@ -273,7 +273,8 @@ Caching → Configuration:
 Caching → Tiered Cache: **Smart Tiered Cache Topology** on, so a miss in one data center asks an upper tier before the
 origin.
 
-Caching → Cache Rules, in this order. The last matching rule wins a conflict, so the bypass comes second.
+Caching → Cache Rules, in this order. The last matching rule wins a conflict, so the bypass comes second and the
+versioned public files come third.
 
 1. **Cache by the origin's headers**
    - Expression:
@@ -306,6 +307,25 @@ Caching → Cache Rules, in this order. The last matching rule wins a conflict, 
      `Authorization` clause keeps a bearer token's request from reading a visitor's stored copy. Confirm the rule
      editor accepts it, because a zone's plan limits which header fields a cache rule reads.
    - Cache eligibility: Bypass cache.
+3. **Cache versioned public files whatever the cookie**
+   - Expression:
+     ```
+     starts_with(http.request.uri.path, "/api/topic-images/")
+     or starts_with(http.request.uri.path, "/api/podcast-episode-images/")
+     or starts_with(http.request.uri.path, "/api/topic-podcast-episode-video-images/")
+     or starts_with(http.request.uri.path, "/api/topic-post-images/")
+     or starts_with(http.request.uri.path, "/api/topic-post-body-images/")
+     or starts_with(http.request.uri.path, "/api/avatars/")
+     or starts_with(http.request.uri.path, "/api/team-avatars/")
+     or starts_with(http.request.uri.path, "/api/favicons/")
+     or starts_with(http.request.uri.path, "/api/podcast-covers/")
+     or ends_with(http.request.uri.path, "/preview.png")
+     ```
+   - Cache eligibility: Eligible for cache.
+   - Edge TTL: Use cache-control header if present, bypass cache if not.
+   - It comes after the bypass, so it wins for these paths and a signed-in request reads the public file from the
+     edge. A private Topic's file is still never stored: the origin sends it `private`, and an account without access
+     gets a 404.
 
 The page reads are `/api/profiles/:userId/page`, `/api/topics/:id/page`,
 `/api/topics/:id/episodes/:season/:episodeNumber/page`, `/api/topic-posts/:id/page`, and `/api/teams/:id/page`. A
@@ -317,9 +337,9 @@ it to the expression above, which adds `/api/home`, the page reads, `/api/status
 and add the `Authorization` clause to rule 2. Until then `bun run check:edge` fails on each of those paths with
 `DYNAMIC`. Then set `PAGE_READS_EDGE_CACHED=true` in Doppler prd and restart the `app` and `web` services. Until the
 setting is on, every page read, status read, and poll reload is sent `private`, which Cloudflare reports as `BYPASS`,
-so the check fails on those paths whatever the rule says. Run the check after both. A third rule after the bypass, for
-the versioned public file paths, is a separate manual step: it serves a public image from the edge to a signed-in
-request too, and the check's card read with a made-up session cookie fails with anything but `HIT` until it exists.
+so the check fails on those paths whatever the rule says. Run the check after both. Rule 3 serves a public image from
+the edge to a signed-in request too, and the check's card read with a made-up session cookie fails with anything but
+`HIT` until it exists.
 
 What the rules never cache: every other api route, every authenticated one included, the SSE streams after `/api/`, and
 `/mcp`. Also any response without a `Cache-Control` header, any response the origin marks `private` or `no-store`, and
