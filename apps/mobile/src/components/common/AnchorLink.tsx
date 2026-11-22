@@ -2,21 +2,24 @@ import { showClientError } from "@carlnotes/client/apiClient"
 import { isCodexConversationUrl } from "@carlnotes/contracts/personalSourcesUrls"
 import { toCtaTag } from "@carlnotes/contracts/signupCta"
 import { SITE_URL } from "@carlnotes/contracts/site"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Slot } from "@rn-primitives/slot"
 import * as Linking from "expo-linking"
 import { type Href, Link } from "expo-router"
 import * as WebBrowser from "expo-web-browser"
 import { type GestureResponderEvent, Pressable, type PressableProps } from "react-native"
+import { useCardGlow } from "@/hooks/useCardGlow"
 import { toPlatformPath } from "@/platformPath"
 import { captureVisitEvent } from "@/visitAnalytics"
 
-// every mobile link supplies a destination and an accessible name
+// every mobile link supplies a destination and an accessible name, and a card link glows while pressed
 export type AnchorLinkProps = PressableProps & {
 	href: Href
 	accessibilityLabel: string
 	shouldReplace?: boolean
 	shouldDismissTo?: boolean
 	asChild?: boolean
+	hasCardGlow?: boolean
 }
 
 /**
@@ -27,9 +30,26 @@ export function AnchorLink({
 	shouldReplace,
 	shouldDismissTo,
 	asChild = false,
+	hasCardGlow = false,
 	onPress,
-	...props
+	...linkProps
 }: AnchorLinkProps) {
+	// a card link's glow, keyed by its destination, joins its class and its press handlers
+	const cardGlow = useCardGlow(typeof destination === "string" ? destination : JSON.stringify(destination))
+	const props: PressableProps = hasCardGlow
+		? {
+				...linkProps,
+				className: cn(linkProps.className, cardGlow.className),
+				onPressIn: (event) => {
+					linkProps.onPressIn?.(event)
+					cardGlow.onPressIn()
+				},
+				onPressOut: (event) => {
+					linkProps.onPressOut?.(event)
+					cardGlow.onPressOut()
+				},
+			}
+		: linkProps
 	const href = typeof destination === "string" ? toPlatformPath(destination) : destination
 	// let Expo Router own internal navigation and replacement
 	const Component = asChild ? Slot : Pressable

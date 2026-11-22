@@ -36,8 +36,8 @@ export function TopicSkeleton({ topicPreview }: TopicSkeletonProps) {
 	)
 }
 
-// reserve the action bar's two buttons in the screen's own row, then the image with the title, the tags, the byline
-// and the reactions, and the details line beside it
+// reserve the action bar's two buttons in the screen's own row, then the image with the title and the tags beside it,
+// and the byline, the reactions, and the details line under it at full width
 function TopicSkeletonHeader({ topicTitle, hasTags }: { topicTitle?: string; hasTags: boolean }) {
 	return (
 		<View>
@@ -61,21 +61,21 @@ function TopicSkeletonHeader({ topicTitle, hasTags }: { topicTitle?: string; has
 							</View>
 						)}
 						{hasTags && <View className={cn(SKELETON_SHAPE_CLASS, "mt-1.5 h-5.5 w-28 rounded-full")} />}
-						{/* the byline, and the reactions, which wrap under it beside the image */}
-						<View className="mt-1.5 flex-row flex-wrap items-center gap-x-3">
-							<View className="h-6 flex-row items-center gap-2">
-								<View className={cn(SKELETON_SHAPE_CLASS, "size-6 rounded-full")} />
-								<View className={cn(SKELETON_SHAPE_CLASS, "h-4 w-28")} />
-							</View>
-							<View className="h-8 justify-center">
-								<View className={cn(SKELETON_SHAPE_CLASS, "h-5 w-36")} />
-							</View>
-						</View>
-						{/* the details line of the screen's counts, at the line's own height */}
-						<View className="mt-1 min-h-5 justify-center">
-							<View className={cn(SKELETON_SHAPE_CLASS, "h-3.5 w-full")} />
-						</View>
 					</View>
+				</View>
+				{/* the byline, and the reactions, which wrap under it, under the image at full width */}
+				<View className="mt-1.5 flex-row flex-wrap items-center gap-x-3">
+					<View className="h-6 flex-row items-center gap-2">
+						<View className={cn(SKELETON_SHAPE_CLASS, "size-6 rounded-full")} />
+						<View className={cn(SKELETON_SHAPE_CLASS, "h-4 w-28")} />
+					</View>
+					<View className="h-8 justify-center">
+						<View className={cn(SKELETON_SHAPE_CLASS, "h-5 w-36")} />
+					</View>
+				</View>
+				{/* the details line of the screen's counts, at the line's own height */}
+				<View className="mt-1 min-h-5 justify-center">
+					<View className={cn(SKELETON_SHAPE_CLASS, "h-3.5 w-full")} />
 				</View>
 			</View>
 		</View>

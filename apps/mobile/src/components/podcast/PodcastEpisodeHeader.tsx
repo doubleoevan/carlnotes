@@ -24,8 +24,8 @@ import {
 } from "@/pageButtonClasses"
 
 /**
- * Draws the podcast episode screen's header. The text stays beside the image, as React Native has no float for it to
- * run under.
+ * Draws the podcast episode screen's header: the title and the description beside the image, and the byline under it at
+ * full width.
  */
 export function PodcastEpisodeHeader({
 	page: { podcastEpisode, topic, reactions, canEditPodcastEpisode },
@@ -61,8 +61,8 @@ export function PodcastEpisodeHeader({
 				</Button>
 				<NewTopicButton />
 			</View>
-			{/* the podcast episode's own image beside the title, the description, and the byline. React Native has no
-			    float, so the text stays beside the image instead of running under it as on the web */}
+			{/* the podcast episode's own image beside the title and the description, then the byline under it at full
+			    width, as the web header shows them at phone width */}
 			<View className="mt-4 flex-row items-start gap-4">
 				<TopicHeaderImage
 					image={podcastEpisode.image}
@@ -79,24 +79,24 @@ export function PodcastEpisodeHeader({
 						<PodcastEpisodeMentionBadge podcastEpisodeId={podcastEpisode.id} />
 					</View>
 					{podcastEpisode.description && <Text className="mt-1.5 text-sm">{podcastEpisode.description}</Text>}
-					{/* the byline, the topic's name, and the podcast episode's reactions on one line */}
-					<View className="mt-1.5 flex-row flex-wrap items-center gap-x-3">
-						<View className="min-w-0 shrink flex-row flex-wrap items-center gap-x-1">
-							<TopicByline topic={topic} label="Recorded by" isPage />
-							<Text className="text-sm text-muted-foreground">
-								{topic.teamLink || topic.owner ? "for " : "Coffee Break podcast for "}
-								<AnchorLink asChild href={toTopicPath(topic)} accessibilityLabel={`Open ${topic.name}`}>
-									<Text className="text-sm text-link">{topic.name}</Text>
-								</AnchorLink>
-							</Text>
-						</View>
-						<ReactionRow
-							target={{ kind: "podcastEpisode", id: podcastEpisode.id }}
-							summary={reactions}
-							isSignedIn={isSignedIn}
-						/>
-					</View>
 				</View>
+			</View>
+			{/* the byline, the topic's name, and the podcast episode's reactions on one line */}
+			<View className="mt-1.5 flex-row flex-wrap items-center gap-x-3">
+				<View className="min-w-0 shrink flex-row flex-wrap items-center gap-x-1">
+					<TopicByline topic={topic} label="Recorded by" isPage />
+					<Text className="text-sm text-muted-foreground">
+						{topic.teamLink || topic.owner ? "for " : "Coffee Break podcast for "}
+						<AnchorLink asChild href={toTopicPath(topic)} accessibilityLabel={`Open ${topic.name}`}>
+							<Text className="text-sm text-link">{topic.name}</Text>
+						</AnchorLink>
+					</Text>
+				</View>
+				<ReactionRow
+					target={{ kind: "podcastEpisode", id: podcastEpisode.id }}
+					summary={reactions}
+					isSignedIn={isSignedIn}
+				/>
 			</View>
 		</View>
 	)

@@ -24,7 +24,7 @@ export function Topic({ topic }: { topic: TopicDetails }) {
 	return (
 		<View className="mx-4 my-4">
 			{/* the image at the left edge of the findings card, which opens the topic's screen as the title does, with
-			    the title, the tags, and the byline beside it */}
+			    the title and the tags beside it */}
 			<View className="flex-row items-start gap-4">
 				<TopicImageLink
 					image={topic.image}
@@ -55,8 +55,7 @@ export function Topic({ topic }: { topic: TopicDetails }) {
 						) : null}
 						<TopicInfoButton topic={topic} />
 					</View>
-					{/* the tags, then the byline, with the unread count and the share action at the right of its row, over
-					    the findings card's top right corner. React Native has no float, so they stay beside the image */}
+					{/* the tags under the title */}
 					{topic.tags.length > 0 ? (
 						<View className="mt-1.5 flex-row flex-wrap gap-1">
 							{topic.tags.map((tag) => (
@@ -66,11 +65,15 @@ export function Topic({ topic }: { topic: TopicDetails }) {
 							))}
 						</View>
 					) : null}
-					<View className="mt-1.5 flex-row items-end justify-between gap-3">
-						<TopicByline topic={topic} />
-						<TopicRowActions topic={topic} />
-					</View>
 				</View>
+			</View>
+			{/* the byline under the image at the row's full width, as on the web at phone width, with the unread count and
+			    the share action at the right of its row, over the findings card's top right corner */}
+			<View className="mt-1.5 flex-row items-center justify-between gap-3">
+				<View className="min-w-0 shrink">
+					<TopicByline topic={topic} isInset={false} />
+				</View>
+				<TopicRowActions topic={topic} />
 			</View>
 		</View>
 	)

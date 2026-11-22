@@ -85,6 +85,7 @@ function UserMenuItems({ onClose, onPlayTutorial }: { onClose: () => void; onPla
 		return (
 			<>
 				<USER_MENU_ELEMENTS.Action label="Brew with Carl" onSelect={onPlayTutorial} />
+				<USER_MENU_ELEMENTS.Link label="Topics" href="/topics" isSelected={pathname === "/topics"} onSelect={onClose} />
 				<USER_MENU_ELEMENTS.Link label="What CarlNotes Is" href="/docs" isSelected={false} onSelect={onClose} />
 				<MenuDivider />
 				<MenuLink label="Log in" href="/sign-in" isSelected={false} onSelect={onClose} />

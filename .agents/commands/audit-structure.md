@@ -1073,6 +1073,10 @@ Check for:
      `packages/pipeline/topicMemorySpend.ts`), `saveTopicMemorySubject` (now `saveTopicMemorySubjects`),
      `ScanQueueDescription` (now `TaskQueueDescription`), `MarkTopicVideoFailedInput` (removed), and
      `findingIdsToFilter` in `packages/pipeline/review/index.ts` (now `packages/pipeline/review/maxTopicFindings.ts`)
+   - `apps/mobile/src/cardGlowClasses.ts` and `CARD_GLOW_CLASS` (now `useCardGlow` in
+     `apps/mobile/src/hooks/useCardGlow.ts`, which `AnchorLink` takes with `hasCardGlow`), and the `image_prompt`
+     parameter of the `set_topic_image` MCP tool (removed: a call with no `image_url` names the topic page, where
+     Regenerate runs)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

@@ -7,7 +7,6 @@ import { toDashboardSubjectName } from "@carlnotes/contracts/dashboards"
 import type { AvatarHeaderElements, AvatarHeaderSkeletonElements } from "@carlnotes/core/components/AvatarHeader"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { View } from "react-native"
-import { CARD_GLOW_CLASS } from "@/cardGlowClasses"
 import { Avatar, PAGE_AVATAR_SIZE } from "@/components/branding/Avatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { PageHeaderIdentity } from "@/components/common/PageHeaderIdentity"
@@ -31,7 +30,8 @@ export const MOBILE_AVATAR_HEADER_ELEMENTS: AvatarHeaderElements = {
 			accessibilityLabel={toDashboardSubjectName(subject)}
 			accessibilityElementsHidden={hasNameLink}
 			importantForAccessibility={hasNameLink ? "no-hide-descendants" : "auto"}
-			className={cn("rounded-full", CARD_GLOW_CLASS)}
+			className="rounded-full"
+			hasCardGlow
 		>
 			{subject.subjectKind === "user" ? (
 				<Avatar

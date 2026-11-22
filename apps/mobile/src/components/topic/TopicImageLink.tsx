@@ -8,7 +8,6 @@ import {
 import { isCurrentPagePath } from "@carlnotes/core/lib/pagePaths"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { usePathname } from "expo-router"
-import { CARD_GLOW_CLASS } from "@/cardGlowClasses"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { TopicImage } from "@/components/primitives/topic-image"
 import { toPlatformPath } from "@/platformPath"
@@ -24,7 +23,8 @@ const ELEMENTS: TopicImageLinkElements = {
 			accessible={label !== null}
 			accessibilityLabel={label ?? ""}
 			onPress={onOpen}
-			className={cn("shrink-0", CARD_GLOW_CLASS, className)}
+			className={cn("shrink-0", className)}
+			hasCardGlow
 		>
 			{children}
 		</AnchorLink>

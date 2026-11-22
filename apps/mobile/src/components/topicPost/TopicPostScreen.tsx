@@ -56,16 +56,16 @@ import { TopicPostEditor } from "./TopicPostEditor"
 import { TopicPostInfo } from "./TopicPostInfo"
 import { toTopicPostPageActionOptions } from "./topicPostPageActions"
 
-// the app's elements: the image beside the title and the byline, as on the podcast episode screen, the note's
-// typography on a card, and the app's editor
+// the app's elements: the image beside the title with the byline and the details line under it at full width, as on
+// the podcast episode screen and the web at phone width, the note's typography on a card, and the app's editor
 export const TOPIC_POST_PAGE_ELEMENTS: TopicPostPageElements = {
 	Header: ({ image, title, children }) => (
-		<View className="mt-4 flex-row items-start gap-4">
-			{image}
-			<View className="min-w-0 flex-1">
-				{title}
-				{children}
+		<View className="mt-4">
+			<View className="flex-row items-start gap-4">
+				{image}
+				<View className="min-w-0 flex-1">{title}</View>
 			</View>
+			{children}
 		</View>
 	),
 	Image: ({ image, name, isPending, onEdit }) => (

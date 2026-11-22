@@ -400,9 +400,10 @@ Topic roast sheet or a Topic Post's info sheet.
 `SearchRowTopicLink` in `components/search/SearchResultsList.tsx` opens a search row's or a news row's Topic without
 opening the surrounding finding sheet, the web's `SearchRowTopicLink`. `src/topicImageClasses.ts` holds the classes of
 a topic image in a header row, a Topics row, and the Topic roast sheet, matching the web's topic images at phone
-width. `src/cardGlowClasses.ts` holds `CARD_GLOW_CLASS`, the glow while a finger is on a card, a topic image link, a
-film poster, or a header avatar, the counterpart of the web's card glow class. `src/pageButtonClasses.ts` holds the
-classes of a screen's top row of buttons, the counterpart of the web's page button classes. `PLAIN_PAGE_BUTTON_CLASS`
+width. `src/hooks/useCardGlow.ts` holds the glow while a finger is on a card, a topic image link, a film poster, or a
+header avatar, held for 300 milliseconds so a tap shows it, the counterpart of the web's card glow class.
+`AnchorLink` takes it with `hasCardGlow`. `src/pageButtonClasses.ts` holds the classes of a screen's top row of
+buttons, the counterpart of the web's page button classes. `PLAIN_PAGE_BUTTON_CLASS`
 is the plain button at the row's left, the card's fill and border with a muted label and an icon that alone takes the
 highlight color, and `HIGHLIGHTED_PAGE_BUTTON_CLASS` the one highlighted button at its right and the button of a titled
 header row. Both go on the default `Button`, so the two draw at one size, 36 points tall with the hit slop to the touch

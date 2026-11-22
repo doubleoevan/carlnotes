@@ -30,7 +30,7 @@ export function PodcastEpisodeSkeleton() {
 						<View className={cn(SKELETON_SHAPE_CLASS, "h-9 w-28 rounded-md")} />
 						<View className={cn(SKELETON_SHAPE_CLASS, "h-9 w-28 rounded-md")} />
 					</View>
-					{/* the image beside the title's lines, the description, and the byline */}
+					{/* the image beside the title's lines and the description, then the byline under it at full width */}
 					<View className="mt-4 flex-row items-start gap-4">
 						<View className={cn(SKELETON_SHAPE_CLASS, "aspect-[3/2]", HEADER_TOPIC_IMAGE_CLASS)} />
 						<View className="min-w-0 flex-1">
@@ -47,11 +47,11 @@ export function PodcastEpisodeSkeleton() {
 							<View className="h-5 justify-center">
 								<View className={cn(SKELETON_SHAPE_CLASS, "h-4 w-1/2")} />
 							</View>
-							<View className="mt-1.5 h-6 flex-row items-center gap-2">
-								<View className={cn(SKELETON_SHAPE_CLASS, "size-6 rounded-full")} />
-								<View className={cn(SKELETON_SHAPE_CLASS, "h-4 w-32")} />
-							</View>
 						</View>
+					</View>
+					<View className="mt-1.5 h-6 flex-row items-center gap-2">
+						<View className={cn(SKELETON_SHAPE_CLASS, "size-6 rounded-full")} />
+						<View className={cn(SKELETON_SHAPE_CLASS, "h-4 w-32")} />
 					</View>
 					{/* the sections, with the loaded screen's own gaps */}
 					<View className="mt-5 gap-2">

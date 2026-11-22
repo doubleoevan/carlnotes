@@ -11,11 +11,11 @@ import { Image } from "expo-image"
 import { Clapperboard, Play } from "lucide-react-native"
 import { type ComponentProps, type ComponentRef, useRef } from "react"
 import { type GestureResponderEvent, Pressable, View } from "react-native"
-import { CARD_GLOW_CLASS } from "@/cardGlowClasses"
 import { toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text, TextClassContext } from "@/components/primitives/text"
 import { useApiImageProps } from "@/hooks/useApiImageProps"
+import { useCardGlow } from "@/hooks/useCardGlow"
 import { captureFilmVisitEvent } from "@/visitAnalytics"
 import { PodcastEpisodePlayButton } from "./PodcastEpisodePlayButton"
 import { TopicVideoDialog } from "./TopicVideoDialog"
@@ -47,9 +47,10 @@ function VideoButton({
 	onPress,
 	onDialogClose,
 }: ComponentProps<PodcastEpisodeVideoButtonElements["Button"]>) {
-	// the button the sheet returns focus to, and the poster's source
+	// the button the sheet returns focus to, the poster's source, and the poster's glow
 	const buttonRef = useRef<ComponentRef<typeof View>>(null)
 	const posterImageProps = useApiImageProps(posterUrl)
+	const cardGlow = useCardGlow(podcastEpisode.id)
 
 	// the press stops at the button, so it never opens the card or the row it sits on
 	const handlePress = (event: GestureResponderEvent): void => {
@@ -77,9 +78,11 @@ function VideoButton({
 					accessibilityLabel={label}
 					className={cn(
 						"aspect-video w-30 shrink-0 items-center justify-center overflow-hidden rounded-xs bg-hero",
-						CARD_GLOW_CLASS,
+						cardGlow.className,
 					)}
 					onPress={handlePress}
+					onPressIn={cardGlow.onPressIn}
+					onPressOut={cardGlow.onPressOut}
 				>
 					{posterImageProps && (
 						<Image

@@ -71,9 +71,9 @@ export function TopicPageContent({
 			contentContainerStyle={{ paddingBottom: 24 }}
 		>
 			<TopicActionBar topic={topic} onRefresh={onRefresh} onScanned={onScanned} />
-			{/* the image with the title in the page's own type sizes, the tags, the byline and the reactions, and the
-			    details line of the screen's counts beside it, as the web header shows them at phone width. React Native
-			    has no float, so they stay beside the image */}
+			{/* the image with the title in the page's own type sizes and the tags beside it, then the byline, the reactions,
+			    and the details line of the screen's counts under it at full width, as the web header shows them at phone
+			    width */}
 			<View className="mx-4 my-4">
 				<View className="flex-row items-start gap-4">
 					<TopicHeaderImage
@@ -103,22 +103,22 @@ export function TopicPageContent({
 								))}
 							</View>
 						) : null}
-						{/* the byline and the topic's reactions */}
-						<View className="mt-1.5 flex-row flex-wrap items-center gap-x-3">
-							<TopicByline topic={topic} isPage />
-							<ReactionRow
-								target={{ kind: "topic", id: topic.id }}
-								summary={topic.reactions}
-								isSignedIn={Boolean(session)}
-							/>
-						</View>
-						{/* the counts of the screen's sections, on their own line */}
-						<DetailsLine
-							className="mt-1"
-							details={toTopicDetails({ topic, findingCount: findings.length, commentCount, noteCount })}
-						/>
 					</View>
 				</View>
+				{/* the byline and the topic's reactions */}
+				<View className="mt-1.5 flex-row flex-wrap items-center gap-x-3">
+					<TopicByline topic={topic} isPage />
+					<ReactionRow
+						target={{ kind: "topic", id: topic.id }}
+						summary={topic.reactions}
+						isSignedIn={Boolean(session)}
+					/>
+				</View>
+				{/* the counts of the screen's sections, on their own line */}
+				<DetailsLine
+					className="mt-1"
+					details={toTopicDetails({ topic, findingCount: findings.length, commentCount, noteCount })}
+				/>
 			</View>
 			{/* full-width cards match the web's narrow reading column */}
 			<View className="mx-4">

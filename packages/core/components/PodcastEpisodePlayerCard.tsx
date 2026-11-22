@@ -80,7 +80,7 @@ export function PodcastEpisodePlayerCard<T>({
 						/>
 					</Group>
 					<Group className="flex shrink-0 flex-row items-center gap-1.5">
-						{isLoaded && <Controls podcastEpisode={podcastEpisode} playbackRate={player.playbackRate} />}{" "}
+						{isLoaded && <Controls podcastEpisode={podcastEpisode} playbackRate={player.playbackRate} />}
 						{onOpenPodcastFeedDialog && (
 							<FeedButton onPress={onOpenPodcastFeedDialog} className="hidden sm:flex" label="Subscribe" />
 						)}
