@@ -1,15 +1,13 @@
 // the tools the mcp server registers: their names, schemas, annotations, and what each returns. the tools that edit and
 // create a topic are in topicEditTools.ts
 
-import { feedbackText, findingRatingPayload } from "@carlnotes/contracts/payloads"
 import { searchRequestPayload } from "@carlnotes/contracts/search"
 import type { CallToolResult } from "@modelcontextprotocol/server"
 import { z } from "zod"
-import { loadFindingRatingNote } from "../topic/findingFeedback"
-import { setTopicSubscription } from "../topic/subscriptions"
 import { registerAccountTool } from "./accountTool"
 import { registerActivityTool } from "./activityTool"
 import { registerDashboardTool } from "./dashboardTool"
+import { registerFeedbackTools, registerFindingFeedbackTool } from "./feedbackTools"
 import { loadFindingsMcpViewData, loadSearchMcpViewData, toMcpViewMeta } from "./mcpViewData"
 import { registerNewsTool } from "./newsTool"
 import { registerNoteTools } from "./noteTools"
@@ -18,15 +16,12 @@ import { registerProfileTool } from "./profileTool"
 import { registerReportTools } from "./reportTools"
 import {
 	BOUND_SERVER_TEXT,
-	bookmarkFinding,
 	CONNECT_ACCOUNT_TEXT,
 	type McpFinding,
 	type McpPage,
 	markFindingConsumed,
-	rateFinding,
 	readTopicFeed,
 	searchFindings,
-	sendFindingFeedback,
 	type TopicFeed,
 	toToolTopicId,
 } from "./results"
@@ -35,8 +30,8 @@ import { searchForTool, toSearchText } from "./searchResults"
 import { registerSocialTools } from "./socialTools"
 import { registerTeamTools } from "./teamTools"
 import { registerTeamWriteTools } from "./teamWriteTools"
-import { type ToolCaller, toMcpAnalyticsProperties } from "./toolCaller"
-import { type RegisterToolsOptions, toPageResult, topicIdArgument, toStatusResult, toTextResult } from "./toolShapes"
+import type { ToolCaller } from "./toolCaller"
+import { type RegisterToolsOptions, toPageResult, topicIdArgument, toTextResult } from "./toolShapes"
 import { registerTopicAttachmentTool } from "./topicAttachmentTool"
 import { registerTopicContextTool } from "./topicContextTool"
 import { registerTopicEditTools } from "./topicEditTools"
@@ -106,7 +101,7 @@ function registerReadTools({ mcpServer, toolCaller, routeTopicId, clientAddress 
 				similar_to_topic_id: z.string().min(1).optional().describe("A topic whose similar topics to list."),
 				cursor: cursorArgument,
 			}),
-			annotations: { readOnlyHint: true },
+			annotations: { title: "List topics", readOnlyHint: true },
 			_meta: toMcpViewToolMeta("topics"),
 		},
 		async ({ section, similar_to_topic_id, cursor }) => {
@@ -137,7 +132,7 @@ function registerReadTools({ mcpServer, toolCaller, routeTopicId, clientAddress 
 			description:
 				"A CarlNotes topic's findings in relevance order, each with Carl's relevance explanation. A connected account's read includes which findings it read and bookmarked. Use it when the user asks Carl or CarlNotes for a topic's findings, with phrases like show this topic, what did Carl find, or read my feed.",
 			inputSchema: z.object({ topic_id: topicIdArgument, cursor: cursorArgument }),
-			annotations: { readOnlyHint: true },
+			annotations: { title: "Read a topic's feed", readOnlyHint: true },
 			_meta: toMcpViewToolMeta("findings"),
 		},
 		async ({ topic_id, cursor }) => {
@@ -161,7 +156,7 @@ function registerReadTools({ mcpServer, toolCaller, routeTopicId, clientAddress 
 			description:
 				"A CarlNotes topic's findings closest to a query, ranked by meaning over the same index Carl's chat uses. Use it when the user asks Carl or CarlNotes about something on one topic, with phrases like search this topic, or what does Carl have on.",
 			inputSchema: z.object({ topic_id: topicIdArgument, query: z.string().min(1).max(2000), cursor: cursorArgument }),
-			annotations: { readOnlyHint: true },
+			annotations: { title: "Search a topic's findings", readOnlyHint: true },
 			_meta: toMcpViewToolMeta("findings"),
 		},
 		async ({ topic_id, query, cursor }) => {
@@ -184,7 +179,7 @@ function registerReadTools({ mcpServer, toolCaller, routeTopicId, clientAddress 
 			description:
 				"Find CarlNotes topics, podcast episodes, posts, findings, teams, and profiles by name, the same search the site's search bar and search page run. Rank by relevance, newest, or trending, and page through the results. Each result has its url on carlnotes.com. To rank one topic's findings by meaning, use search_topic_findings. Use it when the user asks Carl or CarlNotes to find something across the site, with phrases like search CarlNotes, find a topic, or look up a podcast episode.",
 			inputSchema: searchRequestPayload,
-			annotations: { readOnlyHint: true },
+			annotations: { title: "Search CarlNotes", readOnlyHint: true },
 			_meta: toMcpViewToolMeta("search"),
 		},
 		async (searchRequest) => {
@@ -207,7 +202,12 @@ function registerReadTools({ mcpServer, toolCaller, routeTopicId, clientAddress 
 			description:
 				"Mark a CarlNotes finding read for the connected account, the way opening it on the page does. Use it when the user tells Carl or CarlNotes they read a finding, with phrases like mark this read or I read this.",
 			inputSchema: z.object({ finding_id: z.string() }),
-			annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+			annotations: {
+				title: "Mark a finding consumed",
+				readOnlyHint: false,
+				destructiveHint: false,
+				idempotentHint: true,
+			},
 		},
 		async ({ finding_id }) => {
 			if (toolCaller.kind !== "user") {
@@ -217,133 +217,6 @@ function registerReadTools({ mcpServer, toolCaller, routeTopicId, clientAddress 
 			return toTextResult(isMarkedConsumed ? "Marked consumed." : "No readable finding has that id.", !isMarkedConsumed)
 		},
 	)
-}
-
-// register the tool that saves the user's own words about a finding, which needs an account
-function registerFindingFeedbackTool({ mcpServer, toolCaller }: RegisterToolsOptions): void {
-	mcpServer.registerTool(
-		"send_finding_feedback",
-		{
-			title: "Send feedback on a finding",
-			description:
-				"Save the user's own words about why a CarlNotes finding was good or bad for the connected account. Use it when the user explains a rating, with phrases like tell Carl why or give Carl feedback.",
-			inputSchema: z.object({ finding_id: z.string(), feedback: feedbackText }),
-			annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
-		},
-		async ({ finding_id, feedback }) => {
-			if (toolCaller.kind !== "user") {
-				return toTextResult(CONNECT_ACCOUNT_TEXT)
-			}
-			const isFindingFeedbackSaved = await sendFindingFeedback(toolCaller, finding_id, feedback)
-			return toTextResult(
-				isFindingFeedbackSaved ? "Sent." : "This account may not rate that finding.",
-				!isFindingFeedbackSaved,
-			)
-		},
-	)
-}
-
-// register the rating, bookmark, and follow tools. each needs an account
-function registerFeedbackTools({ mcpServer, toolCaller, routeTopicId }: RegisterToolsOptions): void {
-	mcpServer.registerTool(
-		"rate_finding",
-		{
-			title: "Rate a finding",
-			description:
-				"Thumb a CarlNotes finding up or down for the connected account, or clear the rating with null. Ratings tell Carl what to keep. Use it when the user rates a finding, with phrases like thumbs up, thumbs down, or more like this.",
-			inputSchema: findingRatingPayload.extend({ finding_id: z.string() }),
-			annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-		},
-		async ({ finding_id, rating, note }) => {
-			if (toolCaller.kind !== "user") {
-				return toTextResult(CONNECT_ACCOUNT_TEXT)
-			}
-			const isRated = await rateFinding(toolCaller, finding_id, rating, note)
-			return toTextResult(isRated ? "Rated." : "This account may not rate that finding.", !isRated)
-		},
-	)
-	mcpServer.registerTool(
-		"read_finding_rating_note",
-		{
-			title: "Read rating note",
-			description: "Restore the connected account's own note to Carl in the CarlNotes finding rating field.",
-			inputSchema: z.object({ finding_id: z.string() }),
-			annotations: { readOnlyHint: true },
-			_meta: { ui: { visibility: ["app"] } },
-		},
-		async ({ finding_id }) => {
-			if (toolCaller.kind !== "user") {
-				return toTextResult(CONNECT_ACCOUNT_TEXT, true)
-			}
-			// deliver the private words only to the view and only to the account that saved them
-			const result = await loadFindingRatingNote(toolCaller.userId, finding_id)
-			return result
-				? { ...toTextResult("Rating note loaded."), _meta: { findingRatingNote: result } }
-				: toTextResult("This account may not read that rating.", true)
-		},
-	)
-	mcpServer.registerTool(
-		"bookmark_finding",
-		{
-			title: "Bookmark a finding",
-			description:
-				"Keep a CarlNotes finding for the connected account so no later brew filters it out, or drop the bookmark. Bookmarking takes the topic's owner or a team that holds it. Use it when the user asks Carl or CarlNotes to keep a finding, with phrases like bookmark this or keep this finding.",
-			inputSchema: z.object({ finding_id: z.string(), is_bookmarked: z.boolean() }),
-			annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-		},
-		async ({ finding_id, is_bookmarked }) => {
-			if (toolCaller.kind !== "user") {
-				return toTextResult(CONNECT_ACCOUNT_TEXT)
-			}
-			const isBookmarkSaved = await bookmarkFinding(toolCaller, finding_id, is_bookmarked)
-			return toTextResult(
-				isBookmarkSaved ? "Bookmark saved." : "This account may not bookmark that finding.",
-				!isBookmarkSaved,
-			)
-		},
-	)
-	mcpServer.registerTool(
-		"follow_topic",
-		{
-			title: "Follow a topic",
-			description:
-				"Follow a CarlNotes topic for the connected account, or unfollow it. Following puts the topic in the account's feed and its list. An owner always follows their own topic. Use it when the user asks Carl or CarlNotes to follow a topic, with phrases like follow this topic or unfollow this topic.",
-			inputSchema: z.object({ topic_id: topicIdArgument, is_following: z.boolean() }),
-			annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-		},
-		async ({ topic_id, is_following }) => {
-			const toolTopic = toToolTopicId(routeTopicId, topic_id ?? null)
-			if ("rejection" in toolTopic) {
-				return toTextResult(toolTopic.rejection, true)
-			}
-			if (toolCaller.kind !== "user") {
-				return toTextResult(CONNECT_ACCOUNT_TEXT)
-			}
-
-			// follow or unfollow through the topic page's own write and its rules
-			const isTopicSubscriptionSet = await setTopicSubscription({
-				userId: toolCaller.userId,
-				topicId: toolTopic.topicId,
-				isSubscribed: is_following,
-				analyticsProperties: toMcpAnalyticsProperties(toolCaller),
-				subscriptionSource: "mcp",
-			})
-			if (!isTopicSubscriptionSet) {
-				return toTextResult(toSubscriptionRejectionText(is_following), true)
-			}
-			return toStatusResult(is_following ? "Following." : "Unfollowed.", {
-				topicId: toolTopic.topicId,
-				isFollowing: is_following,
-			})
-		},
-	)
-}
-
-// what a rejected subscribe or unsubscribe says
-function toSubscriptionRejectionText(isSubscribing: boolean): string {
-	return isSubscribing
-		? "No topic this account may follow has that id. A private topic is followed by its owner alone."
-		: "This account can't unfollow that topic. An owner always follows their own topic."
 }
 
 // a page of topics as a tool result, with the topics MCP view's data in its _meta

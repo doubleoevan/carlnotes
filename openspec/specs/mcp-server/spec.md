@@ -415,7 +415,8 @@ The allowlist SHALL include `https://carlnotes.com` and the configured applicati
 
 ### Requirement: Every advertised tool has a directory-safe annotation contract
 
-Every advertised tool SHALL have a nonempty title and explicit boolean safety hints. Every read SHALL use
+Every advertised tool SHALL have a nonempty title, an `annotations.title` equal to that title, and explicit boolean
+safety hints, with at least one of `readOnlyHint` and `destructiveHint` set. Every read SHALL use
 `readOnlyHint: true`. Every write SHALL use `readOnlyHint: false`. Only a write that deletes or overwrites something the
 caller cannot restore SHALL use `destructiveHint: true`: `delete_note`, `delete_hot_take`, `save_note`, which can
 replace a note's body with no history kept, and `set_topic_image`, which deletes the previous image. Every other write,
@@ -428,13 +429,14 @@ SHALL keep its draft preview, and `edit_topic` SHALL keep its own confirmations 
 #### Scenario: Visitor and connected clients list the same annotated tools
 
 - **WHEN** either identity lists tools on either endpoint
-- **THEN** all forty-three tools have titles and the expected safety hints
+- **THEN** all forty-five tools have titles, annotation titles equal to them, and the expected safety hints
 - **AND** idempotence and open-world hints remain accurate
 
 #### Scenario: An annotation regresses
 
-- **WHEN** a tool loses its title, supplies a non-boolean hint, marks a write read-only, marks an irreversible write
-  non-destructive, or marks any other write destructive
+- **WHEN** a tool loses its title or its annotation title, names itself differently in its annotations, sets neither
+  a read-only nor a destructive hint, supplies a non-boolean hint, marks a write read-only, marks an irreversible
+  write non-destructive, or marks any other write destructive
 - **THEN** the annotation check fails with the tool name
 - **AND** newly advertised tools cannot silently bypass that check
 
@@ -592,7 +594,7 @@ Adding MCP disclosures SHALL preserve the policy's existing collection, use and 
 
 ### Requirement: MCP release gates include additive sends
 
-MCP smoke checks SHALL include both routes, all forty-three tool annotations, identity and revocation checks,
+MCP smoke checks SHALL include both routes, all forty-five tool annotations, identity and revocation checks,
 editable-Topic authorization and sender-only private layers, origin handling, and existing result-size/pagination
 guarantees. The sixteen UI resources, numbered suggestion text, name search, stable cursor pages, and atomic
 multi-Topic send accounting SHALL be checked. Each new tool SHALL have a smoke section on both routes, and each tool
@@ -1219,22 +1221,6 @@ or may moderate it, the topic's owner or an admin, and SHALL be annotated `destr
 - **WHEN** a user who did not write a hot take and cannot moderate its topic calls `delete_hot_take` on it
 - **THEN** the hot take stays and the result says they may not delete it
 
-### Requirement: set_topic_image regenerates a topic's image or sets it from a url
-
-The server SHALL expose `set_topic_image`, taking a `topic_id` and either a regenerate request with an optional image
-prompt or an `image_url`. Regenerating SHALL count against the editor's monthly regenerations. An image from a url
-SHALL pass the upload's size, type, and image moderation checks and be fetched through the public fetch guard.
-
-#### Scenario: Regenerating past the monthly allowance is rejected
-
-- **WHEN** an editor with no regenerations left this month calls `set_topic_image` to regenerate
-- **THEN** no render starts and the result says the monthly regenerations are used
-
-#### Scenario: A url that is not an image is rejected
-
-- **WHEN** an editor calls `set_topic_image` with a url that returns html
-- **THEN** the image is unchanged and the result says the url is not a supported image
-
 ### Requirement: add_topic_attachment adds a url or pasted text and never a host upload
 
 The server SHALL expose `add_topic_attachment`, taking a `topic_id` and either a `url` or a pasted `text` with a title.
@@ -1327,3 +1313,21 @@ The server SHALL advertise `read_topic_memories` as a paginated read. It SHALL a
 
 - **WHEN** the visitor calls the tool for that Topic
 - **THEN** the tool withholds its topic memories
+
+### Requirement: set_topic_image sets a topic's image from a url
+
+The server SHALL expose `set_topic_image`, taking a `topic_id` and an `image_url`, and SHALL NOT take an image prompt
+or start a render. An image from a url SHALL pass the upload's size, type, and image moderation checks and be fetched
+through the public fetch guard. A call from an editor with no `image_url` SHALL leave the image unchanged and return an
+error that names the topic page, where the editor regenerates the image.
+
+#### Scenario: A url that is not an image is rejected
+
+- **WHEN** an editor calls `set_topic_image` with a url that returns html
+- **THEN** the image is unchanged and the result says the url is not a supported image
+
+#### Scenario: A call with no url names the topic page
+
+- **WHEN** an editor calls `set_topic_image` with no `image_url`
+- **THEN** no render starts, the image is unchanged, and the error names the topic page's url and the `image_url`
+  argument

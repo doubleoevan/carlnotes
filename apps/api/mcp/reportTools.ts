@@ -36,7 +36,7 @@ export function registerReportTools({ mcpServer, toolCaller, routeTopicId }: Reg
 				reason: z.string().trim().max(FLAG_REASON_MAX_CHARS).optional().describe("What is wrong, in the user's words."),
 				should_block_author: z.boolean().optional().describe("Whether to block the author too."),
 			}),
-			annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+			annotations: { title: "Report something", readOnlyHint: false, destructiveHint: false, idempotentHint: false },
 		},
 		async ({ subject_kind, subject_id, reason, should_block_author }) => {
 			if (toolCaller.kind !== "user") {
@@ -70,7 +70,7 @@ export function registerReportTools({ mcpServer, toolCaller, routeTopicId }: Reg
 				user_id: z.string().min(1).describe("The person's id."),
 				is_blocked: z.boolean().describe("true blocks the person, and false unblocks them."),
 			}),
-			annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+			annotations: { title: "Block a person", readOnlyHint: false, destructiveHint: false, idempotentHint: true },
 		},
 		async ({ user_id, is_blocked }) => {
 			if (toolCaller.kind !== "user") {

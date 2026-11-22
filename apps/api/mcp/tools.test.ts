@@ -37,6 +37,22 @@ test.each([
 	expect(toMcpToolContractIssues(tools).some((issue) => issue.startsWith("edit_topic:"))).toBe(true)
 })
 
+// annotations with no title, with a title that differs from the tool's, and with neither read nor write hint each
+// fail the check with their own issue
+test.each([
+	[{ readOnlyHint: true }, "annotations.title must be the tool's title"],
+	[{ title: "Another name", readOnlyHint: true }, "annotations.title must be the tool's title"],
+	[{ title: "List topics" }, "annotations must set readOnlyHint or destructiveHint"],
+])("the directory check rejects the annotations %j", (brokenAnnotations, expectedIssue) => {
+	// the registered tools, with list_topics' annotations replaced
+	const tools = [...toRegisteredTools(VISITOR)].map(([name, { config }]) => ({
+		name,
+		...config,
+		...(name === "list_topics" ? { annotations: brokenAnnotations } : {}),
+	}))
+	expect(toMcpToolContractIssues(tools)).toContain(`list_topics: ${expectedIssue}`)
+})
+
 // an additive write the host would confirm, and an irreversible one it would not, each fail the check
 test.each([
 	["an additive write marked destructive", "follow_topic", true],

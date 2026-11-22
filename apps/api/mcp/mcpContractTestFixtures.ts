@@ -142,6 +142,7 @@ export function toMcpToolContractIssues(tools: readonly ListedTool[]): string[] 
 
 // require both names and every phrase in a description, and reject one that asks a model to act unprompted
 function toDescriptionIssues(tool: ListedTool): string[] {
+	// the names and phrases the description leaves out
 	const description = typeof tool.description === "string" ? tool.description : ""
 	const missingNames = ["Carl", "CarlNotes"].filter((name) => !new RegExp(`\\b${name}\\b`).test(description))
 	const missingPhrases = (EXPECTED_TOOL_PHRASES[tool.name] ?? []).filter(
@@ -165,10 +166,12 @@ function toDescriptionIssues(tool: ListedTool): string[] {
 
 // require each title and each classified boolean, with a diagnostic naming the tool
 function toToolIssues(tool: ListedTool): string[] {
+	// the title at the top and in the annotations
 	const issues: string[] = []
 	if (typeof tool.title !== "string" || !tool.title.trim()) {
 		issues.push(`${tool.name}: missing title`)
 	}
+	issues.push(...toToolAnnotationIssues(tool))
 
 	// compare required hints with their exact values, then reject any optional non-boolean hint
 	const expectedHints = Object.entries(EXPECTED_TOOL_ANNOTATIONS).find(([name]) => name === tool.name)?.[1]
@@ -192,6 +195,21 @@ function toToolIssues(tool: ListedTool): string[] {
 		if (tool.annotations?.[hint] !== undefined && typeof tool.annotations[hint] !== "boolean") {
 			issues.push(`${tool.name}: ${hint} must be boolean`)
 		}
+	}
+	return issues
+}
+
+// require the tool annotations, which give the title of the tool and a hint that says whether it reads or writes
+function toToolAnnotationIssues(tool: ListedTool): string[] {
+	// the annotations title matches the tool's own title
+	const issues: string[] = []
+	if (typeof tool.annotations?.title !== "string" || tool.annotations.title !== tool.title) {
+		issues.push(`${tool.name}: annotations.title must be the tool's title`)
+	}
+
+	// a read or write hint is set
+	if (tool.annotations?.readOnlyHint === undefined && tool.annotations?.destructiveHint === undefined) {
+		issues.push(`${tool.name}: annotations must set readOnlyHint or destructiveHint`)
 	}
 	return issues
 }

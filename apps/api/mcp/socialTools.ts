@@ -60,7 +60,7 @@ export function registerSocialTools({ mcpServer, toolCaller, routeTopicId }: Reg
 				),
 				reaction_type: z.enum(reactionTypes).nullable().optional().describe("The reaction type, or null to remove it."),
 			}),
-			annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+			annotations: { title: "React", readOnlyHint: false, destructiveHint: false, idempotentHint: true },
 		},
 		async ({ target_kind, target_id, reaction_type }) => {
 			const target = { kind: target_kind, id: target_id }
@@ -85,7 +85,7 @@ export function registerSocialTools({ mcpServer, toolCaller, routeTopicId }: Reg
 				...commentTargetArguments,
 				cursor: z.string().optional().describe("The cursor a previous page returned."),
 			}),
-			annotations: { readOnlyHint: true },
+			annotations: { title: "Read hot takes", readOnlyHint: true },
 		},
 		async ({ target_kind, target_id, cursor }) => {
 			// the thread, for anyone who may open what it hangs on
@@ -113,7 +113,7 @@ export function registerSocialTools({ mcpServer, toolCaller, routeTopicId }: Reg
 					.optional()
 					.describe("The position of the podcast episode's chapter the hot take is about, from 0 for the first."),
 			}),
-			annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+			annotations: { title: "Add a hot take", readOnlyHint: false, destructiveHint: false, idempotentHint: false },
 		},
 		async ({ target_kind, target_id, body, parent_id, chapter_position }) => {
 			const target = { kind: target_kind, id: target_id }
@@ -137,7 +137,7 @@ export function registerSocialTools({ mcpServer, toolCaller, routeTopicId }: Reg
 			description:
 				"Delete a hot take on CarlNotes with its replies, for good. Its author, the topic's owner, and an admin may delete it. Use it when the user asks Carl or CarlNotes to delete my hot take, remove this comment, or take down a reply on my topic.",
 			inputSchema: z.object({ comment_id: socialId.describe("The hot take's id.") }),
-			annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+			annotations: { title: "Delete a hot take", readOnlyHint: false, destructiveHint: true, idempotentHint: true },
 		},
 		async ({ comment_id }) => {
 			if (toolCaller.kind !== "user") {

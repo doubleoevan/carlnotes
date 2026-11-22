@@ -46,7 +46,7 @@ export function registerTopicPostTools({ mcpServer, toolCaller, routeTopicId }: 
 				topic_id: topicIdArgument,
 				cursor: z.string().optional().describe("The cursor a previous page returned."),
 			}),
-			annotations: { readOnlyHint: true },
+			annotations: { title: "Read a topic's Open Mic posts", readOnlyHint: true },
 			_meta: toMcpViewToolMeta("topic-posts"),
 		},
 		async ({ topic_id, cursor }) => {
@@ -86,7 +86,7 @@ export function registerTopicPostTools({ mcpServer, toolCaller, routeTopicId }: 
 			inputSchema: z.object({
 				topic_post_id: z.string().describe("The topic post's id. read_topic_posts returns them."),
 			}),
-			annotations: { readOnlyHint: true },
+			annotations: { title: "Read an Open Mic post", readOnlyHint: true },
 			_meta: toMcpViewToolMeta("topic-post"),
 		},
 		async ({ topic_post_id }) => {

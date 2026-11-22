@@ -41,7 +41,7 @@ export function registerNewsTool({ mcpServer, toolCaller }: RegisterToolsOptions
 					.describe("How far back to read: week, day, or hour. Leave it out for week."),
 				cursor: z.string().optional().describe("The cursor a previous page returned."),
 			}),
-			annotations: { readOnlyHint: true },
+			annotations: { title: "Read Brews News", readOnlyHint: true },
 			_meta: toMcpViewToolMeta("news"),
 		},
 		async ({ window = DEFAULT_NEWS_WINDOW, cursor }) => {

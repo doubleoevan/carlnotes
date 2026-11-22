@@ -24,7 +24,7 @@ export function registerAccountTool({ mcpServer, toolCaller }: RegisterToolsOpti
 			description:
 				"The connected account's CarlNotes plan and usage: the plan, this month's spend against the monthly budget with the shares where features pause, the day's scans against the daily limit, and the topic image regenerations left this month. Changing the plan or billing happens on carlnotes.com, whose links the result includes. Use it when the user asks Carl or CarlNotes about my plan, my usage, or how much budget is left.",
 			inputSchema: z.object({}),
-			annotations: { readOnlyHint: true, destructiveHint: false },
+			annotations: { title: "Read your account", readOnlyHint: true, destructiveHint: false },
 			_meta: toMcpViewToolMeta("account"),
 		},
 		async () => {

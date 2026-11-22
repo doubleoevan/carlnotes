@@ -57,7 +57,7 @@ export function registerDashboardTool({ mcpServer, toolCaller }: RegisterToolsOp
 					.optional()
 					.describe("What the charts count, which the MCP view asks for. Leave it out."),
 			}),
-			annotations: { readOnlyHint: true },
+			annotations: { title: "Read Specials", readOnlyHint: true },
 			_meta: toMcpViewToolMeta("dashboard"),
 		},
 		async ({ dashboardKind: dashboardToolKind, userId, teamId, selection }) => {

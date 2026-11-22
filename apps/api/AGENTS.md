@@ -342,8 +342,9 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
 - `mcp/` — the mcp server on `@modelcontextprotocol/server`: `server.ts` (the `/mcp` and `/mcp/t/:topicId` routes and
   the web-standard transport), `origins.ts` (exact Origin validation on both transports, before caller resolution and
   limits in `index.ts`, allowing an absent header, production, and the configured app origin), `tools.ts` (the reads,
-  the site search, and the per-user writes it registers, with their schemas and annotations), `topicEditTools.ts`
-  (`edit_topic`, `suggest_sources`, and `create_topic`), `topicImageTool.ts` (`set_topic_image`, a regenerate or a
+  the site search, and the per-user writes it registers, with their schemas and annotations), `feedbackTools.ts`
+  (`rate_finding`, `read_finding_rating_note`, `bookmark_finding`, `send_finding_feedback`, and `follow_topic`),
+  `topicEditTools.ts` (`edit_topic`, `suggest_sources`, and `create_topic`), `topicImageTool.ts` (`set_topic_image`, a regenerate or a
   public image url, returning the topic MCP view. If the image set from a url stays unchecked, it returns the Topic's
   current image and says only the caller can see the new one), `topicAttachmentTool.ts` (`add_topic_attachment`, a url's
   page or pasted text, owner only), `noteTools.ts` (`read_notes`, `save_note`, and `delete_note` through the note

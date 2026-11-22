@@ -1,8 +1,9 @@
 # CarlNotes
 
 CarlNotes is a web app that reads each Topic's Sources on a schedule or on demand and keeps the Findings that match the
-Topic's prompt. Its users get them in the Topic's Feed, a scan email, a podcast episode, and a chat. This README covers
-the stack, how the apps and packages fit together, the evals, and the commands that run, check, and deploy the app.
+Topic's prompt. Its users get them in the Topic's Feed, a scan email, a video, a podcast episode, and in a chat. This
+README covers the stack, how the apps and packages fit together, the evals, and the commands that run, check, and
+deploy the app.
 
 <img src="apps/web/public/carl-hero.png" alt="Carl writes in a notebook beside a laptop and a mug of coffee" width="200" align="left" />
 

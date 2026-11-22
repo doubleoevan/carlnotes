@@ -26,7 +26,7 @@ export function registerProfileTool({ mcpServer, toolCaller, routeTopicId }: Reg
 			inputSchema: z.object({
 				user_id: z.string().min(1).optional().describe("The person's id. Leave it out for your own profile."),
 			}),
-			annotations: { readOnlyHint: true, destructiveHint: false },
+			annotations: { title: "Read a Café", readOnlyHint: true, destructiveHint: false },
 			_meta: toMcpViewToolMeta("profile"),
 		},
 		async ({ user_id }) => {

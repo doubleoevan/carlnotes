@@ -25,9 +25,9 @@ import { toTextResult } from "./toolShapes"
 import { registerTools } from "./tools"
 import { toResultWithViewableImagesSigned } from "./viewableImageSignatures"
 
-// the name and version the mcpServer reports on initialize
+// the name and version the mcpServer reports on initialize, the version that server.json lists
 const SERVER_NAME = "carlnotes"
-const SERVER_VERSION = "1.0.0"
+const SERVER_VERSION = "1.0.1"
 
 // the instructions a client reads at connect
 export const SERVER_INSTRUCTIONS =

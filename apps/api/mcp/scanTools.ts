@@ -38,7 +38,7 @@ export function registerScanTools({ mcpServer, toolCaller, routeTopicId }: Regis
 			description:
 				"Start a brew of a CarlNotes topic now. Carl reads its sources and keeps what's worth reading, and the brew sends its report and records its podcast episode like any other. It takes one of the account's daily brews, and only the topic's owner or an admin may start it. Past the daily limit no brew starts and nothing bills. Use it when the user asks Carl or CarlNotes to run a topic, with phrases like brew this topic now or run this topic now.",
 			inputSchema: scanToolInput,
-			annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+			annotations: { title: "Brew a topic", readOnlyHint: false, destructiveHint: false, openWorldHint: true },
 			_meta: toMcpViewToolMeta("scan"),
 		},
 		async ({ topic_id }) => {
@@ -84,7 +84,7 @@ export function registerScanTools({ mcpServer, toolCaller, routeTopicId }: Regis
 			description:
 				"A CarlNotes topic's running brew, or its latest recap with none running: the stage Carl is on, what each source found, what he kept, and the state of the brew's podcast episode. Use it when the user asks Carl or CarlNotes about a brew, with phrases like how is the brew going, is Carl done, or show the latest brew.",
 			inputSchema: scanToolInput,
-			annotations: { readOnlyHint: true },
+			annotations: { title: "Read a brew's status", readOnlyHint: true },
 			_meta: toMcpViewToolMeta("scan"),
 		},
 		async ({ topic_id }) => {
@@ -108,7 +108,7 @@ export function registerScanTools({ mcpServer, toolCaller, routeTopicId }: Regis
 			description:
 				"Stop a CarlNotes topic's running brew. What Carl kept stays, what the brew spent stays charged, and its daily brew comes back. Only the topic's owner or an admin may stop it. Use it when the user asks Carl or CarlNotes to stop, with phrases like stop the brew or cancel this brew.",
 			inputSchema: scanToolInput,
-			annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+			annotations: { title: "Stop a brew", readOnlyHint: false, destructiveHint: false, idempotentHint: true },
 		},
 		async ({ topic_id }) => {
 			const topicWriteCall = toTopicWriteCall({ toolCaller, routeTopicId, topicId: topic_id })

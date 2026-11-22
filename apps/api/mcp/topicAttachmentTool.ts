@@ -33,7 +33,13 @@ export function registerTopicAttachmentTool({ mcpServer, toolCaller, routeTopicI
 			description:
 				"Add an attachment to a CarlNotes topic you own: the page at a public url, or pasted text with a title, saved as a plain-text file. Carl reads it in the background, and every brew after that scores findings with it. Use it when the user asks Carl or CarlNotes to attach something to a topic, with phrases like attach this page, attach this to the topic, or save this text to the topic.",
 			inputSchema: addTopicAttachmentPayload,
-			annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+			annotations: {
+				title: "Add an attachment",
+				readOnlyHint: false,
+				destructiveHint: false,
+				idempotentHint: false,
+				openWorldHint: true,
+			},
 		},
 		async ({ topic_id, url, title, text }) => {
 			const topicWriteCall = toTopicWriteCall({ toolCaller, routeTopicId, topicId: topic_id })

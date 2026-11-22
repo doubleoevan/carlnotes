@@ -42,7 +42,7 @@ export function registerTeamWriteTools({ mcpServer, toolCaller, routeTopicId }: 
 			description:
 				"Ask to join a CarlNotes team, or take the ask back with is_requesting false. A team leader approves the ask on the team's page. Use it when the user asks Carl or CarlNotes to join this team or ask to join a team.",
 			inputSchema: z.object({ team_id: teamIdArgument, is_requesting: z.boolean() }),
-			annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+			annotations: { title: "Ask to join a team", readOnlyHint: false, destructiveHint: false, idempotentHint: true },
 		},
 		async ({ team_id, is_requesting }) => {
 			// an account asks, and a team page is never the bound topic
@@ -80,7 +80,7 @@ export function registerTeamWriteTools({ mcpServer, toolCaller, routeTopicId }: 
 				username: z.string().trim().min(1).optional().describe("The person's CarlNotes username."),
 				email: z.string().trim().optional().describe("The person's email address, in place of username."),
 			}),
-			annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+			annotations: { title: "Invite someone", readOnlyHint: false, destructiveHint: false, idempotentHint: false },
 		},
 		async ({ team_id, topic_id, username, email }) => {
 			if (toolCaller.kind !== "user") {
@@ -115,7 +115,7 @@ export function registerTeamWriteTools({ mcpServer, toolCaller, routeTopicId }: 
 			description:
 				"Accept or decline a CarlNotes team or topic invite waiting for you, by the invite id read_activity lists. Accepting a team invite joins the team, or asks to join it if a member sent an open link. Use it when the user asks Carl or CarlNotes to accept an invite, decline an invite, or join the team I was invited to.",
 			inputSchema: z.object({ invite_id: z.string().min(1), is_accepted: z.boolean() }),
-			annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+			annotations: { title: "Answer an invite", readOnlyHint: false, destructiveHint: false, idempotentHint: true },
 		},
 		async ({ invite_id, is_accepted }) => {
 			if (toolCaller.kind !== "user") {
@@ -150,7 +150,7 @@ export function registerTeamWriteTools({ mcpServer, toolCaller, routeTopicId }: 
 					.optional()
 					.describe("A message id from read_team to reply to."),
 			}),
-			annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+			annotations: { title: "Post in a team chat", readOnlyHint: false, destructiveHint: false, idempotentHint: false },
 		},
 		async ({ team_id, message, reply_to_chat_message_id }) => {
 			// a member's account that accepted the Terms posts, and a team page is never the bound topic

@@ -36,7 +36,7 @@ export function registerUpdatesTool({ mcpServer, toolCaller, routeTopicId }: Reg
 			description:
 				"Read the user's CarlNotes updates: the unread findings Carl would read next across the topics they follow, or on one topic, trimmed to 5, 15, or 30 minutes of reading. Every finding it returns counts as read, so the next call moves on. Use it for requests like what's new, catch me up, update me, or what's new on a topic. Call it once for each time the user asks.",
 			inputSchema: updatesToolInput,
-			annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+			annotations: { title: "Read updates", readOnlyHint: false, destructiveHint: false, openWorldHint: false },
 			_meta: toMcpViewToolMeta("updates"),
 		},
 		async ({ minutes, topic_id }) => {

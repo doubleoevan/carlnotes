@@ -35,7 +35,7 @@ function registeredSend(
 	routeTopicId: string | null,
 	toolCaller: ToolCaller = caller,
 ): {
-	config: { annotations: Record<string, boolean>; title: string; _meta: unknown }
+	config: { annotations: Record<string, boolean | string>; title: string; _meta: unknown }
 	handler: (payload: typeof input) => Promise<CallToolResult>
 } {
 	let registered: ReturnType<typeof registeredSend> | undefined
@@ -73,7 +73,12 @@ test.each([null, "bound-topic"])(
 		}
 		const send = spyOn(sendService, "sendToPersonalSources").mockResolvedValue(result)
 		const tool = registeredSend(routeTopicId)
-		expect(tool.config.annotations).toEqual({ readOnlyHint: false, destructiveHint: false, idempotentHint: false })
+		expect(tool.config.annotations).toEqual({
+			title: "Send to a Topic",
+			readOnlyHint: false,
+			destructiveHint: false,
+			idempotentHint: false,
+		})
 		expect(tool.config.title).toBe("Send to a Topic")
 		expect(JSON.stringify(tool.config._meta)).toContain("ui://carlnotes/topic.html")
 		const response = await tool.handler(input)

@@ -1,12 +1,11 @@
-// the set_topic_image tool: a regenerate past the month's regenerations starts no render, a user who may not edit the
-// topic changes nothing, a url that returns a page leaves the image unchanged, and a url's image that stays unchecked
+// the set_topic_image tool: a call with no image url starts no render and names the topic page, a user who may not
+// edit the topic changes nothing, a url that returns a page leaves the image unchanged, and a url's image that stays unchecked
 // returns the topic's current image
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import * as dnsPromises from "node:dns/promises"
 import { toTestTopicResponse } from "@carlnotes/contracts/topicFeedTestFixtures"
 import { toTopicImageUrls } from "@carlnotes/contracts/topicImages"
 import * as topicImageRenders from "@carlnotes/pipeline/topicImages/topicImageRenders"
-import * as authorization from "../authorization"
 import * as topicImageEdits from "../topic/topicImageEdits"
 import * as topics from "../topic/topics"
 import { type RegisteredToolHandler, toRegisteredTools, toResultText, USER } from "./toolTestFixtures"
@@ -49,18 +48,21 @@ function toSetTopicImageHandler(): RegisteredToolHandler {
 	return handler
 }
 
-test("a regenerate past the month's regenerations starts no render", async () => {
+test("a call with no image url starts no render and sends the editor to the topic page to regenerate", async () => {
 	spyOn(topicImageEdits, "loadTopicImageEditor").mockResolvedValue(EDITOR)
-	spyOn(authorization, "isAllowed").mockResolvedValue(false)
 	const toolResult = await toSetTopicImageHandler()({ topic_id: "topic-1" })
+
+	// the result names the topic page and the url argument, and nothing was rendered or replaced
 	expect(toolResult.isError).toBe(true)
-	expect(toResultText(toolResult)).toContain("This month's image regenerations are used")
+	expect(toResultText(toolResult)).toContain("https://carlnotes.com/topics/topic-1")
+	expect(toResultText(toolResult)).toContain("image_url")
 	expect(startRenderSpy).not.toHaveBeenCalled()
+	expect(replaceImageSpy).not.toHaveBeenCalled()
 })
 
 test("a user who may not edit the topic changes nothing", async () => {
 	spyOn(topicImageEdits, "loadTopicImageEditor").mockResolvedValue(null)
-	const toolResult = await toSetTopicImageHandler()({ topic_id: "topic-1", image_prompt: "a red espresso machine" })
+	const toolResult = await toSetTopicImageHandler()({ topic_id: "topic-1", image_url: "https://images.example/a.png" })
 	expect(toResultText(toolResult)).toBe("You may not change this topic's image.")
 	expect(startRenderSpy).not.toHaveBeenCalled()
 })

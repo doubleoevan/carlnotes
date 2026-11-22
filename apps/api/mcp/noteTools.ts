@@ -54,7 +54,7 @@ export function registerNoteTools({ mcpServer, toolCaller, routeTopicId, clientA
 				note_id: z.string().min(1).optional().describe("One note to open, with its html and version."),
 				cursor: z.string().optional().describe("The cursor a previous page returned."),
 			}),
-			annotations: { readOnlyHint: true, destructiveHint: false },
+			annotations: { title: "Read tasting notes", readOnlyHint: true, destructiveHint: false },
 			_meta: toMcpViewToolMeta("note"),
 		},
 		async ({ topic_id, team_id, note_id, cursor }) => {
@@ -111,7 +111,7 @@ export function registerNoteTools({ mcpServer, toolCaller, routeTopicId, clientA
 					.optional()
 					.describe("The version read_notes returned, which a body save needs."),
 			}),
-			annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
+			annotations: { title: "Save a tasting note", readOnlyHint: false, destructiveHint: true, idempotentHint: false },
 			_meta: toMcpViewToolMeta("note"),
 		},
 		async ({ topic_id, team_id, note_id, name, visibility, html, version }) => {
@@ -138,7 +138,7 @@ export function registerNoteTools({ mcpServer, toolCaller, routeTopicId, clientA
 			description:
 				"Delete a CarlNotes tasting note with its comments, if you wrote it. A note cannot be brought back. Use it when the user asks Carl or CarlNotes to delete my note or remove this note.",
 			inputSchema: z.object({ note_id: z.string().min(1) }),
-			annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+			annotations: { title: "Delete a tasting note", readOnlyHint: false, destructiveHint: true, idempotentHint: true },
 		},
 		async ({ note_id }) => {
 			if (toolCaller.kind !== "user") {
