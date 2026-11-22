@@ -54,13 +54,13 @@ function stubTeamPage(role: "member" | null, filmRows: unknown[][] = FILM_ROWS, 
 			return filmRows.filter(([, topicId]) => values.includes(topicId))
 		}
 
-		// the team's topics, one public and one private. every other read returns no row, so the team has no member, no
-		// topic card, and no Topic Post
+		// the team's topics, one public and one private, the public one newer so the profile order puts it first. every
+		// other read returns no row, so the team has no member, no topic card, and no Topic Post
 		const isOwnedTopicsRead = text.includes('from "topics"') && text.includes('"topics"."team_id" =')
 		return isOwnedTopicsRead
 			? [
-					toTableRow(topics, { id: "topic-public", visibility: "public", createdAt: new Date() }),
-					toTableRow(topics, { id: "topic-private", visibility: "private", createdAt: new Date() }),
+					toTableRow(topics, { id: "topic-public", visibility: "public", createdAt: new Date("2026-02-01") }),
+					toTableRow(topics, { id: "topic-private", visibility: "private", createdAt: new Date("2026-01-01") }),
 				]
 			: []
 	})
