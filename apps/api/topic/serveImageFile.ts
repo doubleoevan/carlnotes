@@ -14,6 +14,7 @@ import {
 	toVersionedImageHeaders,
 	UNVERSIONED_CACHE_CONTROL,
 } from "../edgeCache"
+import { isValidGatedImageSignature } from "../signedImagePaths"
 import type { NamedTopic } from "./permissions"
 
 // the topic whose visibility gates the file, the object key of the file, its content type, which is webp if none is
@@ -59,16 +60,17 @@ export async function serveCurrentOrUncheckedImageFile(
 
 /**
  * Serves one image file under its topic's visibility: a public topic's file immutable at the edge under the topic's
- * tag, a non-public topic's file to a session the view gate grants and in the browser alone, and 404 otherwise. A file
- * at a url that keeps naming it through its changes is cached briefly instead.
+ * tag, a non-public topic's file in the browser alone to a session the view gate grants or a request signed for its
+ * path, and 404 otherwise. A file at a url that keeps naming it through its changes is cached briefly instead.
  */
 export async function serveImageFile(
 	context: Context<AppEnv>,
 	{ topic, objectKey, contentType = "image/webp", isUrlVersioned = true, checkedReadAccess }: ServeImageFileOptions,
 ): Promise<Response> {
-	// a non-public topic's file goes to a session the view gate grants, and never to the edge
+	// a non-public topic's file goes to a session the view gate grants or a request signed for its path, such as an MCP
+	// view's, and never to the edge
 	const isPublic = checkedReadAccess ? checkedReadAccess === "public" : topic.visibility === "public"
-	if (!checkedReadAccess && !isPublic && !(await isAllowed(currentUser(context), "topic:view", topic))) {
+	if (!checkedReadAccess && !isPublic && !(await isGatedImageReadAllowed(context, topic))) {
 		return context.json({ error: "not found" }, 404)
 	}
 
@@ -90,4 +92,14 @@ export async function serveImageFile(
 	// the file's bytes stream from object storage in its content type
 	context.header("Content-Type", contentType)
 	return stream(context, (responseStream) => responseStream.pipe(attachmentStream(objectKey)))
+}
+
+// whether a request may read a non-public topic's file: it is signed for its path, or its session may view the topic
+async function isGatedImageReadAllowed(context: Context<AppEnv>, topic: NamedTopic): Promise<boolean> {
+	const isSigned = isValidGatedImageSignature({
+		path: context.req.path,
+		expires: context.req.query("expires"),
+		signature: context.req.query("signature"),
+	})
+	return isSigned || isAllowed(currentUser(context), "topic:view", topic)
 }

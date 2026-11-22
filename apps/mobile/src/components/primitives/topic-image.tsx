@@ -51,13 +51,25 @@ function TopicImagePlaceholder({ size }: { size: TopicImageSize }) {
 	)
 }
 
-// the file at 2x in the contract's image box. an unchecked image's file, at a path only its uploader's session reads,
-// loads with the stored session cookie and is never stored
-function TopicImageFile({ url2x, alt }: TopicImageFileProps) {
+// the file at 2x in the contract's image box, or the fallback once the file fails to load. an unchecked image's file,
+// at a path only its uploader's session reads, loads with the stored session cookie and is never stored
+function TopicImageFile({ url2x, alt, fallback }: TopicImageFileProps) {
 	const imageProps = useApiImageProps(url2x)
+	const [failedUrl, setFailedUrl] = useState<string | null>(null)
+	if (failedUrl === url2x) {
+		return fallback
+	}
 	return (
 		<View className={topicImageClasses.image}>
-			{imageProps && <Image {...imageProps} accessibilityLabel={alt} contentFit="cover" style={{ flex: 1 }} />}
+			{imageProps && (
+				<Image
+					{...imageProps}
+					accessibilityLabel={alt}
+					contentFit="cover"
+					style={{ flex: 1 }}
+					onError={() => setFailedUrl(url2x)}
+				/>
+			)}
 		</View>
 	)
 }

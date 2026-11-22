@@ -423,7 +423,11 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   list. `isHomeFeaturedOnly` in the spend control settings leaves every list its featured rows alone. Both are read with
   the cached ids, so the home follows them within a minute. A Topic Post's publish on a public topic and a published
   post's delete call `clearHomeCaches` and purge the author's profile. `topic/serveImageFile.ts` streams one image file
-  with the visibility gate and the cache headers, and `topic/topicImagesRoute.ts` serves a topic image's files (public
+  with the visibility gate and the cache headers. A non-public file goes to a session `topic:view` grants or to a
+  request signed for its path. `signedImagePaths.ts` signs a path with an expiry under the auth secret, by purpose, and
+  finds the subject each gated image path names. An MCP view's frame sends no cookie, so the MCP server's
+  `trackToolCalls` passes each tool result through `mcp/viewableImageSignatures.ts`, which signs only the paths of
+  non-public topics the caller may view now. `topic/topicImagesRoute.ts` serves a topic image's files (public
   ones immutable at the edge under `topic-image:<topicId>`, private ones behind `topic:view`), the editor's Regenerate
   within `imageRegenerationLimit`, the render an editor polls, and the upload. `topic/imageEdits.ts` holds what the
   image routes share: the upload's body limit and checks over an image's bytes, the image prompt's moderation, and the
@@ -807,7 +811,8 @@ decode in `@carlnotes/pipeline/topicPosts/topicPostBodyImageFiles.ts`, and `toSt
 which fails closed with a 503 `moderation-unavailable`. It serves one file at `GET
 /api/topic-post-body-images/:topicPostId/:imageId/:file`: a saved image to whoever may read the post, an upload the body
 does not name to its author, and either to a valid read signature, cached at the edge only for a public Topic's
-published post. `topicPost/topicPostBodyImages.ts` signs a non-public post's image urls, writes the html each reader
+published post. `topicPost/topicPostBodyImages.ts` signs a non-public post's image urls through `signedImagePaths.ts`
+under its own purpose, writes the html each reader
 gets with `toTopicPostHtmlForReader` (absolute for an MCP view), counts a post's images over its saved body and its
 uploads in grace, settles a save's images (the added ones keep their files and the dropped ones are queued for
 deletion), and purges a public post's images from the edge after a save drops one or the post is deleted. A file read

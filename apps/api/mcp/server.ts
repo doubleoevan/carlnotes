@@ -20,9 +20,10 @@ import { type Context, Hono } from "hono"
 import { type AppEnv, currentUser } from "../currentUser"
 import { resolveClientAddress } from "../trustedProxies"
 import { loadOAuthClientName } from "./oauthClientNames"
-import { resolveToolCaller, type ToolCaller } from "./toolCaller"
+import { resolveToolCaller, type ToolCaller, toToolCallerUserId } from "./toolCaller"
 import { toTextResult } from "./toolShapes"
 import { registerTools } from "./tools"
+import { toResultWithViewableImagesSigned } from "./viewableImageSignatures"
 
 // the name and version the mcpServer reports on initialize
 const SERVER_NAME = "carlnotes"
@@ -119,7 +120,8 @@ type ToolHandler = (...handlerArguments: unknown[]) => Promise<CallToolResult>
 
 /**
  * Reports every tool call by the app that made it and the call's outcome, by wrapping the server's registerTool. A
- * tool that throws an error returns a failure with none of the error's text.
+ * tool that throws an error returns a failure with none of the error's text. The gated image paths of the non-public
+ * topics the caller may view are signed, because an MCP view's frame sends no session cookie.
  */
 export function trackToolCalls(mcpServer: McpServer, toolCaller: ToolCaller): void {
 	const registerTool = mcpServer.registerTool.bind(mcpServer)
@@ -128,11 +130,13 @@ export function trackToolCalls(mcpServer: McpServer, toolCaller: ToolCaller): vo
 			toolName,
 			config as never,
 			(async (...handlerArguments: unknown[]) => {
-				// report the result's outcome. a thrown error reports as failed, and its text stays out of the result
+				// report the result's outcome, and return it with the caller's viewable images signed. a thrown error reports
+				// as failed, and its text stays out of the result
 				try {
 					const toolResult = await handler(...handlerArguments)
+					const signedResult = await toResultWithViewableImagesSigned(toolResult, toToolCallerUserId(toolCaller))
 					trackToolCall(toolCaller, toolName, toolResult.isError ? "rejected" : "ok")
-					return toolResult
+					return signedResult
 				} catch (error) {
 					// report the error's own text to monitoring alone
 					trackToolCall(toolCaller, toolName, "failed")

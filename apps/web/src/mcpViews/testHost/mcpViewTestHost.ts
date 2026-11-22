@@ -24,6 +24,12 @@ export const HOST_PAGE_URL = "https://mcp-view-test-host.test/"
 const HOST_SCRIPT_URL = `${HOST_PAGE_URL}hostPage.js`
 const HOST_PAGE_HTML = `<!doctype html><body style="margin: 0"><script type="module" src="${HOST_SCRIPT_URL}"></script></body>`
 
+// a transparent 1x1 png, the file every image request in an MCP view's frame receives
+const BLANK_PIXEL_PNG = Buffer.from(
+	"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
+	"base64",
+)
+
 // where build:ui and smoke:mcp-views write the MCP view bundle, relative to this folder
 const MCP_VIEWS_BUNDLE_ROOT = `${import.meta.dir}/../../../dist/mcp-views`
 
@@ -131,8 +137,13 @@ export async function openMcpView(browser: Browser, options: OpenMcpViewOptions)
 			await route.fulfill({ contentType: "text/javascript", body: await toHostScript() })
 			return
 		}
-		// record every other request and abort the request
+		// record every other request. an image gets a blank pixel, so a view's image loads instead of showing its
+		// fallback, and any other request is aborted
 		requestUrls.push(requestUrl)
+		if (route.request().resourceType() === "image") {
+			await route.fulfill({ contentType: "image/png", body: BLANK_PIXEL_PNG })
+			return
+		}
 		await route.abort()
 	})
 

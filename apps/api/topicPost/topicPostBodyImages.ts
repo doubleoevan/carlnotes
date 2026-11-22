@@ -16,16 +16,12 @@ import {
 	toTopicPostBodyImageObjectKeys,
 } from "@carlnotes/pipeline/topicPosts/topicPostBodyImageFiles"
 import { purgeEdgeCacheTagAfterDeletion, toTopicImageCacheTag } from "@carlnotes/server/edgePurge"
-import { isSameSignature, toAuthSecretSignature } from "@carlnotes/server/hmac"
 import { sanitizeTopicPostHtml } from "../noteHtml"
+import { isValidPathSignature, type SignedPathCheckOptions, toSignedPath } from "../signedImagePaths"
 import type { TopicPostAccessRow, TopicPostRow } from "./topicPosts"
 
 // what a signature signs before the path, so it never matches another use of the auth secret
 const SIGNATURE_PURPOSE = "topic-post-body-image"
-
-// a signed url lasts a day past the next whole hour, so one url holds for an hour of the browser's cache
-const HOUR_SECONDS = 60 * 60
-const SIGNED_URL_LIFETIME_SECONDS = 24 * HOUR_SECONDS
 
 /**
  * Returns whether a Topic Post's body images are public: the post is published on a public Topic. Any other post's
@@ -39,42 +35,14 @@ export function isTopicPostPublic({ topicPost, topic }: TopicPostAccessRow): boo
  * Returns a body image path with a read signature that lasts a day past the next whole hour.
  */
 export function toSignedTopicPostBodyImageUrl(path: string, nowMs = Date.now()): string {
-	const expires = Math.ceil(nowMs / 1000 / HOUR_SECONDS) * HOUR_SECONDS + SIGNED_URL_LIFETIME_SECONDS
-	return `${path}?expires=${expires}&signature=${toBodyImageSignature(path, expires)}`
-}
-
-// a read signature request's path and its two query values, as sent
-export type TopicPostBodyImageSignatureOptions = {
-	path: string
-	expires: string | undefined
-	signature: string | undefined
-	nowMs?: number
+	return toSignedPath({ path, purpose: SIGNATURE_PURPOSE, nowMs })
 }
 
 /**
  * Returns whether a request's signature signs its path and an expiry that has not passed.
  */
-export function isValidTopicPostBodyImageSignature({
-	path,
-	expires,
-	signature,
-	nowMs = Date.now(),
-}: TopicPostBodyImageSignatureOptions): boolean {
-	// an expiry is whole seconds that have not passed
-	const expiresSeconds = Number(expires)
-	if (!signature || !/^\d+$/.test(expires ?? "") || expiresSeconds * 1000 <= nowMs) {
-		return false
-	}
-	return isSameSignature({ expectedSignature: toBodyImageSignature(path, expiresSeconds), signature })
-}
-
-// the signature of a path until an expiry
-function toBodyImageSignature(path: string, expires: number): string {
-	return toAuthSecretSignature({
-		value: `${SIGNATURE_PURPOSE}|${path}|${expires}`,
-		purpose: "body image urls",
-		encoding: "base64url",
-	})
+export function isValidTopicPostBodyImageSignature(options: SignedPathCheckOptions): boolean {
+	return isValidPathSignature({ ...options, purpose: SIGNATURE_PURPOSE })
 }
 
 // whether a reader's body urls are signed, and the site url an absolute src starts with

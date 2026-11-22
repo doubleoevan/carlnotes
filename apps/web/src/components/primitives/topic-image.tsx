@@ -7,6 +7,7 @@ import {
 	type TopicImageProps,
 } from "@carlnotes/core/components/TopicImage"
 import { topicImageClasses, topicImagePlaceholderMugHeights } from "@carlnotes/nightshift/components/topic-image"
+import { useState } from "react"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
 import { useSiteAssetUrl } from "@/hooks/useSiteAssetUrl"
 
@@ -22,8 +23,8 @@ const ELEMENTS: TopicImageElements = {
 		) : (
 			<span className={`relative block animate-pulse motion-reduce:animate-none ${className}`}>{children}</span>
 		),
-	Image: ({ url, url2x, alt }) => (
-		<TopicImageFile url={url} url2x={url2x} alt={alt} className={topicImageClasses.image} />
+	Image: ({ url, url2x, alt, fallback }) => (
+		<TopicImageFile url={url} url2x={url2x} alt={alt} className={topicImageClasses.image} fallback={fallback} />
 	),
 	Placeholder: ({ size }) => (
 		<span className={`flex ${topicImageClasses.placeholder}`}>
@@ -34,11 +35,25 @@ const ELEMENTS: TopicImageElements = {
 	),
 }
 
-// the img, with its urls resolved against the connected site in an embedded host
-function TopicImageFile({ url, url2x, alt, className }: TopicImageFileProps) {
+// the img, with its urls resolved against the connected site in an embedded host, or the fallback once a file of the
+// url fails to load
+function TopicImageFile({ url, url2x, alt, className, fallback }: TopicImageFileProps) {
 	const siteUrl = useSiteAssetUrl(url)
 	const siteUrl2x = useSiteAssetUrl(url2x)
-	return <img src={siteUrl} srcSet={`${siteUrl} 1x, ${siteUrl2x} 2x`} alt={alt} loading="lazy" className={className} />
+	const [failedUrl, setFailedUrl] = useState<string | null>(null)
+	if (failedUrl === url) {
+		return fallback
+	}
+	return (
+		<img
+			src={siteUrl}
+			srcSet={`${siteUrl} 1x, ${siteUrl2x} 2x`}
+			alt={alt}
+			loading="lazy"
+			className={className}
+			onError={() => setFailedUrl(url)}
+		/>
+	)
 }
 
 /**

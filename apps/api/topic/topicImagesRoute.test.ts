@@ -1,8 +1,8 @@
 // topic image route tests: a public file to a visitor with its edge headers, a private file refused with no session, a
-// stale hash, an unchecked file to its uploader alone, the regenerate limit, a regenerate that keeps a published
+// private file to a request signed for its path, a stale hash, an unchecked file to its uploader alone, the regenerate limit, a regenerate that keeps a published
 // unchecked image, a too-large, a wrong-type, and a flagged upload, an upload saved as unchecked if its check could not
 // run, and a private topic's upload that is published all the same
-import { afterEach, expect, mock, spyOn, test } from "bun:test"
+import { afterAll, afterEach, expect, mock, spyOn, test } from "bun:test"
 import { toTopicImageUrls } from "@carlnotes/contracts/topicImages"
 import {
 	restoreConnectionPool,
@@ -19,18 +19,22 @@ import * as moderationModels from "@carlnotes/models/moderation"
 import * as topicImageFiles from "@carlnotes/pipeline/topicImages/topicImageFiles"
 import * as topicImageRenders from "@carlnotes/pipeline/topicImages/topicImageRenders"
 import * as uncheckedImages from "@carlnotes/pipeline/uncheckedImages"
+import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
+import { Hono } from "hono"
 import * as authorization from "../authorization"
 import * as currentUserModule from "../currentUser"
 import * as moderation from "../moderation"
+import { toSignedGatedImagePaths } from "../signedImagePaths"
 import { toJsonRequest, toSignedInApp } from "../testSession"
 import { namedTopicColumns } from "./permissions"
 import { topicImagesRoute } from "./topicImagesRoute"
 
-// put the pool and every spy back after each test
+// put the pool and every spy back after each test, and the signing secret back after the file
 afterEach(() => {
 	restoreConnectionPool()
 	mock.restore()
 })
+afterAll(saveEnvSettings(["BETTER_AUTH_SECRET"]))
 
 // a one-pixel png, which an upload crops and resizes to its frame
 const ONE_PIXEL_PNG = Buffer.from(
@@ -92,6 +96,27 @@ test("a private topic's file is not found without a session, and private in the 
 	expect(served.status).toBe(200)
 	expect(served.headers.get("cache-control")).toBe("private, max-age=31536000, immutable")
 	expect(served.headers.get("cache-tag")).toBeNull()
+})
+
+test("a private topic's file goes to a request signed for its path with no session, private in the browser", async () => {
+	stubTopic("private")
+	Bun.env.BETTER_AUTH_SECRET = "test-secret"
+
+	// the route at its served path, as an MCP view's frame requests it with no cookie
+	const app = new Hono().route("/api", topicImagesRoute)
+	const imagePath = `/api/topic-images/topic-1/${HASH}/page.webp`
+	const served = await app.request(toSignedGatedImagePaths({ value: imagePath, isSubjectSigned: () => true }))
+	expect(served.status).toBe(200)
+	expect(served.headers.get("cache-control")).toBe("private, max-age=31536000, immutable")
+	expect(served.headers.get("cache-tag")).toBeNull()
+
+	// a signature for another file of the topic opens nothing
+	const otherFilePath = toSignedGatedImagePaths({
+		value: imagePath.replace("page", "list"),
+		isSubjectSigned: () => true,
+	})
+	const otherFileSignature = new URL(otherFilePath, "https://a.b").search
+	expect((await app.request(`${imagePath}${otherFileSignature}`)).status).toBe(404)
 })
 
 test("a stale hash and a file name that is not a size are not found", async () => {
