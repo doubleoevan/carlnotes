@@ -8,13 +8,14 @@ import {
 import { isCurrentPagePath } from "@carlnotes/core/lib/pagePaths"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { usePathname } from "expo-router"
+import { CARD_GLOW_CLASS } from "@/cardGlowClasses"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { TopicImage } from "@/components/primitives/topic-image"
 import { toPlatformPath } from "@/platformPath"
 
-// the app's elements: the topic image, and the link around it, which dims while pressed. the link opens the page's
-// site url, which opens in the app if the app has that screen. a link with no label is no accessibility element of
-// its own, and a link with one reads it as its name
+// the app's elements: the topic image, and the link around it, which glows like a card while pressed. the link opens
+// the page's site url, which opens in the app if the app has that screen. a link with no label is no accessibility
+// element of its own, and a link with one reads it as its name
 const ELEMENTS: TopicImageLinkElements = {
 	TopicImage,
 	Link: ({ path, label, className, onOpen, children }) => (
@@ -23,7 +24,7 @@ const ELEMENTS: TopicImageLinkElements = {
 			accessible={label !== null}
 			accessibilityLabel={label ?? ""}
 			onPress={onOpen}
-			className={cn("shrink-0 active:opacity-75", className)}
+			className={cn("shrink-0", CARD_GLOW_CLASS, className)}
 		>
 			{children}
 		</AnchorLink>

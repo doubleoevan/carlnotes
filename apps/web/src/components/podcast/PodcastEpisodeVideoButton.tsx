@@ -9,7 +9,7 @@ import {
 import { cn } from "@carlnotes/nightshift/classNames"
 import { Clapperboard, Play } from "lucide-react"
 import type { ComponentProps } from "react"
-import { PLAY_BUTTON_CLASS } from "@/lib/styleClasses"
+import { CARD_GLOW_CLASS, PLAY_BUTTON_CLASS } from "@/lib/styleClasses"
 import { captureFilmVisitEvent } from "@/lib/visitAnalytics"
 import { PodcastEpisodePlayButton } from "./PodcastEpisodePlayButton"
 import { TopicVideoDialog } from "./TopicVideoDialog"
@@ -69,7 +69,8 @@ function VideoButton({
 		)
 	}
 
-	// the film's poster at 16:9 under the film player's round play button. the whole poster takes the press
+	// the film's poster at 16:9 under the film player's round play button, which glows like a card link. the whole
+	// poster takes the press
 	if (size === "thumbnail") {
 		return (
 			<>
@@ -77,7 +78,10 @@ function VideoButton({
 					type="button"
 					aria-label={label}
 					onClick={onPress}
-					className="group relative grid aspect-video w-30 shrink-0 cursor-pointer place-items-center overflow-hidden rounded-xs bg-hero"
+					className={cn(
+						"group relative grid aspect-video w-30 shrink-0 cursor-pointer place-items-center overflow-hidden rounded-xs bg-hero",
+						CARD_GLOW_CLASS,
+					)}
 				>
 					{posterUrl && <img src={posterUrl} alt="" className="absolute inset-0 size-full object-contain" />}
 					<span className={cn(PLAY_BUTTON_CLASS, "relative size-9 group-hover:bg-primary/90")}>

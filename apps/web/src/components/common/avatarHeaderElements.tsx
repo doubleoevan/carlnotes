@@ -1,6 +1,6 @@
 // the web's avatar header elements on the profile page's floated-avatar layout, under a page's heading row. the
-// avatar's link leaves the tab order and the screen reader to the name's link beside it, which opens the same page,
-// unless the team dropdown shows in the name's place
+// avatar's link glows like a card link, and leaves the tab order and the screen reader to the name's link beside it,
+// which opens the same page, unless the team dropdown shows in the name's place
 
 import { toDashboardSubjectName } from "@carlnotes/contracts/dashboards"
 import type { AvatarHeaderElements, AvatarHeaderSkeletonElements } from "@carlnotes/core/components/AvatarHeader"
@@ -17,7 +17,7 @@ import {
 	PAGE_HEADER_LONE_TITLE_CLASS,
 	PAGE_HEADER_TITLE_CLASS,
 } from "@/lib/pageHeaderClasses"
-import { SKELETON_SHAPE_CLASS } from "@/lib/styleClasses"
+import { CARD_GLOW_CLASS, SKELETON_SHAPE_CLASS } from "@/lib/styleClasses"
 
 // the header's row, 1rem under the page's heading row
 const AVATAR_HEADER_ROW_CLASS = cn(PAGE_HEADER_FLOW_CLASS, "mt-4")
@@ -33,7 +33,7 @@ export const WEB_AVATAR_HEADER_ELEMENTS: AvatarHeaderElements = {
 			tabIndex={hasNameLink ? -1 : undefined}
 			aria-hidden={hasNameLink ? "true" : undefined}
 			aria-label={hasNameLink ? undefined : toDashboardSubjectName(subject)}
-			className={PAGE_HEADER_AVATAR_FLOAT_CLASS}
+			className={cn(PAGE_HEADER_AVATAR_FLOAT_CLASS, "rounded-full", CARD_GLOW_CLASS)}
 		>
 			{subject.subjectKind === "user" ? (
 				<UserAvatar

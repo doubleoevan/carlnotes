@@ -1,5 +1,6 @@
 // a topic image that opens the page of what it shows when pressed, and stays a plain image on that page itself
 import { cn } from "@carlnotes/nightshift/classNames"
+import { topicImageBoxVariants } from "@carlnotes/nightshift/components/topic-image"
 import type { ComponentType, ReactNode } from "react"
 import type { TopicImageProps } from "./TopicImage"
 
@@ -13,7 +14,8 @@ export type TopicImageLinkProps = TopicImageProps & {
 }
 
 // each app's topic image and the link around it. a link with no label is for a pointer or a touch alone, and the
-// title beside the image is the keyboard's and the screen reader's link to the page
+// title beside the image is the keyboard's and the screen reader's link to the page. the link's classes include the
+// image's corner, so a glow around the link follows the image's shape
 export type TopicImageLinkElements = {
 	TopicImage: ComponentType<TopicImageProps>
 	Link: ComponentType<{
@@ -45,9 +47,24 @@ export function TopicImageLink({
 	if (isCurrentPage) {
 		return <TopicImage {...topicImageProps} className={cn(topicImageProps.className, linkClassName)} />
 	}
+	// the link takes the corner the image's box ends up with after the placement's classes, so its glow keeps the
+	// image's shape
 	return (
-		<Link path={path} label={label ?? null} className={linkClassName} onOpen={onOpen}>
+		<Link
+			path={path}
+			label={label ?? null}
+			className={cn(toBoxCornerClasses(topicImageProps), linkClassName)}
+			onOpen={onOpen}
+		>
 			<TopicImage {...topicImageProps} />
 		</Link>
 	)
+}
+
+// the corner classes of a topic image's box, at every breakpoint, as the box merges them
+function toBoxCornerClasses({ size, className }: Pick<TopicImageProps, "size" | "className">): string {
+	return cn(topicImageBoxVariants({ size }), className)
+		.split(" ")
+		.filter((boxClass) => /(^|:)rounded/.test(boxClass))
+		.join(" ")
 }

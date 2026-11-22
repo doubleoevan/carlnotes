@@ -21,3 +21,16 @@ test("the open page's own image is a plain image in the link's place", () => {
 	expect(ownImage.type).toBe(elements.TopicImage)
 	expect(ownImage.props).toMatchObject({ name: "Chens", className: "w-30 shrink-0" })
 })
+
+test("the link takes the corner the image's box ends up with, so its glow keeps the image's shape", () => {
+	// a page-size image keeps its own corner, and a placement's corner replaces it at every breakpoint it names
+	const pageImage = TopicImageLink({ ...props, size: "page", linkClassName: "shrink-0", isCurrentPage: false })
+	expect(pageImage.props.className).toBe("rounded-lg shrink-0")
+	const restyledImage = TopicImageLink({
+		...props,
+		size: "page",
+		className: "w-30 rounded-xs sm:rounded-md",
+		isCurrentPage: false,
+	})
+	expect(restyledImage.props.className).toBe("rounded-xs sm:rounded-md")
+})

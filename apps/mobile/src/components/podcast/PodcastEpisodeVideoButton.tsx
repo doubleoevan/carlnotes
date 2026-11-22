@@ -6,10 +6,12 @@ import {
 	type PodcastEpisodeVideoButtonProps,
 	PodcastEpisodeVideoButton as SharedPodcastEpisodeVideoButton,
 } from "@carlnotes/core/components/PodcastEpisodeVideoButton"
+import { cn } from "@carlnotes/nightshift/classNames"
 import { Image } from "expo-image"
 import { Clapperboard, Play } from "lucide-react-native"
 import { type ComponentProps, type ComponentRef, useRef } from "react"
 import { type GestureResponderEvent, Pressable, View } from "react-native"
+import { CARD_GLOW_CLASS } from "@/cardGlowClasses"
 import { toTouchTargetHitSlop } from "@/components/primitives/button"
 import { Icon } from "@/components/primitives/icon"
 import { Text, TextClassContext } from "@/components/primitives/text"
@@ -64,8 +66,8 @@ function VideoButton({
 		/>
 	)
 
-	// the film's poster at 16:9 under the film player's round play button. the whole poster takes the press, and its
-	// url is an api path. an unchecked poster loads with the session and is never stored
+	// the film's poster at 16:9 under the film player's round play button. the whole poster takes the press and glows
+	// like a card while pressed. its url is an api path. an unchecked poster loads with the session and is never stored
 	if (size === "thumbnail") {
 		return (
 			<>
@@ -73,7 +75,10 @@ function VideoButton({
 					ref={buttonRef}
 					accessibilityRole="button"
 					accessibilityLabel={label}
-					className="aspect-video w-30 shrink-0 items-center justify-center overflow-hidden rounded-xs bg-hero active:opacity-75"
+					className={cn(
+						"aspect-video w-30 shrink-0 items-center justify-center overflow-hidden rounded-xs bg-hero",
+						CARD_GLOW_CLASS,
+					)}
 					onPress={handlePress}
 				>
 					{posterImageProps && (

@@ -6,6 +6,7 @@ import { cn } from "@carlnotes/nightshift/classNames"
 import { Heart } from "lucide-react-native"
 import type { FunctionComponent } from "react"
 import { View } from "react-native"
+import { CARD_GLOW_CLASS } from "@/cardGlowClasses"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { SkeletonPulse } from "@/components/common/SkeletonPulse"
 import { Icon } from "@/components/primitives/icon"
@@ -16,12 +17,7 @@ import { toTypeRoleStyle } from "@/typeRoleStyles"
 // the heading is a function component, which a card's name or title element type takes with the link props it ignores
 export const CARD_ELEMENTS: CardElements & { Heading: FunctionComponent<{ children: string }> } = {
 	Card: ({ path, label, className, onOpen, children }) => (
-		<AnchorLink
-			href={path}
-			accessibilityLabel={label}
-			onPress={onOpen}
-			className={cn(className, "active:shadow-card-glow")}
-		>
+		<AnchorLink href={path} accessibilityLabel={label} onPress={onOpen} className={cn(className, CARD_GLOW_CLASS)}>
 			{children}
 		</AnchorLink>
 	),

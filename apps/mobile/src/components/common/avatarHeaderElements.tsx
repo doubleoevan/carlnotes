@@ -1,12 +1,13 @@
 // the app's avatar header elements, laid out like the profile screen's: the avatar at the profile screen's size, then
 // the name in the display font, or the team dropdown in the team's name's place, over the details line. the avatar's
-// link leaves the screen reader to the name's link beside it, which opens the same page, unless the team dropdown shows
-// in the name's place
+// link glows like a card while pressed, and leaves the screen reader to the name's link beside it, which opens the
+// same page, unless the team dropdown shows in the name's place
 import { toAvatarImagePath, toTeamAvatarImagePath } from "@carlnotes/contracts/avatars"
 import { toDashboardSubjectName } from "@carlnotes/contracts/dashboards"
 import type { AvatarHeaderElements, AvatarHeaderSkeletonElements } from "@carlnotes/core/components/AvatarHeader"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { View } from "react-native"
+import { CARD_GLOW_CLASS } from "@/cardGlowClasses"
 import { Avatar, PAGE_AVATAR_SIZE } from "@/components/branding/Avatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { PageHeaderIdentity } from "@/components/common/PageHeaderIdentity"
@@ -30,6 +31,7 @@ export const MOBILE_AVATAR_HEADER_ELEMENTS: AvatarHeaderElements = {
 			accessibilityLabel={toDashboardSubjectName(subject)}
 			accessibilityElementsHidden={hasNameLink}
 			importantForAccessibility={hasNameLink ? "no-hide-descendants" : "auto"}
+			className={cn("rounded-full", CARD_GLOW_CLASS)}
 		>
 			{subject.subjectKind === "user" ? (
 				<Avatar

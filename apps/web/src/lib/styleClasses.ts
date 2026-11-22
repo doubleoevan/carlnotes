@@ -97,15 +97,18 @@ export const SCRIPTED_HIDDEN_CLASS = "scripted:hidden"
  */
 export const NARROW_SCREEN_HIDDEN_CLASS = "max-sm:scripted:hidden"
 
-// a card's glow under the pointer, a focus inside it, or a finger on it, whose shadow each theme sets in tokens.css
-const CARD_GLOW_CLASS =
-	"hover:shadow-(--card-glow-shadow) focus-within:shadow-(--card-glow-shadow) active:shadow-(--card-glow-shadow)"
+/**
+ * The glow in the primary color under the pointer, a focus inside, or a finger on a card or an image link, whose
+ * shadow each theme sets in tokens.css. It fades in and out.
+ */
+export const CARD_GLOW_CLASS =
+	"transition-shadow duration-200 motion-reduce:transition-none hover:shadow-(--card-glow-shadow) focus-within:shadow-(--card-glow-shadow) active:shadow-(--card-glow-shadow)"
 
 /**
  * A card that is one link to its page: the box the heading's link stretches over, the group whose hover underlines the
- * heading, and a glow in the primary color under the pointer, a focus inside it, or a finger on it.
+ * heading, and the card glow.
  */
-export const CARD_LINK_BOX_CLASS = `group/card relative flex flex-col transition-shadow duration-200 motion-reduce:transition-none ${CARD_GLOW_CLASS}`
+export const CARD_LINK_BOX_CLASS = `group/card relative flex flex-col ${CARD_GLOW_CLASS}`
 
 /**
  * The heading of a card that is one link: the display font, underlined while the card is hovered, and a pseudo-element
