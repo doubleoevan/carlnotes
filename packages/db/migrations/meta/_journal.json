@@ -1338,6 +1338,13 @@
       "when": 1795449368623,
       "tag": "0190_small_dazzler",
       "breakpoints": true
+    },
+    {
+      "idx": 191,
+      "version": "7",
+      "when": 1795449795348,
+      "tag": "0191_thick_mongu",
+      "breakpoints": true
     }
   ]
 }

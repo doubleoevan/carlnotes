@@ -39,9 +39,6 @@ export const adminPlanChanges = pgTable(
 			.references(() => users.id, { onDelete: "cascade" }),
 		adminUserId: text("admin_user_id").references(() => users.id, { onDelete: "set null" }),
 		plan: plan("plan").notNull(),
-		// no longer read or written. a later migration drops them, once no process from before the plan select runs
-		reason: text("reason"),
-		endsAt: timestamp("ends_at", { withTimezone: true }),
 		// created and updated timestamps
 		...timestamps(),
 	},
