@@ -29,8 +29,7 @@ still waits, then copies the viewer
 and listener counts through `syncViewerCounts.ts`, retries the pending object deletions through
 `retryPendingObjectDeletions.ts`, checks the unchecked images again through `checkUncheckedImages` in
 `@carlnotes/pipeline/uncheckedImageChecks` for two minutes a sweep, mails the support inbox one reminder for each
-content report open past twelve hours through `reportReminders.ts`, ends each admin plan change past its end date
-through `endExpiredAdminPlanChanges` in `@carlnotes/pipeline/adminPlanChanges`, sends the day's notifications emails through
+content report open past twelve hours through `reportReminders.ts`, sends the day's notifications emails through
 `notificationsEmails.ts`, reports the day's spend across every user through `dailySpend.ts`, which warns past
 `GLOBAL_DAILY_SPEND_ALERT_USD` and warns once the past hour's signups reach the `hourly-signups` threshold from the
 spend control settings, and reports a Firecrawl credit that a review found spent, once, through

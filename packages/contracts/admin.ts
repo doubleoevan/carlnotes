@@ -25,8 +25,6 @@ export type AdminUserRow = {
 	// whether an admin blocked the user from reactions and comments everywhere
 	isAdminBlocked: boolean
 	plan: Plan
-	// an admin plan change: its reason and its end date, null for no end. null if the plan is not set by an admin
-	adminPlanChange: { reason: string; endsAt: string | null } | null
 	createdAt: string
 	// when they last signed in, null until they sign in again
 	lastLoginAt: string | null

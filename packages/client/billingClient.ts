@@ -79,17 +79,14 @@ export async function sendUserRole(userId: string, role: "admin" | "user"): Prom
 }
 
 /**
- * Changes a user's plan from the admin table: the plan granted without billing, the reason, and the end date, null for
- * no end. Returns the api's error message if it rejects the admin plan change, or null once it is saved.
+ * Sets a user's plan from the admin table without billing. Returns the api's error message if it rejects the admin plan
+ * change, or null once it is saved.
  */
-export async function sendAdminPlanChange(
-	userId: string,
-	adminPlanChange: { plan: Plan; reason: string; endsAt: string | null },
-): Promise<string | null> {
+export async function sendAdminPlanChange(userId: string, plan: Plan): Promise<string | null> {
 	// a request that never reaches the api is a rejection too. a rejection includes its reason, such as an active paid
 	// subscription
 	const response = await apiClient()
-		.api.admin.users[":id"].plan.$post({ param: { id: userId }, json: adminPlanChange })
+		.api.admin.users[":id"].plan.$post({ param: { id: userId }, json: { plan } })
 		.catch(() => null)
 	if (!response) {
 		return "admin plan change failed: the request did not reach the server"

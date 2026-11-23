@@ -34,14 +34,13 @@ export type BillingProjection = {
 	billingInterval: BillingInterval
 }
 
-// the user, the providers whose billing row this call may write or clear, the projection or null to clear that row,
-// the one subscription a null projection may clear, a write that commits with the projection, and the properties its
-// subscription events add, which name a webhook as the entry point unless they say otherwise
+// the user, the providers whose billing row this call may write or clear, the projection or null to clear that row, a
+// write that commits with the projection, and the properties its subscription events add, which name a webhook as the
+// entry point unless they say otherwise
 export type ApplyBillingProjectionOptions = {
 	userId: string
 	providers: readonly [BillingSubscriptionProvider, ...BillingSubscriptionProvider[]]
 	projection: BillingProjection | null
-	clearedSubscriptionId?: string
 	writeWithProjection?: (transaction: DbTransaction) => Promise<void>
 	eventProperties?: AnalyticsEventProperties
 }
@@ -62,7 +61,7 @@ const REPLACE_LITELLM_KEY_BACKOFF_MS = 1000
 /**
  * Upserts the user's billing subscription from a provider's projection, or clears it, then syncs users.plan, reports
  * the subscription event, and reissues the LiteLLM key if the plan changed or the key's budget is stale. A row from
- * another provider stays unless the projection's plan ranks higher, and the conflict is reported with both ids. A plan
+ * another provider stays unless the projection's plan ranks higher, and the conflict is reported with both ids. An
  * admin plan change gives way to any provider's projection, and never replaces a provider's row. A Stripe subscription
  * that a higher store plan replaces is canceled at its period end. A user's projections apply one at a time. Returns
  * false if another provider's row stayed.
@@ -71,18 +70,12 @@ export async function applyBillingProjection({
 	userId,
 	providers,
 	projection,
-	clearedSubscriptionId,
 	writeWithProjection,
 	eventProperties,
 }: ApplyBillingProjectionOptions): Promise<boolean> {
 	// write the billing row, users.plan, and the caller's write under the user's row lock
 	const writtenProjection = await db.transaction(async (transaction) => {
-		const writtenBillingProjection = await writeBillingProjection(transaction, {
-			userId,
-			providers,
-			projection,
-			clearedSubscriptionId,
-		})
+		const writtenBillingProjection = await writeBillingProjection(transaction, { userId, providers, projection })
 		// the caller's write commits only with a written projection
 		if (writtenBillingProjection) {
 			await writeWithProjection?.(transaction)
@@ -138,12 +131,7 @@ async function cancelDisplacedStripeSubscription(userId: string, stripeSubscript
 // stays
 async function writeBillingProjection(
 	transaction: DbTransaction,
-	{
-		userId,
-		providers,
-		projection,
-		clearedSubscriptionId,
-	}: Omit<ApplyBillingProjectionOptions, "eventProperties" | "writeWithProjection">,
+	{ userId, providers, projection }: Omit<ApplyBillingProjectionOptions, "eventProperties" | "writeWithProjection">,
 ): Promise<WrittenProjection | null> {
 	// the user's plan, locked until the transaction ends, and the billing row before this projection
 	const [user] = await transaction
@@ -162,7 +150,7 @@ async function writeBillingProjection(
 	const planBeforeProjection = user?.plan ?? "free"
 
 	// keep the stored row if this projection may not replace or clear it
-	if (isStoredRowKept({ userId, providers, projection, clearedSubscriptionId, storedBillingSubscription })) {
+	if (isStoredRowKept({ userId, providers, projection, storedBillingSubscription })) {
 		return null
 	}
 
@@ -188,32 +176,28 @@ async function writeBillingProjection(
 	}
 }
 
-// the user, the providers, the projection, the subscription a null projection may clear, and the stored billing row
+// the user, the providers, the projection, and the stored billing row
 type IsStoredRowKeptOptions = Omit<ApplyBillingProjectionOptions, "eventProperties" | "writeWithProjection"> & {
 	storedBillingSubscription?: { provider: BillingSubscriptionProvider; plan: Plan; providerSubscriptionId: string }
 }
 
 // keep another provider's row unless the projected plan ranks higher, and report the conflict. a null projection never
 // clears that row. an admin plan change never replaces a provider's row, and a provider's projection replaces an admin
-// plan change without a report. a null projection never clears an admin plan change it does not name, nor a
-// subscription other than the one it clears
+// plan change without a report
 function isStoredRowKept({
 	userId,
 	providers,
 	projection,
-	clearedSubscriptionId,
 	storedBillingSubscription,
 }: IsStoredRowKeptOptions): boolean {
 	if (!storedBillingSubscription) {
 		return false
 	}
 
-	// a null projection keeps another provider's row and a subscription other than the one it clears
+	// a null projection keeps another provider's row
 	const isOtherProviderRow = !providers.includes(storedBillingSubscription.provider)
-	const isOtherSubscriptionRow =
-		clearedSubscriptionId !== undefined && storedBillingSubscription.providerSubscriptionId !== clearedSubscriptionId
 	if (!projection) {
-		return isOtherProviderRow || isOtherSubscriptionRow
+		return isOtherProviderRow
 	}
 
 	// any projection replaces its own provider's row or an admin plan change, and an admin plan change never replaces a

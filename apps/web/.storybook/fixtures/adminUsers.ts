@@ -22,12 +22,11 @@ export const SIGNED_IN_ADMIN_ROW = toAdminUserRow({
 	budgetCents: 5000,
 })
 
-/** A user an admin moved to the plus plan for a month, under budget, with topics and a team to open. */
+/** A user on the plus plan, under budget, with topics and a team to open. */
 export const PLUS_USER_ROW = toAdminUserRow({
 	id: VIENNA.userId,
 	username: VIENNA.username,
 	plan: "plus",
-	adminPlanChange: { reason: "Beta tester", endsAt: new Date(FIXTURE_DATE.getTime() + 30 * DAY_MS).toISOString() },
 	topicCount: 3,
 	teamCount: 1,
 	attributedBytes: 8_388_608,
@@ -95,7 +94,6 @@ function toAdminUserRow(overrides: Partial<AdminUserRow> & Pick<AdminUserRow, "i
 		role: "user",
 		isAdminBlocked: false,
 		plan: "free",
-		adminPlanChange: null,
 		createdAt: FIXTURE_DATE.toISOString(),
 		lastLoginAt: FIXTURE_DATE.toISOString(),
 		topicCount: 0,

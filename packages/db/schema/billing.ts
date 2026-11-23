@@ -27,21 +27,20 @@ export const billingSubscriptions = pgTable("billing_subscriptions", {
 	...timestamps(),
 })
 
-// an admin plan change is an admin's grant of a plan without billing, kept as a log of who granted which plan, when,
-// and why. the admin plan change's billing_subscriptions row holds this row's id as its subscription id and the end
-// date as its period end
+// an admin plan change is a plan an admin set without billing, kept as a log of who set which plan and when. the admin
+// plan change's billing_subscriptions row holds this row's id as its subscription id
 export const adminPlanChanges = pgTable(
 	"admin_plan_changes",
 	{
 		id: primaryId(),
-		// the user the plan was granted to, and the admin who granted it, kept as null once that admin's account closes
+		// the user whose plan was set, and the admin who set it, kept as null once that admin's account closes
 		userId: text("user_id")
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
 		adminUserId: text("admin_user_id").references(() => users.id, { onDelete: "set null" }),
-		// the plan granted, the admin's reason, and when the admin plan change ends, null for no end
 		plan: plan("plan").notNull(),
-		reason: text("reason").notNull(),
+		// no longer read or written. a later migration drops them, once no process from before the plan select runs
+		reason: text("reason"),
 		endsAt: timestamp("ends_at", { withTimezone: true }),
 		// created and updated timestamps
 		...timestamps(),

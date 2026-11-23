@@ -1,4 +1,3 @@
-import { sendUserRole } from "@carlnotes/client/billingClient"
 import type { AdminUserRow } from "@carlnotes/contracts/admin"
 import { isAdminRole } from "@carlnotes/contracts/enums"
 import { ChevronsUpDown, ShieldUser, X } from "lucide-react"
@@ -9,6 +8,7 @@ import { IconButton } from "@/components/common/IconButton"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/primitives/dialog"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { FIELD_TRIGGER_CLASS, MENU_OPTION_CLASS } from "@/lib/styleClasses"
+import { changeUserRole } from "@/lib/userRoleChange"
 
 /**
  * The modal for an admin to add and remove other admins.
@@ -31,21 +31,13 @@ export function ManageAdminsModal({
 
 	// promote a user to an admin and show a toast
 	const handleAddAdmin = async (account: AdminUserRow): Promise<void> => {
-		if (await sendUserRole(account.id, "admin")) {
-			toast(`${account.username} is now an admin.`)
-		} else {
-			toast.error("That role change failed.")
-		}
+		await changeUserRole({ userId: account.id, username: account.username, role: "admin" })
 		onChanged()
 	}
 
 	// demote an admin to a user and show a toast
 	const handleRemoveAdmin = async (admin: AdminUserRow): Promise<void> => {
-		if (await sendUserRole(admin.id, "user")) {
-			toast(`${admin.username} is no longer an admin.`)
-		} else {
-			toast.error("That role change failed.")
-		}
+		await changeUserRole({ userId: admin.id, username: admin.username, role: "user" })
 		onChanged()
 	}
 

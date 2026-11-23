@@ -415,34 +415,32 @@ until an admin changes it.
 - **WHEN** a non-admin posts a pause
 - **THEN** the request is rejected through the gate, and nothing is saved
 
-### Requirement: Admins change a user's plan from the users table
+### Requirement: Admins set a user's plan from the users table
 
-The users table's plan cell SHALL be a select of free, plus, and premium, like the role's. Picking a plan SHALL open a
-dialog asking for a required reason and an optional end date, and saving SHALL change the plan through the gate. A plan
-an admin set SHALL show a Set by admin badge with its end date, or no end, and its reason in a tooltip.
+The users table's plan cell SHALL be a select of free, plus, and premium, like the role's. Picking a plan SHALL set it
+through the gate at once, with no dialog, and SHALL show a toast naming the user's new plan.
 
-#### Scenario: An admin changes a plan
+#### Scenario: An admin sets a plan
 
-- **WHEN** an admin picks premium for a user, enters a reason, and saves
-- **THEN** the row shows premium with a Set by admin badge and its end date
+- **WHEN** an admin picks premium for a user
+- **THEN** the row shows premium and a toast says the user is now on premium
 
 #### Scenario: A billed user shows an error
 
-- **WHEN** an admin changes the plan of a user with an active Stripe subscription
-- **THEN** the api responds 409 and the table shows its reason, and the plan is unchanged
+- **WHEN** an admin picks a plan for a user with an active Stripe subscription
+- **THEN** the api responds 409, an error toast shows its reason, and the plan is unchanged
 
-#### Scenario: The api rejects an empty reason or a bad end date
+### Requirement: Each saved row change shows a toast
 
-- **WHEN** an admin saves an admin plan change with an empty reason, an end date in the past, or an end date on the free
-  plan
-- **THEN** the api responds 400 and nothing is written
+A role change and a budget override in the admin users table SHALL each show a toast once they save, and an error
+toast if they fail.
 
-#### Scenario: Picking free ends the admin plan change
+#### Scenario: A role change shows a toast
 
-- **WHEN** an admin picks free for a user with an admin plan change
-- **THEN** the dialog asks for a reason only and its button reads Return to free
+- **WHEN** an admin makes a user an admin from the role select
+- **THEN** a toast says the user is now an admin
 
-#### Scenario: The badge reopens the dialog
+#### Scenario: A budget override shows a toast
 
-- **WHEN** an admin clicks a row's Set by admin badge
-- **THEN** the dialog opens on the same plan
+- **WHEN** an admin saves a budget override
+- **THEN** a toast says the user's budget is saved

@@ -2,7 +2,6 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import * as jobLease from "@carlnotes/db/jobLease"
-import * as adminPlanChanges from "@carlnotes/pipeline/adminPlanChanges"
 import * as firecrawlCredit from "@carlnotes/pipeline/firecrawlCredit"
 import * as temporalClient from "@carlnotes/pipeline/temporalClient"
 import * as uncheckedImageChecks from "@carlnotes/pipeline/uncheckedImageChecks"
@@ -45,7 +44,6 @@ test("a sweep whose leased stage throws still saves the daily counts and reports
 	spyOn(pendingObjectDeletions, "retryPendingObjectDeletions").mockImplementation(recordStage("object deletions"))
 	spyOn(uncheckedImageChecks, "checkUncheckedImages").mockImplementation(recordStage("unchecked images"))
 	spyOn(reportReminders, "remindOpenReports").mockImplementation(recordStage("report reminders"))
-	spyOn(adminPlanChanges, "endExpiredAdminPlanChanges").mockImplementation(recordStage("admin plan changes"))
 
 	// the emails throw too, and the two stages after them are recorded
 	spyOn(notificationsEmails, "sendNotificationsEmails").mockRejectedValue(new Error("the email read failed"))
@@ -69,7 +67,6 @@ test("a sweep whose leased stage throws still saves the daily counts and reports
 		"object deletions",
 		"unchecked images",
 		"report reminders",
-		"admin plan changes",
 		"dashboard build",
 		"daily spend",
 		"firecrawl credit",

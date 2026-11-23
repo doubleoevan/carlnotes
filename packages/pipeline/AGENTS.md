@@ -7,8 +7,7 @@ provider key.
 `billingProjection.ts` writes a billing provider's subscription or an admin plan change into the one billing row per
 user, syncs `users.plan`, refreshes the sessions, reports the subscription event, and reissues the LiteLLM key at the
 new budget. An admin plan change never replaces a provider's row, and any provider's projection replaces an admin plan
-change. `adminPlanChanges.ts` writes an admin plan change through it with an `admin_plan_changes` log row, and
-`endExpiredAdminPlanChanges` returns each admin plan change past its end date to the free plan from the worker's sweep.
+change. `adminPlanChanges.ts` writes an admin plan change through it with an `admin_plan_changes` log row.
 
 `updatesRecap.ts` builds the recap prompt and writes Carl's recap above an updates list.
 `personalSources/topicRelevance.ts` holds the attachment score weight and the minimum relevances, and raises a Topic's

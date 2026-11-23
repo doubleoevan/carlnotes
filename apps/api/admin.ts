@@ -280,23 +280,16 @@ export const adminRoute = new Hono<AppEnv>()
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
-		// grant a user a plan without billing, with a reason and an optional future end date, admin only
+		// set a user's plan without billing, admin only
 		if (!(await isAllowed(userId, "admin:changePlan"))) {
 			return context.json({ error: "forbidden" }, 403)
-		}
-		const { plan, reason, endsAt } = context.req.valid("json")
-		const planEndsAt = endsAt === null ? null : new Date(endsAt)
-		if (planEndsAt && planEndsAt.getTime() <= Date.now()) {
-			return context.json({ error: "the end date must be in the future" }, 400)
 		}
 
 		// a user billed through Stripe or a store keeps their plan, and a made-up user id is not found
 		const planChangeResult = await changeUserPlan({
 			userId: context.req.param("id"),
 			adminUserId: userId,
-			plan,
-			reason,
-			endsAt: planEndsAt,
+			plan: context.req.valid("json").plan,
 		})
 		if (planChangeResult === "billed") {
 			return context.json(

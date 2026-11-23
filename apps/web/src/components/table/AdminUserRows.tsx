@@ -7,12 +7,11 @@ import {
 	sendAdminPlanChange,
 	sendDeleteUser,
 	sendUserBudgetOverride,
-	sendUserRole,
 } from "@carlnotes/client/billingClient"
 import type { OwnerTopic } from "@carlnotes/contracts/activity"
 import type { AdminUserRow } from "@carlnotes/contracts/admin"
-import { isAdminRole } from "@carlnotes/contracts/enums"
-import { type Plan, toCentsFromDollars } from "@carlnotes/contracts/plans"
+import { isAdminRole, plans } from "@carlnotes/contracts/enums"
+import { toCentsFromDollars } from "@carlnotes/contracts/plans"
 import { toTeamPath } from "@carlnotes/contracts/seo"
 import type { TeamSummary } from "@carlnotes/contracts/teams"
 import { toBytesLabel, toCentsLabel, toDateLabel } from "@carlnotes/core/lib/labels"
@@ -27,12 +26,11 @@ import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { ADMIN_NUMBER_INPUT_CLASS, STANDALONE_LINK_CLASS, TABLE_CONTROL_CLASS } from "@/lib/styleClasses"
 import { SUBTABLE_CARD_CLASS, TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/tableClasses"
-import { AdminPlanChangeDialog, type AdminPlanChangeSave } from "./AdminPlanChangeDialog"
+import { changeUserRole } from "@/lib/userRoleChange"
 import { TopicsSubtableRow } from "./OwnerTopicsTable"
 import { SubtableCountButton } from "./SubtableCountButton"
 import { TableCard } from "./TableCard"
 import { UserAccountLink, UserEmailLink, UserNameLink } from "./UserLinks"
-import { UserPlanSelect } from "./UserPlanSelect"
 
 // how many columns the users table has, which a subtable row spans to sit under all of them
 const ADMIN_TABLE_COLUMN_COUNT = 14
@@ -54,9 +52,6 @@ export function UserRow({
 	const [userTopics, setUserTopics] = useState<OwnerTopic[] | null>(null)
 	const [userTeams, setUserTeams] = useState<TeamSummary[] | null>(null)
 	const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
-	// the plan the plan change dialog sets, and the admin plan change it edits, null for a new one
-	const [pickedPlan, setPickedPlan] = useState<Plan | null>(null)
-	const [editedAdminPlanChange, setEditedAdminPlanChange] = useState<AdminUserRow["adminPlanChange"]>(null)
 
 	// open or close this row's teams subtable, loading the rows on the first open
 	async function handleUserTeamsClick(): Promise<void> {
@@ -86,37 +81,26 @@ export function UserRow({
 		}
 	}
 
-	// set the user's role on the server, then reload the console
+	// set the user's role on the server with a toast, then reload the console
 	async function handleRoleChange(selectedRole: string): Promise<void> {
 		const role = isAdminRole(selectedRole) ? "admin" : "user"
-		const isRoleSet = await sendUserRole(user.id, role)
-		if (!isRoleSet) {
-			toast.error("Role change failed.")
-		}
+		await changeUserRole({ userId: user.id, username: user.username, role })
 		onReloadPage()
 	}
 
-	// open the plan change dialog for a new admin plan change of the picked plan
-	function handlePlanPick(plan: Plan | null): void {
-		setEditedAdminPlanChange(null)
-		setPickedPlan(plan)
-	}
-
-	// open the plan change dialog on the current admin plan change, to change its reason or end date
-	function handleAdminPlanChangeEdit(): void {
-		setEditedAdminPlanChange(user.adminPlanChange)
-		setPickedPlan(user.plan)
-	}
-
-	// change the user's plan with the dialog's reason and end date, then reload the console. a rejection, such as an
-	// active paid subscription, keeps the dialog open and shows the api's reason
-	async function handleAdminPlanChangeSave(adminPlanChangeSave: AdminPlanChangeSave): Promise<void> {
-		const rejection = await sendAdminPlanChange(user.id, adminPlanChangeSave)
-		if (rejection) {
-			toast.error(rejection)
+	// set the user's plan on the server with a toast, then reload the console. the options list the plans in order, so
+	// the picked option's index names its plan. a rejection, such as an active paid subscription, shows the api's reason
+	async function handlePlanChange(selectedIndex: number): Promise<void> {
+		const plan = plans[selectedIndex]
+		if (!plan) {
 			return
 		}
-		setPickedPlan(null)
+		const rejection = await sendAdminPlanChange(user.id, plan)
+		if (rejection) {
+			toast.error(rejection)
+		} else {
+			toast(`${user.username} is now on the ${plan} plan.`)
+		}
 		onReloadPage()
 	}
 
@@ -140,7 +124,9 @@ export function UserRow({
 		try {
 			// save the budget on its own, and resize the proxy key to match it separately
 			const { isKeyResized } = await sendUserBudgetOverride(user.id, budgetOverrideCents)
-			if (!isKeyResized) {
+			if (isKeyResized) {
+				toast(`${user.username}'s budget is saved.`)
+			} else {
 				toast.error(
 					`${user.username}'s budget saved, but their key still enforces the old one, so model calls may still fail.`,
 				)
@@ -196,8 +182,18 @@ export function UserRow({
 					</select>
 				</td>
 				<td className="py-2 pr-4">
-					{/* picking a plan opens the plan change dialog, which asks for a reason and an optional end date */}
-					<UserPlanSelect user={user} onPlanPick={handlePlanPick} onAdminPlanChangeEdit={handleAdminPlanChangeEdit} />
+					<select
+						value={user.plan}
+						onChange={(event) => void handlePlanChange(event.target.selectedIndex)}
+						aria-label={`${user.username}'s plan`}
+						className={TABLE_CONTROL_CLASS}
+					>
+						{plans.map((plan) => (
+							<option key={plan} value={plan}>
+								{plan}
+							</option>
+						))}
+					</select>
 				</td>
 				<td className="py-2 pr-4">{toDateLabel(user.createdAt)}</td>
 				{/* a user who has not signed in since the column was added has no date to show */}
@@ -301,16 +297,6 @@ export function UserRow({
 				>
 					{`Their ${user.topicCount} ${user.topicCount === 1 ? "topic" : "topics"}, findings, and chats go with it, and they stop following every topic. Any paid plan is canceled. This cannot be undone.`}
 				</ConfirmDialog>
-			)}
-			{/* the plan change dialog for the plan the admin picked, until it saves or closes */}
-			{pickedPlan && (
-				<AdminPlanChangeDialog
-					username={user.username}
-					plan={pickedPlan}
-					adminPlanChange={editedAdminPlanChange}
-					onSave={handleAdminPlanChangeSave}
-					onClose={() => setPickedPlan(null)}
-				/>
 			)}
 			{/* this user's teams subtable, read-only rows in the teams index shape */}
 			{openSubtable === "teams" && (
