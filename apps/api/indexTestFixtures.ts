@@ -2,7 +2,7 @@
 // pool. only tests import it
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
-import { dirname, join } from "node:path"
+import { dirname, join, resolve } from "node:path"
 import { restoreConnectionPool, stubConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import { UI_CLIENT_ROOT, UI_SERVER_ENTRY } from "./bundlePaths"
 import server from "./index"
@@ -51,14 +51,15 @@ export async function removeTestDirectories(): Promise<void> {
 	await Promise.all(removedDirectories.map((testDirectory) => rm(testDirectory, { recursive: true, force: true })))
 }
 
-// how long the fake server entry takes to render a page, and how many of its first renders throw an error
-export type CreateBundleDirectoryOptions = { renderDelayMs?: number; failingRenderCount?: number }
+// whether the fake server entry pauses its first render until a test resumes it, and how many of its first renders
+// throw an error
+export type CreateBundleDirectoryOptions = { isFirstRenderPaused?: boolean; failingRenderCount?: number }
 
 /**
  * Creates a fake directory with a bundle shaped like the one build:ui writes, whose server entry renders PAGE_HTML.
  */
 export async function createBundleDirectory({
-	renderDelayMs = 0,
+	isFirstRenderPaused = false,
 	failingRenderCount = 0,
 }: CreateBundleDirectoryOptions = {}): Promise<string> {
 	const root = await createTestDirectory("carl-bundle-")
@@ -70,14 +71,58 @@ export async function createBundleDirectory({
 	await writeFile(join(root, UI_CLIENT_ROOT, "robots.txt"), PUBLIC_FILE_TEXT)
 	const serverEntryText = [
 		"let renderCount = 0",
+		"const firstRenderStart = Promise.withResolvers()",
+		"const firstRenderResume = Promise.withResolvers()",
+		"export const firstRenderStarted = firstRenderStart.promise",
+		"export const resumeFirstRender = firstRenderResume.resolve",
 		"export default { fetch: async () => {",
 		`if (++renderCount <= ${failingRenderCount}) { throw new Error("the render failed") }`,
-		`await Bun.sleep(${renderDelayMs})`,
+		"firstRenderStart.resolve()",
+		`if (${isFirstRenderPaused} && renderCount === 1) { await firstRenderResume.promise }`,
 		`return new Response(${JSON.stringify(PAGE_HTML)}, { headers: { "content-type": "text/html" } })`,
 		"} }",
 	].join("\n")
 	await writeFile(join(root, UI_SERVER_ENTRY), serverEntryText)
 	return root
+}
+
+// the bundle whose first render pauses, the request that starts that render, and what runs while it is paused
+type PauseFirstRenderOptions<FirstResponse, RunResult> = {
+	bundleDirectory: string
+	sendFirstRequest: () => Promise<FirstResponse>
+	runWhilePaused: (resumeFirstRender: () => void) => Promise<RunResult>
+}
+
+/**
+ * Starts a bundle's first render, runs the callback while it is paused, and resumes it however the callback ends.
+ */
+export async function pauseFirstRender<FirstResponse, RunResult>({
+	bundleDirectory,
+	sendFirstRequest,
+	runWhilePaused,
+}: PauseFirstRenderOptions<FirstResponse, RunResult>): Promise<{
+	firstResponse: FirstResponse
+	runResult: RunResult
+}> {
+	return withWorkingDirectory(bundleDirectory, async () => {
+		// import the server entry by the api's own path, so both share one module
+		const uiServerEntry: { firstRenderStarted: Promise<void>; resumeFirstRender: () => void } = await import(
+			resolve(UI_SERVER_ENTRY)
+		)
+
+		// wait for the render to pause, or for a request that responds without rendering
+		const firstResponsePromise = sendFirstRequest()
+		try {
+			await Promise.race([uiServerEntry.firstRenderStarted, firstResponsePromise])
+			const runResult = await runWhilePaused(uiServerEntry.resumeFirstRender)
+			uiServerEntry.resumeFirstRender()
+			return { firstResponse: await firstResponsePromise, runResult }
+		} finally {
+			// resume the render if the callback threw an error, so it frees its slot before the next test
+			uiServerEntry.resumeFirstRender()
+			await firstResponsePromise
+		}
+	})
 }
 
 // the status, body, and headers the composed app returned for a request

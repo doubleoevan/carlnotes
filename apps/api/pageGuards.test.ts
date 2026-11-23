@@ -6,7 +6,13 @@ import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import { toRenderShedCrossings } from "./apiGauges"
 import { RENDERED_EDGE_CACHE_CONTROL } from "./edgeCache"
 import server from "./index"
-import { createBundleDirectory, removeTestDirectories, request, withWorkingDirectory } from "./indexTestFixtures"
+import {
+	createBundleDirectory,
+	pauseFirstRender,
+	removeTestDirectories,
+	request,
+	withWorkingDirectory,
+} from "./indexTestFixtures"
 import { SESSION_COOKIE } from "./testSession"
 import {
 	BUSY_RENDER_MAX_RETRY_AFTER_SECONDS,
@@ -73,21 +79,22 @@ test("a click id redirect never leaves the site", async () => {
 // a visitor's render past the concurrency limit is shed privately with a short retry, while the edge serves its stale
 // copy, and a signed-in render is never shed
 test("a visitor's render past the limit responds 503 with a retry, and a signed-in render is not", async () => {
-	// two visitor renders and a signed-in render at once against a bundle that takes a moment to render
+	// a visitor render and a signed-in render while the one slot is taken
 	Bun.env.RENDER_CONCURRENCY = "1"
 	Bun.env.RENDER_SLOT_WAIT_MS = "0"
-	const bundleDirectory = await createBundleDirectory({ renderDelayMs: 50 })
-	const [firstResponse, secondResponse, signedInResponse] = await withWorkingDirectory(bundleDirectory, () =>
-		Promise.all([
-			request("/topics/abc123"),
-			request("/topics/def456"),
-			request("/topics/ghi789", { headers: { cookie: SESSION_COOKIE } }),
-		]),
-	)
+	const bundleDirectory = await createBundleDirectory({ isFirstRenderPaused: true })
+	const { firstResponse, runResult } = await pauseFirstRender({
+		bundleDirectory,
+		sendFirstRequest: () => request("/topics/abc123"),
+		runWhilePaused: async () => ({
+			shedResponse: await request("/topics/def456"),
+			signedInResponse: await request("/topics/ghi789", { headers: { cookie: SESSION_COOKIE } }),
+		}),
+	})
+	const { shedResponse, signedInResponse } = runResult
 
-	// one visitor render runs, the other is shed with a retry of two to six seconds, and the signed-in one renders
-	expect([firstResponse.status, secondResponse.status].sort()).toEqual([200, 503])
-	const shedResponse = firstResponse.status === 503 ? firstResponse : secondResponse
+	// the first visitor render runs, the other is shed with a retry of two to six seconds, and the signed-in one renders
+	expect([firstResponse.status, shedResponse.status]).toEqual([200, 503])
 	expect(shedResponse.cacheControl).toBe("private, no-cache")
 	expect(signedInResponse.status).toBe(200)
 
@@ -104,22 +111,22 @@ test("a shed visitor gets a page that retries after its Retry-After wait, and th
 	Bun.env.RENDER_CONCURRENCY = "1"
 	Bun.env.RENDER_SLOT_WAIT_MS = "0"
 	readAndResetRenderGauges()
-	const bundleDirectory = await createBundleDirectory({ renderDelayMs: 50 })
-	const responses = await withWorkingDirectory(bundleDirectory, () =>
-		Promise.all([
-			server.fetch(new Request("http://localhost/topics/abc123")),
-			server.fetch(new Request("http://localhost/topics/def456")),
-			server.fetch(new Request("http://localhost/topics/ghi789", { headers: { cookie: SESSION_COOKIE } })),
-		]),
-	)
+	const bundleDirectory = await createBundleDirectory({ isFirstRenderPaused: true })
+	const { runResult: shedResponse } = await pauseFirstRender({
+		bundleDirectory,
+		sendFirstRequest: () => request("/topics/abc123"),
+		runWhilePaused: async () => {
+			await request("/topics/ghi789", { headers: { cookie: SESSION_COOKIE } })
+			return server.fetch(new Request("http://localhost/topics/def456"))
+		},
+	})
 
 	// the shed response is an html page that names the site and asks for the same address again after the same wait
 	// as its Retry-After header
-	const shedResponse = responses.find((response) => response.status === 503)
-	const shedPage = (await shedResponse?.text()) ?? ""
-	expect(shedResponse?.headers.get("content-type")).toBe("text/html; charset=utf-8")
+	const shedPage = await shedResponse.text()
+	expect(shedResponse.headers.get("content-type")).toBe("text/html; charset=utf-8")
 	expect(shedPage).toStartWith("<!doctype html>")
-	expect(shedPage).toContain(`<meta http-equiv="refresh" content="${shedResponse?.headers.get("retry-after")}">`)
+	expect(shedPage).toContain(`<meta http-equiv="refresh" content="${shedResponse.headers.get("retry-after")}">`)
 	expect(shedPage).toContain("<h1>CarlNotes is busy</h1>")
 	expect(shedPage).not.toContain("<script")
 
@@ -139,33 +146,50 @@ test("a shed visitor gets a page that retries after its Retry-After wait, and th
 
 // a visitor's render past the limit waits for a free slot and renders
 test("a visitor's render past the limit waits for a free slot and renders, and the minute counts the wait", async () => {
-	// two visitor renders at once with one slot and a wait longer than a render
+	// one slot, and a wait that outlasts the test
 	Bun.env.RENDER_CONCURRENCY = "1"
-	Bun.env.RENDER_SLOT_WAIT_MS = "2000"
+	Bun.env.RENDER_SLOT_WAIT_MS = "60000"
 	readAndResetRenderGauges()
-	const bundleDirectory = await createBundleDirectory({ renderDelayMs: 50 })
-	const responses = await withWorkingDirectory(bundleDirectory, () =>
-		Promise.all([request("/topics/abc123"), request("/topics/def456")]),
-	)
+	const bundleDirectory = await createBundleDirectory({ isFirstRenderPaused: true })
+	const { firstResponse, runResult: waitingResponse } = await pauseFirstRender({
+		bundleDirectory,
+		sendFirstRequest: () => request("/topics/abc123"),
+		runWhilePaused: async (resumeFirstRender) => {
+			// the minute counts the first render as started
+			expect(readAndResetRenderGauges()).toEqual({ startedCount: 1, waitedCount: 0, shedCount: 0 })
 
-	// both render, one after the other, and the minute counts one wait and no shed render
-	expect(responses.map((response) => response.status)).toEqual([200, 200])
-	expect(readAndResetRenderGauges()).toEqual({ startedCount: 2, waitedCount: 1, shedCount: 0 })
+			// resume the first render once the minute counts the second as waiting
+			const waitingResponsePromise = request("/topics/def456")
+			let waitedCount = 0
+			while (waitedCount === 0) {
+				await Bun.sleep(1)
+				waitedCount = readAndResetRenderGauges().waitedCount
+			}
+			resumeFirstRender()
+			return waitingResponsePromise
+		},
+	})
+
+	// both render, and the minute counts the second as started with no shed render
+	expect([firstResponse.status, waitingResponse.status]).toEqual([200, 200])
+	expect(readAndResetRenderGauges()).toEqual({ startedCount: 1, waitedCount: 0, shedCount: 0 })
 })
 
 // a slot that frees too late still sheds the render, so a visitor never waits past the slot wait
 test("a visitor's render whose wait ends before a slot frees is shed, and the next waiter still gets the slot", async () => {
-	// three visitor renders at once with one slot, a render slower than the wait, and the wait's end
+	// the second visitor's wait ends while the first render still has the one slot
 	Bun.env.RENDER_CONCURRENCY = "1"
 	Bun.env.RENDER_SLOT_WAIT_MS = "20"
 	readAndResetRenderGauges()
-	const bundleDirectory = await createBundleDirectory({ renderDelayMs: 100 })
-	const [firstResponse, secondResponse] = await withWorkingDirectory(bundleDirectory, () =>
-		Promise.all([request("/topics/abc123"), request("/topics/def456")]),
-	)
+	const bundleDirectory = await createBundleDirectory({ isFirstRenderPaused: true })
+	const { firstResponse, runResult: shedResponse } = await pauseFirstRender({
+		bundleDirectory,
+		sendFirstRequest: () => request("/topics/abc123"),
+		runWhilePaused: () => request("/topics/def456"),
+	})
 
 	// the first renders and the second is shed after its wait
-	expect([firstResponse.status, secondResponse.status]).toEqual([200, 503])
+	expect([firstResponse.status, shedResponse.status]).toEqual([200, 503])
 	expect(readAndResetRenderGauges()).toEqual({ startedCount: 1, waitedCount: 1, shedCount: 1 })
 
 	// the shed waiter left the line, so the slot is free for the next visitor
@@ -175,12 +199,15 @@ test("a visitor's render whose wait ends before a slot frees is shed, and the ne
 
 // only a visitor's render counts against the limit, so signed-in renders in progress never shed a visitor
 test("a signed-in render in progress does not count against the visitors' limit", async () => {
-	// a slow signed-in render and a visitor render at once
+	// a visitor render with no slot wait while a signed-in render is in progress
 	Bun.env.RENDER_CONCURRENCY = "1"
-	const bundleDirectory = await createBundleDirectory({ renderDelayMs: 50 })
-	const [signedInResponse, visitorResponse] = await withWorkingDirectory(bundleDirectory, () =>
-		Promise.all([request("/topics/abc123", { headers: { cookie: SESSION_COOKIE } }), request("/topics/def456")]),
-	)
+	Bun.env.RENDER_SLOT_WAIT_MS = "0"
+	const bundleDirectory = await createBundleDirectory({ isFirstRenderPaused: true })
+	const { firstResponse: signedInResponse, runResult: visitorResponse } = await pauseFirstRender({
+		bundleDirectory,
+		sendFirstRequest: () => request("/topics/abc123", { headers: { cookie: SESSION_COOKIE } }),
+		runWhilePaused: () => request("/topics/def456"),
+	})
 
 	// both render
 	expect([signedInResponse.status, visitorResponse.status]).toEqual([200, 200])

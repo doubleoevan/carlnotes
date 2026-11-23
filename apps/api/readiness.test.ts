@@ -121,11 +121,11 @@ test("readiness reuses a recent render", async () => {
 	expect(responses.map((response) => response.status)).toEqual([503, 503])
 })
 
-// a render slower than five seconds is not ready
+// a render that takes over five seconds is not ready
 test(
 	"readiness responds 503 if the render times out",
 	async () => {
-		const bundleDirectory = await createBundleDirectory({ renderDelayMs: 6 * 1000 })
+		const bundleDirectory = await createBundleDirectory({ isFirstRenderPaused: true })
 		const response = await withWorkingDirectory(bundleDirectory, () => request("/api/health/ready"))
 
 		expect(response.status).toBe(503)
