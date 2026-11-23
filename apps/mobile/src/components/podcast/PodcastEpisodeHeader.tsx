@@ -1,5 +1,5 @@
 // the podcast episode page's header: the Subscribe button beside the new topic button, then the episode's own image
-// beside its title, description, and byline
+// beside its title, with the description and the byline under it
 import type { PodcastEpisodePageResponse } from "@carlnotes/contracts/podcastEpisodePage"
 import { toTopicPath } from "@carlnotes/contracts/seo"
 import { EDIT_IMAGE_DIALOG_TITLES } from "@carlnotes/core/lib/topicImageEditor"
@@ -24,8 +24,8 @@ import {
 } from "@/pageButtonClasses"
 
 /**
- * Draws the podcast episode screen's header: the title and the description beside the image, and the byline under it at
- * full width.
+ * Draws the podcast episode screen's header: the title beside the image, and the description and the byline under it
+ * at full width.
  */
 export function PodcastEpisodeHeader({
 	page: { podcastEpisode, topic, reactions, canEditPodcastEpisode },
@@ -61,7 +61,7 @@ export function PodcastEpisodeHeader({
 				</Button>
 				<NewTopicButton />
 			</View>
-			{/* the podcast episode's own image beside the title and the description, then the byline under it at full
+			{/* the podcast episode's own image beside the title, then the description and the byline under it at full
 			    width, as the web header shows them at phone width */}
 			<View className="mt-4 flex-row items-start gap-4">
 				<TopicHeaderImage
@@ -78,9 +78,10 @@ export function PodcastEpisodeHeader({
 						</Text>
 						<PodcastEpisodeMentionBadge podcastEpisodeId={podcastEpisode.id} />
 					</View>
-					{podcastEpisode.description && <Text className="mt-1.5 text-sm">{podcastEpisode.description}</Text>}
 				</View>
 			</View>
+			{/* the description under the image, from the left edge */}
+			{podcastEpisode.description && <Text className="mt-1.5 text-sm">{podcastEpisode.description}</Text>}
 			{/* the byline, the topic's name, and the podcast episode's reactions on one line */}
 			<View className="mt-1.5 flex-row flex-wrap items-center gap-x-3">
 				<View className="min-w-0 shrink flex-row flex-wrap items-center gap-x-1">

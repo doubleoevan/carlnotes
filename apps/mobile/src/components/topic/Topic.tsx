@@ -4,15 +4,14 @@ import { Text as NativeText, View } from "react-native"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { PodcastEpisodePlayButton } from "@/components/podcast/PodcastEpisodePlayButton"
-import { Badge } from "@/components/primitives/badge"
 import { toTouchTargetHitSlop } from "@/components/primitives/button"
-import { Text } from "@/components/primitives/text"
 import { ShareTopic } from "@/components/share/ShareTopic"
 import { LIST_TOPIC_IMAGE_CLASS } from "@/topicImageClasses"
 import { toTypeRoleStyle } from "@/typeRoleStyles"
 import { TopicByline } from "./TopicByline"
 import { TopicImageLink } from "./TopicImageLink"
 import { TopicInfoButton } from "./TopicInfo"
+import { TopicTags } from "./TopicTags"
 
 /**
  * Matches the web Topic heading, attribution, unread count, share action, and tags.
@@ -24,7 +23,7 @@ export function Topic({ topic }: { topic: TopicDetails }) {
 	return (
 		<View className="mx-4 my-4">
 			{/* the image at the left edge of the findings card, which opens the topic's screen as the title does, with
-			    the title and the tags beside it */}
+			    the title beside it */}
 			<View className="flex-row items-start gap-4">
 				<TopicImageLink
 					image={topic.image}
@@ -55,18 +54,10 @@ export function Topic({ topic }: { topic: TopicDetails }) {
 						) : null}
 						<TopicInfoButton topic={topic} />
 					</View>
-					{/* the tags under the title */}
-					{topic.tags.length > 0 ? (
-						<View className="mt-1.5 flex-row flex-wrap gap-1">
-							{topic.tags.map((tag) => (
-								<Badge key={tag} variant="secondary">
-									<Text>{tag}</Text>
-								</Badge>
-							))}
-						</View>
-					) : null}
 				</View>
 			</View>
+			{/* the tags under the image, wrapping from the left edge as the web's tags do at phone width */}
+			<TopicTags tags={topic.tags} />
 			{/* the byline under the image at the row's full width, as on the web at phone width, with the unread count and
 			    the share action at the right of its row, over the findings card's top right corner */}
 			<View className="mt-1.5 flex-row items-center justify-between gap-3">

@@ -7,7 +7,6 @@ import { PawPrint } from "lucide-react"
 import { useState } from "react"
 import { DetailsLine } from "@/components/common/DetailsLine"
 import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
-import { Badge } from "@/components/primitives/badge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { ReactionRow } from "@/components/social/ReactionRow"
 import { TOPIC_HEADER_AREA_CLASSES, toTopicHeaderGridClass } from "@/lib/pageHeaderClasses"
@@ -17,6 +16,7 @@ import { setChatPanelState } from "@/stores/chatPanelStore"
 import { TopicInfoPopover } from "./Topic"
 import { TopicByline } from "./TopicByline"
 import { TopicHeaderImage } from "./TopicImageButton"
+import { TopicTags } from "./TopicTags"
 
 // the topic, whether the user is signed in, how many findings the findings section lists, the counts that the
 // comment thread and the notes section report once they load, and the click on an editor's image
@@ -88,15 +88,7 @@ export function TopicHeader({
 					/>
 				</h1>
 				{/* tags row, left out for an untagged topic */}
-				{topic.tags.length > 0 && (
-					<div className={TOPIC_HEADER_AREA_CLASSES.tags}>
-						{topic.tags.map((tag) => (
-							<Badge key={tag} variant="secondary">
-								{tag}
-							</Badge>
-						))}
-					</div>
-				)}
+				<TopicTags tags={topic.tags} />
 				{/* the byline and the topic's reactions, under the image on a phone, then the counts of the page's sections on
 				    their own line */}
 				<div className="mt-1.5 max-sm:clear-left sm:contents">

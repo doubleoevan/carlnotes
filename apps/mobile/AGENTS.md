@@ -354,9 +354,10 @@ details texts, which the news, search, and finding rows draw on their details li
 Topic Posts featured on a person's own profile, opened from the profile and from the screen of one of their topics,
 podcast episodes, or Topic Posts.
 `components/topic/TopicByline.tsx` is a topic's byline, the team or the owner of the topic with its avatar, the web's
-`TopicByline`. `components/topic/TopicCard.tsx` and `components/podcast/PodcastEpisodeCard.tsx` adapt the shared cards
-over `components/common/cardElements.tsx`, the card box, topic image, and text row the two cards share, matching the
-web's `cardElements`. `components/podcast/PodcastEpisodeVideoButton.tsx` adapts the shared button that opens a film,
+`TopicByline`. `components/topic/TopicTags.tsx` adapts core's `TopicTags`, a topic's tags in a wrapping row under its
+image, which the Topics row and the topic screen share. `components/topic/TopicCard.tsx` and
+`components/podcast/PodcastEpisodeCard.tsx` adapt the shared cards over `components/common/cardElements.tsx`, the card
+box, topic image, and text row the two cards share, matching the web's `cardElements`. `components/podcast/PodcastEpisodeVideoButton.tsx` adapts the shared button that opens a film,
 with the Video sheet its press opens: a film card's round play button, `PodcastEpisodePlayButton` centered over the
 card's image, and the Video pill beside the play pill on a `components/social/NewsList.tsx` row whose Podcast Episode
 has a film. Its thumbnail size is the play button over the film's poster in `components/topic/TopicInfo.tsx`, whose

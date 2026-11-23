@@ -10,7 +10,6 @@ import { useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { PodcastEpisodePlayButton } from "@/components/podcast/PodcastEpisodePlayButton"
-import { Badge } from "@/components/primitives/badge"
 import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { TOPIC_IMAGE_FRAME_CLASS } from "@/components/primitives/topic-image"
@@ -33,6 +32,7 @@ import { TopicFindingList } from "./TopicFindingsSection"
 import { TopicImageLink } from "./TopicImageLink"
 import { TopicInfo } from "./TopicInfo"
 import { TOPIC_NOTE_TOOLTIP, TopicNoteTrigger } from "./TopicNoteTrigger"
+import { TopicTags } from "./TopicTags"
 
 // the note icon's button and the play button beside the note icon, in a heading's own text flow and beside a heading.
 // each tap area reaches past the tile, so the icons sit close together on a phone too. inline, the first icon keeps
@@ -87,15 +87,7 @@ export function Topic({ topic, index, className }: TopicProps) {
 					<TopicInfoPopover topic={topic} isInline />
 				</h3>
 				{/* tags, lined up with the title. an untagged topic renders no row at all */}
-				{topic.tags.length > 0 && (
-					<div className={TOPIC_HEADER_AREA_CLASSES.tags}>
-						{topic.tags.map((tag) => (
-							<Badge key={tag} variant="secondary">
-								{tag}
-							</Badge>
-						))}
-					</div>
-				)}
+				<TopicTags tags={topic.tags} />
 				{/* the byline, with the actions at the right of its row */}
 				<div className={TOPIC_HEADER_AREA_CLASSES.bylineRow}>
 					{/* the topic creator byline */}

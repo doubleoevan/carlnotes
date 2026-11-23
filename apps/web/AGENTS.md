@@ -551,7 +551,8 @@ the browser bundle and renders pages through the server build, behind its own ro
 ## Topic images and the home
 
 `pages/HomePage.tsx` is the home's two faces over `GET /api/home`, and `pages/TopicsPage.tsx` the directory at
-`/topics`. `components/topic/TopicCard.tsx`, `components/podcast/PodcastEpisodeCard.tsx`, and
+`/topics`. `components/topic/TopicTags.tsx` adapts core's `TopicTags` in the tags area of a Topics row's and a topic
+page's header. `components/topic/TopicCard.tsx`, `components/podcast/PodcastEpisodeCard.tsx`, and
 `components/primitives/topic-image.tsx` adapt the shared cards and image, the last drawing the coffee mug in a box with
 no file and also exporting the contract's frame
 as `TOPIC_IMAGE_FRAME_CLASS`. `components/common/cardElements.tsx` is `CARD_ELEMENTS`, the card box, topic image, and

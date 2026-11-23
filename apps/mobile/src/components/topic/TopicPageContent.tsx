@@ -15,7 +15,6 @@ import { Footer } from "@/components/layout/Footer"
 import { SectionTargetContext } from "@/components/layout/SectionAnchor"
 import { PodcastEpisodePlayer } from "@/components/podcast/PodcastEpisodePlayer"
 import { TopicVideoSection } from "@/components/podcast/TopicVideoSection"
-import { Badge } from "@/components/primitives/badge"
 import { Text } from "@/components/primitives/text"
 import { ReactionRow } from "@/components/social/ReactionRow"
 import { SocialSection } from "@/components/social/SocialSection"
@@ -32,6 +31,7 @@ import { TopicInfoButton } from "./TopicInfo"
 import { TopicActionBar } from "./TopicPageActions"
 import { TopicPageCards } from "./TopicPageCards"
 import { TopicScanButton } from "./TopicScanButton"
+import { TopicTags } from "./TopicTags"
 
 /**
  * Keeps the web Topic page's header, Findings, and cards in one native scroll area.
@@ -71,7 +71,7 @@ export function TopicPageContent({
 			contentContainerStyle={{ paddingBottom: 24 }}
 		>
 			<TopicActionBar topic={topic} onRefresh={onRefresh} onScanned={onScanned} />
-			{/* the image with the title in the page's own type sizes and the tags beside it, then the byline, the reactions,
+			{/* the image with the title in the page's own type sizes beside it, then the tags, the byline, the reactions,
 			    and the details line of the screen's counts under it at full width, as the web header shows them at phone
 			    width */}
 			<View className="mx-4 my-4">
@@ -94,17 +94,10 @@ export function TopicPageContent({
 						</TopicInfoButton>
 						{/* the chat mention and note count sits under the name, and its press opens the chat room */}
 						<PageUpdateCountBadge topicId={topic.id} className="self-start" />
-						{topic.tags.length > 0 ? (
-							<View className="mt-1.5 flex-row flex-wrap gap-1">
-								{topic.tags.map((tag) => (
-									<Badge key={tag} variant="secondary">
-										<Text>{tag}</Text>
-									</Badge>
-								))}
-							</View>
-						) : null}
 					</View>
 				</View>
+				{/* the tags under the image, wrapping from the left edge */}
+				<TopicTags tags={topic.tags} />
 				{/* the byline and the topic's reactions */}
 				<View className="mt-1.5 flex-row flex-wrap items-center gap-x-3">
 					<TopicByline topic={topic} isPage />

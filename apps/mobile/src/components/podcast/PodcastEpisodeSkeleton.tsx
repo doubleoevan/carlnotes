@@ -1,5 +1,5 @@
-// the podcast episode page's loading state: the button row, the image beside the title, the description, and the
-// byline, then the podcast section with the player card, the film section, the comments, and the transcript
+// the podcast episode page's loading state: the button row, the image beside the title, the description and the
+// byline under it, then the podcast section with the player card, the film section, the comments, and the transcript
 import { cn } from "@carlnotes/nightshift/classNames"
 import { View } from "react-native"
 import { SkeletonPulse } from "@/components/common/SkeletonPulse"
@@ -30,7 +30,7 @@ export function PodcastEpisodeSkeleton() {
 						<View className={cn(SKELETON_SHAPE_CLASS, "h-9 w-28 rounded-md")} />
 						<View className={cn(SKELETON_SHAPE_CLASS, "h-9 w-28 rounded-md")} />
 					</View>
-					{/* the image beside the title's lines and the description, then the byline under it at full width */}
+					{/* the image beside the title's lines, then the description and the byline under it at full width */}
 					<View className="mt-4 flex-row items-start gap-4">
 						<View className={cn(SKELETON_SHAPE_CLASS, "aspect-[3/2]", HEADER_TOPIC_IMAGE_CLASS)} />
 						<View className="min-w-0 flex-1">
@@ -41,13 +41,14 @@ export function PodcastEpisodeSkeleton() {
 									/>
 								</View>
 							))}
-							<View className="mt-1.5 h-5 justify-center">
-								<View className={cn(SKELETON_SHAPE_CLASS, "h-4 w-full")} />
-							</View>
-							<View className="h-5 justify-center">
-								<View className={cn(SKELETON_SHAPE_CLASS, "h-4 w-1/2")} />
-							</View>
 						</View>
+					</View>
+					{/* the description's two lines under the image */}
+					<View className="mt-1.5 h-5 justify-center">
+						<View className={cn(SKELETON_SHAPE_CLASS, "h-4 w-full")} />
+					</View>
+					<View className="h-5 justify-center">
+						<View className={cn(SKELETON_SHAPE_CLASS, "h-4 w-1/2")} />
 					</View>
 					<View className="mt-1.5 h-6 flex-row items-center gap-2">
 						<View className={cn(SKELETON_SHAPE_CLASS, "size-6 rounded-full")} />

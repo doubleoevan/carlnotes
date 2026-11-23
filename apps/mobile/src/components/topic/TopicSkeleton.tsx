@@ -36,8 +36,8 @@ export function TopicSkeleton({ topicPreview }: TopicSkeletonProps) {
 	)
 }
 
-// reserve the action bar's two buttons in the screen's own row, then the image with the title and the tags beside it,
-// and the byline, the reactions, and the details line under it at full width
+// reserve the action bar's two buttons in the screen's own row, then the image with the title beside it, and the
+// tags, the byline, the reactions, and the details line under it at full width
 function TopicSkeletonHeader({ topicTitle, hasTags }: { topicTitle?: string; hasTags: boolean }) {
 	return (
 		<View>
@@ -60,9 +60,10 @@ function TopicSkeletonHeader({ topicTitle, hasTags }: { topicTitle?: string; has
 								<View className={cn(SKELETON_SHAPE_CLASS, "h-6 w-5/6")} />
 							</View>
 						)}
-						{hasTags && <View className={cn(SKELETON_SHAPE_CLASS, "mt-1.5 h-5.5 w-28 rounded-full")} />}
 					</View>
 				</View>
+				{/* the tags' placeholder under the image */}
+				{hasTags && <View className={cn(SKELETON_SHAPE_CLASS, "mt-1.5 h-5.5 w-28 rounded-full")} />}
 				{/* the byline, and the reactions, which wrap under it, under the image at full width */}
 				<View className="mt-1.5 flex-row flex-wrap items-center gap-x-3">
 					<View className="h-6 flex-row items-center gap-2">

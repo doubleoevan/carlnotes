@@ -545,6 +545,7 @@ or each app's `Placeholder` element, the coffee mug, in a box with no file.
 episode's, or a Topic Post's, and renders the plain image if that page is the one open. A link with no label is for a
 pointer or a touch alone, beside a title that opens the same page. `lib/pagePaths` holds `isCurrentPagePath`, which
 compares a link's path with the open page's path without the query, the hash, and the end slash.
+`components/TopicTags` is a topic's tags in its Topics row and on its page, each app supplying the row and the tag.
 `components/TopicCard` and `PodcastEpisodeCard` are the home's and the Topics page's cards, and `TopicImageEditor` is
 the editor's image block for a topic or a podcast episode (Regenerate with an image prompt and an upload from the
 image), each app supplying its elements and its file picker. It shows `UNCHECKED_IMAGE_TEXT` through its `Line` element
