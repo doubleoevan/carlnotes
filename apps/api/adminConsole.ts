@@ -7,6 +7,7 @@ import { toAvatarKeyVersion, toAvatarVersion } from "@carlnotes/contracts/avatar
 import { toCentsFromDollars } from "@carlnotes/contracts/plans"
 import type { TeamPageResponse, TeamSummary } from "@carlnotes/contracts/teams"
 import { db } from "@carlnotes/db"
+import { adminPlanChanges, billingSubscriptions } from "@carlnotes/db/schema/billing"
 import { chatAttachments, chatTurns } from "@carlnotes/db/schema/chat"
 import { EMBED_DIMENSIONS, findings, resources, scans } from "@carlnotes/db/schema/scans"
 import { teamMembers, teams } from "@carlnotes/db/schema/teams"
@@ -46,48 +47,61 @@ export async function loadAdminUserTopics({
 }
 
 /**
- * One row per user for the admin table: status, topic and team counts, attributed storage, and month-to-date variable cost against their budget.
+ * One row per user for the admin table: status, topic and team counts, attributed storage, and month-to-date variable
+ * cost against their budget.
  */
 export async function loadAdminUsers(): Promise<AdminUserRow[]> {
-	// the base user rows, the per-user topic and team counts, the attributed storage
+	// the base user rows, the per-user topic and team counts, the attributed storage, the spend, and the admin plan
+	// changes
 	const monthStart = startOfUtcMonth(new Date())
-	const [userRows, topicCountRows, teamCountRows, storageByUser, scanSpendRows, chatSpendRows] = await Promise.all([
-		db
-			.select({
-				// identity and status
-				id: users.id,
-				email: users.email,
-				username: users.username,
-				avatarSource: users.avatarSource,
-				avatarKey: users.avatarKey,
-				role: users.role,
-				adminBlockedAt: users.adminBlockedAt,
-				plan: users.plan,
-				// the override, signup and last-login times, and the key that bills topic scans
-				budgetOverrideCents: users.budgetOverrideCents,
-				createdAt: users.createdAt,
-				lastLoginAt: users.lastLoginAt,
-				litellmVirtualKey: users.litellmVirtualKey,
-			})
-			.from(users),
-		db.select({ ownerId: topics.ownerId, count: count() }).from(topics).groupBy(topics.ownerId),
-		db
-			.select({ userId: teamMembers.userId, count: count() })
-			.from(teamMembers)
-			.where(eq(teamMembers.isActive, true))
-			.groupBy(teamMembers.userId),
-		loadAttributedStorage(),
-		db
-			.select({ ownerId: scans.ownerId, dollars: sql<string>`coalesce(sum(${scans.cost}), 0)` })
-			.from(scans)
-			.where(gte(scans.startedAt, monthStart))
-			.groupBy(scans.ownerId),
-		db
-			.select({ userId: chatTurns.userId, dollars: sql<string>`coalesce(sum(${chatTurns.cost}), 0)` })
-			.from(chatTurns)
-			.where(gte(chatTurns.createdAt, monthStart))
-			.groupBy(chatTurns.userId),
-	])
+	const [userRows, topicCountRows, teamCountRows, storageByUser, scanSpendRows, chatSpendRows, adminPlanChangeRows] =
+		await Promise.all([
+			db
+				.select({
+					// identity and status
+					id: users.id,
+					email: users.email,
+					username: users.username,
+					avatarSource: users.avatarSource,
+					avatarKey: users.avatarKey,
+					role: users.role,
+					adminBlockedAt: users.adminBlockedAt,
+					plan: users.plan,
+					// the override, signup and last-login times, and the key that bills topic scans
+					budgetOverrideCents: users.budgetOverrideCents,
+					createdAt: users.createdAt,
+					lastLoginAt: users.lastLoginAt,
+					litellmVirtualKey: users.litellmVirtualKey,
+				})
+				.from(users),
+			db.select({ ownerId: topics.ownerId, count: count() }).from(topics).groupBy(topics.ownerId),
+			db
+				.select({ userId: teamMembers.userId, count: count() })
+				.from(teamMembers)
+				.where(eq(teamMembers.isActive, true))
+				.groupBy(teamMembers.userId),
+			loadAttributedStorage(),
+			db
+				.select({ ownerId: scans.ownerId, dollars: sql<string>`coalesce(sum(${scans.cost}), 0)` })
+				.from(scans)
+				.where(gte(scans.startedAt, monthStart))
+				.groupBy(scans.ownerId),
+			db
+				.select({ userId: chatTurns.userId, dollars: sql<string>`coalesce(sum(${chatTurns.cost}), 0)` })
+				.from(chatTurns)
+				.where(gte(chatTurns.createdAt, monthStart))
+				.groupBy(chatTurns.userId),
+			// each admin billing row's reason from the log row it names, and its end date
+			db
+				.select({
+					userId: billingSubscriptions.userId,
+					reason: adminPlanChanges.reason,
+					endsAt: billingSubscriptions.currentPeriodEnd,
+				})
+				.from(billingSubscriptions)
+				.innerJoin(adminPlanChanges, eq(adminPlanChanges.id, billingSubscriptions.providerSubscriptionId))
+				.where(eq(billingSubscriptions.provider, "admin")),
+		])
 
 	// read each user's observed spend in parallel, best-effort, keyed by user id one proxy call per user, batch
 	const userSpends = await Promise.all(
@@ -99,6 +113,12 @@ export async function loadAdminUsers(): Promise<AdminUserRow[]> {
 	const spendByUser = new Map(userSpends)
 	const topicCountByUser = new Map(topicCountRows.map((topicCountRow) => [topicCountRow.ownerId, topicCountRow.count]))
 	const teamCountByUser = new Map(teamCountRows.map((teamCountRow) => [teamCountRow.userId, teamCountRow.count]))
+	const adminPlanChangeByUser = new Map(
+		adminPlanChangeRows.map((adminPlanChangeRow) => [
+			adminPlanChangeRow.userId,
+			{ reason: adminPlanChangeRow.reason, endsAt: adminPlanChangeRow.endsAt?.toISOString() ?? null },
+		]),
+	)
 
 	// the app's own totals keyed by user, in cents
 	const scanSpendByUser = new Map(
@@ -121,6 +141,7 @@ export async function loadAdminUsers(): Promise<AdminUserRow[]> {
 			role: user.role,
 			isAdminBlocked: user.adminBlockedAt !== null,
 			plan: user.plan,
+			adminPlanChange: adminPlanChangeByUser.get(user.id) ?? null,
 			createdAt: user.createdAt.toISOString(),
 			lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
 			topicCount: topicCountByUser.get(user.id) ?? 0,
@@ -243,8 +264,8 @@ export async function loadAdminUserTeams(userId: string): Promise<TeamSummary[] 
 }
 
 /**
- * One row per team for the admin table: the team's status, its member and topic counts, and month-to-date spend across its topics.
- * Teams are never billed: each cost here was already billed to its topic's owner or chatting member.
+ * One row per team for the admin table: the team's status, its member and topic counts, and month-to-date spend across
+ * its topics. Teams are never billed: each cost here was already billed to its topic's owner or chatting member.
  */
 export async function loadAdminTeams(): Promise<AdminTeamRow[]> {
 	// the team rows, the active member count, and each team's topic count, all in parallel
@@ -317,7 +338,8 @@ export async function loadAdminTotals(userRows: AdminUserRow[]): Promise<AdminTo
 }
 
 /**
- * Contribution in cents: net revenue minus tracked variable cost minus an optional fixed cost. Null if revenue is unavailable.
+ * Contribution in cents: net revenue minus tracked variable cost minus an optional fixed cost. Null if revenue is
+ * unavailable.
  */
 export function computeContributionCents(
 	netRevenueCents: number | null,
@@ -331,7 +353,8 @@ export function computeContributionCents(
 	return netRevenueCents - trackedVariableCostCents - fixedCostCents
 }
 
-// attributed storage in bytes per user: distinct resource content + embedding bytes + attachment bytes across their topics
+// attributed storage in bytes per user: distinct resource content + embedding bytes + attachment bytes across their
+// topics
 async function loadAttributedStorage(): Promise<Map<string, number>> {
 	// distinct (owner, resource) pairs so the same Resource in two of a user's topics counts once
 	const userResources = db

@@ -7,9 +7,9 @@ import { type SentQuery, stubConnectionPool } from "@carlnotes/db/connectionPool
 import * as litellm from "@carlnotes/models/litellm"
 import type * as monitoring from "@carlnotes/server/monitoring"
 import { quietErrorReports } from "@carlnotes/server/monitoringTestFixtures"
+import * as stripeClient from "@carlnotes/server/stripeClient"
 import { billingRoute } from "./billingRoute"
 import type { RevenueCatCustomer } from "./storeBilling"
-import * as stripeClient from "./stripeClient"
 import { toSignedInApp } from "./testSession"
 
 // the time every projection reads as now, and a time a month before and after it

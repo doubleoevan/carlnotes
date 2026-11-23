@@ -8,6 +8,7 @@ import { memberSortValues } from "@carlnotes/core/lib/teamMembersTableColumns"
 import { cn } from "@carlnotes/nightshift/classNames"
 import { toast } from "sonner"
 import { useConfirmDialog } from "@/hooks/useConfirmDialog"
+import { TABLE_CONTROL_CLASS } from "@/lib/styleClasses"
 import { TABLE_CLASS, TABLE_SCROLL_CLASS } from "@/lib/tableClasses"
 import { DATA_TABLE_ELEMENTS } from "./DataTable"
 import { TablePagination, usePaginatedRowSort } from "./TablePagination"
@@ -97,7 +98,7 @@ const TEAM_MEMBERS_TABLE_ELEMENTS: TeamMembersTableElements = {
 			onChange={(event) => onChange(event.target.value)}
 			aria-label={label}
 			disabled={isDisabled}
-			className="rounded-md border px-1 py-0.5"
+			className={TABLE_CONTROL_CLASS}
 		>
 			{options.map((option) => (
 				<option key={option} value={option}>

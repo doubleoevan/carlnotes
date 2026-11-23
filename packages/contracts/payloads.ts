@@ -21,7 +21,9 @@ import { CHAT_HISTORY_TURNS } from "./chatTurns"
 import {
 	conversationChatTurnKinds,
 	inviteAccesses,
+	isPaidPlan,
 	noteVisibilities,
+	plans,
 	podcastEpisodeSpeakers,
 	ratings,
 	reportSubjectKinds,
@@ -343,6 +345,19 @@ export const setRolePayload = z.object({ role: z.enum(["admin", "user"]) })
 
 // the admin budget-override body: a per-user monthly limit in cents, or null to fall back to the plan's backstop
 export const budgetOverridePayload = z.object({ budgetOverrideCents: z.number().int().nonnegative().nullable() })
+
+// the longest reason an admin may give for an admin plan change
+export const ADMIN_PLAN_CHANGE_REASON_MAX = 500
+
+// the admin plan change body: the plan granted without billing, the required reason, and the optional end date.
+// the free plan ends an admin plan change, so it has no end date
+export const adminPlanChangePayload = z
+	.object({
+		plan: z.enum(plans),
+		reason: z.string().trim().min(1).max(ADMIN_PLAN_CHANGE_REASON_MAX),
+		endsAt: z.iso.datetime().nullable(),
+	})
+	.refine((adminPlanChange) => isPaidPlan(adminPlanChange.plan) || adminPlanChange.endsAt === null)
 
 // the admin mobile minimum version body: the oldest build a platform's api still serves, or null to serve every build
 export const mobileMinimumVersionPayload = z.object({ minimumVersion: appVersion.nullable() })

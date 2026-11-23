@@ -71,6 +71,7 @@ capability the app will never need, with the reason, or `deferred` for one an ac
 | `billingClient.fetchAdminUserTopics` | web-only | Admin stays on the web |
 | `billingClient.sendDeleteUser` | web-only | Admin stays on the web |
 | `billingClient.sendUserBudgetOverride` | web-only | Admin stays on the web |
+| `billingClient.sendAdminPlanChange` | web-only | The admin console's admin plan change. Admin stays on the web |
 | `billingClient.sendUserRole` | web-only | Admin stays on the web |
 | `billingClient.sendAdminBlock` | web-only | The admin console's admin block of a user from reactions and comments. Admin stays on the web |
 | `dashboardClient.fetchDashboardMapSettings` | web-only | The web's Google Maps key and Map ID. The app's builds embed their own Maps keys from EAS |

@@ -47,8 +47,27 @@ export function UserEmailLink({ user }: { user: UserLinkUser & { email: string }
  */
 export function UserPlanLink({ user }: { user: UserLinkUser & { plan: Plan } }) {
 	return (
-		<UserPageLink href={`/account?userId=${user.userId}`} tooltip={`${user.username}'s account`} className="capitalize">
+		<UserAccountLink user={user} className="capitalize">
 			{user.plan}
+		</UserAccountLink>
+	)
+}
+
+/**
+ * A figure in an admin user table, such as the cost against the budget, linking to the user's account page.
+ */
+export function UserAccountLink({
+	user,
+	className,
+	children,
+}: {
+	user: UserLinkUser
+	className?: string
+	children: ReactNode
+}) {
+	return (
+		<UserPageLink href={`/account?userId=${user.userId}`} tooltip={`${user.username}'s account`} className={className}>
+			{children}
 		</UserPageLink>
 	)
 }
@@ -62,7 +81,7 @@ function UserPageLink({
 }: {
 	href: string
 	tooltip: string
-	className: string
+	className?: string
 	children: ReactNode
 }) {
 	return (

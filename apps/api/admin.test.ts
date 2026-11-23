@@ -403,3 +403,48 @@ test("the console reads back a stored image limit override, each pause, and the 
 		isHomeFeaturedOnly: false,
 	})
 })
+
+// the access rows, and the user with an admin plan change's Stripe billing row
+function toPlanChangeRouteRows({ text, values }: SentQuery): unknown[] {
+	// the user's access row, which the admin plan change's check of the user with an admin plan change also reads
+	if (text.includes('from "users"')) {
+		return values.includes("admin-1") ? [ADMIN_USER_ACCESS_ROW] : [FREE_USER_ACCESS_ROW]
+	}
+	return text.startsWith('select "provider", "plan", "stripe_subscription_id" from "billing_subscriptions"')
+		? [["stripe", "plus", "sub_1"]]
+		: []
+}
+
+// change user-2's plan as the given user, or as a signed-out visitor for null
+async function pickedPlan(userId: string | null, adminPlanChange: Record<string, unknown>): Promise<Response> {
+	const app = userId ? toSignedInApp(adminRoute, userId) : adminRoute
+	return await app.request("/admin/users/user-2/plan", {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify(adminPlanChange),
+	})
+}
+
+test("a visitor gets 401 and a non-admin gets 403 for an admin plan change, and a missing reason is rejected", async () => {
+	stubConnectionPool(toPlanChangeRouteRows)
+	const adminPlanChange = { plan: "premium", reason: "Reviewer", endsAt: null }
+	expect((await pickedPlan(null, adminPlanChange)).status).toBe(401)
+	expect((await pickedPlan("user-1", adminPlanChange)).status).toBe(403)
+	expect((await pickedPlan("admin-1", { ...adminPlanChange, reason: " " })).status).toBe(400)
+})
+
+test("an admin plan change ending in the past, or a free plan with an end date, is rejected", async () => {
+	stubConnectionPool(toPlanChangeRouteRows)
+	const pastEnd = await pickedPlan("admin-1", { plan: "plus", reason: "Reviewer", endsAt: "2020-01-01T00:00:00Z" })
+	expect(pastEnd.status).toBe(400)
+	const freeEnd = await pickedPlan("admin-1", { plan: "free", reason: "Reviewer", endsAt: "2099-01-01T00:00:00Z" })
+	expect(freeEnd.status).toBe(400)
+})
+
+test("an admin plan change for a user with an active Stripe subscription responds 409 with its reason, and writes nothing", async () => {
+	const sentQueries = stubConnectionPool(toPlanChangeRouteRows)
+	const response = await pickedPlan("admin-1", { plan: "premium", reason: "Reviewer", endsAt: null })
+	expect(response.status).toBe(409)
+	expect(((await response.json()) as { error: string }).error).toContain("active paid subscription")
+	expect(sentQueries.some(({ text }) => /^(insert|update|delete)/.test(text))).toBe(false)
+})

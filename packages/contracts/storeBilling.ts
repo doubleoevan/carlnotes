@@ -59,3 +59,8 @@ export function toStoreProduct(productId: string): StoreProduct | null {
 	const plan = STORE_ENTITLEMENT_IDS.find((storeEntitlementId) => productId.includes(storeEntitlementId))
 	return plan ? { plan, billingInterval: toStoreBillingInterval(productId) } : null
 }
+
+// whether a billing row's provider bills the user, which an admin plan change does not
+export function isBillingProvider(provider: string | null | undefined): provider is BillingProvider {
+	return provider === "stripe" || isStoreProvider(provider)
+}

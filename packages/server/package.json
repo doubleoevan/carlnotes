@@ -11,6 +11,7 @@
 		"@sentry/bun": "^11.10.0",
 		"expo-server-sdk": "^8.0.0",
 		"posthog-node": "^5.61.2",
+		"stripe": "^23.1.0",
 		"svix": "^2.9.1"
 	}
 }

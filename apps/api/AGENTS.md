@@ -148,9 +148,10 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   store sync names and projects it, counting a sandbox purchase only in dev and for the ids in
   `REVENUECAT_SANDBOX_USER_IDS`, and deletes the customer when the account closes. It reaches a customer by the user's
   random `revenueCatAppUserId`, never the user id. Both providers write the one billing row through
-  `billingProjection.ts`, where a row from another provider stays unless the new plan ranks higher, and a Stripe
-  subscription that a higher store plan replaces is set to cancel at its period end. `stripeClient.ts` holds the Stripe
-  client that `billing.ts` and `billingProjection.ts` call. Stripe checkout responds 409 to a store subscriber.
+  `@carlnotes/pipeline/billingProjection`, where a row from another provider stays unless the new plan ranks higher,
+  an admin plan change gives way to any provider, and a Stripe subscription that a higher store plan replaces is set to
+  cancel at its period end. `@carlnotes/server/stripeClient` holds the Stripe client both call. The account page's
+  billing state names no provider for an admin plan change. Stripe checkout responds 409 to a store subscriber.
   `storeBillingTestFixtures.ts` holds the RevenueCat customers and the stubbed sync the store billing tests share.
 - `documents.ts` — the document routes: the sitemap, the site and topic feeds, the llms files, the IndexNow key,
   security.txt, and the two domain association documents the stores verify app links against,
@@ -590,8 +591,9 @@ authenticated encryption itself lives in `@carlnotes/server/privateText`.
   `edgeCache.purge.ts` (`bun run edge:purge`) is the deploy job that clears the `rendered` tag right after the app
   deploys. `bun run check:edge` (`scripts/check-edge-cache.ts`, its rules in `scripts/edgeCacheCheck.ts`) reads after
   a release whether each shared path is stored at the edge.
-- `admin.ts` — the admin writes (a user's role and budget override, a platform's minimum app version, and the spend
-  control settings through `POST /admin/spend-control-settings`) and the admin console routes, over `adminConsole.ts`
+- `admin.ts` — the admin writes (a user's role and budget override, an admin plan change through
+  `POST /admin/users/:id/plan` over `@carlnotes/pipeline/adminPlanChanges`, with a 409 for a user that Stripe or a store
+  bills, a platform's minimum app version, and the spend control settings through `POST /admin/spend-control-settings`) and the admin console routes, over `adminConsole.ts`
   (the users and teams tables, the platform totals, and the expandable rows, a topic's subscribers among them),
   `spendControlSettings.ts` (the console's `dailySpendCutoffs` field read straight from the database: the day's
   free-plan spend, the worst case monthly spend from `loadWorstCaseMonthlySpend`, each cutoff and whether it is passed,

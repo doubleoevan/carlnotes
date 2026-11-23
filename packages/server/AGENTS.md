@@ -34,7 +34,8 @@ a minute under its name, `api`, `web`, or `worker`, reading the delay from the h
 stalled event loop warns from the api and the web service alone. Each line's `instance` field names the replica by
 its host name, so the replicas' lines can be told apart. `analytics.ts` holds the PostHog clients: `trackEvent` for the
 user events keyed to a user, `trackBotEvent` for the bot events keyed to a bot's or an app's name, and `toBotCapture`;
-the event types are `@carlnotes/contracts/analyticsEvents`. `appUrl.ts` reads the app's base url from `BETTER_AUTH_URL`:
+the event types are `@carlnotes/contracts/analyticsEvents`. `stripeClient.ts` returns the Stripe client that the api's
+billing and the pipeline's billing projection call. `appUrl.ts` reads the app's base url from `BETTER_AUTH_URL`:
 `appUrl()` falls back to the local dev server, and `appBaseUrl()` is undefined if unset, for the emails and
 notifications that skip without a link. `envSettings.ts` reads a number that a setting holds: `toPositiveInteger` for a
 count or a duration, and `readDollarSetting` for an amount in dollars. Its `readEnumSetting` reads one of a setting's

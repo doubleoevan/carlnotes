@@ -5,18 +5,18 @@
 import { checkoutPayload } from "@carlnotes/contracts/payloads"
 import { type BillingInterval, isOverageBillable, type PaidPlan, PLANS } from "@carlnotes/contracts/plans"
 import type { BillingState } from "@carlnotes/contracts/profiles"
-import { isStoreProvider } from "@carlnotes/contracts/storeBilling"
+import { isBillingProvider, isStoreProvider } from "@carlnotes/contracts/storeBilling"
 import { DAY_MS } from "@carlnotes/contracts/time"
 import { db } from "@carlnotes/db"
 import { billingSubscriptions } from "@carlnotes/db/schema/billing"
 import { users } from "@carlnotes/db/schema/users"
+import { applyBillingProjection, type BillingProjection } from "@carlnotes/pipeline/billingProjection"
 import { appUrl } from "@carlnotes/server/appUrl"
 import { reportError } from "@carlnotes/server/monitoring"
+import { stripe } from "@carlnotes/server/stripeClient"
 import { and, eq } from "drizzle-orm"
 import type Stripe from "stripe"
-import { applyBillingProjection, type BillingProjection } from "./billingProjection"
 import { syncStoreSubscription } from "./storeBilling"
-import { stripe } from "./stripeClient"
 import { loadEditorImageRegenerationQuota } from "./topic/imageEdits"
 import { scansToday } from "./topic/quotas"
 
@@ -117,10 +117,12 @@ export async function loadBillingState(userId: string): Promise<BillingState> {
 		.from(users)
 		.where(eq(users.id, userId))
 
-	// a user with no subscription is on the free plan, which bills on no frequency at all, so it defaults to monthly
+	// a user with no subscription is on the free plan, which bills on no frequency at all, so it defaults to monthly. an
+	// admin plan change has no provider that bills it
 	const plan = user?.plan ?? "free"
+	const provider = isBillingProvider(billingSubscription?.provider) ? billingSubscription.provider : null
 	const billingAccess = {
-		provider: billingSubscription?.provider ?? null,
+		provider,
 		hasPaymentMethod: billingSubscription?.hasPaymentMethod ?? false,
 		billingInterval: billingSubscription?.billingInterval ?? "monthly",
 	}

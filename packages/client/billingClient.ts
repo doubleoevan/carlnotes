@@ -3,6 +3,7 @@ import type { OwnerTopic } from "@carlnotes/contracts/activity"
 import type { AdminConsoleResponse, AdminTopicSubscriberRow } from "@carlnotes/contracts/admin"
 import type { MobilePlatform } from "@carlnotes/contracts/clientTelemetry"
 import type { SpendControlSettingsPayload, StoreCheckoutPayload } from "@carlnotes/contracts/payloads"
+import type { Plan } from "@carlnotes/contracts/plans"
 import { type BillingState, billingState } from "@carlnotes/contracts/profiles"
 import type { TeamPageResponse, TeamSummary } from "@carlnotes/contracts/teams"
 import { apiClient, readApiResponse } from "./apiClient"
@@ -75,6 +76,31 @@ export async function fetchAdminConsole(): Promise<AdminConsoleResponse> {
 export async function sendUserRole(userId: string, role: "admin" | "user"): Promise<boolean> {
 	const response = await apiClient().api.admin.users[":id"].role.$post({ param: { id: userId }, json: { role } })
 	return response.ok
+}
+
+/**
+ * Changes a user's plan from the admin table: the plan granted without billing, the reason, and the end date, null for
+ * no end. Returns the api's error message if it rejects the admin plan change, or null once it is saved.
+ */
+export async function sendAdminPlanChange(
+	userId: string,
+	adminPlanChange: { plan: Plan; reason: string; endsAt: string | null },
+): Promise<string | null> {
+	// a request that never reaches the api is a rejection too. a rejection includes its reason, such as an active paid
+	// subscription
+	const response = await apiClient()
+		.api.admin.users[":id"].plan.$post({ param: { id: userId }, json: adminPlanChange })
+		.catch(() => null)
+	if (!response) {
+		return "admin plan change failed: the request did not reach the server"
+	}
+
+	// a saved admin plan change returns null, and a rejection returns the api's error
+	if (response.ok) {
+		return null
+	}
+	const rejection = (await response.json().catch(() => ({}))) as { error?: string }
+	return rejection.error ?? `admin plan change failed: ${response.status}`
 }
 
 /**

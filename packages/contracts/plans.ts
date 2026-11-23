@@ -1,7 +1,7 @@
 // each billing plan's topic limit, daily topic limit, daily scan limit, monthly spend backstop, monthly budget
 // cutoffs, and price
 import { z } from "zod"
-import type { billingIntervals, billingProviders, plans } from "./enums"
+import type { billingIntervals, billingProviders, billingSubscriptionProviders, plans } from "./enums"
 
 export type Plan = (typeof plans)[number]
 
@@ -9,6 +9,7 @@ export type Plan = (typeof plans)[number]
 export type PaidPlan = Exclude<Plan, "free">
 export type BillingInterval = (typeof billingIntervals)[number]
 export type BillingProvider = (typeof billingProviders)[number]
+export type BillingSubscriptionProvider = (typeof billingSubscriptionProviders)[number]
 
 // a limit that differs by how the subscription bills. reading one means naming a billing interval
 type BillingIntervalLimit = Record<BillingInterval, number>
@@ -186,7 +187,7 @@ export const PURCHASE_COPY = {
 // the parts of a billing subscription that decide whether a scan past the daily limit can be billed. a free user has
 // no provider
 export type OverageBillingAccess = {
-	provider: BillingProvider | null
+	provider: BillingSubscriptionProvider | null
 	billingInterval: BillingInterval
 	hasPaymentMethod: boolean
 }

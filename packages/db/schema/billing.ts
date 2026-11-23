@@ -1,5 +1,5 @@
 // the billing subscriptions table
-import { boolean, pgTable, text, timestamp } from "drizzle-orm/pg-core"
+import { boolean, index, pgTable, text, timestamp } from "drizzle-orm/pg-core"
 import { billingInterval, billingProvider, plan, primaryId, timestamps } from "./columns"
 import { users } from "./users"
 
@@ -26,3 +26,28 @@ export const billingSubscriptions = pgTable("billing_subscriptions", {
 	// created and updated timestamps
 	...timestamps(),
 })
+
+// an admin plan change is an admin's grant of a plan without billing, kept as a log of who granted which plan, when,
+// and why. the admin plan change's billing_subscriptions row holds this row's id as its subscription id and the end
+// date as its period end
+export const adminPlanChanges = pgTable(
+	"admin_plan_changes",
+	{
+		id: primaryId(),
+		// the user the plan was granted to, and the admin who granted it, kept as null once that admin's account closes
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		adminUserId: text("admin_user_id").references(() => users.id, { onDelete: "set null" }),
+		// the plan granted, the admin's reason, and when the admin plan change ends, null for no end
+		plan: plan("plan").notNull(),
+		reason: text("reason").notNull(),
+		endsAt: timestamp("ends_at", { withTimezone: true }),
+		// created and updated timestamps
+		...timestamps(),
+	},
+	(table) => [
+		// a user's admin plan changes, which a deleted user's cascade finds
+		index("admin_plan_changes_user_id_idx").on(table.userId),
+	],
+)

@@ -1,8 +1,9 @@
-// the admin writes: a user's role, budget override, a platform's minimum app version, and the spend control settings,
-// and the admin console routes
+// the admin writes: a user's role, budget override, admin plan change, a platform's minimum app version, and the spend
+// control settings, and the admin console routes
 
 import { isNativePlatform } from "@carlnotes/contracts/clientTelemetry"
 import {
+	adminPlanChangePayload,
 	budgetOverridePayload,
 	mobileMinimumVersionPayload,
 	setRolePayload,
@@ -13,6 +14,7 @@ import { db } from "@carlnotes/db"
 import { users } from "@carlnotes/db/schema/users"
 import { refreshSessionUser } from "@carlnotes/db/sessions"
 import { replaceUserLiteLLMKey } from "@carlnotes/models/litellm"
+import { changeUserPlan } from "@carlnotes/pipeline/adminPlanChanges"
 import { zValidator } from "@hono/zod-validator"
 import { eq } from "drizzle-orm"
 import { Hono } from "hono"
@@ -271,6 +273,38 @@ export const adminRoute = new Hono<AppEnv>()
 			resolution,
 		})
 		return isResolved ? context.json({ ok: true }) : context.json({ error: "not found" }, 404)
+	})
+	.post("/admin/users/:id/plan", zValidator("json", adminPlanChangePayload), async (context) => {
+		// reject a signed-out visitor
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// grant a user a plan without billing, with a reason and an optional future end date, admin only
+		if (!(await isAllowed(userId, "admin:changePlan"))) {
+			return context.json({ error: "forbidden" }, 403)
+		}
+		const { plan, reason, endsAt } = context.req.valid("json")
+		const planEndsAt = endsAt === null ? null : new Date(endsAt)
+		if (planEndsAt && planEndsAt.getTime() <= Date.now()) {
+			return context.json({ error: "the end date must be in the future" }, 400)
+		}
+
+		// a user billed through Stripe or a store keeps their plan, and a made-up user id is not found
+		const planChangeResult = await changeUserPlan({
+			userId: context.req.param("id"),
+			adminUserId: userId,
+			plan,
+			reason,
+			endsAt: planEndsAt,
+		})
+		if (planChangeResult === "billed") {
+			return context.json(
+				{ error: "this user has an active paid subscription, so only billing changes their plan" },
+				409,
+			)
+		}
+		return planChangeResult === "changed" ? context.json({ ok: true }) : context.json({ error: "not found" }, 404)
 	})
 	.post("/admin/users/:id/budget", zValidator("json", budgetOverridePayload), async (context) => {
 		// reject a signed-out visitor

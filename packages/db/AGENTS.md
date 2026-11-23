@@ -55,7 +55,8 @@ and `@carlnotes/contracts`, with `drizzle-orm` and `@neondatabase/serverless`.
   with `resources.images_fetched_at` and `images_filter_version` recording that their fetch ran and under which version
   of the image filter), `topicEmailSends.ts` (the emails a Topic sent), `teams.ts`, `teamTopics.ts` (the topics shared
   into a team beyond its owning team), `invites.ts`, `chat.ts`, `notes.ts`, `podcast.ts`, `billing.ts` (each user's one
-  billing subscription and the provider that bills it), `releases.ts`, `jobLeases.ts` (each job's lease row),
+  billing subscription and the provider that bills it, or `admin` for an admin plan change, and `admin_plan_changes`,
+  the log of each admin plan change's admin, reason, and end date), `releases.ts`, `jobLeases.ts` (each job's lease row),
   `storage.ts` (favicons and the pending object deletions), `mobileMinimumVersions.ts` (the minimum app version of each
   platform), `spendControlSettings.ts` (the one row of admin overrides on the daily spend cutoffs, the first scan
   dispatch limit, the hourly signup alert, and a film's generated image limit, with the switches: the unverified

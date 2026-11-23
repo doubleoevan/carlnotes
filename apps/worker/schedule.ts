@@ -5,6 +5,7 @@ import { sizeConnectionPool } from "@carlnotes/db"
 import { loadDailySpendCutoffState } from "@carlnotes/db/dailySpendCutoffs"
 import { runWithJobLease } from "@carlnotes/db/jobLease"
 import { shutdownTelemetry, startTelemetry } from "@carlnotes/models/telemetry"
+import { endExpiredAdminPlanChanges } from "@carlnotes/pipeline/adminPlanChanges"
 import { reportFirecrawlCreditSpent } from "@carlnotes/pipeline/firecrawlCredit"
 import { recoverPersonalSourcesWork } from "@carlnotes/pipeline/personalSources/work"
 import { screenPendingSources } from "@carlnotes/pipeline/screen"
@@ -116,15 +117,16 @@ type SweepStage = {
 }
 
 // the sweep's stages in order: the leased sweep and the leased viewer count sync, which also saves the daily counts,
-// then, once the leases are released, the pending object deletions, the unchecked images, the reminder of reports
-// left open, the day's notifications emails, the Dashboard build for the last completed UTC day, the day's spend, and
-// a Firecrawl credit that a review found spent
+// then, once the leases are released, the pending object deletions, the unchecked images, the reminder of reports left
+// open, the admin plan changes past their end date, the day's notifications emails, the Dashboard build for the last
+// completed UTC day, the day's spend, and a Firecrawl credit that a review found spent
 const SWEEP_STAGES: SweepStage[] = [
 	{ name: "scheduled scans", reportedStage: "scheduled-scan", run: () => runScheduledTopicScans() },
 	{ name: "viewer counts", reportedStage: "database", run: () => syncViewerCounts() },
 	{ name: "object deletions", reportedStage: "object-storage", run: () => retryPendingObjectDeletions() },
 	{ name: "unchecked images", reportedStage: "unchecked-image", run: () => checkUncheckedImages() },
 	{ name: "report reminders", reportedStage: "email", run: () => remindOpenReports() },
+	{ name: "admin plan changes", reportedStage: "billing", run: () => endExpiredAdminPlanChanges() },
 	// the next two keep what their reports said before each stage had a try of its own
 	{
 		name: "notifications emails",

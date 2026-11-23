@@ -12,6 +12,7 @@ import { cn } from "@carlnotes/nightshift/classNames"
 import { paginationClasses } from "@carlnotes/nightshift/pagination"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { type RenderedRow, toRenderedRows } from "@/lib/renderedRows"
+import { TABLE_CONTROL_CLASS } from "@/lib/styleClasses"
 import { ONE_PAGE_TABLE_CARD_CLASS, SCRIPTED_PAGINATION_TABLE_CARD_CLASS } from "@/lib/tableClasses"
 
 // the smallest page a table can be cut into. below this, the pagination controls are hidden
@@ -106,7 +107,7 @@ const TABLE_PAGINATION_ELEMENTS: TablePaginationElements = {
 		<select
 			value={value}
 			onChange={(event) => onValueChange(Number(event.target.value))}
-			className={cn("rounded-md border px-1 py-0.5", paginationClasses.idle.box, paginationClasses.idle.text)}
+			className={cn(TABLE_CONTROL_CLASS, paginationClasses.idle.box, paginationClasses.idle.text)}
 		>
 			{options.map((pageSize) => (
 				<option key={pageSize} value={pageSize}>

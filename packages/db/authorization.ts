@@ -75,6 +75,7 @@ export type Capability =
 	| "admin:console"
 	| "admin:setRole"
 	| "admin:setBudget"
+	| "admin:changePlan"
 	| "admin:setHomeOrder"
 	| "admin:deleteUser"
 	| "admin:setAdminBlock"
@@ -179,6 +180,7 @@ async function decideTopicCapability(
 		case "admin:console":
 		case "admin:setRole":
 		case "admin:setBudget":
+		case "admin:changePlan":
 		case "admin:setHomeOrder":
 		case "admin:deleteUser":
 		case "admin:setAdminBlock":

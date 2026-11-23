@@ -14,10 +14,10 @@ import {
 } from "@carlnotes/contracts/storeBilling"
 import { db } from "@carlnotes/db"
 import { users } from "@carlnotes/db/schema/users"
+import { applyBillingProjection, type BillingProjection } from "@carlnotes/pipeline/billingProjection"
 import { isSameSignature } from "@carlnotes/server/hmac"
 import { eq } from "drizzle-orm"
 import { z } from "zod"
-import { applyBillingProjection, type BillingProjection } from "./billingProjection"
 
 // the error for a webhook with a missing or wrong Authorization value, or a body that is not an event
 export class RevenueCatWebhookRejectionError extends Error {}
@@ -210,6 +210,8 @@ export function isSandboxPurchaseAllowed(userId: string): boolean {
 	if (Bun.env.DOPPLER_ENVIRONMENT === "dev") {
 		return true
 	}
+
+	// elsewhere, only the listed user ids
 	const sandboxUserIds = (Bun.env.REVENUECAT_SANDBOX_USER_IDS ?? "")
 		.split(",")
 		.map((sandboxUserId) => sandboxUserId.trim())

@@ -177,6 +177,8 @@ export const plans = ["free", "plus", "premium"] as const
 export const billingIntervals = ["monthly", "yearly"] as const
 // who bills a subscription: Stripe on the web, or the App Store or Google Play in the app
 export const billingProviders = ["stripe", "app_store", "play_store"] as const
+// who grants a billing row: a billing provider, or an admin plan change, which no one bills
+export const billingSubscriptionProviders = [...billingProviders, "admin"] as const
 // where a user's public avatar comes from. generated uses the username initials
 export const avatarSources = ["generated", "oauth", "upload"] as const
 // what an unchecked image is for: a user's or a team's avatar, or the image of a Topic, a Podcast Episode, a Topic

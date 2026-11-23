@@ -32,9 +32,14 @@ export const STANDALONE_LINK_CLASS = "text-link hover:underline"
 export const STANDALONE_LINE_LINK_CLASS = `${STANDALONE_LINK_CLASS} inline-block text-sm`
 
 /**
+ * A small bordered select or input inside a table row.
+ */
+export const TABLE_CONTROL_CLASS = "rounded-md border px-1 py-0.5"
+
+/**
  * A small number input an admin types a setting into.
  */
-export const ADMIN_NUMBER_INPUT_CLASS = "w-16 rounded-md border px-1 py-0.5"
+export const ADMIN_NUMBER_INPUT_CLASS = `w-16 ${TABLE_CONTROL_CLASS}`
 
 /**
  * The divider and spacing above a section in Admin Limits.
