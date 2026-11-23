@@ -158,7 +158,8 @@ and the package boundary check fails anything else, a type-only import of `@carl
   story through `.rnstorybook/topicMemoriesStorybook.ts`. The story client keeps reads and feedback submissions local.
 - `bun run mobile:build -- --profile development-simulator` — an EAS cloud build; profiles: development,
   development-simulator, preview, production.
-- `bun run mobile:update` — an EAS Update on the fingerprint runtime policy.
+- `bun run mobile:update` — an EAS Update on the fingerprint runtime policy. A launch waits up to three seconds for a new
+  update. A slower one opens on the next launch.
 - `bun run mobile:env:sync` — moves the mobile values from Doppler into the EAS environments. Never type a value into
   the EAS dashboard.
 - `bun run mobile:submit -- --platform ios | android` — submits the latest production build, under Doppler prd, after

@@ -64,8 +64,10 @@ const expoConfig: ExpoConfig = {
 	runtimeVersion: {
 		policy: "fingerprint",
 	},
+	// a launch waits up to three seconds for a new EAS Update. a slower one opens on the next launch
 	updates: {
 		url: `https://u.expo.dev/${EAS_PROJECT_ID}`,
+		fallbackToCacheTimeout: 3000,
 	},
 	extra: {
 		eas: {
