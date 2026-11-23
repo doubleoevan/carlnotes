@@ -142,8 +142,11 @@ and the package boundary check fails anything else, a type-only import of `@carl
   production submit profile, whose Play key path the submit script fills for the length of a submit. EAS is Expo
   Application Services, the vendor's name for its cloud build and update services, so identifiers and files keep its
   word. A change that adds a native module, as the sign-in change did, needs a rebuilt development client.
-- `store/` — the store release's own files: `listing.md`, the Apple and Google listing copy and the review notes
-  template, `data-inventory.md`, what the app and each service collect for the privacy and data-safety forms, and
+- `store/` — the store release's own files: `store/listing/`, the App Store and Google Play copy (`app-store.md`,
+  `google-play.md`, and the `description.md` they share) and `review.md` with the categories, age ratings, URLs, and
+  review notes template; `data-inventory.md`, what the app and each service collect; `privacy-forms.md`, the App
+  Privacy and Data safety answers built from it and the Privacy policy flags; `screenshots.md`, the screens and sizes
+  each store takes; `company-steps.md`, the store steps that wait for the company, in order; and
   `release-checklist.md`, the acceptance list a release passes, each item unverified until someone checks it.
 
 ## Commands
@@ -306,7 +309,7 @@ The path from a commit to a store build, in order. Every secret stays in Doppler
   `adb shell pm verify-app-links --re-verify com.carlnotes.app` then `adb shell pm get-app-links com.carlnotes.app`.
 - Reviewer. `bun run reviewer:seed -- --environment prd` under `doppler run --config prd` creates or refreshes the
   reviewer's account with its fixtures. The credentials come from `REVIEWER_EMAIL` and `REVIEWER_PASSWORD` in Doppler
-  and go into the review notes by hand, from `store/listing.md`'s template.
+  and go into the review notes by hand, from `store/listing/review.md`'s template.
 
 ## Topic images and the home
 
