@@ -5,6 +5,12 @@ import { profileIdentity } from "./profiles"
 import { displayEnum } from "./tolerantReads"
 import type { TopicDraft } from "./topicPayloads"
 
+// the longest suggested reply a composer shows, in characters
+export const SUGGESTED_REPLY_CHARS = 100
+
+// which chat a page holds, as an analytics event names it
+export type ChatKind = "topic" | "team" | "new_topic" | "room"
+
 // the chat's name in the app's copy
 export const CHAT_NAME = "Coffee Talk"
 
@@ -295,6 +301,8 @@ export const chatConversation = z.object({
 	topicLimit: z.number().optional(),
 	// the topic draft carl has written so far, on the new-topic conversation alone
 	topicDraft: z.custom<TopicDraft>((value) => typeof value === "object" && value !== null).optional(),
+	// whether this conversation shows suggested replies. a client without it shows none
+	isSuggestedReplyOn: z.boolean().optional(),
 })
 
 export type ChatConversation = z.infer<typeof chatConversation>

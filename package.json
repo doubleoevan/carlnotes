@@ -90,6 +90,7 @@
 		"eval:topic-post-chat": "doppler run -- bun evals/topic-post-chat/topicPostChatEval.ts",
 		"eval:grader-calibration": "doppler run -- bun evals/grader-calibration/graderCalibrationEval.ts",
 		"eval:new-topic-chat": "doppler run -- bun evals/new-topic-chat/newTopicChatEval.ts",
+		"eval:suggested-replies": "doppler run -- bun evals/suggested-replies/suggestedReplyEval.ts",
 		"eval:podcast-episode-script": "doppler run -- bun evals/podcast-episode-script/podcastEpisodeScriptEval.ts",
 		"eval:review-pipeline": "doppler run -- bun evals/review-pipeline/reviewPipelineEval.ts",
 		"eval:scan-report": "doppler run -- bun evals/scan-report/scanReportEval.ts",

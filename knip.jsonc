@@ -47,6 +47,7 @@
 				// the eval:topic-memories:labels script serves the private phone review
 				"evals/topic-memories/topicMemoryLabelReview.ts",
 				"evals/topic-post-chat/topicPostChatEval.ts",
+				"evals/suggested-replies/suggestedReplyEval.ts",
 				"evals/grader-calibration/graderCalibrationEval.ts",
 				"evals/new-topic-chat/newTopicChatEval.ts",
 				"evals/podcast-chat/podcastChatEval.ts",

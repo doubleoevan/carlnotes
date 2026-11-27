@@ -15,6 +15,7 @@ part of `bun test` or the push gate. Run a prompt's eval before shipping a chang
 | `topic-chat-tools/` | the topic chat's edit tools, in the solo chat and the team room | `bun run eval:topic-chat-tools` |
 | `podcast-chat/` | a question asked out loud from the podcast player, and the host it picks | `bun run eval:podcast-chat` |
 | `new-topic-chat/` | the chat that makes a topic, with its tools | `bun run eval:new-topic-chat` |
+| `suggested-replies/` | the one line an empty private chat box suggests, before the code's filter | `bun run eval:suggested-replies` |
 | `source-suggestions/` | the Sources suggested for a topic | `bun run eval:source-suggestions` |
 | `search-queries/` | the search queries that a Scan writes for a topic | `bun run eval:search-queries` |
 | `attachment-summaries/` | the summary of an attached document and the description of an attached image | `bun run eval:attachment-summaries` |

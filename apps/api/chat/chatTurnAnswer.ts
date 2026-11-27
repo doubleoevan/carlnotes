@@ -199,6 +199,8 @@ export async function answerChatTurn(
 		litellmApiKey,
 		topicDraft,
 		reservation,
+		// the turns before this one that the suggested reply reads
+		recentChatTurns: history.slice(-2).map((chatTurn) => ({ question: chatTurn.question, answer: chatTurn.answer })),
 	})
 }
 

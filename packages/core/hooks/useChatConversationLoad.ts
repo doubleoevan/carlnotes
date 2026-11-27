@@ -41,6 +41,8 @@ export type ChatConversationGates = {
 	topicLimit: number | null
 	// whether the mic and the play buttons render, which needs a transcription model and a speech model
 	isVoiceChatConfigured: boolean
+	// whether this conversation shows suggested replies, off for a load that does not say
+	isSuggestedReplyOn: boolean
 	// true once the conversation load finishes, so the panel can select its opening state from what came back
 	isLoaded: boolean
 	hasLoadFailed: boolean
@@ -65,7 +67,9 @@ export function useChatConversationLoad({
 	const [isFirstTopic, setIsFirstTopic] = useState(false)
 	const [topicsRemaining, setTopicsRemaining] = useState<number | null>(null)
 	const [topicLimit, setTopicLimit] = useState<number | null>(null)
+	// the voice and suggested reply switches the server reads
 	const [isVoiceChatConfigured, setIsVoiceChatConfigured] = useState(false)
+	const [isSuggestedReplyOn, setIsSuggestedReplyOn] = useState(false)
 	// whether the load has finished
 	const [isLoaded, setIsLoaded] = useState(false)
 	const [hasLoadFailed, setHasLoadFailed] = useState(false)
@@ -81,6 +85,7 @@ export function useChatConversationLoad({
 		setIsLoaded(false)
 		setHasLoadFailed(false)
 		setCanChat(false)
+		// the load, applied only while this topic and conversation are still on screen
 		fetchChatConversation(page)
 			.then((chatConversation) => {
 				if (!isCurrentTopic || !isCurrentChat()) {
@@ -95,7 +100,9 @@ export function useChatConversationLoad({
 				setIsFirstTopic(chatConversation.isFirstTopic ?? false)
 				setTopicsRemaining(chatConversation.topicsRemaining ?? null)
 				setTopicLimit(chatConversation.topicLimit ?? null)
+				// voice, and suggested replies, which a load that does not say leaves off
 				setIsVoiceChatConfigured(chatConversation.isVoiceChatConfigured)
+				setIsSuggestedReplyOn(chatConversation.isSuggestedReplyOn ?? false)
 				// show the topic draft that carl wrote earlier
 				setTopicDraft(chatConversation.topicDraft ?? EMPTY_TOPIC_DRAFT)
 				// bring back the change that carl proposed earlier in this conversation
@@ -128,6 +135,7 @@ export function useChatConversationLoad({
 		topicsRemaining,
 		topicLimit,
 		isVoiceChatConfigured,
+		isSuggestedReplyOn,
 		isLoaded,
 		hasLoadFailed,
 		reload: () => setLoadCount((count) => count + 1),

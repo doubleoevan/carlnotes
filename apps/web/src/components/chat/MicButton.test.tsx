@@ -1,51 +1,22 @@
 // render tests for the mic in both composers' send slots and for the recording bar's controls
 import { expect, test } from "bun:test"
 import { TEST_TOPIC_VOICE_CHAT_PAGE } from "@carlnotes/client/voiceClientTestFixtures"
-import { EMPTY_TOPIC_DRAFT } from "@carlnotes/contracts/topicPayloads"
 import { ChatComposer } from "./ChatComposer"
 import { ChatRoomComposer } from "./ChatRoomComposer"
 import { RecordingBar } from "./RecordingBar"
 import { renderWithRouter } from "./renderWithRouter"
+import { toTestTopicChat } from "./topicChatTestFixtures"
 import type { TopicChat } from "./useTopicChat"
 import type { VoiceRecording } from "./useVoiceRecording"
 
 // a loaded private chat with voice on and nothing typed. each test states what differs
-function toTestTopicChat(overrides: Partial<TopicChat>): TopicChat {
-	return {
-		chatTurns: [],
-		question: "",
-		setQuestion: () => {},
-		attachments: [],
-		addAttachmentFiles: async () => [],
-		addPastedText: () => {},
-		removeAttachment: () => {},
-		keptAttachments: [],
-		removeKeptAttachment: async () => {},
-		canChat: true,
-		isSignupRequired: false,
-		isBudgetExhausted: false,
-		canEditTopic: false,
-		isFirstTopic: false,
-		topicsRemaining: null,
-		topicLimit: null,
-		isVoiceChatConfigured: true,
-		isLoaded: true,
-		editableTopicDraft: null,
-		topicDraft: EMPTY_TOPIC_DRAFT,
-		topicDraftAttachmentFiles: [],
-		removeTopicDraftAttachmentFile: () => {},
-		isStreaming: false,
-		voiceChatPage: TEST_TOPIC_VOICE_CHAT_PAGE,
-		send: async () => {},
-		stop: () => {},
-		clear: async () => true,
-		...overrides,
-	}
+function toVoiceTopicChat(overrides: Partial<TopicChat>): TopicChat {
+	return toTestTopicChat({ isVoiceChatConfigured: true, voiceChatPage: TEST_TOPIC_VOICE_CHAT_PAGE, ...overrides })
 }
 
 // the private chat's composer as HTML
 function renderChatComposer(overrides: Partial<TopicChat>): Promise<string> {
-	return renderWithRouter(<ChatComposer chat={toTestTopicChat(overrides)} onSendQuestion={() => {}} />)
+	return renderWithRouter(<ChatComposer chat={toVoiceTopicChat(overrides)} onSendQuestion={() => {}} />)
 }
 
 // the chat room's composer as HTML, with voice on unless the test turns it off

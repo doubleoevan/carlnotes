@@ -178,8 +178,14 @@ permission, and clock, which the mobile room's list reads row by row. `lib/chatS
 conversations to both component browsers.
 
 `hooks/useChatConversationLoad` owns history/access gates and proposal restoration; `useTopicChat` owns send, stop,
-retry, clear, and tool outcomes. The attachment state, the topic draft state, and the notice remain injected app
-extensions. `useVoiceRecording` is the recording's state machine from the mic tap to the transcript over the app's
+retry, clear, and tool outcomes. It frees the composer at the stream's the `saved` line while the stream reads on, and keeps
+the `suggestedReply` the stream sends for the latest sent chat turn as `receivedSuggestedReply`. `hooks/useSuggestedReply`
+is the one rule for when a suggested reply shows, for both apps: an empty question box with no attachments, nothing
+streaming, nothing recording, no voice composer, a signed-in user, the latest chat turn of the account and
+conversation on screen, and a load whose `isSuggestedReplyOn` is set. An empty new-topic chat with a topic left
+shows one of `NEW_TOPIC_EXAMPLE_TOPICS` from `lib/chatCopy`. It counts each suggestion shown and accepted once through
+the app's analytics adapter, which never receives the text, and hands the app the text to announce once. The
+attachment state, the topic draft state, and the notice remain injected app extensions. `useVoiceRecording` is the recording's state machine from the mic tap to the transcript over the app's
 recorder adapter, with listen mode in `useListenMode`, which reopens the mic on the tap's session once Carl finishes his
 spoken answer, and `useChatRoomSpokenAnswer`, which `useChatRoom` calls, speaks Carl's reply to this device's spoken
 room message, once. `useSpokenAnswerButton` is the play button's state and its tap, and

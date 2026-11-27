@@ -3,6 +3,7 @@ import { buildChapterPictureVideoPrompt } from "@carlnotes/models/chapterPicture
 import { toUntrustedFences } from "@carlnotes/models/prompts/untrustedFenceTestFixtures"
 import { buildContextPrompt } from "@carlnotes/pipeline/attach"
 import { buildAgreementPrompt } from "@carlnotes/pipeline/chat/agreement"
+import { buildSuggestedReplyPrompt } from "@carlnotes/pipeline/chat/suggestedReply"
 import { buildDashboardParagraphPrompt } from "@carlnotes/pipeline/dashboardParagraph"
 import { buildSearchPrompt } from "@carlnotes/pipeline/ingest/search"
 import { buildTopicMemorySearchPrompt } from "@carlnotes/pipeline/ingest/selectTopicMemorySearchQuery"
@@ -63,6 +64,9 @@ export async function writeSamplePrompts(): Promise<[string, boolean][]> {
 		hasIncompleteCoverage: false,
 	})
 	const agreementResult = await buildAgreementPrompt("sounds good", "frequency: daily")
+	const suggestedReplyResult = await buildSuggestedReplyPrompt({
+		chatTurns: [{ question: "I want to follow espresso machines", answer: "How often should I look?" }],
+	})
 	const updatesRecapResult = await buildUpdatesRecapPrompt({
 		topicNames: ["Coffee"],
 		findingTitles: ["Sample"],
@@ -155,6 +159,7 @@ export async function writeSamplePrompts(): Promise<[string, boolean][]> {
 		searchSelection,
 		contextResult,
 		agreementResult,
+		suggestedReplyResult,
 		updatesRecapResult,
 		dashboardParagraphResult,
 		topicPostSummaryResult,
@@ -177,6 +182,7 @@ export async function writeSamplePrompts(): Promise<[string, boolean][]> {
 		["attachment context prompt", contextResult.prompt],
 		["Personal sources context prompt", personalSourcesContextResult.prompt],
 		["agreement check prompt", agreementResult.prompt],
+		["suggested reply prompt", suggestedReplyResult.prompt],
 		["updates recap prompt", updatesRecapResult.prompt],
 		["topic post summary prompt", topicPostSummaryResult.prompt],
 		["topic post discussion prompt", topicPostDiscussionResult.prompt],

@@ -1,21 +1,20 @@
-import { CHAT_QUESTION_CHARS, type KeptChatAttachment } from "@carlnotes/contracts/chat"
-import { CHAT_QUESTION_PLACEHOLDER } from "@carlnotes/core/lib/chatCopy"
-import { toDeleteFileConfirmation } from "@carlnotes/core/lib/confirmationCopy"
-import { toAgeLabel } from "@carlnotes/core/lib/labels"
+import type { ChatPage } from "@carlnotes/client/chatClient"
+import { CHAT_QUESTION_CHARS } from "@carlnotes/contracts/chat"
+import { CHAT_QUESTION_PLACEHOLDER, SUGGESTED_REPLY_COPY } from "@carlnotes/core/lib/chatCopy"
 import { cn } from "@carlnotes/nightshift/classNames"
-import { ArrowUp, FileText, FileX2, Film, Image, Minus, Paperclip, Square, X } from "lucide-react"
+import { ArrowRightToLine, ArrowUp, Square, X } from "lucide-react"
 import { useEffect, useRef } from "react"
-import { AnchorLink } from "@/components/common/AnchorLink"
 import { FileDropZone } from "@/components/common/FileDropZone"
-import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
+import { Button } from "@/components/primitives/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { useConfirmDialog } from "@/hooks/useConfirmDialog"
 import { COMPOSER_BAR_CLASS, COMPOSER_BOX_CLASS, COMPOSER_FRAME_CLASS, SEND_BUTTON_CLASS } from "@/lib/chatClasses"
-import { ICON_BUTTON_CLASS, SECTION_LABEL_CLASS, STANDALONE_LINK_CLASS } from "@/lib/styleClasses"
-import { CHAT_FILE_PICKER_ACCEPT, isSendKey, isTouchScreen, isWideScreen } from "@/lib/utils"
+import { ICON_BUTTON_CLASS } from "@/lib/styleClasses"
+import { isSendKey, isTouchScreen, isWideScreen } from "@/lib/utils"
 import { ChatAttachmentChips } from "./ChatAttachmentChips"
+import { ChatAttachButton, KeptAttachmentsButton } from "./ChatComposerAttachments"
 import { isMicShown, MicButton } from "./MicButton"
 import { RecordingBar } from "./RecordingBar"
+import { useComposerSuggestedReply } from "./useComposerSuggestedReply"
 import type { TopicChat } from "./useTopicChat"
 import { useVoiceRecording } from "./useVoiceRecording"
 
@@ -32,13 +31,17 @@ export function ChatComposer({
 	chat,
 	onSendQuestion,
 	placeholder = CHAT_QUESTION_PLACEHOLDER,
+	page,
 }: {
 	// the conversation the composer writes into, which owns the draft, its attachments, and the stream
 	chat: TopicChat
 	// a visitor's send routes to the signup instead of the conversation
 	onSendQuestion: () => void
-	// what the empty question box shows. the private chat's line unless the conversation says otherwise
+	// what the empty question box shows without a suggestion. the private chat's line unless the conversation says
+	// otherwise
 	placeholder?: string
+	// the private conversation's page, which suggested replies need. a composer without one shows none
+	page?: ChatPage
 }) {
 	const { question, attachments, keptAttachments, isStreaming, isSignupRequired } = chat
 	const questionBoxRef = useRef<HTMLTextAreaElement>(null)
@@ -60,6 +63,10 @@ export function ChatComposer({
 		isBusy: isStreaming,
 	})
 
+	// the suggested reply the empty box shows, its announcement, and its accept. the voice composer and a recording show none
+	const composerSuggestedReply = useComposerSuggestedReply({ chat, page, placeholder, voiceRecording, questionBoxRef })
+	const { suggestedReply } = composerSuggestedReply
+
 	// a wide screen focuses the composer as soon as the panel opens, so the user can just start typing
 	useEffect(() => {
 		if (isWideScreen()) {
@@ -78,7 +85,10 @@ export function ChatComposer({
 		if (question !== "") {
 			questionBox.style.height = `${Math.min(questionBox.scrollHeight, MAX_QUESTION_BOX_HEIGHT_PX)}px`
 		}
-	}, [question])
+
+		// an accepted suggestion leaves the caret at its end
+		composerSuggestedReply.moveCaretAfterAccept(questionBox)
+	}, [question, composerSuggestedReply.moveCaretAfterAccept])
 
 	// send the question, unless a spoken question is on its way. on a touch screen the box lets go of focus, so the
 	// keyboard closes, and the reply shows
@@ -94,8 +104,10 @@ export function ChatComposer({
 		}
 	}
 
-	// Enter sends the question and Shift+Enter starts a new line
-	function handleSendQuestion(event: React.KeyboardEvent<HTMLTextAreaElement>): void {
+	// Enter sends the question and Shift+Enter starts a new line. Right Arrow alone in an empty box accepts its suggestion,
+	// except during an input method composition
+	function handleQuestionKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>): void {
+		composerSuggestedReply.handleAcceptKey(event)
 		if (isSendKey(event)) {
 			event.preventDefault()
 			sendQuestion()
@@ -148,26 +160,35 @@ export function ChatComposer({
 					<>
 						{/* the input box is 16px to keep the panel on the screen. autocomplete is off,
 						so a phone offers no passwords, cards, or addresses over a chat field */}
-						<textarea
-							ref={questionBoxRef}
-							rows={1}
-							value={question}
-							readOnly={isVoiceRecordingBusy}
-							maxLength={CHAT_QUESTION_CHARS}
-							onChange={(event) => chat.setQuestion(event.target.value)}
-							onKeyDown={handleSendQuestion}
-							onPaste={handlePaste}
-							placeholder={placeholder}
-							aria-label="Ask Carl"
-							autoComplete="off"
-							className={COMPOSER_BOX_CLASS}
-						/>
+						<div className="relative">
+							<textarea
+								ref={questionBoxRef}
+								rows={1}
+								value={question}
+								readOnly={isVoiceRecordingBusy}
+								maxLength={CHAT_QUESTION_CHARS}
+								onChange={(event) => chat.setQuestion(event.target.value)}
+								onKeyDown={handleQuestionKeyDown}
+								onPaste={handlePaste}
+								placeholder={composerSuggestedReply.placeholder}
+								aria-placeholder={suggestedReply ?? undefined}
+								aria-label="Ask Carl"
+								autoComplete="off"
+								className={COMPOSER_BOX_CLASS}
+							/>
+							{/* the suggestion over the empty box */}
+							<SuggestedReplyLine suggestedReply={suggestedReply} />
+						</div>
+						{/* a new suggestion is read to a screen reader once, without interrupting it */}
+						<span className="sr-only" aria-live="polite">
+							{composerSuggestedReply.announcement}
+						</span>
 						{/* the buttons sit under the question: attachments to the left, clear and send to the right */}
 						<div className="mt-1 flex items-center gap-2">
 							{/* the add and remove attachment buttons sit next to each other */}
 							<div className="flex shrink-0 items-center">
 								{/* a visitor's attachment routes to the signup page */}
-								<AttachButton
+								<ChatAttachButton
 									isSignupRequired={isSignupRequired}
 									onSelect={chat.addAttachmentFiles}
 									onSignup={onSendQuestion}
@@ -182,6 +203,11 @@ export function ChatComposer({
 							{/* the clear and send buttons. each keeps focus in the message box.
 						losing it closes a phone's keyboard, which moves the button before the click arrives */}
 							<div className="ml-auto flex items-center gap-2">
+								{/* the suggestion's accept button */}
+								<SuggestedReplyAcceptButton
+									suggestedReply={suggestedReply}
+									onAccept={() => composerSuggestedReply.accept("button")}
+								/>
 								{/* an X button clears the input and returns focus, only appearing when there is content */}
 								{question !== "" && (
 									<button
@@ -245,128 +271,51 @@ export function ChatComposer({
 	)
 }
 
-// a file-x opening the downloadable attachments for this topic chat. deleting an attachment frees a slot under the limit
-function KeptAttachmentsButton({
-	keptAttachments,
-	onRemoveKeptAttachment,
-}: {
-	keptAttachments: KeptChatAttachment[]
-	onRemoveKeptAttachment: (keptAttachmentId: string) => Promise<void>
-}) {
-	const { confirm, confirmDialog } = useConfirmDialog()
+// the suggestion as the empty box's one-line placeholder, cut with an ellipsis, or nothing while none shows
+function SuggestedReplyLine({ suggestedReply }: { suggestedReply: string | null }) {
+	if (!suggestedReply) {
+		return null
+	}
 	return (
-		<Popover>
-			<Tooltip>
-				<TooltipTrigger asChild>
-					<PopoverTrigger aria-label="Clear files or photos" className={ICON_BUTTON_CLASS}>
-						<FileX2 className="size-4" />
-					</PopoverTrigger>
-				</TooltipTrigger>
-				<TooltipContent>Clear files or photos</TooltipContent>
-			</Tooltip>
-			<PopoverContent align="start" className="w-64 text-sm" bodyClassName="p-2">
-				{/* the minimize button in the corner of the panel closes the attachments menu */}
-				<Tooltip>
-					<TooltipTrigger asChild>
-						<PopoverClose
-							aria-label="Minimize"
-							className="text-muted-foreground hover:text-foreground absolute top-1.5 right-1.5 grid size-9 place-items-center rounded-md sm:size-6"
-						>
-							<Minus className="size-4" />
-						</PopoverClose>
-					</TooltipTrigger>
-					<TooltipContent>Minimize</TooltipContent>
-				</Tooltip>
-				{/* the centered label names the attachments menu */}
-				<div className={cn(SECTION_LABEL_CLASS, "mb-1 text-center")}>Chat files</div>
-				{keptAttachments.map((keptAttachment) => (
-					<div key={keptAttachment.id} className="flex min-w-0 items-center gap-2 rounded-md px-1 py-1">
-						{keptAttachment.kind === "image" ? (
-							<Image aria-hidden="true" className="text-muted-foreground size-3.5 shrink-0" />
-						) : keptAttachment.kind === "video" ? (
-							<Film aria-hidden="true" className="text-muted-foreground size-3.5 shrink-0" />
-						) : (
-							<FileText aria-hidden="true" className="text-muted-foreground size-3.5 shrink-0" />
-						)}
-						<Tooltip>
-							<TooltipTrigger asChild>
-								{/* the file download */}
-								<AnchorLink
-									href={`/api/chat-attachments/${keptAttachment.id}/download`}
-									download={keptAttachment.name}
-									className={cn(STANDALONE_LINK_CLASS, "min-w-0 flex-1 truncate")}
-								>
-									{keptAttachment.name}
-								</AnchorLink>
-							</TooltipTrigger>
-							<TooltipContent>Click to download</TooltipContent>
-						</Tooltip>
-						{/* the name truncates before its age does */}
-						<span className="text-muted-foreground shrink-0 text-xs">{toAgeLabel(keptAttachment.at)}</span>
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<button
-									type="button"
-									aria-label={`Delete ${keptAttachment.name}`}
-									onClick={() =>
-										confirm(toDeleteFileConfirmation(keptAttachment.name), () =>
-											onRemoveKeptAttachment(keptAttachment.id),
-										)
-									}
-									className="text-muted-foreground hover:text-foreground grid size-9 shrink-0 place-items-center sm:size-5"
-								>
-									<X className="size-3.5" />
-								</button>
-							</TooltipTrigger>
-							<TooltipContent>
-								Delete <span className="font-semibold">{keptAttachment.name}</span>
-							</TooltipContent>
-						</Tooltip>
-					</div>
-				))}
-				{confirmDialog}
-			</PopoverContent>
-		</Popover>
+		<span
+			aria-hidden="true"
+			className={cn(
+				COMPOSER_BOX_CLASS,
+				"text-muted-foreground pointer-events-none absolute inset-x-0 top-0 truncate motion-safe:animate-in motion-safe:fade-in",
+			)}
+		>
+			{suggestedReply}
+		</span>
 	)
 }
 
-// the paperclip and its hidden file picker. a visitor's click routes to signup page
-function AttachButton({
-	isSignupRequired,
-	onSelect,
-	onSignup,
+// the suggestion's accept button, or nothing while no suggestion shows. it keeps focus in the box and sends nothing
+function SuggestedReplyAcceptButton({
+	suggestedReply,
+	onAccept,
 }: {
-	isSignupRequired: boolean
-	onSelect: (files: File[]) => Promise<unknown>
-	onSignup: () => void
+	suggestedReply: string | null
+	onAccept: () => void
 }) {
-	const inputRef = useRef<HTMLInputElement>(null)
+	if (!suggestedReply) {
+		return null
+	}
 	return (
-		<>
-			<input
-				ref={inputRef}
-				type="file"
-				multiple
-				accept={CHAT_FILE_PICKER_ACCEPT}
-				className="hidden"
-				onChange={(event) => {
-					void onSelect(Array.from(event.target.files ?? []))
-					event.target.value = ""
-				}}
-			/>
-			<Tooltip>
-				<TooltipTrigger asChild>
-					<button
-						type="button"
-						aria-label={isSignupRequired ? "Sign up to add files" : "Add files or photos"}
-						onClick={() => (isSignupRequired ? onSignup() : inputRef.current?.click())}
-						className={ICON_BUTTON_CLASS}
-					>
-						<Paperclip className="size-4" />
-					</button>
-				</TooltipTrigger>
-				<TooltipContent>{isSignupRequired ? "Sign up to add files" : "Add files or photos"}</TooltipContent>
-			</Tooltip>
-		</>
+		<Tooltip>
+			<TooltipTrigger asChild>
+				<Button
+					type="button"
+					variant="ghost"
+					size="icon-sm"
+					aria-label={SUGGESTED_REPLY_COPY.toAcceptLabel(suggestedReply)}
+					onMouseDown={(event) => event.preventDefault()}
+					onClick={onAccept}
+					className="motion-safe:animate-in motion-safe:fade-in"
+				>
+					<ArrowRightToLine className="size-4" />
+				</Button>
+			</TooltipTrigger>
+			<TooltipContent>{SUGGESTED_REPLY_COPY.acceptTooltip}</TooltipContent>
+		</Tooltip>
 	)
 }

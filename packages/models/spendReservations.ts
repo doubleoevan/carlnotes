@@ -7,13 +7,16 @@ import { loadUserAccess } from "@carlnotes/db/quotas"
 import { monthlySpendDollars, toSpendCents } from "@carlnotes/db/recordedSpend"
 import { runWithRedis } from "@carlnotes/db/redis"
 
-// the kinds of call that reserve: a chat turn, a spoken question's transcription, one spoken part of a reply, a
-// Personal sources summary, an updates recap, a topic memory update, and a paid call with no model in it, such as a
-// page fetch or a search
+// the kinds of call that reserve: a chat turn, the suggested reply after one, a spoken question's transcription, one
+// spoken part of a reply, a Personal sources summary, an updates recap, a topic memory update, and a paid call with no
+// model in it, such as a page fetch or a search
 export type SpendReservationKind =
+	// the chat's calls
 	| "chatTurn"
+	| "suggestedReply"
 	| "transcription"
 	| "speech"
+	// the calls outside the chat
 	| "personalSourcesContext"
 	| "updatesRecap"
 	| "topicMemories"
@@ -26,6 +29,7 @@ const RESERVATION_MS_BY_KIND: Record<SpendReservationKind, number> = {
 	updatesRecap: 2 * 60 * 1000,
 	paidCall: 2 * 60 * 1000,
 	chatTurn: 16 * 60 * 1000,
+	suggestedReply: 60 * 1000,
 	transcription: 6 * 60 * 1000,
 	speech: 6 * 60 * 1000,
 }

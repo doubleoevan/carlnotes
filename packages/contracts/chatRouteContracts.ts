@@ -59,6 +59,7 @@ export const chatRouteContracts: Record<string, ApiRouteContract> = {
 		body: { json: topicChatTurnPayload },
 		response: chatReplyLine,
 		stream: "ndjson",
+		lineKindField: "type",
 	},
 	"chatClient.sendChatTurn#team": {
 		method: "POST",
@@ -67,6 +68,7 @@ export const chatRouteContracts: Record<string, ApiRouteContract> = {
 		body: { json: chatTurnPayload },
 		response: chatReplyLine,
 		stream: "ndjson",
+		lineKindField: "type",
 	},
 	"chatClient.sendChatTurn#new-topic": {
 		method: "POST",
@@ -74,6 +76,7 @@ export const chatRouteContracts: Record<string, ApiRouteContract> = {
 		body: { json: chatTurnPayload },
 		response: chatReplyLine,
 		stream: "ndjson",
+		lineKindField: "type",
 	},
 	"chatClient.sendClearChat": { method: "DELETE", path: "/api/topics/:id/chat", params: idParam, response: okResponse },
 	"chatClient.sendClearChat#team": {

@@ -4,6 +4,7 @@ import {
 	compareRequest,
 	compareResponse,
 	compareSnapshotRoute,
+	isSkippedLineKind,
 	type JsonSchema,
 	type SnapshotRoute,
 } from "./contractCompatibility"
@@ -214,4 +215,63 @@ test("a keyword the comparator cannot read fails conservatively", () => {
 	expect(compareResponse({ type: "string" }, { type: "string", not: { const: "x" } })[0]).toContain(
 		"cannot read the keyword not",
 	)
+})
+
+// a frozen ndjson stream of text lines and a failed line, the way the chat reply stream was frozen
+const FROZEN_LINE_STREAM: SnapshotRoute = {
+	method: "POST",
+	path: "/api/chat/new-topic",
+	request: {},
+	stream: "ndjson",
+	response: {
+		oneOf: [
+			{
+				type: "object",
+				properties: { type: { type: "string", const: "text" }, text: { type: "string" } },
+				required: ["type", "text"],
+			},
+			{ type: "object", properties: { type: { type: "string", const: "failed" } }, required: ["type"] },
+		],
+	},
+}
+
+// the frozen stream's current form with one more line kind, declared or not
+function withSuggestedReplyLine(lineKindField?: "type"): SnapshotRoute {
+	const response = structuredClone(FROZEN_LINE_STREAM.response) as JsonSchema & { oneOf: JsonSchema[] }
+	response.oneOf.push({
+		type: "object",
+		properties: { type: { type: "string", const: "suggestedReply" }, suggestedReply: { type: "string" } },
+		required: ["type", "suggestedReply"],
+	})
+	return { ...FROZEN_LINE_STREAM, response, ...(lineKindField ? { lineKindField } : {}) }
+}
+
+test("a stream that names its line kind field may add a kind its frozen reader skips", () => {
+	expect(compareSnapshotRoute("chatClient.sendChatTurn", FROZEN_LINE_STREAM, withSuggestedReplyLine("type"))).toEqual(
+		[],
+	)
+})
+
+test("a stream that names no line kind field fails a new kind", () => {
+	expect(compareSnapshotRoute("chatClient.sendChatTurn", FROZEN_LINE_STREAM, withSuggestedReplyLine())[0]).toContain(
+		"union option 2 is accepted by no option",
+	)
+})
+
+test("a declared stream still fails a changed frozen kind", () => {
+	// the text line loses its text
+	const current = withSuggestedReplyLine("type")
+	const textOption = (current.response as { oneOf: ObjectSchema[] }).oneOf[0] as ObjectSchema
+	textOption.properties = { type: { type: "string", const: "text" } }
+	textOption.required = ["type"]
+	expect(compareSnapshotRoute("chatClient.sendChatTurn", FROZEN_LINE_STREAM, current)).not.toEqual([])
+})
+
+test("a line whose kind no frozen option names is skipped, and a frozen kind is not", () => {
+	const frozenResponse = FROZEN_LINE_STREAM.response as JsonSchema
+	expect(isSkippedLineKind(frozenResponse, "type", { type: "suggestedReply", suggestedReply: "Weekly is fine" })).toBe(
+		true,
+	)
+	expect(isSkippedLineKind(frozenResponse, "type", { type: "text", text: "Hi" })).toBe(false)
+	expect(isSkippedLineKind(frozenResponse, "type", "not a line")).toBe(false)
 })

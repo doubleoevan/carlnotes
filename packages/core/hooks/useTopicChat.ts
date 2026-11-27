@@ -5,7 +5,6 @@ import { type ChatPage, type ChatSendResult, sendChatTurn, sendClearChat } from 
 import { type SpokenQuestionTimings, toVoiceChatPage } from "@carlnotes/client/voiceClient"
 import type { KeptChatAttachment } from "@carlnotes/contracts/chat"
 import { toPodcastEpisodeNoteParts, withoutAttachmentNote } from "@carlnotes/contracts/chatQuestionNotes"
-import type { TopicToolCalls } from "@carlnotes/contracts/chatTurns"
 import type { ChatAttachment, VoiceChatPage } from "@carlnotes/contracts/payloads"
 import { EMPTY_TOPIC_DRAFT, type TopicDraft } from "@carlnotes/contracts/topicPayloads"
 import { useEffect, useRef, useState } from "react"
@@ -19,14 +18,8 @@ import {
 	upsertChatTurn,
 	withoutChatTurn,
 } from "../lib/chatTurns"
-import { applyTopicEditToolCalls, showTopicToolCalls } from "../lib/topicToolCalls"
-import {
-	clearProposedTopicEdit,
-	publishTopicChanged,
-	setChatId,
-	startEditingTopic,
-	toCurrentChatGuard,
-} from "../stores/chatConversationStore"
+import { applyTopicChatToolCalls } from "../lib/topicChatToolCalls"
+import { setChatId, toCurrentChatGuard } from "../stores/chatConversationStore"
 import { subscribeToPodcastEpisodeQuestionChatTurn } from "../stores/podcastEpisodeQuestionStore"
 import { stopSpokenAnswerKey } from "../stores/spokenAnswerStore"
 import { toPrivateChatStreamedSpokenAnswer } from "../stores/streamedSpokenAnswer"
@@ -54,6 +47,8 @@ export type TopicChat = ChatConversationGates & {
 	// carl's topic draft and the files waiting for the topic
 	topicDraft: TopicDraft
 	isStreaming: boolean
+	// the latest suggested reply the stream sent, for the chat turn it followed
+	receivedSuggestedReply: ReceivedSuggestedReply | null
 	// the page the mic and the play buttons name, null while voice is off
 	voiceChatPage: VoiceChatPage | null
 	// send streams the question's reply, a retry's or a spoken transcript's in place of the draft, and stop cuts
@@ -62,6 +57,10 @@ export type TopicChat = ChatConversationGates & {
 	stop: () => void
 	clear: () => Promise<boolean>
 }
+
+// a suggested reply as the stream sent it: the chat turn it followed, its text, and whether the account and the
+// conversation it arrived in are still the ones on screen
+export type ReceivedSuggestedReply = { spokenAnswerKey: string; text: string; isCurrentChat: () => boolean }
 
 // adapters keep files, speech, and navigation with the app that provides them
 type ChatAttachmentState = {
@@ -118,6 +117,10 @@ export function useTopicChat({
 
 	// whether a chat turn is streaming, and the controller that stops it
 	const [isStreaming, setIsStreaming] = useState(false)
+	// the suggested reply the last finished chat turn's stream sent
+	const [receivedSuggestedReply, setReceivedSuggestedReply] = useState<ReceivedSuggestedReply | null>(null)
+	// the chat turn sent last, whose suggestion alone is kept, so an earlier turn's late one never replaces it
+	const latestSentChatTurnKeyRef = useRef<string | null>(null)
 	const abortRef = useRef<AbortController | null>(null)
 	// the spoken answer key of the reply being spoken as it streams, which the panel's unmount stops
 	const streamingSpokenAnswerKeyRef = useRef<string | null>(null)
@@ -157,6 +160,13 @@ export function useTopicChat({
 		)
 	}, [page.topicId])
 
+	// another page's conversation holds none of this page's suggestion
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the page's ids identify the conversation
+	useEffect(() => {
+		setReceivedSuggestedReply(null)
+		latestSentChatTurnKeyRef.current = null
+	}, [page.topicId, page.teamId, page.newTopic, page.topicPost?.id])
+
 	// stop the streamed spoken answer on unmount
 	useEffect(
 		() => () => {
@@ -166,52 +176,6 @@ export function useTopicChat({
 		},
 		[],
 	)
-
-	// toast the saves and rejections, show the topic draft, and open a created topic, else reload the page behind the
-	// panel
-	type HandleToolCallsOptions = { spokenAnswerKey: string; toolCalls: TopicToolCalls; isCurrentChat: () => boolean }
-	const handleToolCalls = ({ spokenAnswerKey, toolCalls, isCurrentChat }: HandleToolCallsOptions): void => {
-		if (!isCurrentChat()) {
-			return
-		}
-		// keep the chat tool calls on the chat turn, so the model reads a save as a call
-		const streamedChatToolCalls = toolCalls.chatToolCalls
-		if (streamedChatToolCalls) {
-			setChatTurns((previousChatTurns) =>
-				replaceChatTurn(previousChatTurns, spokenAnswerKey, (chatTurn) => ({
-					...chatTurn,
-					toolCalls: [...(chatTurn.toolCalls ?? []), ...streamedChatToolCalls],
-				})),
-			)
-		}
-		showTopicToolCalls({ topicToolToasts: toolCalls, onSaved: onNotice, onRejected: onNotice })
-		if (page.topicId) {
-			applyTopicEditToolCalls({
-				topicId: page.topicId,
-				toolCalls,
-				onStartEditingTopic: startEditingTopic,
-				onClearProposedTopicEdit: clearProposedTopicEdit,
-			})
-		}
-		// fill the card with the topic draft carl wrote
-		if (toolCalls.topicDraft) {
-			setTopicDraft(toolCalls.topicDraft)
-		}
-		// remember to open the new-topic chat once the reply ends. the reply's last words stay in this conversation
-		if (toolCalls.isNewTopicChatOpened) {
-			shouldOpenNewTopicChatRef.current = true
-		}
-		// open a created topic, and remember to end the conversation that made it
-		if (toolCalls.createdTopicId) {
-			isTopicCreatedRef.current = true
-			void openCreatedTopic(toolCalls.createdTopicId)
-			return
-		}
-		// reload the topic page behind the panel, so a save shows there too
-		if (page.topicId) {
-			publishTopicChanged(page.topicId)
-		}
-	}
 
 	// whether a send may go: something to send and no reply streaming. a retry with only attachments to resend says why
 	type CanSendOptions = { askedQuestion: string; sendableAttachmentCount: number; isRetry: boolean }
@@ -266,9 +230,11 @@ export function useTopicChat({
 			topicPost: page.topicPost,
 		})
 		setChatTurns((previousChatTurns) => [...(isConversationEnded ? [] : previousChatTurns), sentChatTurn])
-		// this question is the new conversation, so the next one keeps it
+		// this question is the new conversation, so the next one keeps it. clear the last suggestion
 		setIsConversationEnded(false)
 		setIsStreaming(true)
+		setReceivedSuggestedReply(null)
+		latestSentChatTurnKeyRef.current = sentChatTurn.spokenAnswerKey
 
 		// a spoken question's reply is spoken as it streams, and keeps the whole answer to split it
 		const streamedSpokenAnswer = toPrivateChatStreamedSpokenAnswer({
@@ -283,6 +249,26 @@ export function useTopicChat({
 		const isCurrentChat = toCurrentChatGuard()
 		const controller = new AbortController()
 		abortRef.current = controller
+
+		// the reply's end frees the composer while the stream reads on for the suggestion. a stream with no end frees it
+		// once it closes. either way the chat turn finishes once
+		let isSendFinished = false
+		const finishSendOnce = (chatSendResult: ChatSendResult): void => {
+			if (isSendFinished) {
+				return
+			}
+			// the stop button lets go of this stream
+			isSendFinished = true
+			if (abortRef.current === controller) {
+				abortRef.current = null
+			}
+			// the spoken answer and the chat turn finish
+			streamingSpokenAnswerKeyRef.current = null
+			streamedSpokenAnswer?.finish(streamedAnswer, chatSendResult)
+			finishSend({ spokenAnswerKey: sentChatTurn.spokenAnswerKey, chatSendResult, isCurrentChat })
+		}
+
+		// send, with each line's handler
 		const chatSendResult = await sendChatTurn({
 			page,
 			question: askedQuestion,
@@ -302,15 +288,34 @@ export function useTopicChat({
 				)
 			},
 			onToolCalls: (toolCalls) =>
-				handleToolCalls({ spokenAnswerKey: sentChatTurn.spokenAnswerKey, toolCalls, isCurrentChat }),
+				isCurrentChat() &&
+				applyTopicChatToolCalls({
+					spokenAnswerKey: sentChatTurn.spokenAnswerKey,
+					toolCalls,
+					topicId: page.topicId,
+					setChatTurns,
+					setTopicDraft,
+					onNotice,
+					onNewTopicChatOpened: () => {
+						shouldOpenNewTopicChatRef.current = true
+					},
+					onTopicCreated: (createdTopicId) => {
+						isTopicCreatedRef.current = true
+						void openCreatedTopic(createdTopicId)
+					},
+				}),
+			onSaved: () => finishSendOnce(null),
+			// a suggestion belongs to the chat turn it followed, in the account and conversation it arrived in
+			onSuggestedReply: (text) => {
+				if (isCurrentChat() && latestSentChatTurnKeyRef.current === sentChatTurn.spokenAnswerKey) {
+					setReceivedSuggestedReply({ spokenAnswerKey: sentChatTurn.spokenAnswerKey, text, isCurrentChat })
+				}
+			},
 			signal: controller.signal,
 			topicDraft: page.newTopic ? topicDraft : undefined,
 			isSpoken,
 		})
-		abortRef.current = null
-		streamingSpokenAnswerKeyRef.current = null
-		streamedSpokenAnswer?.finish(streamedAnswer, chatSendResult)
-		finishSend({ spokenAnswerKey: sentChatTurn.spokenAnswerKey, chatSendResult, isCurrentChat })
+		finishSendOnce(chatSendResult)
 	}
 
 	// clear the draft from the composer and return its attachments. add them to the kept attachments right away on a
@@ -374,6 +379,7 @@ export function useTopicChat({
 		if ((await sendClearChat(page)) && isCurrentChat()) {
 			setChatTurns([])
 			setKeptAttachments([])
+			setReceivedSuggestedReply(null)
 			// reset the topic draft and its files with the conversation
 			resetTopicDraft()
 			return true
@@ -391,6 +397,7 @@ export function useTopicChat({
 		editableTopicDraft,
 		topicDraft,
 		isStreaming,
+		receivedSuggestedReply,
 		voiceChatPage,
 		send,
 		stop,

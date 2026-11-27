@@ -171,6 +171,9 @@ export type VisitAnalyticsEvent =
 	| "social_topic_post_discussion_play"
 	| "social_news_window_change"
 	| "social_news_page_open"
+	// a suggested reply shown in an empty private chat box, and one accepted into it, by chat, origin, and accept method
+	| "chat_suggested_reply_shown"
+	| "chat_suggested_reply_accepted"
 	// a mention badge's list opened, by the badge's place
 	| "social_mention_badge_open"
 	// a Dashboard page shown, a chart's item kind, format, or range changed, and a share

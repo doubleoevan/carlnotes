@@ -102,6 +102,9 @@ Native file viewing uses this client so it does not depend on a browser session.
 `chatClient.ts` keeps the shared incremental UTF-8/NDJSON reader for `sendChatTurn`. The caller supplies a streaming
 fetch and AbortSignal; native aborts can be plain Errors, so an aborted signal is authoritative. `chatStreaming.test.ts`
 checks byte-split multibyte text, tool callbacks before EOF, and native cancellation. No transport retries a chat POST.
+`onSaved` fires on the stream's `saved` line, and `onSuggestedReply` on a `suggestedReply` line that passes
+`toSafeSuggestedReply`. `sendChatTurn` still resolves when the stream closes. The reader skips a line kind it does not
+know, which `chatStreaming.test.ts` proves and the chat stream contracts' `lineKindField` relies on.
 
 `podcastEpisodeClient` resolves audio through the existing authorized route with `Accept: application/json` and
 refuses redirects. Only the returned HTTPS media URL reaches a platform player, without session headers. Sources

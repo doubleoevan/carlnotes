@@ -49,7 +49,17 @@ seconds gets its route's busy response, the private chat's 503 with `Retry-After
 dropped while it waits is never read. `chat/chatTurnAuthorizationTestFixtures.ts` holds the stubbed rows the chat turn
 tests share. A chat turn's reply stream writes `OPENING_LINE`, a blank line the client skips, before its retrieval
 starts, because Bun sends no response headers until the first body chunk. A failed retrieval then ends the stream with
-its failed line instead of a 500. No app imports it as a value: `@carlnotes/client` and `apps/web` read `AppType` and
+its failed line instead of a 500. After Carl's last text, `chat/chatTurnStream.ts` saves the turn's row, records the
+proposal it leaves standing, saves its topic draft, and releases the turn's reservation, then writes the `saved` line,
+which frees a current client's composer. A finished, typed private chat turn that created no topic and leaves no proposal that would publish or invite
+then gets one suggested reply call (`@carlnotes/pipeline/chat/suggestedReply`) on a chat `SUGGESTED_REPLY_CHATS` turns
+on, under a reservation of its own, which a user who leaves stops. It writes a `suggestedReply` line for a safe result
+and adds the call's tokens to the saved row with `addChatTurnSpend` in `chat/chatSpendRows.ts`, which also writes the
+rows with no text that a transcription, a spoken part, and a chat room completion record. `chat/chatTurns.ts` keeps
+the private chat turn's own row and the conversation's reads and clear. `index.ts` reads the
+setting at start, so a typo fails the start. A chat room turn never makes the call.
+The conversation load's `isSuggestedReplyOn` tells the client whether the chat shows suggestions. No app imports the
+api as a value: `@carlnotes/client` and `apps/web` read `AppType` and
 the `auth` type from it as types only, and `evals/` and `scripts/` at the root import it by name.
 
 `authorization.ts`, `topic/permissions.ts`, and `topic/findingPermissions.ts` retain compatibility exports for the

@@ -61,6 +61,38 @@ function toSchemaErrors(key: string, part: string, schema: object, data: unknown
 	return validate(structuredClone(data)) ? [] : [`${key} ${part}: ${ajv.errorsText(validate.errors)}`]
 }
 
+// the frozen options of a stream's line union, or the one schema of a stream with no union
+type FrozenLineSchema = { oneOf?: { properties?: Record<string, { const?: unknown }> }[] }
+
+/**
+ * Returns the errors of each line of an ndjson body against the frozen line schema. A blank line is skipped, and so is
+ * a line whose kind no frozen option names on a stream that names its line kind field.
+ */
+function toStreamLineErrors(
+	key: string,
+	frozenResponse: FrozenLineSchema,
+	lineKindField: string | undefined,
+	streamText: string,
+): string[] {
+	// the kinds the frozen reader knows
+	const frozenLineKinds = new Set(
+		(frozenResponse.oneOf ?? []).map((option) =>
+			lineKindField ? option.properties?.[lineKindField]?.const : undefined,
+		),
+	)
+	return streamText
+		.split("\n")
+		.filter((lineText) => lineText.trim() !== "")
+		.flatMap((lineText) => {
+			// a line the frozen reader skips is not checked
+			const line = JSON.parse(lineText) as Record<string, unknown>
+			if (lineKindField && !frozenLineKinds.has(line[lineKindField])) {
+				return []
+			}
+			return toSchemaErrors(key, "response", frozenResponse, line)
+		})
+}
+
 // the path the fixture's request takes: the contract's path with its params filled in and its query added, after the
 // /api base for a route of the api tree itself and without it for a route mounted on the tree
 function toRequestPath(contractPath: string, fixture: ContractFixture): string {
@@ -112,11 +144,33 @@ for (const [key, fixture] of Object.entries(CONTRACT_FIXTURES)) {
 			throw new Error(`${key} responded ${response.status}: ${responseText}`)
 		}
 
-		// the body satisfies the frozen response schema. a key the snapshot does not hold, a route with no json
-		// response, and a stream, whose lines are not one json body, end at the status
-		if (!frozenRoute?.response || !contract.response || contract.stream) {
+		// a key the snapshot does not hold, a route with no json response, and an event stream end at the status
+		if (!frozenRoute?.response || !contract.response || contract.stream === "sse") {
 			return
 		}
+		// an ndjson stream's lines each satisfy the frozen line schema, except the kinds its frozen reader skips
+		if (contract.stream === "ndjson") {
+			expect(toStreamLineErrors(key, frozenRoute.response, contract.lineKindField, responseText)).toEqual([])
+			return
+		}
+		// the body satisfies the frozen response schema
 		expect(toSchemaErrors(key, "response", frozenRoute.response, JSON.parse(responseText))).toEqual([])
 	})
 }
+
+test("a reply stream's new line kinds are skipped, and its frozen kinds are checked", () => {
+	// the frozen new-topic reply stream
+	const key = "chatClient.sendChatTurn#new-topic"
+	const frozenResponse = frozenRoutes[key]?.response as FrozenLineSchema
+	const lines = [
+		{ type: "text", text: "How often should I look?" },
+		{ type: "saved" },
+		{ type: "suggestedReply", suggestedReply: "Weekly is fine" },
+	]
+	const streamText = `\n${lines.map((line) => JSON.stringify(line)).join("\n")}\n`
+	expect(toStreamLineErrors(key, frozenResponse, "type", streamText)).toEqual([])
+
+	// a frozen kind that drifts still fails, and a stream that names no line kind field checks every line
+	expect(toStreamLineErrors(key, frozenResponse, "type", JSON.stringify({ type: "text", text: 4 }))).not.toEqual([])
+	expect(toStreamLineErrors(key, frozenResponse, undefined, streamText)).not.toEqual([])
+})

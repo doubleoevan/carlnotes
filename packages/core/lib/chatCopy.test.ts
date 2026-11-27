@@ -1,7 +1,11 @@
 import { expect, test } from "bun:test"
+import { SUGGESTED_REPLY_CHARS } from "@carlnotes/contracts/chat"
+import { toSafeSuggestedReply } from "@carlnotes/contracts/suggestedReplies"
 import {
 	CHAT_QUESTION_PLACEHOLDER,
 	NEW_TOPIC_CHAT_COPY,
+	NEW_TOPIC_EXAMPLE_TOPICS,
+	SUGGESTED_REPLY_COPY,
 	TOPIC_POST_CHAT_PLACEHOLDER,
 	toPrivateChatLabel,
 	toPrivateChatPlaceholder,
@@ -30,4 +34,17 @@ test("a private chat's placeholder names the post only while a Topic Post is ope
 	expect(toPrivateChatPlaceholder({ teamId: "team-1" }, false)).toBe(CHAT_QUESTION_PLACEHOLDER)
 	expect(toPrivateChatPlaceholder({ newTopic: true }, true)).toBe(NEW_TOPIC_CHAT_COPY.firstTopicPlaceholder)
 	expect(toPrivateChatPlaceholder({ newTopic: true }, false)).toBe(NEW_TOPIC_CHAT_COPY.placeholder)
+})
+
+test("every new-topic example passes the suggested reply's filter and fits its limit", () => {
+	expect(NEW_TOPIC_EXAMPLE_TOPICS.length).toBeGreaterThan(1)
+	for (const exampleReply of NEW_TOPIC_EXAMPLE_TOPICS) {
+		expect(toSafeSuggestedReply(exampleReply)).toBe(exampleReply)
+		expect(exampleReply.length).toBeLessThanOrEqual(SUGGESTED_REPLY_CHARS)
+	}
+})
+
+test("the accept button's name and the announcement both include the suggestion", () => {
+	expect(SUGGESTED_REPLY_COPY.toAcceptLabel("Weekly is fine")).toBe("Use suggested reply: Weekly is fine")
+	expect(SUGGESTED_REPLY_COPY.toAnnouncement("Weekly is fine")).toBe("Suggested reply: Weekly is fine")
 })

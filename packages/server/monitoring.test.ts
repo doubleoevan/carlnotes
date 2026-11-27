@@ -13,6 +13,7 @@ import {
 	reportThresholdCrossing,
 	shutdownMonitoring,
 	startMonitoring,
+	toLoggableError,
 	toSentryRelease,
 } from "./monitoring"
 import { saveEnvSettings } from "./savedEnvSettings"
@@ -215,4 +216,16 @@ test("a process that takes no slot sends its report at once", () => {
 	const captureMessageSpy = spyOn(Sentry, "captureMessage").mockImplementation(() => "")
 	reportThresholdCrossing({ condition: "no-slot", message: "a warning with no slot", values: {} })
 	expect(captureMessageSpy).toHaveBeenCalledTimes(1)
+})
+
+test("a loggable error keeps its name, message, and status, and never the request it sent", () => {
+	// a model call's error with the chat text in its request body
+	const modelCallError = Object.assign(new Error("Bad Gateway"), {
+		name: "AI_APICallError",
+		statusCode: 502,
+		requestBodyValues: { messages: [{ content: "my private question" }] },
+	})
+	expect(toLoggableError(modelCallError)).toBe("AI_APICallError: Bad Gateway (502)")
+	expect(toLoggableError(new TypeError("fetch failed"))).toBe("TypeError: fetch failed")
+	expect(toLoggableError("timed out")).toBe("timed out")
 })

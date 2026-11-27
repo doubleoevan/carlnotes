@@ -28,6 +28,9 @@ export type ApiRouteContract = {
 	// the json body a 2xx carries, the schema of each line or event of a stream, or nothing for a binary or empty body
 	response?: z.ZodType
 	stream?: "ndjson" | "sse"
+	// the field whose value names a stream line's kind, set only where the reader is proven to skip a kind it does not
+	// know, so a new kind passes the freeze
+	lineKindField?: "type"
 }
 
 // the capabilities that are helpers over the client, not routes: the freeze skips them

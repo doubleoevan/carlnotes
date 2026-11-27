@@ -217,8 +217,10 @@ function isTopicDraftWritten(topicDraft: TopicDraft): boolean {
 	)
 }
 
-// the draft as carl reads it, one line per field, or a plain line for a draft with nothing written yet
-function toTopicDraftBlock(topicDraft?: TopicDraft): string {
+/**
+ * Returns the draft as carl reads it, one line per field, or a plain line for a draft with nothing written yet.
+ */
+export function toTopicDraftBlock(topicDraft?: TopicDraft): string {
 	if (!topicDraft || !isTopicDraftWritten(topicDraft)) {
 		return "Nothing written yet."
 	}

@@ -7,6 +7,7 @@ import { CHAT_PAUSED_ERROR, EMAIL_UNVERIFIED_ERROR } from "@carlnotes/contracts/
 import { FREE_USER_ACCESS_ROW, restoreConnectionPool } from "@carlnotes/db/connectionPoolStub"
 import { restoreRedisClient, stubRedisClient } from "@carlnotes/db/redisClientStub"
 import * as analytics from "@carlnotes/server/analytics"
+import { saveEnvSettings } from "@carlnotes/server/savedEnvSettings"
 import { toSignedInApp } from "../testSession"
 import * as chatAttachmentReads from "./chatAttachmentReads"
 import * as chatTurnAnswer from "./chatTurnAnswer"
@@ -277,4 +278,31 @@ test("the conversation stays open for a user the unverified accounts switch limi
 	authorizeChatTurnSpy.mockResolvedValue({ status: "budget", userId: "user-1" })
 	const spentBudgetConversation = await (await app.request("/topics/topic-1/chat")).json()
 	expect(spentBudgetConversation).toMatchObject({ canChat: false, isBudgetExhausted: true })
+})
+
+test("the conversation says whether suggested replies are on, by the rollout setting", async () => {
+	// user-1's empty conversation on topic-1, allowed to chat
+	stubRedisClient()
+	spyOn(chatTurns, "loadChatTurns").mockResolvedValue([])
+	spyOn(chatAttachmentReads, "loadKeptTopicAttachments").mockResolvedValue([])
+	spyOn(chatTurnAuthorization, "authorizeChatTurn").mockResolvedValue({
+		status: "emailUnverified",
+		userId: "user-1",
+	})
+	const app = toSignedInApp(privateChatRoute, "user-1")
+	const restoreEnvSettings = saveEnvSettings(["SUGGESTED_REPLY_CHATS"])
+
+	// unset turns it on, new-topic turns a topic's chat off, and a visitor never sees one
+	try {
+		delete Bun.env.SUGGESTED_REPLY_CHATS
+		expect(await (await app.request("/topics/topic-1/chat")).json()).toMatchObject({ isSuggestedReplyOn: true })
+		Bun.env.SUGGESTED_REPLY_CHATS = "new-topic"
+		expect(await (await app.request("/topics/topic-1/chat")).json()).toMatchObject({ isSuggestedReplyOn: false })
+		// a visitor's conversation shows none
+		delete Bun.env.SUGGESTED_REPLY_CHATS
+		spyOn(chatTurnAuthorization, "authorizeChatTurn").mockResolvedValue({ status: "signup" })
+		expect(await (await app.request("/topics/topic-1/chat")).json()).toMatchObject({ isSuggestedReplyOn: false })
+	} finally {
+		restoreEnvSettings()
+	}
 })

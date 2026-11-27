@@ -35,6 +35,7 @@ import scorePersonalSourceResourceTemplate from "./score-personal-source-resourc
 import searchTopicTemplate from "./search-topic.md" with { type: "text" }
 import selectTopicMemorySearchTemplate from "./select-topic-memory-search.md" with { type: "text" }
 import splitTopicMemoryTemplate from "./split-topic-memory.md" with { type: "text" }
+import suggestReplyTemplate from "./suggest-reply.md" with { type: "text" }
 import suggestSourcesTemplate from "./suggest-sources.md" with { type: "text" }
 import summarizePersonalSourcesContextTemplate from "./summarize-personal-sources-context.md" with { type: "text" }
 import summarizeResourceTemplate from "./summarize-resource.md" with { type: "text" }
@@ -101,6 +102,7 @@ export const FALLBACK_PROMPT_TEMPLATES = {
 	"topic-image-limits": topicImageLimitsTemplate,
 	"topic-video-image-style": topicVideoImageStyleTemplate,
 	"check-agreement": checkAgreementTemplate,
+	"suggest-reply": suggestReplyTemplate,
 	"moderate-user-text": moderateUserTextTemplate,
 	"suggest-sources": suggestSourcesTemplate,
 	"podcast-episode-hosts": podcastEpisodeHostsTemplate,

@@ -494,7 +494,13 @@ post's screen opened it (`toChatScreenTopicPost` in `src/components/chat/chatNav
 opened above the post's keeps its own chat. On that screen `toChatHref` in `src/components/chat/chatNavigation.ts` sends the chat launcher
 to `/topics/[topicId]/chat` with `privateChat=true`, so the chat screen opens on the topic's private chat, and a
 visitor's press opens the sign-up sheet. `useChatPage` labels the private chat's choice with `toPrivateChatIdLabel`
-on one line, and `PrivateChatPanel` reads its placeholder from `toPrivateChatPlaceholder`. Report image is the
+on one line, and `PrivateChatPanel` reads its placeholder from `toPrivateChatPlaceholder`. While core's
+`useSuggestedReply` holds a suggested reply, `ChatComposer` shows it on one line over the empty input in the
+placeholder's place, hidden from a screen reader, which hears it once through `AccessibilityInfo` and on the accept
+`Button`'s label. The button and a swipe right across the empty input fill it without sending. The swipe is a
+`usePanGesture` from `react-native-gesture-handler`, with its offsets and Android's edge zone in
+`src/components/chat/suggestedReplySwipe.ts`, attached only while the input is empty. Reduced motion skips its fade,
+and listen mode, a recording, and a visitor show none. Report image is the
 screen's report in its actions sheet, beside a Report image N in post option for each body image a reader may report.
 `src/components/chat/TopicPostTag.tsx` adapts the shared tag to a pressable
 link.

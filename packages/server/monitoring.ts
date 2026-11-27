@@ -162,6 +162,21 @@ const reportedStages = [
 export type ReportedStage = (typeof reportedStages)[number]
 
 /**
+ * Returns what a log line may say about a failed call: its name, its message, and the status a model call's error
+ * has. A model call's error also holds the request it sent, which is the user's chat text, and that never reaches a log.
+ */
+export function toLoggableError(error: unknown): string {
+	if (!(error instanceof Error)) {
+		return String(error)
+	}
+	// a model call's error names the status the proxy answered
+	const { statusCode } = error as { statusCode?: unknown }
+	return typeof statusCode === "number"
+		? `${error.name}: ${error.message} (${statusCode})`
+		: `${error.name}: ${error.message}`
+}
+
+/**
  * Reports a failure the caller is already handling, so a failure that never throws an error is still visible.
  */
 export function reportError(error: unknown, stage: ReportedStage, extra?: Record<string, string>): void {

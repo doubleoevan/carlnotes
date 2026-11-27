@@ -147,8 +147,12 @@ it; it imports `@carlnotes/models`, `@carlnotes/emails`, `@carlnotes/db`, `@carl
   shapes a conversation into the model messages a turn sends, `chatPrompts.ts` builds each chat's system prompt from its
   template, `podcastEpisodeQuestionPrompt.ts` the topic chat prompt's blocks for a question asked from the podcast
   player, `search.ts` the live web search tool a signed-in chat turn may call, and `agreement.ts` checks whether a
-  user's message agrees to the proposal it answers, reading only the user's words and the proposal, `chatTurnCost.ts`
-  the largest cost of one chat turn, which the api reserves before the turn runs, with `chatModelTestFixtures.ts` for
+  user's message agrees to the proposal it answers, reading only the user's words and the proposal, `suggestedReply.ts`
+  writes the suggested reply after Carl's reply ends, one cheap call over the last three turns and the topic draft with
+  a 2-second limit, no retry, and its own largest cost in `MAX_SUGGESTED_REPLY_DOLLARS`, that returns none on any
+  failure, filtered by `toSafeSuggestedReply` in
+  `@carlnotes/contracts/suggestedReplies`, `chatTurnCost.ts` the largest cost of one chat turn, which the api reserves
+  before the turn runs, with `chatModelTestFixtures.ts` for
   the fake models their tests stream from, and `chatContextTestFixtures.ts` and `podcastEpisodeChapterTestFixtures.ts`
   for the chat context and the chapter their tests read) and their retrieval (`retrieve.ts`, whose topic ranking
   collects the topics' findings in a materialized common table expression and ranks that set, `retrieveDocs.ts` for the

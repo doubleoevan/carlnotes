@@ -7,7 +7,7 @@ import * as analytics from "@carlnotes/server/analytics"
 import { TEST_ANALYTICS_PROPERTIES } from "../analyticsTestFixtures"
 import * as authorization from "../authorization"
 import * as chatAttachmentReads from "./chatAttachmentReads"
-import { loadChatTurns, recordChatSpendRow, saveChatTurn, type ToChatTurnRowOptions, toChatTurnRow } from "./chatTurns"
+import { loadChatTurns, saveChatTurn, type ToChatTurnRowOptions, toChatTurnRow } from "./chatTurns"
 import { decryptChatJson, decryptChatText, encryptChatText } from "./encryption"
 import * as linkPreviews from "./linkPreviews"
 
@@ -166,68 +166,6 @@ test("saveChatTurn counts the chat turn with whether it was spoken", async () =>
 test("a chat turn's row stores whether its question was spoken", () => {
 	expect(toTopicChatTurnRow({ isSpoken: true }).isSpoken).toBe(true)
 	expect(toTopicChatTurnRow({}).isSpoken).toBe(false)
-})
-
-// a transcription or a speech call writes the text-less row an unpersisted chat turn does, mapped to the page the
-// way a chat turn row and a chat room turn row are, and sends no chat turn event
-test("a transcription or a speech call is recorded as a text-less chat turn row on its page", async () => {
-	const sentQueries = stubConnectionPool(() => [])
-	const trackEventSpy = spyOn(analytics, "trackEvent").mockImplementation(() => {})
-
-	// one row per page kind, each with its cost as a six-decimal string and its token total
-	await recordChatSpendRow({
-		kind: "transcription",
-		userId: "user-1",
-		page: { kind: "topic", topicId: "topic-1" },
-		cost: 0.00123456,
-		totalTokens: 330,
-	})
-	await recordChatSpendRow({
-		kind: "transcription",
-		userId: "user-1",
-		page: { kind: "team", teamId: "team-1" },
-		cost: 0.002,
-		totalTokens: 450,
-	})
-	await recordChatSpendRow({
-		kind: "speech",
-		userId: "user-1",
-		page: { kind: "newTopic" },
-		cost: 0.002,
-		totalTokens: 450,
-	})
-	await recordChatSpendRow({
-		kind: "transcription",
-		userId: "user-1",
-		page: { kind: "room", topicId: "topic-1", teamId: "team-1" },
-		cost: 0.002,
-		totalTokens: 450,
-	})
-	await recordChatSpendRow({
-		kind: "speech",
-		userId: "user-1",
-		page: { kind: "room", topicId: null, teamId: "team-1" },
-		cost: 0.002,
-		totalTokens: 450,
-	})
-
-	// every row is a chat_turns insert whose values are, in order, the id, the kind, the user, the topic, the team,
-	// the cost, and the tokens, with no text and no room message among them
-	expect(sentQueries).toHaveLength(5)
-	for (const sentQuery of sentQueries) {
-		expect(sentQuery.text).toStartWith('insert into "chat_turns"')
-	}
-
-	// the three private pages, each with the row's generated id first
-	const rowId = expect.any(String)
-	expect(sentQueries[0]?.values).toEqual([rowId, "transcription", "user-1", "topic-1", null, "0.001235", 330])
-	expect(sentQueries[1]?.values).toEqual([rowId, "transcription", "user-1", null, "team-1", "0.002000", 450])
-	expect(sentQueries[2]?.values).toEqual([rowId, "speech", "user-1", null, null, "0.002000", 450])
-
-	// a topic's chat room names its topic alone, and the team's own chat room names its team, as a chat room turn does
-	expect(sentQueries[3]?.values).toEqual([rowId, "transcription", "user-1", "topic-1", null, "0.002000", 450])
-	expect(sentQueries[4]?.values).toEqual([rowId, "speech", "user-1", null, "team-1", "0.002000", 450])
-	expect(trackEventSpy).not.toHaveBeenCalled()
 })
 
 // a stored conversation replays each chat turn's spoken flag and reads only the rows that kept their text

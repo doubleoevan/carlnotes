@@ -5,7 +5,7 @@ import type { PodcastEpisodeSpeaker } from "@carlnotes/contracts/enums"
 import type { ChatToolCall } from "@carlnotes/contracts/payloads"
 import { chatModel } from "@carlnotes/models/models"
 import { type BuiltPrompt, promptTelemetry } from "@carlnotes/models/prompts/fetch"
-import { reportError } from "@carlnotes/server/monitoring"
+import { reportError, toLoggableError } from "@carlnotes/server/monitoring"
 import { type StreamTextTransform, stepCountIs, streamText, type TextStreamPart, type ToolSet } from "ai"
 import { type ChatTurnInput, toModelMessages } from "./chatMessages"
 import { buildNewTopicChatPrompt, buildTeamChatPrompt, buildTopicChatPrompt, toEditTopicBlock } from "./chatPrompts"
@@ -55,7 +55,10 @@ export async function streamChatReply(input: ChatTurnInput): Promise<ChatReplySt
 		chatPrompt = await buildReplyPrompt(input, chatContext)
 	} catch (error) {
 		// report the failure, then rethrow
-		console.error(`chat reply failed for ${input.teamId ? `team ${input.teamId}` : `topic ${input.topicId}`}`, error)
+		console.error(
+			`chat reply failed for ${input.teamId ? `team ${input.teamId}` : `topic ${input.topicId}`}`,
+			toLoggableError(error),
+		)
 		reportError(error, "chat", { topicId: input.topicId ?? input.teamId ?? "" })
 		throw error
 	}

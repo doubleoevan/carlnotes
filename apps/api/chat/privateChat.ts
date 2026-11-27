@@ -5,6 +5,7 @@ import { CHAT_ROOM_ATTACHMENT_ERRORS, type ChatConversation, type ChatTurnRow } 
 import { chatTurnPayload, topicChatTurnPayload } from "@carlnotes/contracts/payloads"
 import { db } from "@carlnotes/db"
 import { topics } from "@carlnotes/db/schema/topics"
+import { isSuggestedReplyOn } from "@carlnotes/server/suggestedReplySettings"
 import { isVoiceChatConfigured } from "@carlnotes/server/voiceChat"
 import { zValidator } from "@hono/zod-validator"
 import { eq } from "drizzle-orm"
@@ -89,8 +90,12 @@ async function ownsNoTopic(userId: string | null): Promise<boolean> {
 
 // the conversation that every chat page opens with: its chat turns and whether the user may chat on it. a free user
 // the unverified accounts switch limits, or one past the chat cutoff, keeps the chat open, and a chat turn says why
-// carl does not answer
-function toChatConversation(chatTurns: ChatTurnRow[], authorization: ChatTurnAuthorization): ChatConversation {
+// carl does not answer. a signed-in user on a chat the rollout setting turns on sees suggested replies
+function toChatConversation(
+	chatTurns: ChatTurnRow[],
+	authorization: ChatTurnAuthorization,
+	page: ChatPage,
+): ChatConversation {
 	return {
 		chatTurns,
 		canChat: ["allowed", "emailUnverified", "chatPaused"].includes(authorization.status),
@@ -99,6 +104,8 @@ function toChatConversation(chatTurns: ChatTurnRow[], authorization: ChatTurnAut
 		isVoiceChatConfigured: isVoiceChatConfigured(),
 		keptAttachments: [],
 		canEditTopic: authorization.status === "allowed" && authorization.canEditTopic,
+		isSuggestedReplyOn:
+			authorization.status !== "signup" && isSuggestedReplyOn({ isNewTopicChat: page.newTopic === true }),
 	}
 }
 
@@ -125,7 +132,10 @@ export const privateChatRoute = new Hono<AppEnv>()
 		])
 
 		// return the conversation with its kept attachments
-		const chatConversation: ChatConversation = { ...toChatConversation(chatTurns, authorization), keptAttachments }
+		const chatConversation: ChatConversation = {
+			...toChatConversation(chatTurns, authorization, { topicId }),
+			keptAttachments,
+		}
 		return context.json(chatConversation)
 	})
 	.delete(TOPIC_CHAT_PATH, (context) => clearChatConversation(context, { topicId: context.req.param("id") }))
@@ -147,7 +157,7 @@ export const privateChatRoute = new Hono<AppEnv>()
 			loadChatTurns(userId, { teamId }),
 			authorizeTeamChatTurn(userId, teamId),
 		])
-		return context.json(toChatConversation(chatTurns, authorization))
+		return context.json(toChatConversation(chatTurns, authorization, { teamId }))
 	})
 	.delete(TEAM_CHAT_PATH, (context) => clearChatConversation(context, { teamId: context.req.param("id") }))
 	.post(
@@ -173,7 +183,7 @@ export const privateChatRoute = new Hono<AppEnv>()
 
 		// return the conversation with how many more topics the plan allows and the topic draft so far
 		const chatConversation: ChatConversation = {
-			...toChatConversation(chatTurns, authorization),
+			...toChatConversation(chatTurns, authorization, { newTopic: true }),
 			isFirstTopic,
 			topicsRemaining: authorization.status === "allowed" ? authorization.topicsRemaining : undefined,
 			topicLimit: planTopicLimit,

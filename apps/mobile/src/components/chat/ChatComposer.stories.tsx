@@ -1,6 +1,6 @@
 import type { KeptChatAttachment } from "@carlnotes/contracts/chat"
 import type { ChatAttachment } from "@carlnotes/contracts/payloads"
-import { NEW_TOPIC_CHAT_COPY } from "@carlnotes/core/lib/chatCopy"
+import { NEW_TOPIC_CHAT_COPY, NEW_TOPIC_EXAMPLE_TOPICS } from "@carlnotes/core/lib/chatCopy"
 import type { Meta, StoryObj } from "@storybook/react-native"
 import { useState } from "react"
 import { View } from "react-native"
@@ -46,6 +46,25 @@ export const RejectedPostKeepsDraft: Story = {
 }
 export const AttachingFiles: Story = {
 	render: () => <AttachmentComposer attachments={TWO_ATTACHMENTS} isAttaching />,
+}
+// a reply's suggestion and the new-topic chat's example, accepted by the button or a swipe, in light and dark, and the
+// longest suggestion, which keeps the box one line tall
+export const SuggestedReply: Story = { render: () => <SuggestedReplyComposer suggestedReply="Weekly is fine" /> }
+export const SuggestedReplyDark: Story = {
+	render: () => <SuggestedReplyComposer suggestedReply="Weekly is fine" />,
+	globals: { backgrounds: { value: "dark" } },
+}
+export const LongSuggestedReply: Story = {
+	render: () => (
+		<SuggestedReplyComposer suggestedReply="Keep me up on new espresso machines, grinders, and the people who repair them near me every week" />
+	),
+}
+export const ExampleTopic: Story = {
+	render: () => <SuggestedReplyComposer suggestedReply={NEW_TOPIC_EXAMPLE_TOPICS[0]} />,
+}
+export const ExampleTopicDark: Story = {
+	render: () => <SuggestedReplyComposer suggestedReply={NEW_TOPIC_EXAMPLE_TOPICS[0]} />,
+	globals: { backgrounds: { value: "dark" } },
 }
 export const KeptFiles: Story = {
 	render: () => (
@@ -129,4 +148,18 @@ function AttachmentComposer({
 function EditableComposer() {
 	const [question, setQuestion] = useState("")
 	return <ChatComposer value={question} onChange={setQuestion} onSend={() => setQuestion("")} />
+}
+
+// an empty composer that shows a suggestion, which accepting puts in the box and a send clears
+function SuggestedReplyComposer({ suggestedReply }: { suggestedReply: string }) {
+	const [question, setQuestion] = useState("")
+	return (
+		<ChatComposer
+			value={question}
+			onChange={setQuestion}
+			onSend={() => setQuestion("")}
+			suggestedReply={suggestedReply}
+			onAcceptSuggestedReply={() => setQuestion(suggestedReply)}
+		/>
+	)
 }

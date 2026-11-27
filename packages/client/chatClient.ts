@@ -17,6 +17,7 @@ import {
 import { isPodcastEpisodeSpeaker, type PodcastEpisodeSpeaker } from "@carlnotes/contracts/enums"
 import type { ChatAttachment, ChatHistoryTurn, PodcastEpisodeChapterRef } from "@carlnotes/contracts/payloads"
 import { chatConversationResponse } from "@carlnotes/contracts/routeShapes"
+import { toSafeSuggestedReply } from "@carlnotes/contracts/suggestedReplies"
 import type { TopicDraft, TopicDraftTeam } from "@carlnotes/contracts/topicPayloads"
 import { fetchApi, readApiErrorMessage, readApiResponse } from "./apiClient"
 
@@ -60,11 +61,14 @@ export async function fetchChatConversation(chatPage: ChatPage): Promise<ChatCon
 	return readApiResponse(chatConversationResponse, response)
 }
 
-// what a reply's stream calls back with: each text chunk, the tool calls, and a podcast chat turn's speaker
+// what a reply's stream calls back with: each text chunk, the tool calls, a podcast chat turn's speaker, the reply's
+// end once its turn is saved, and the suggested reply that may follow it
 type ChatReplyHandlers = {
 	onChunk: (chunk: string) => void
 	onToolCalls?: (toolCalls: TopicToolCalls) => void
 	onSpeaker?: (speaker: PodcastEpisodeSpeaker) => void
+	onSaved?: () => void
+	onSuggestedReply?: (suggestedReply: string) => void
 }
 
 // one chat turn to send, with the handlers that read its reply
@@ -194,7 +198,7 @@ async function readChatStream(
 // show one line's text or apply its tool calls, answering "failed" for the line that ends a broken reply
 function applyChatReplyLine(
 	chatReplyLineText: string,
-	{ onChunk, onToolCalls, onSpeaker }: ChatReplyHandlers,
+	{ onChunk, onToolCalls, onSpeaker, onSaved, onSuggestedReply }: ChatReplyHandlers,
 ): ChatSendResult {
 	const chatReplyLine = toChatReplyLine(chatReplyLineText)
 	// a text line is the only one the bubble shows
@@ -212,7 +216,17 @@ function applyChatReplyLine(
 		onToolCalls?.(chatReplyLine.toolCalls)
 		return null
 	}
-	return chatReplyLine ? "failed" : null
+	// pass the reply's end to its handler
+	if (chatReplyLine?.type === "saved") {
+		onSaved?.()
+		return null
+	}
+	// pass a suggested reply to its handler, and answer failed for the line that ends a broken reply
+	if (chatReplyLine?.type === "suggestedReply") {
+		onSuggestedReply?.(chatReplyLine.suggestedReply)
+		return null
+	}
+	return chatReplyLine?.type === "failed" ? "failed" : null
 }
 
 // what one streamed line says, or null for the blank line a stream ends on and for text the server never wrote
@@ -236,10 +250,15 @@ function isChatReplyLine(parsedLine: unknown): parsedLine is ChatReplyLine {
 	if (typeof parsedLine !== "object" || parsedLine === null) {
 		return false
 	}
-	// a text line needs its text, a speaker line one of the two hosts, and the failed line nothing beyond its type
-	const { type, text, speaker, toolCalls } = parsedLine as Record<string, unknown>
+	// a text line needs its text, a speaker line one of the two hosts, a suggested reply one safe line, and the failed
+	// line and the reply's end nothing beyond their type
+	const { type, text, speaker, toolCalls, suggestedReply } = parsedLine as Record<string, unknown>
 	if (type === "text") {
 		return typeof text === "string"
+	}
+	// a suggested reply passes only if the filter leaves it unchanged
+	if (type === "suggestedReply") {
+		return typeof suggestedReply === "string" && toSafeSuggestedReply(suggestedReply) === suggestedReply
 	}
 	if (type === "speaker") {
 		return isPodcastEpisodeSpeaker(speaker)
@@ -248,7 +267,7 @@ function isChatReplyLine(parsedLine: unknown): parsedLine is ChatReplyLine {
 	if (type === "toolCalls") {
 		return isTopicToolCalls(toolCalls)
 	}
-	return type === "failed"
+	return type === "failed" || type === "saved"
 }
 
 // whether a value holds the two lists the toast, the card, and the topic page read off every tool calls line

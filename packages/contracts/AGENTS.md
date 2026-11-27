@@ -162,6 +162,11 @@ account, and the Terms), `podcastRouteContracts.ts` (podcast episodes), `socialR
 threads, the news, and Topic Posts), `personalSourcesRouteContracts.ts` (Personal sources), and
 `dashboardRouteContracts.ts` (a Dashboard's snapshot). The part files load every other contract, and nothing loads
 them back.
+A stream contract may set `lineKindField: "type"`, which says its reader skips a line kind it does not know. The freeze
+check then passes a new line kind against a live snapshot and still compares every frozen kind, and the in-process
+compatibility test skips the new kind. The three `sendChatTurn` contracts set it, for the `saved` and
+`suggestedReply` lines. The proof is the unknown-kind tests in `packages/client/chatStreaming.test.ts`. Set it on
+another stream only beside a test like those.
 
 The read-only Personal sources email response returns the environment-configured mailbox for the empty-state hint. Finding views show public notes alone. Send and email routing use editable Topics.
 

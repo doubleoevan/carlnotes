@@ -1,4 +1,6 @@
 // the page a private conversation lives on, and the id and the analytics kind a page is named by
+
+import type { ChatKind } from "@carlnotes/contracts/chat"
 import type { VoiceChatPage } from "@carlnotes/contracts/payloads"
 
 // the page that a private conversation lives on: one topic, a whole team, or the new-topic chat, bound to neither
@@ -13,9 +15,6 @@ export type ChatPage =
 export function toChatPageId(page: ChatPage): string {
 	return page.topicId ?? page.teamId ?? ""
 }
-
-// which chat a page holds, as an analytics event names it
-export type ChatKind = "topic" | "team" | "new_topic" | "room"
 
 /**
  * Returns which chat a page holds: a topic's, a team's, the new-topic chat, or a chat room.

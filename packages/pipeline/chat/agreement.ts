@@ -4,7 +4,7 @@
 import { cheapModel } from "@carlnotes/models/models"
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "@carlnotes/models/prompts/fetch"
 import { writePrompt } from "@carlnotes/models/prompts/write"
-import { reportError } from "@carlnotes/server/monitoring"
+import { reportError, toLoggableError } from "@carlnotes/server/monitoring"
 import { generateText, Output } from "ai"
 import { z } from "zod"
 
@@ -54,7 +54,7 @@ export async function checkAgreement({
 		return { decision: output.decision, totalTokens: usage.totalTokens ?? 0 }
 	} catch (error) {
 		// a check that fails agrees to nothing
-		console.error("the agreement check failed", error)
+		console.error("the agreement check failed", toLoggableError(error))
 		reportError(error, "chat")
 		return { decision: "unclear", totalTokens: 0 }
 	}

@@ -85,8 +85,12 @@ with no image of its own, and running it again SHALL leave a film that already h
 
 The first time a film renders, before its intro and sign-off, the worker SHALL draw the film's own image: 16:9 at 2752
 by 1536, full frame with no paper edge or border, in film lighting and the app's palette, painted to every edge with no
-dark band along the bottom. The lower third's espresso plate SHALL keep the title readable over any image. The topic
-image's scene writer SHALL write its scene, and an image model that draws at that size SHALL draw it from a film house
+dark band along the bottom. The lower third's espresso plate SHALL keep the title readable over any image.
+
+#### Scenario: The worker prepares the poster
+
+- **WHEN** the worker draws the film image
+- **THEN** the topic image's scene writer SHALL write its scene, and an image model that draws at that size SHALL draw it from a film house
 style prompt. It SHALL be stored under the film's folder as that original and as a 1280 by 720 copy, which the poster
 shows, and in the `page`, `list`, and `thumbnail` sizes, which a smaller frame loads in its place. Its cost SHALL add
 to the film's cost.

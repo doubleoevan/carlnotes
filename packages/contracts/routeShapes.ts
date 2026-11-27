@@ -3,7 +3,7 @@
 
 import { z } from "zod"
 import { optionalCardsPageNumber, pagedQuery } from "./cardPages"
-import { chatConversation, chatRoomMessage } from "./chat"
+import { chatConversation, chatRoomMessage, SUGGESTED_REPLY_CHARS } from "./chat"
 import { podcastEpisodeSpeakers } from "./enums"
 import { topicInviteBadge } from "./invites"
 import { chatToolCallPayload } from "./payloads"
@@ -94,6 +94,10 @@ export const chatReplyLine = z.discriminatedUnion("type", [
 	z.object({ type: z.literal("speaker"), speaker: z.enum(podcastEpisodeSpeakers) }),
 	z.object({ type: z.literal("toolCalls"), toolCalls: topicToolCalls }),
 	z.object({ type: z.literal("failed") }),
+	// the reply's end, written once the turn's row, proposal, and draft are saved
+	z.object({ type: z.literal("saved") }),
+	// one suggested reply, after the saved line. a released client skips both lines
+	z.object({ type: z.literal("suggestedReply"), suggestedReply: z.string().max(SUGGESTED_REPLY_CHARS) }),
 ])
 
 // what a chat room shows every member after a tool call

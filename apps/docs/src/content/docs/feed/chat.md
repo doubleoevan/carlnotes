@@ -65,6 +65,11 @@ These questions start a conversation about your topic:
 
 That last one doubles as a source audit. The gaps Carl names are gaps in your source list or prompt.
 
+After Carl answers in your private chat, the empty message box shows a reply you can send next when one fits. Press **→** on
+the web, tap the arrow button beside **Send**, or swipe right across the box in the app to put it in the box. Nothing
+is sent until you send it. [Making a topic with Coffee Talk](/docs/feed/making-a-topic-in-chat/#the-suggested-reply)
+covers what a suggestion never does. Team rooms and podcast questions show none.
+
 ## Bringing a file into the conversation
 
 On the web there are three ways, all on the message box:

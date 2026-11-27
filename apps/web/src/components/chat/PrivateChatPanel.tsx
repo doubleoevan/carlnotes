@@ -24,10 +24,13 @@ const ChatMessages = lazy(() =>
 // the composer, a disabled box while the conversation loads, or the upgrade link when the budget is spent
 function PrivateChatComposer({
 	chat,
+	page,
 	placeholder,
 	onSendQuestion,
 }: {
 	chat: TopicChat
+	// the conversation's page, which its suggested replies follow
+	page: ChatPage
 	placeholder: string
 	onSendQuestion: () => void
 }) {
@@ -41,7 +44,7 @@ function PrivateChatComposer({
 			</div>
 		)
 	}
-	return <ChatComposer chat={chat} onSendQuestion={onSendQuestion} placeholder={placeholder} />
+	return <ChatComposer chat={chat} onSendQuestion={onSendQuestion} placeholder={placeholder} page={page} />
 }
 
 // above the new-topic chat's composer: the plan's limit when it holds no more topics, else carl's draft
@@ -101,7 +104,7 @@ export function PrivateChatPanel({
 		return null
 	}
 
-	// the question box's line: the Topic Post chat's, the new-topic chat's, or the private chat's
+	// the question box's line without a suggestion: the Topic Post chat's, the new-topic chat's, or the private chat's
 	const placeholder = toPrivateChatPlaceholder(page, chat.isFirstTopic)
 
 	// "open" and "enlarged" render the same panel, sized by the flag
@@ -154,7 +157,7 @@ export function PrivateChatPanel({
 					isCarlReplying={chat.isStreaming}
 				/>
 			)}
-			<PrivateChatComposer chat={chat} placeholder={placeholder} onSendQuestion={handleSendChat} />
+			<PrivateChatComposer chat={chat} page={page} placeholder={placeholder} onSendQuestion={handleSendChat} />
 
 			{/* the clear confirmation is only mounted while open, so its state resets each time */}
 			{isClearConfirmOpen && (

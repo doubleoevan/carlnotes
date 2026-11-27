@@ -1,5 +1,5 @@
 // the live web search tool a signed-in chat turn may call
-import { reportError } from "@carlnotes/server/monitoring"
+import { reportError, toLoggableError } from "@carlnotes/server/monitoring"
 import { type Tool, tool } from "ai"
 import { z } from "zod"
 
@@ -60,7 +60,7 @@ async function runSearch(query: string): Promise<string> {
 		return toResultsText((await response.json()) as SearchResponse)
 	} catch (error) {
 		// report the failure and tell the model to answer without the web
-		console.error("chat web search failed", error)
+		console.error("chat web search failed", toLoggableError(error))
 		reportError(error, "chat")
 		return "the web search failed, answer from what you have"
 	}

@@ -1,15 +1,22 @@
-// streaming a chat turn's reply to the user, then saving its row, the proposal it leaves standing, its topic draft, and
-// its sent attachments
+// streaming a chat turn's reply to the user, then saving its row, the proposal it leaves standing, and its topic draft,
+// then marking the reply's end, writing its suggested reply, and storing its sent attachments
 
 import { withPodcastEpisodeNote } from "@carlnotes/contracts/chatQuestionNotes"
 import { toChatReplyLineText } from "@carlnotes/contracts/chatTurns"
 import type { PodcastEpisodeSpeaker } from "@carlnotes/contracts/enums"
+import type { ChatToolCall } from "@carlnotes/contracts/payloads"
 import type { TopicDraft } from "@carlnotes/contracts/topicPayloads"
 import { isBudgetRejection, SPENT_BUDGET_REJECTION } from "@carlnotes/models/models"
-import type { SpendReservation } from "@carlnotes/models/spendReservations"
+import { reserveUserSpend, type SpendReservation } from "@carlnotes/models/spendReservations"
 import type { ChatReplyStream } from "@carlnotes/pipeline/chat/index"
 import type { PodcastEpisodeChapterContext } from "@carlnotes/pipeline/chat/retrievePodcastEpisodeChapter"
+import {
+	MAX_SUGGESTED_REPLY_DOLLARS,
+	type SuggestedReplyChatTurn,
+	writeSuggestedReply,
+} from "@carlnotes/pipeline/chat/suggestedReply"
 import { reportError } from "@carlnotes/server/monitoring"
+import { isSuggestedReplyOn } from "@carlnotes/server/suggestedReplySettings"
 import type { Context } from "hono"
 import { stream } from "hono/streaming"
 import type { AnalyticsProperties } from "../currentUser"
@@ -18,7 +25,8 @@ import { saveTopicDraft } from "../topic/topicDrafts"
 import { storeTopicChatAttachments } from "./attachments"
 import type { StorableChatAttachment } from "./chatAttachmentParts"
 import { type ChatPage, toChatPageId } from "./chatPages"
-import { recordChatProposal } from "./chatProposals"
+import { isPublishingOrInvitingProposal, recordChatProposal, toStandingChatProposal } from "./chatProposals"
+import { addChatTurnSpend } from "./chatSpendRows"
 import { saveChatTurn } from "./chatTurns"
 import { saveLinkPreviews } from "./linkPreviews"
 import { writeReplyStream } from "./replyStream"
@@ -51,6 +59,8 @@ export type StreamedChatTurn = {
 	topicDraft?: TopicDraft
 	// the turn's reservation against the user's budget, released once the turn's spend row is saved
 	reservation: SpendReservation
+	// the chat turns before this one that the suggested reply reads, oldest first
+	recentChatTurns?: SuggestedReplyChatTurn[]
 }
 
 // the blank line a reply stream opens with, so its headers reach the client before the retrieval returns
@@ -98,35 +108,64 @@ export function streamChatTurn(context: Context, chatTurn: StreamedChatTurn): Re
 			await writeClosingLine(writeStream, toClosingLine(chatTurn, error))
 		}
 
-		// save the spend whether the stream finished or broke, then release the reservation. a partial chat turn is never
-		// free, and the saved row now counts what the reservation held
-		const chatTurnId = await saveFinishedChatTurn({ chatTurn, loadedChatReply, isReplyFinished })
-		await chatTurn.reservation.release()
-
-		// store the topic draft that the chat turn wrote. a chat turn that created the topic already deleted it
-		if (chatTurn.toolCalls.topicDraft && !chatTurn.toolCalls.createdTopicId) {
-			await saveTopicDraft(chatTurn.userId, chatTurn.toolCalls.topicDraft).catch((error) => {
-				console.error("topic draft save failed", error)
-				reportError(error, "chat")
-			})
-		}
-
-		// store the sent attachments in the background once the reply has finished. their summaries take seconds.
-		// a team or new-topic conversation stores none
-		const storedTopicId = chatTurn.page.topicId
-		if (storedTopicId !== undefined) {
-			storeTopicChatAttachments(
-				chatTurn.userId,
-				storedTopicId,
-				chatTurnId,
-				chatTurn.attachments,
-				chatTurn.litellmApiKey,
-			).catch((error) => {
-				console.error(`storing chat attachments failed for topic ${storedTopicId}`, error)
-				reportError(error, "chat", { topicId: storedTopicId })
-			})
-		}
+		// save the turn, release its reservation, mark the reply's end, write its suggested reply, and store its files
+		await finishStreamedChatTurn({ writeStream, chatTurn, loadedChatReply, isReplyFinished })
 	})
+}
+
+// the response stream a finished chat turn writes its last lines to: its write, whether the user left, and the call
+// that runs once they do
+type ChatTurnWriteStream = {
+	write: (text: string) => Promise<unknown>
+	aborted: boolean
+	onAbort: (listener: () => void) => void
+}
+
+// the response stream, and the chat turn with its reply
+type FinishStreamedChatTurnOptions = SaveFinishedChatTurnOptions & { writeStream: ChatTurnWriteStream }
+
+// what follows the reply: the save, the topic draft, the reservation's release, the saved line, the suggested reply, and the
+// sent attachments in the background
+async function finishStreamedChatTurn({
+	writeStream,
+	chatTurn,
+	loadedChatReply,
+	isReplyFinished,
+}: FinishStreamedChatTurnOptions): Promise<void> {
+	// save the spend whether the stream finished or broke, then the topic draft the chat turn wrote. a chat turn that
+	// created the topic already deleted it
+	const savedChatTurn = await saveFinishedChatTurn({ chatTurn, loadedChatReply, isReplyFinished })
+	if (chatTurn.toolCalls.topicDraft && !chatTurn.toolCalls.createdTopicId) {
+		await saveTopicDraft(chatTurn.userId, chatTurn.toolCalls.topicDraft).catch((error) => {
+			console.error("topic draft save failed", error)
+			reportError(error, "chat")
+		})
+	}
+
+	// release the turn's reservation, which the saved row now counts, before the reply's end
+	await chatTurn.reservation.release()
+
+	// mark the reply's end, then write the suggested reply under its own reservation and add its spend to the row
+	if (isReplyFinished && savedChatTurn) {
+		await writeClosingLine(writeStream, toChatReplyLineText({ type: "saved" }))
+		await writeSuggestedReplyLine({ writeStream, chatTurn, savedChatTurn })
+	}
+
+	// store the sent attachments in the background once the reply has finished. their summaries take seconds.
+	// a team or new-topic conversation stores none
+	const storedTopicId = chatTurn.page.topicId
+	if (storedTopicId !== undefined) {
+		storeTopicChatAttachments(
+			chatTurn.userId,
+			storedTopicId,
+			savedChatTurn?.isPersisted ? savedChatTurn.chatTurnId : null,
+			chatTurn.attachments,
+			chatTurn.litellmApiKey,
+		).catch((error) => {
+			console.error(`storing chat attachments failed for topic ${storedTopicId}`, error)
+			reportError(error, "chat", { topicId: storedTopicId })
+		})
+	}
 }
 
 // the closing line of a reply that failed. a spent budget closes with its text. any other failure is reported and closes with the failed line
@@ -166,13 +205,16 @@ type SaveFinishedChatTurnOptions = {
 	isReplyFinished: boolean
 }
 
+// a saved chat turn: its row's id, whether the row kept its text, and what carl answered and called
+type SavedChatTurn = { chatTurnId: string; isPersisted: boolean; answer: string; chatToolCalls: ChatToolCall[] }
+
 // save the finished chat turn's spend and text, record the proposal a finished reply leaves standing, and fetch the
-// answer's link preview in the background. return null if the chat turn stored no text or the save failed
+// answer's link preview in the background. return null if the save failed
 async function saveFinishedChatTurn({
 	chatTurn,
 	loadedChatReply,
 	isReplyFinished,
-}: SaveFinishedChatTurnOptions): Promise<string | null> {
+}: SaveFinishedChatTurnOptions): Promise<SavedChatTurn | null> {
 	try {
 		// save the chat turn, the agreement check's tokens included. a topic save keeps the chat turn's text even if the
 		// gate rejects persistence
@@ -214,11 +256,101 @@ async function saveFinishedChatTurn({
 			void saveLinkPreviews(text).catch((error) => console.error("chat link preview failed", error))
 		}
 
-		// return the id only if the chat turn stored text. without text there is no bubble for an attachment to show in
-		return isChatTurnPersisted ? savedChatTurnId : null
+		// return the row's id, whether it kept its text, and what carl answered and called
+		return savedChatTurnId
+			? { chatTurnId: savedChatTurnId, isPersisted: isChatTurnPersisted, answer: text, chatToolCalls: toolCalls }
+			: null
 	} catch (error) {
+		// report a failed save
 		console.error(`chat turn save failed for ${toChatPageId(chatTurn.page)}`, error)
 		reportError(error, "chat", { topicId: toChatPageId(chatTurn.page) })
 		return null
 	}
+}
+
+// the stream the suggested reply is written to, the chat turn it follows, and that chat turn's saved row
+type WriteSuggestedReplyLineOptions = {
+	writeStream: ChatTurnWriteStream
+	chatTurn: StreamedChatTurn
+	savedChatTurn: SavedChatTurn
+}
+
+// write the suggested reply's line and add its spend to the saved row, if the chat turn may have one. a stopped,
+// spoken, podcast, or created turn, a chat the setting leaves off, and a proposal that would publish or invite get none
+async function writeSuggestedReplyLine({
+	writeStream,
+	chatTurn,
+	savedChatTurn,
+}: WriteSuggestedReplyLineOptions): Promise<void> {
+	if (!isSuggestedReplyTurn(chatTurn, savedChatTurn) || writeStream.aborted) {
+		return
+	}
+
+	// the call reserves its own largest cost, and a spent budget makes no call
+	const reservation = await reserveUserSpend({
+		userId: chatTurn.userId,
+		kind: "suggestedReply",
+		maxDollars: MAX_SUGGESTED_REPLY_DOLLARS,
+	})
+	if (reservation === "rejected") {
+		return
+	}
+
+	// the call stops when the request aborts, and its reservation is released last, whatever happened
+	const requestAbortController = new AbortController()
+	writeStream.onAbort(() => requestAbortController.abort())
+	try {
+		await writeSuggestedReplyAndSpend({
+			writeStream,
+			chatTurn,
+			savedChatTurn,
+			requestAbortSignal: requestAbortController.signal,
+		})
+	} finally {
+		await reservation.release()
+	}
+}
+
+// make one call over the recent turns and this one, write its line, and add its tokens to the turn's saved spend
+async function writeSuggestedReplyAndSpend({
+	writeStream,
+	chatTurn,
+	savedChatTurn,
+	requestAbortSignal,
+}: WriteSuggestedReplyLineOptions & { requestAbortSignal: AbortSignal }): Promise<void> {
+	const { suggestedReply, totalTokens } = await writeSuggestedReply({
+		chatTurns: [...(chatTurn.recentChatTurns ?? []), { question: chatTurn.question, answer: savedChatTurn.answer }],
+		topicDraft: chatTurn.page.newTopic ? (chatTurn.toolCalls.topicDraft ?? chatTurn.topicDraft) : undefined,
+		litellmApiKey: chatTurn.litellmApiKey,
+		requestAbortSignal,
+	})
+	if (suggestedReply) {
+		await writeClosingLine(writeStream, toChatReplyLineText({ type: "suggestedReply", suggestedReply }))
+	}
+
+	// add the call's tokens to the turn's saved spend, and report a failed add
+	if (totalTokens > 0) {
+		await addChatTurnSpend(savedChatTurn.chatTurnId, totalTokens).catch((error: unknown) => {
+			console.error(`adding the suggested reply's spend failed for ${toChatPageId(chatTurn.page)}`, error)
+			reportError(error, "chat", { topicId: toChatPageId(chatTurn.page) })
+		})
+	}
+}
+
+// whether a finished chat turn may have a suggested reply: typed, asked from a private chat the setting turns on, not
+// from the podcast player, not the turn that created the topic, and leaving no proposal that would publish or invite
+function isSuggestedReplyTurn(chatTurn: StreamedChatTurn, savedChatTurn: SavedChatTurn): boolean {
+	if (chatTurn.isSpoken || chatTurn.podcastEpisodeChapter || chatTurn.toolCalls.createdTopicId) {
+		return false
+	}
+	if (!isSuggestedReplyOn({ isNewTopicChat: chatTurn.page.newTopic === true })) {
+		return false
+	}
+	// a "yes" to a proposal that publishes or invites would agree to that part too
+	const standingChatProposal = toStandingChatProposal({
+		page: chatTurn.page,
+		chatToolCalls: savedChatTurn.chatToolCalls,
+		topicDraft: chatTurn.toolCalls.topicDraft ?? chatTurn.topicDraft,
+	})
+	return !standingChatProposal || !isPublishingOrInvitingProposal(standingChatProposal)
 }

@@ -27,8 +27,8 @@ import { toBodyLimit, VOICE_RECORDING_BODY_LIMIT_BYTES } from "../bodyLimit"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { speechRateLimiter, spokenEventRateLimiter, toolCallerRateLimiter } from "../rateLimit"
 import { toChatKind } from "./chatPages"
+import { type RecordChatSpendRowOptions, recordChatSpendRow, type VoiceSpendChatTurnKind } from "./chatSpendRows"
 import { toChatRejection } from "./chatTurnAuthorization"
-import { type RecordChatSpendRowOptions, recordChatSpendRow, type VoiceSpendChatTurnKind } from "./chatTurns"
 import { chatSignedOutRejection } from "./privateChat"
 import {
 	authorizeVoiceChatPage,

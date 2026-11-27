@@ -5,6 +5,7 @@ import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "@carl
 import * as litellm from "@carlnotes/models/litellm"
 import { MODEL_CHAT_TURN_FAILED_REJECTION } from "@carlnotes/models/models"
 import * as chat from "@carlnotes/pipeline/chat/index"
+import * as suggestedReply from "@carlnotes/pipeline/chat/suggestedReply"
 import * as monitoring from "@carlnotes/server/monitoring"
 import * as authorization from "../authorization"
 import { decryptChatText, encryptChatText } from "./encryption"
@@ -72,6 +73,14 @@ test("carl's reply to a spoken chat message is spoken too", async () => {
 	expect(replyInsertQuery?.values).toEqual([null, "team-1", "Carl", 7, expect.any(String), true])
 	expect(decryptChatText(String(replyInsertQuery?.values[4]))).toBe("Saved, it brews daily now.")
 	expect(notifyChatRoomMessageSpy).toHaveBeenCalledWith(null, "team-1", 44, expect.anything())
+})
+
+// a chat room turn never gets a suggested reply, whatever the rollout setting says
+test("a chat room turn makes no suggested reply call", async () => {
+	stubChatRoomTurn({ promptContent: "@carl who is hiring?" })
+	const writeSuggestedReplySpy = spyOn(suggestedReply, "writeSuggestedReply")
+	await runModelChatRoomTurn("member-1", null, "team-1", 7)
+	expect(writeSuggestedReplySpy).not.toHaveBeenCalled()
 })
 
 // the prompt chat message's words, and whether it was spoken

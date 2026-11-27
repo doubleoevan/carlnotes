@@ -97,6 +97,13 @@ the browser bundle and renders pages through the server build, behind its own ro
   starts a table at ten rows a page unless it asks for another size, and its `ScriptedTablePagination` shows a paged
   table's pagination only with JavaScript.
 - `components/chat/` — the chat panel, both composers, the chat message lists, and the hooks behind them.
+  `ChatComposerAttachments.tsx` holds the composer's paperclip, `ChatAttachButton`, and its kept files button.
+  `ChatComposer.tsx` shows the private chat's suggested reply as the empty box's placeholder, kept to one line, through
+  `useComposerSuggestedReply.ts` over the shared `useSuggestedReply`. Right Arrow alone in an empty box fills it with the
+  caret at its end, Tab and an input method composition are left alone, and a ghost `icon-sm` Button named "Use
+  suggested reply: …" fills it by pointer, touch, and keyboard. Nothing is sent. A polite live region announces each
+  suggestion once, and `captureVisitEvent` counts it shown and accepted with no text. `ChatComposer.stories.tsx` shows
+  a reply's suggestion, the longest one, the new-topic chat's example, and none, in light and dark.
   `useChatRoom.ts` adapts core's room state with the browser stream and toasts. `ChatRoomMessages.tsx` lists a team
   room's messages through core's `ChatRoomMessageList`. `MicButton.tsx` is the
   mic in an empty composer's send slot, `RecordingBar.tsx` the bar that replaces the box while a recording runs, and

@@ -11,7 +11,7 @@ import * as transcription from "@carlnotes/models/transcription"
 import { Hono } from "hono"
 import type { AppEnv } from "../currentUser"
 import { toSignedInApp } from "../testSession"
-import * as chatTurns from "./chatTurns"
+import * as chatSpendRows from "./chatSpendRows"
 import * as voiceAuthorization from "./voiceAuthorization"
 import { voiceRoute } from "./voiceRoute"
 
@@ -63,7 +63,7 @@ export function toTranscriptionRequest(page: unknown, recordingBytes: Uint8Array
 // allow every page for user-1 under the chat turn gate and the access check, with spend under the spoken questions
 // cutoff, every call's largest cost reserved, and sk-user as the key, and return the spies the cases read
 export function allowVoicePage(): ReturnType<typeof stubReservedUserSpend> & {
-	recordChatSpendRowSpy: ReturnType<typeof spyOn<typeof chatTurns, "recordChatSpendRow">>
+	recordChatSpendRowSpy: ReturnType<typeof spyOn<typeof chatSpendRows, "recordChatSpendRow">>
 	loadOrProvisionUserLiteLLMKeySpy: ReturnType<typeof spyOn<typeof litellm, "loadOrProvisionUserLiteLLMKey">>
 } {
 	spyOn(voiceAuthorization, "authorizeVoiceChatPage").mockResolvedValue({ status: "allowed", userId: "user-1" })
@@ -73,7 +73,7 @@ export function allowVoicePage(): ReturnType<typeof stubReservedUserSpend> & {
 	// the key, the spend row, and the reservation the cases read
 	return {
 		loadOrProvisionUserLiteLLMKeySpy: spyOn(litellm, "loadOrProvisionUserLiteLLMKey").mockResolvedValue("sk-user"),
-		recordChatSpendRowSpy: spyOn(chatTurns, "recordChatSpendRow").mockResolvedValue(undefined),
+		recordChatSpendRowSpy: spyOn(chatSpendRows, "recordChatSpendRow").mockResolvedValue(undefined),
 		...stubReservedUserSpend(),
 	}
 }

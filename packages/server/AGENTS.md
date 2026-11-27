@@ -8,6 +8,10 @@ provides synthetic provider payloads and signatures for server, pipeline, and AP
 `personalSourcesSettings.ts` reads `PERSONAL_SOURCES_RECEIVING_ENABLED` and `PERSONAL_SOURCES_EMAIL_ENABLED`, both disabled by default. Enabled email requires a valid mailbox in `RESEND_FROM_EMAIL`, with or without a display name. Receiving, setup, reply text, and outgoing-email Reply-To share that mailbox. `personalSourcesEmailReplyContent.ts` recognizes replies delivered to Carl and strips quoted history before link extraction. Rich replies derive text from stripped HTML so a flattened plain-text alternative cannot restore quotes; paragraph boundaries preserve first-line Topic hints. Plain-text-only replies use their quote separators. Manual forwards retain their forwarded body.
 These switches stop new content only. Reads, deletions, revocation, expiry, and lasting privacy guards stay active.
 
+`suggestedReplySettings.ts` reads `SUGGESTED_REPLY_CHATS`, the suggested reply's rollout: unset or `all` for
+every private chat, `new-topic` for the new-topic chat alone, or `off` for none, and anything else throws.
+`isSuggestedReplyOn` answers for one chat. `apps/api/index.ts` reads the setting at start.
+
 `@carlnotes/server`, the server-only part of what every server module shares: everything that reads `Bun.env`, a Node
 built-in, or a server SDK, and the package every server package imports. `@carlnotes/db`, `emails`, `models`, and
 `pipeline`, `apps/api`, and `apps/worker` import it; it imports `@carlnotes/contracts`, `@sentry/bun`, and

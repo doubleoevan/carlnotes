@@ -235,6 +235,16 @@ export function toStandingChatProposal({
 }
 
 /**
+ * Whether a proposal would make its topic public or invite anyone.
+ */
+export function isPublishingOrInvitingProposal(chatProposal: ChatProposal): boolean {
+	if (chatProposal.kind === "newTopic") {
+		return chatProposal.topicDraft.visibility === "public" || chatProposal.topicDraft.inviteEmails.length > 0
+	}
+	return chatProposal.topicEdit.visibility === "public"
+}
+
+/**
  * Returns the keyed digest of a proposal for one user and page, over its canonical json, so the same proposal always matches
  * and no browser can make one the server did not record.
  */

@@ -4,19 +4,25 @@ import type { ChatMessageAuthor } from "@carlnotes/core/components/ChatTurnBlock
 import type { TopicDraftFile } from "@carlnotes/core/components/TopicDraftCard"
 import type { NewTopicDraft } from "@carlnotes/core/hooks/useNewTopicDraft"
 import { useNow } from "@carlnotes/core/hooks/useNow"
+import {
+	type SuggestedReplyEvent,
+	toSuggestedReplyCapture,
+	useSuggestedReply,
+} from "@carlnotes/core/hooks/useSuggestedReply"
 import { type TopicChat, useTopicChat } from "@carlnotes/core/hooks/useTopicChat"
-import { NEW_TOPIC_CHAT_COPY, toPrivateChatPlaceholder } from "@carlnotes/core/lib/chatCopy"
+import { NEW_TOPIC_CHAT_COPY, SUGGESTED_REPLY_COPY, toPrivateChatPlaceholder } from "@carlnotes/core/lib/chatCopy"
 import { CHAT_REJECTION_COPY } from "@carlnotes/core/lib/chatRejectionCopy"
 import type { ChatTurn } from "@carlnotes/core/lib/chatTurns"
 import { clearProposedTopicEdit } from "@carlnotes/core/stores/chatConversationStore"
 import { usePurchaseOffers } from "@carlnotes/core/stores/purchaseOffersStore"
-import { useEffect, useRef } from "react"
-import { type FlatList, View } from "react-native"
+import { type ComponentRef, useEffect, useRef } from "react"
+import { AccessibilityInfo, type FlatList, type TextInput, View } from "react-native"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { LoadFailedNotice } from "@/components/common/LoadFailedNotice"
 import { Text } from "@/components/primitives/text"
 import { useIsScreenActive } from "@/hooks/useIsScreenActive"
 import type { PickedFile } from "@/pickedFiles"
+import { captureVisitEvent } from "@/visitAnalytics"
 import { ChatComposer } from "./ChatComposer"
 import { ChatAttachButton, KeptAttachmentsButton } from "./ChatComposerAttachments"
 import { ChatMessageList } from "./ChatMessageList"
@@ -191,6 +197,19 @@ function PrivateChatComposer({
 		attachmentCount: topicChat.attachments.length,
 		isBusy: topicChat.isStreaming,
 	})
+
+	// the input an accept focuses, so the keyboard opens on the accepted text
+	const inputRef = useRef<ComponentRef<typeof TextInput>>(null)
+
+	// the suggested reply the empty box shows, counted with no text and announced once. a recording, a transcript on its
+	// way, and listen mode's voice composer show none
+	const { suggestedReply, accept } = useSuggestedReply({
+		page,
+		topicChat,
+		isComposerBusy: isVoiceRecordingBusy || voiceRecording.isListening,
+		onSuggestedReplyEvent: captureSuggestedReplyEvent,
+		onSuggestedReplyShown: announceSuggestedReply,
+	})
 	return (
 		<ChatComposer
 			value={topicChat.question}
@@ -222,9 +241,28 @@ function PrivateChatComposer({
 				</>
 			}
 			sendSlot={isMicInSendSlot ? <MicButton voiceRecording={voiceRecording} /> : undefined}
+			inputRef={inputRef}
+			suggestedReply={suggestedReply}
+			onAcceptSuggestedReply={(acceptMethod) => {
+				accept(acceptMethod)
+				inputRef.current?.focus()
+			}}
 			recordingBar={voiceRecording.state === "recording" ? <RecordingBar voiceRecording={voiceRecording} /> : undefined}
 		/>
 	)
+}
+
+// count a suggested reply shown or accepted through the visit analytics, with no text
+function captureSuggestedReplyEvent(suggestedReplyEvent: SuggestedReplyEvent): void {
+	const { name, properties } = toSuggestedReplyCapture(suggestedReplyEvent)
+	captureVisitEvent(name, properties)
+}
+
+// read a new suggestion to a screen reader once, queued behind what it was reading
+function announceSuggestedReply(suggestedReply: string): void {
+	AccessibilityInfo.announceForAccessibilityWithOptions(SUGGESTED_REPLY_COPY.toAnnouncement(suggestedReply), {
+		queue: true,
+	})
 }
 
 // a picked file as the draft card lists it

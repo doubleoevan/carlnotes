@@ -67,6 +67,23 @@ rewrites that field.
 9. **The read-back.** He reads the draft back, its team and your other teams included, and asks for a yes. Yes creates
    the topic.
 
+## The suggested reply
+
+When Carl finishes a reply, the empty message box shows one short reply you can send next when one fits, like "Weekly
+is fine" or "Skip invites for now". An empty new-topic chat starts with an example topic. Take it, change it, or type over
+it:
+
+- On the web, press **→** in the empty box, or the arrow button beside **Send**. The reply fills the box with the cursor
+  at its end. **Tab** still moves to the next control.
+- In the app, tap the arrow button beside **Send**, or swipe right across the empty box.
+
+Filling the box never sends it, and Carl never acts on a suggestion until you send it yourself. A suggestion never
+agrees to make a topic public, never invites anyone, and never adds a source you didn't bring up. When Carl asks who
+reads along, the suggestion skips invites. Carl never suggests an email address, a link, or a handle. Start typing
+and it goes away. Clear the box and it comes back. Send, clear the chat, or switch chats, and it's gone. Nothing about a
+suggestion is saved. Suggested replies show in a topic's, a team's, and a post's private chat, but never in a team
+room or for a question you ask from the podcast player.
+
 ## The draft card
 
 Everything Carl has written down so far shows on the **Topic draft** card above the message box: the title, the prompt,

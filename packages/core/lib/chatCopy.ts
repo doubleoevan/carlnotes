@@ -15,6 +15,23 @@ export const NEW_TOPIC_CHAT_COPY = {
 	openingLine: "Tell me what you want to keep up with. I'll shape it into a topic.",
 }
 
+// the example topics an empty new-topic chat suggests, one at a time, with no model call. each is one short line in the
+// user's voice that names no person and no address
+export const NEW_TOPIC_EXAMPLE_TOPICS = [
+	"Spill the beans on new AI model releases",
+	"How to make a great podcast",
+	"Books worth finishing this month",
+	"How avant-garde filmmakers make cinema",
+	"Topic update tools and how people use them",
+] as const
+
+// the suggested reply's words on both apps: the accept button's name and tooltip, and what a screen reader hears once
+export const SUGGESTED_REPLY_COPY = {
+	toAcceptLabel: (suggestedReply: string) => `Use suggested reply: ${suggestedReply}`,
+	toAnnouncement: (suggestedReply: string) => `Suggested reply: ${suggestedReply}`,
+	acceptTooltip: "Use suggested reply (→)",
+} as const
+
 /**
  * Returns the empty question box's line in a private conversation: the Topic Post chat's while the chat asks about a
  * Topic Post, the new-topic chat's for a first or a next topic, and the private chat's in every other.

@@ -36,6 +36,8 @@ export type SnapshotRoute = {
 	request: { params?: JsonSchema; query?: JsonSchema; body?: JsonSchema; multipart?: JsonSchema }
 	response?: JsonSchema
 	stream?: "ndjson" | "sse"
+	// the field naming a stream line's kind, on a stream whose reader skips a kind it does not know
+	lineKindField?: "type"
 }
 
 // the keywords the comparator understands. any other keyword that constrains a value fails conservatively
@@ -160,9 +162,43 @@ function compareResponsePart(key: string, frozen: SnapshotRoute, current: Snapsh
 
 	// a response both have compares as one, and a route with none passes
 	if (frozen.response && current.response) {
-		return prefixIssues(key, "response", compareResponse(frozen.response, current.response))
+		// a stream whose reader skips a line kind it does not know compares without the kinds the frozen reader never saw
+		const comparedResponse = current.lineKindField
+			? withoutNewLineKinds(frozen.response, current.response, current.lineKindField)
+			: current.response
+		return prefixIssues(key, "response", compareResponse(frozen.response, comparedResponse))
 	}
 	return []
+}
+
+// the current stream line union without the options whose kind no frozen option names. a frozen kind is still
+// compared, so a changed or removed one fails
+function withoutNewLineKinds(frozen: JsonSchema, current: JsonSchema, lineKindField: string): JsonSchema {
+	// a current schema that is no union has no new kind to leave out
+	const currentOptions = toUnionOptions(current)
+	if (!currentOptions) {
+		return current
+	}
+
+	// keep each option whose kind the frozen reader knows, or that names no kind
+	const knownOptions = currentOptions.filter((option) => {
+		const lineKind = option.properties?.[lineKindField]?.const
+		return lineKind === undefined || !isSkippedLineKind(frozen, lineKindField, { [lineKindField]: lineKind })
+	})
+	return current.anyOf ? { ...current, anyOf: knownOptions } : { ...current, oneOf: knownOptions }
+}
+
+/**
+ * Returns whether a frozen stream's reader skips a line: its kind field holds a kind no frozen option names.
+ */
+export function isSkippedLineKind(frozenResponse: JsonSchema, lineKindField: string, line: unknown): boolean {
+	if (typeof line !== "object" || line === null) {
+		return false
+	}
+	// the line's kind, against every kind the frozen union names
+	const lineKind = (line as Record<string, unknown>)[lineKindField]
+	const frozenOptions = toUnionOptions(frozenResponse) ?? [frozenResponse]
+	return !frozenOptions.some((option) => option.properties?.[lineKindField]?.const === lineKind)
 }
 
 // whether a schema requires any property at its top level

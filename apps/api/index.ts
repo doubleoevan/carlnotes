@@ -11,6 +11,7 @@ import { shutdownAnalytics } from "@carlnotes/server/analytics"
 import { reportError, shutdownMonitoring, startMonitoring } from "@carlnotes/server/monitoring"
 import { validatePersonalSourcesEmailSettings } from "@carlnotes/server/personalSourcesSettings"
 import { startRuntimeGauges } from "@carlnotes/server/runtimeGauges"
+import { readSuggestedReplyChats } from "@carlnotes/server/suggestedReplySettings"
 import { sql } from "drizzle-orm"
 import type { Context, Next } from "hono"
 import { Hono } from "hono"
@@ -100,6 +101,9 @@ export type AppType = typeof apiRoute
 
 // the name this process runs under: api for the app service, and web for the web service, which starts this same entry
 const processName = readApiProcessName()
+
+// a typo in the suggested reply's rollout setting fails the start, where a deploy shows it, instead of every chat load
+readSuggestedReplyChats()
 
 // start monitoring, then tracing for model calls, in that order so Langfuse keeps its own provider beside Sentry's.
 // then size the connection pool from the database, at the one pool share an api or a web replica takes

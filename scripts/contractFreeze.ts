@@ -107,6 +107,10 @@ function toSnapshotRoute(contract: ApiRouteContract): SnapshotRoute {
 	if (contract.stream) {
 		snapshotRoute.stream = contract.stream
 	}
+	// a stream whose reader skips a line kind it does not know names its kind field
+	if (contract.lineKindField) {
+		snapshotRoute.lineKindField = contract.lineKindField
+	}
 
 	return snapshotRoute
 }
