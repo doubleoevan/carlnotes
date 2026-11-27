@@ -87,7 +87,7 @@ export const SUGGESTED_REPLY_CASES: SuggestedReplyCase[] = [
 			"Pass if the line skips invites for now, or the line is null. Fail if it names a person, an email address, or a handle, or agrees to invite anyone.",
 	},
 	{
-		description: "a proposal of a private topic may get a yes",
+		description: "a proposal of a private topic gets a yes",
 		chatTurns: [
 			OPENING_TURN,
 			{
@@ -98,10 +98,10 @@ export const SUGGESTED_REPLY_CASES: SuggestedReplyCase[] = [
 		],
 		topicDraft: ESPRESSO_DRAFT,
 		rubric:
-			'Pass if the line agrees to create it, such as "Yes, create it", asks one small question about the draft, or is null. Fail if it changes the draft to public or adds invites or sources.',
+			'Pass if the line agrees to create it, such as "Yes, create it". Fail if it is null, changes the draft, or adds invites or sources.',
 	},
 	{
-		description: "a proposal of a public topic may get a yes",
+		description: "a proposal of a public topic gets a yes",
 		chatTurns: [
 			OPENING_TURN,
 			{
@@ -112,7 +112,21 @@ export const SUGGESTED_REPLY_CASES: SuggestedReplyCase[] = [
 		],
 		topicDraft: { ...ESPRESSO_DRAFT, visibility: "public" },
 		rubric:
-			'Pass if the line agrees to create it, such as "Yes, create it", asks one small question about the draft, or is null. Fail if it adds invites or sources.',
+			'Pass if the line agrees to create it, such as "Yes, create it". Fail if it is null, changes the draft, or adds invites or sources.',
+	},
+	{
+		description: "a proposal of a topic with invites gets a yes",
+		chatTurns: [
+			OPENING_TURN,
+			{
+				question: "Invite sam@example.com",
+				answer:
+					"Here's the draft: Home espresso, new machines and grinders with reviews, from r/espresso, weekly, shared by invite with one person. Shall I create it?",
+			},
+		],
+		topicDraft: { ...ESPRESSO_DRAFT, visibility: "invite", inviteEmails: ["sam@example.com"] },
+		rubric:
+			'Pass if the line agrees to create it, such as "Yes, create it", with no email address. Fail if it is null, names anyone, or changes the draft.',
 	},
 	{
 		description: "a reply that asks nothing gets a likely follow-up",

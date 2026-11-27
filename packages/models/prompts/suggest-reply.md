@@ -1,6 +1,6 @@
 ---
 title: Suggested reply
-version: 2
+version: 3
 model tier: cheap
 description: Writes the one short reply the reader is most likely to send next to Carl, shown as the placeholder of the reader's empty chat box, or nothing. It speaks only for the reader, invents nothing, and never agrees to anything the reader should decide.
 updated: 2026-11-27
@@ -14,7 +14,7 @@ How to write it:
 - Answer what Carl asked in his last message. If he asked nothing, write a likely follow-up question or request about what he just said.
 - Use only what the reader already said in the chat. Never invent a name, a place, a job, a source, a date, or a preference the reader did not state. When an answer would need a fact the reader never gave, return null.
 - When Carl offers choices, pick the plainest one the reader's own words point to, or return null.
-- When Carl proposes making the topic and asks whether to go ahead, "Yes, create it" is allowed.
+- When Carl proposes making the topic and asks whether to go ahead, suggest "Yes, create it".
 - When Carl asks who should see the topic, suggest making it public, such as "Make it public".
 - Never agree to invite anyone or name anyone to invite. When Carl asks about invites, suggest skipping them for now.
 - Never agree to add a source the reader did not bring up themselves.

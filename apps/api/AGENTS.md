@@ -51,7 +51,7 @@ tests share. A chat turn's reply stream writes `OPENING_LINE`, a blank line the 
 starts, because Bun sends no response headers until the first body chunk. A failed retrieval then ends the stream with
 its failed line instead of a 500. After Carl's last text, `chat/chatTurnStream.ts` saves the turn's row, records the
 proposal it leaves standing, saves its topic draft, and releases the turn's reservation, then writes the `saved` line,
-which frees a current client's composer. A finished, typed private chat turn that created no topic and leaves no proposal that would invite
+which frees a current client's composer. A finished, typed private chat turn that created no topic
 then gets one suggested reply call (`@carlnotes/pipeline/chat/suggestedReply`) on a chat `SUGGESTED_REPLY_CHATS` turns
 on, under a reservation of its own, which a user who leaves stops. It writes a `suggestedReply` line for a safe result
 and adds the call's tokens to the saved row with `addChatTurnSpend` in `chat/chatSpendRows.ts`, which also writes the

@@ -235,13 +235,6 @@ export function toStandingChatProposal({
 }
 
 /**
- * Whether a proposal would invite anyone.
- */
-export function isInvitingProposal(chatProposal: ChatProposal): boolean {
-	return chatProposal.kind === "newTopic" && chatProposal.topicDraft.inviteEmails.length > 0
-}
-
-/**
  * Returns the keyed digest of a proposal for one user and page, over its canonical json, so the same proposal always matches
  * and no browser can make one the server did not record.
  */
