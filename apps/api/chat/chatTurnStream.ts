@@ -25,7 +25,7 @@ import { saveTopicDraft } from "../topic/topicDrafts"
 import { storeTopicChatAttachments } from "./attachments"
 import type { StorableChatAttachment } from "./chatAttachmentParts"
 import { type ChatPage, toChatPageId } from "./chatPages"
-import { isPublishingOrInvitingProposal, recordChatProposal, toStandingChatProposal } from "./chatProposals"
+import { isInvitingProposal, recordChatProposal, toStandingChatProposal } from "./chatProposals"
 import { addChatTurnSpend } from "./chatSpendRows"
 import { saveChatTurn } from "./chatTurns"
 import { saveLinkPreviews } from "./linkPreviews"
@@ -276,7 +276,7 @@ type WriteSuggestedReplyLineOptions = {
 }
 
 // write the suggested reply's line and add its spend to the saved row, if the chat turn may have one. a stopped,
-// spoken, podcast, or created turn, a chat the setting leaves off, and a proposal that would publish or invite get none
+// spoken, podcast, or created turn, a chat the setting leaves off, and a proposal that would invite get none
 async function writeSuggestedReplyLine({
 	writeStream,
 	chatTurn,
@@ -338,7 +338,7 @@ async function writeSuggestedReplyAndSpend({
 }
 
 // whether a finished chat turn may have a suggested reply: typed, asked from a private chat the setting turns on, not
-// from the podcast player, not the turn that created the topic, and leaving no proposal that would publish or invite
+// from the podcast player, not the turn that created the topic, and leaving no proposal that would invite
 function isSuggestedReplyTurn(chatTurn: StreamedChatTurn, savedChatTurn: SavedChatTurn): boolean {
 	if (chatTurn.isSpoken || chatTurn.podcastEpisodeChapter || chatTurn.toolCalls.createdTopicId) {
 		return false
@@ -346,11 +346,11 @@ function isSuggestedReplyTurn(chatTurn: StreamedChatTurn, savedChatTurn: SavedCh
 	if (!isSuggestedReplyOn({ isNewTopicChat: chatTurn.page.newTopic === true })) {
 		return false
 	}
-	// a "yes" to a proposal that publishes or invites would agree to that part too
+	// a "yes" to a proposal that invites would agree to emailing those people too
 	const standingChatProposal = toStandingChatProposal({
 		page: chatTurn.page,
 		chatToolCalls: savedChatTurn.chatToolCalls,
 		topicDraft: chatTurn.toolCalls.topicDraft ?? chatTurn.topicDraft,
 	})
-	return !standingChatProposal || !isPublishingOrInvitingProposal(standingChatProposal)
+	return !standingChatProposal || !isInvitingProposal(standingChatProposal)
 }

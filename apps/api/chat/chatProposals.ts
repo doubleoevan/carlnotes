@@ -235,13 +235,10 @@ export function toStandingChatProposal({
 }
 
 /**
- * Whether a proposal would make its topic public or invite anyone.
+ * Whether a proposal would invite anyone.
  */
-export function isPublishingOrInvitingProposal(chatProposal: ChatProposal): boolean {
-	if (chatProposal.kind === "newTopic") {
-		return chatProposal.topicDraft.visibility === "public" || chatProposal.topicDraft.inviteEmails.length > 0
-	}
-	return chatProposal.topicEdit.visibility === "public"
+export function isInvitingProposal(chatProposal: ChatProposal): boolean {
+	return chatProposal.kind === "newTopic" && chatProposal.topicDraft.inviteEmails.length > 0
 }
 
 /**

@@ -228,15 +228,18 @@ test("a spoken, podcast, or created turn gets the saved line and no call", async
 	}
 })
 
-test("a proposal that would publish or invite gets no call", async () => {
-	for (const topicDraft of [
-		{ ...EMPTY_TOPIC_DRAFT, name: "Espresso", visibility: "public" as const },
-		{ ...EMPTY_TOPIC_DRAFT, name: "Espresso", inviteEmails: ["sam@example.com"] },
-	]) {
-		steps = []
-		await streamLines(toProposedNewTopicTurn(topicDraft))
-		expect(steps).toEqual(["saved", "proposal recorded", "turn released"])
-	}
+test("a proposal that would invite gets no call", async () => {
+	steps = []
+	await streamLines(
+		toProposedNewTopicTurn({ ...EMPTY_TOPIC_DRAFT, name: "Espresso", inviteEmails: ["sam@example.com"] }),
+	)
+	expect(steps).toEqual(["saved", "proposal recorded", "turn released"])
+})
+
+test("a public proposal gets the call", async () => {
+	steps = []
+	await streamLines(toProposedNewTopicTurn({ ...EMPTY_TOPIC_DRAFT, name: "Espresso", visibility: "public" }))
+	expect(steps).toContain("suggestion")
 })
 
 test("the setting decides which private chats make the call", async () => {

@@ -77,9 +77,9 @@ it:
   at its end. **Tab** still moves to the next control.
 - In the app, tap the arrow button beside **Send**, or swipe right across the empty box.
 
-Filling the box never sends it, and Carl never acts on a suggestion until you send it yourself. A suggestion never
-agrees to make a topic public, never invites anyone, and never adds a source you didn't bring up. When Carl asks who
-reads along, the suggestion skips invites. Carl never suggests an email address, a link, or a handle. Start typing
+Filling the box never sends it, and Carl never acts on a suggestion until you send it yourself. When Carl asks who
+should see the topic, the suggestion is to make it public, so anyone can read it. A suggestion never invites anyone and
+never adds a source you didn't bring up. When Carl asks who reads along, the suggestion skips invites. Carl never suggests an email address, a link, or a handle. Start typing
 and it goes away. Clear the box and it comes back. Send, clear the chat, or switch chats, and it's gone. Nothing about a
 suggestion is saved. Suggested replies show in a topic's, a team's, and a post's private chat, but never in a team
 room or for a question you ask from the podcast player.

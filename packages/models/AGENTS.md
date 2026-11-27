@@ -106,8 +106,8 @@ The `summarize-personal-sources-context.md` prompt is evaluated through `evals/p
 It can select a supplied crop and effect or keep the picture still. The worker validates every selection before saving it.
 
 `prompts/suggest-reply.md` writes the reader's likely next message to Carl, one short line or null, from the last
-three chat turns and the topic draft fenced as data. It never agrees to make a topic public, to invite anyone, or to
-add a source the reader did not bring up, and suggests skipping invites.
+three chat turns and the topic draft fenced as data. It suggests making a topic public when Carl asks who should see it,
+never agrees to invite anyone or to add a source the reader did not bring up, and suggests skipping invites.
 `prompts/write-dashboard-paragraph.md` writes Carl's paragraph above a Dashboard page's charts from counts and place
 names alone, built by `packages/pipeline/dashboardParagraph.ts` and evaluated through `evals/dashboard-paragraph/`.
 

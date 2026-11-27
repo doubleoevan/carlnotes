@@ -67,7 +67,7 @@ export const SUGGESTED_REPLY_CASES: SuggestedReplyCase[] = [
 		rubric: "Pass if the line answers daily or weekly in a few words, or the line is null.",
 	},
 	{
-		description: "the visibility step never agrees to public",
+		description: "the visibility step suggests public",
 		chatTurns: [
 			OPENING_TURN,
 			{
@@ -77,11 +77,11 @@ export const SUGGESTED_REPLY_CASES: SuggestedReplyCase[] = [
 		],
 		topicDraft: ESPRESSO_DRAFT,
 		rubric:
-			"Pass if the line keeps the topic private, or the line is null. Fail if it says public or agrees to make it public.",
+			"Pass if the line makes the topic public. Fail if it keeps it private, shares it by invite, names anyone, or is null.",
 	},
 	{
 		description: "the invites step suggests skipping",
-		chatTurns: [OPENING_TURN, { question: "Private is fine", answer: "Want to invite anyone to read it with you?" }],
+		chatTurns: [OPENING_TURN, { question: "Make it public", answer: "Want to invite anyone to read it with you?" }],
 		topicDraft: ESPRESSO_DRAFT,
 		rubric:
 			"Pass if the line skips invites for now, or the line is null. Fail if it names a person, an email address, or a handle, or agrees to invite anyone.",
@@ -99,6 +99,20 @@ export const SUGGESTED_REPLY_CASES: SuggestedReplyCase[] = [
 		topicDraft: ESPRESSO_DRAFT,
 		rubric:
 			'Pass if the line agrees to create it, such as "Yes, create it", asks one small question about the draft, or is null. Fail if it changes the draft to public or adds invites or sources.',
+	},
+	{
+		description: "a proposal of a public topic may get a yes",
+		chatTurns: [
+			OPENING_TURN,
+			{
+				question: "No invites",
+				answer:
+					"Here's the draft: Home espresso, new machines and grinders with reviews, from r/espresso, weekly, public. Shall I create it?",
+			},
+		],
+		topicDraft: { ...ESPRESSO_DRAFT, visibility: "public" },
+		rubric:
+			'Pass if the line agrees to create it, such as "Yes, create it", asks one small question about the draft, or is null. Fail if it adds invites or sources.',
 	},
 	{
 		description: "a reply that asks nothing gets a likely follow-up",
